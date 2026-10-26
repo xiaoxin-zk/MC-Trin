@@ -673,10 +673,7 @@ function submitJoin() {
 
 <template>
     <div class="flex min-h-0 w-full flex-1 flex-col gap-3">
-        <MctierRooms
-            :state="multiplayerState?.mctier"
-            :initial-invite-code="initialMctierInvite"
-        />
+        <MctierRooms :state="multiplayerState?.mctier" :initial-invite-code="initialMctierInvite" />
     </div>
     <div v-if="legacyProvidersVisible" class="flex min-h-0 w-full flex-1 flex-col gap-3">
         <div class="flex min-w-0 flex-wrap items-center justify-end gap-3">
