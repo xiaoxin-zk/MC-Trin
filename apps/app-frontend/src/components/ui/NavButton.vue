@@ -83,8 +83,8 @@ const props = withDefaults(
 const link = useLink({ to: computed(() => (typeof props.to === 'string' ? props.to : '/')) })
 const buttonLayoutClasses = computed(() =>
     props.expanded
-        ? 'h-10 w-full min-w-0 justify-start gap-3 rounded-md px-3 text-base text-[var(--color-text-default)] transition-colors bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:size-6 [&>svg]:shrink-0'
-        : 'h-12 w-12 shrink-0 justify-center rounded-full text-2xl text-[var(--color-text-default)] transition-all bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:shrink-0',
+        ? 'flex h-10 w-full min-w-0 items-center justify-start gap-3 rounded-md px-3 text-base text-[var(--color-text-default)] transition-colors bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:size-6 [&>svg]:shrink-0'
+        : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl text-[var(--color-text-default)] transition-all bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:shrink-0',
 )
 const activeClasses = computed(() => {
     const primary = props.isPrimary ? props.isPrimary(route) : link.isActive.value

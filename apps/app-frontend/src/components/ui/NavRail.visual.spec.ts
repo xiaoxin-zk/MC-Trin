@@ -109,3 +109,32 @@ it('honors an explicit primary predicate instead of the router default when both
     expect(wrapper.classes()).not.toContain('router-link-active')
     expect(wrapper.classes()).toContain('subpage-active')
 })
+
+it('keeps collapsed icons centered and expanded labels aligned in the navigation rail', async () => {
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/', component: { render: () => null } }],
+    })
+    await router.push('/')
+    const wrapper = await mountThemed(NavButton, { to: '/', label: 'Home' }, 'dark', {
+        global: { plugins: [router] },
+    })
+    cleanup.push(() => wrapper.unmount())
+
+    expect(wrapper.classes()).toEqual(
+        expect.arrayContaining(['flex', 'h-12', 'w-12', 'items-center', 'justify-center']),
+    )
+
+    await wrapper.setProps({ expanded: true })
+
+    expect(wrapper.classes()).toEqual(
+        expect.arrayContaining([
+            'flex',
+            'h-10',
+            'w-full',
+            'items-center',
+            'justify-start',
+            'gap-3',
+        ]),
+    )
+})
