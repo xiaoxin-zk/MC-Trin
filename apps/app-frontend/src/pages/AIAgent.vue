@@ -33,6 +33,12 @@ import {
 import { list } from '@/helpers/instance'
 import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
+import {
+    agentToolEnabled,
+    BUILT_IN_AGENT_TOOLS,
+    resetAgentTools,
+    setAgentToolEnabled,
+} from '@/logagent/tool-settings'
 import type { AnalysisSettings, RemoteMcpGateway, RemoteMcpTool } from '@/logagent/types'
 
 const { formatMessage } = useVIntl()
@@ -107,6 +113,73 @@ const messages = defineMessages({
         id: 'app.assistant.profiles.error',
         defaultMessage: 'Check the agent name and instructions, then try again.',
     },
+    agentToolsTitle: {
+        id: 'app.assistant.tools.title',
+        defaultMessage: 'Built-in tools',
+    },
+    agentToolsDescription: {
+        id: 'app.assistant.tools.description',
+        defaultMessage:
+            'Read-only tools the local agent may call. Turn one off to keep the assistant from reading that data.',
+    },
+    agentToolsReset: {
+        id: 'app.assistant.tools.reset',
+        defaultMessage: 'Enable all',
+    },
+    agentToolsExternal: {
+        id: 'app.assistant.tools.external',
+        defaultMessage:
+            'Need your own tools? Connect an MCP server below and its tools are offered to the assistant automatically.',
+    },
+    toolInstanceName: {
+        id: 'app.assistant.tools.instance.name',
+        defaultMessage: 'Instances',
+    },
+    toolInstanceDescription: {
+        id: 'app.assistant.tools.instance.description',
+        defaultMessage: 'Game versions, loaders and install status of installed instances.',
+    },
+    toolSettingsName: {
+        id: 'app.assistant.tools.settings.name',
+        defaultMessage: 'Launcher settings',
+    },
+    toolSettingsDescription: {
+        id: 'app.assistant.tools.settings.description',
+        defaultMessage:
+            'Language, memory and download preferences. Credentials and paths stay hidden.',
+    },
+    toolDiagnosticsName: {
+        id: 'app.assistant.tools.diagnostics.name',
+        defaultMessage: 'Platform diagnostics',
+    },
+    toolDiagnosticsDescription: {
+        id: 'app.assistant.tools.diagnostics.description',
+        defaultMessage: 'Operating system, architecture and memory totals for troubleshooting.',
+    },
+    toolListLogsName: {
+        id: 'app.assistant.tools.list-logs.name',
+        defaultMessage: 'List log files',
+    },
+    toolListLogsDescription: {
+        id: 'app.assistant.tools.list-logs.description',
+        defaultMessage: 'The files captured in the current log snapshot.',
+    },
+    toolReadLogName: {
+        id: 'app.assistant.tools.read-log.name',
+        defaultMessage: 'Read log lines',
+    },
+    toolReadLogDescription: {
+        id: 'app.assistant.tools.read-log.description',
+        defaultMessage: 'Read up to 160 numbered lines from one snapshot file.',
+    },
+    toolGrepLogName: {
+        id: 'app.assistant.tools.grep-log.name',
+        defaultMessage: 'Search log lines',
+    },
+    toolGrepLogDescription: {
+        id: 'app.assistant.tools.grep-log.description',
+        defaultMessage: 'Find a literal string in one snapshot file with surrounding context.',
+    },
     mcpTitle: { id: 'app.assistant.mcp.title', defaultMessage: 'MCP tools' },
     mcpEndpoint: { id: 'app.assistant.mcp.endpoint', defaultMessage: 'MCP server URL' },
     mcpEndpointPlaceholder: {
@@ -150,6 +223,49 @@ const selectedInstanceId = ref('')
 const mode = ref<'general' | 'logs'>('general')
 const question = ref('')
 const loading = ref(true)
+const agentTools = BUILT_IN_AGENT_TOOLS
+const toolEnabled = ref<Record<string, boolean>>({})
+const toolLabels = {
+    get_instance_overview: {
+        name: messages.toolInstanceName,
+        description: messages.toolInstanceDescription,
+    },
+    get_launcher_settings: {
+        name: messages.toolSettingsName,
+        description: messages.toolSettingsDescription,
+    },
+    get_platform_diagnostics: {
+        name: messages.toolDiagnosticsName,
+        description: messages.toolDiagnosticsDescription,
+    },
+    list_log_files: {
+        name: messages.toolListLogsName,
+        description: messages.toolListLogsDescription,
+    },
+    read_log_file: { name: messages.toolReadLogName, description: messages.toolReadLogDescription },
+    grep_log_file: { name: messages.toolGrepLogName, description: messages.toolGrepLogDescription },
+} as const
+
+function toolLabel(id: string) {
+    return toolLabels[id as keyof typeof toolLabels] ?? toolLabels.get_instance_overview
+}
+
+function syncToolStates() {
+    toolEnabled.value = Object.fromEntries(
+        agentTools.map((tool) => [tool.id, agentToolEnabled(tool.id)]),
+    )
+}
+
+function toggleAgentTool(id: string, enabled: boolean) {
+    setAgentToolEnabled(id, enabled)
+    syncToolStates()
+}
+
+function enableAllAgentTools() {
+    resetAgentTools()
+    syncToolStates()
+}
+
 const mcpEndpoint = ref('')
 const mcpToken = ref('')
 const mcpServerName = ref('')
@@ -477,6 +593,7 @@ function cancelAgent() {
 }
 
 onMounted(() => {
+    syncToolStates()
     try {
         agentProfiles.value = getAgentProfiles(localStorage)
         selectedAgentProfileId.value = agentProfiles.value[0]?.id ?? DEFAULT_AI_AGENT_PROFILE.id
@@ -636,6 +753,61 @@ onUnmounted(denyPendingApprovals)
             >
                 {{ formatMessage(messages.generalPrivacy) }}
             </p>
+
+            <section
+                class="flex max-w-4xl flex-col gap-3 border-b border-solid border-surface-4 pb-4"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
+                        {{ formatMessage(messages.agentToolsTitle) }}
+                    </h2>
+                    <Button
+                        type="outlined"
+                        :disabled="agent.busy.value"
+                        @click="enableAllAgentTools"
+                    >
+                        {{ formatMessage(messages.agentToolsReset) }}
+                    </Button>
+                </div>
+                <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
+                    {{ formatMessage(messages.agentToolsDescription) }}
+                </p>
+                <ul class="m-0 flex flex-col gap-2 p-0">
+                    <li
+                        v-for="tool in agentTools"
+                        :key="tool.id"
+                        class="flex min-w-0 items-start justify-between gap-3 border-t border-solid border-surface-4 pt-2"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <strong
+                                class="block break-words text-sm text-[var(--color-text-primary)]"
+                            >
+                                {{ formatMessage(toolLabel(tool.id).name) }}
+                            </strong>
+                            <span class="block text-xs text-[var(--color-text-tertiary)]">
+                                {{ formatMessage(toolLabel(tool.id).description) }}
+                            </span>
+                        </div>
+                        <label class="flex shrink-0 items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                class="h-4 w-4"
+                                :checked="toolEnabled[tool.id]"
+                                :aria-label="formatMessage(toolLabel(tool.id).name)"
+                                @change="
+                                    toggleAgentTool(
+                                        tool.id,
+                                        ($event.target as HTMLInputElement).checked,
+                                    )
+                                "
+                            />
+                        </label>
+                    </li>
+                </ul>
+                <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
+                    {{ formatMessage(messages.agentToolsExternal) }}
+                </p>
+            </section>
 
             <section
                 class="flex max-w-4xl flex-col gap-3 border-b border-solid border-surface-4 pb-4"

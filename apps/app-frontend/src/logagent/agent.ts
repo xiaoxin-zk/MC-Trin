@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { LogAgentModel } from './model.ts'
 import { LAUNCHER_ASSISTANT_PROMPT, LOGAGENT_PROMPT } from './prompts.ts'
+import { enabledAgentTools } from './tool-settings.ts'
 import type { AgentGateway, LocalProgress, PreparedSession, RemoteMcpGateway } from './types.ts'
 
 registerHarnessProfile('axolotl-logagent', {
@@ -132,7 +133,8 @@ export async function runLocalAgent(
         })
         return JSON.stringify(result)
     }
-    const builtInTools =
+    const enabledBuiltInTools = enabledAgentTools(mode)
+    const builtInTools = (
         mode === 'assistant'
             ? [
                   tool(() => invokeTool('get_instance_overview', {}), {
@@ -181,6 +183,7 @@ export async function runLocalAgent(
                       }),
                   }),
               ]
+    ).filter((definition) => enabledBuiltInTools.has(definition.name))
     const remoteTools =
         remoteMcp?.tools.map((definition, index) => {
             const modelName = mcpModelToolName(index, definition.name)
