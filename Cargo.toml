@@ -16,11 +16,11 @@ rust-version = "1.90.0"
 repository = "https://github.com/Mystic-Stars/Axolotl"
 
 [workspace.dependencies]
+aes-gcm = "0.10.3"
 ariadne = { path = "packages/ariadne" }
 async-minecraft-ping = { path = "packages/async-minecraft-ping" }
 async-recursion = "1.1.1"
 async-trait = "0.1.89"
-aes-gcm = "0.10.3"
 async-tungstenite = { version = "0.31.0", default-features = false, features = [
   "futures-03-sink"
 ] }

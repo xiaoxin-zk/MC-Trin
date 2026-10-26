@@ -45,6 +45,8 @@ Nam = "Nam"
 PN = "PN"
 # ID for stronghold-straight
 SHS = "SHS"
+# Three.js material property.
+metalness = "metalness"
 
 [default.extend-identifiers]
 # Minecraft locale identifiers containing the ISO 3166-1 code for Bosnia and

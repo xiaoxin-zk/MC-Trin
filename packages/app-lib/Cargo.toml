@@ -5,6 +5,7 @@ version = "1.10.0"
 edition.workspace = true
 
 [dependencies]
+aes-gcm = { workspace = true }
 ariadne = { workspace = true }
 async-minecraft-ping = { workspace = true, features = ["srv"] }
 async-recursion = { workspace = true }
@@ -22,7 +23,6 @@ async_zip = { workspace = true, features = [
   "tokio-fs",
   "zstd",
 ] }
-aes-gcm = { workspace = true }
 base64 = { workspace = true }
 bon = { workspace = true }
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
