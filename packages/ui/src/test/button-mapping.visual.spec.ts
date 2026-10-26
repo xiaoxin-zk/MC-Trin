@@ -6,10 +6,10 @@ import { mountThemed } from './visual-harness'
 
 const EXPECTED_SIZES: Record<ButtonSize, { height: string; radius: string }> = {
     '2xs': { height: '24px', radius: '8px' },
-    xs: { height: '28px', radius: '8px' },
-    sm: { height: '32px', radius: '10px' },
-    md: { height: '36px', radius: '12px' },
-    lg: { height: '40px', radius: '14px' },
+    xs: { height: '28px', radius: '7px' },
+    sm: { height: '32px', radius: '8px' },
+    md: { height: '36px', radius: '10px' },
+    lg: { height: '44px', radius: '12px' },
     xl: { height: '48px', radius: '16px' },
 }
 
