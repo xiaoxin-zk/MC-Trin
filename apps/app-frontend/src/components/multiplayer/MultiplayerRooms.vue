@@ -35,6 +35,7 @@ import { useRoute } from 'vue-router'
 import hongshiIcon from '@/assets/multiplayer/hongshi.png'
 import terracottaIcon from '@/assets/multiplayer/terracotta.png'
 import MctierRooms from '@/components/multiplayer/MctierRooms.vue'
+import SakuraFrpPanel from '@/components/multiplayer/SakuraFrpPanel.vue'
 import { useMultiplayerSession } from '@/composables/useMultiplayerSession'
 import { hongshiErrorMessage } from '@/helpers/hongshi-messages'
 import {
@@ -289,6 +290,7 @@ const messages = defineMessages({
         defaultMessage: 'RedStone Online 2',
     },
     mctierProvider: { id: 'app.multiplayer.provider.mctier', defaultMessage: 'MC-Trin LAN lobby' },
+    sakuraProvider: { id: 'app.multiplayer.provider.sakura', defaultMessage: 'SakuraFrp' },
     hongshiUnsupported: {
         id: 'app.multiplayer.hongshi.unsupported',
         defaultMessage:
@@ -469,6 +471,12 @@ const providerOptions = computed(() => [
         image: '/mctrin.svg',
         disabled: false,
     },
+    {
+        id: 'sakura' as const,
+        label: messages.sakuraProvider,
+        image: '/mctrin.svg',
+        disabled: false,
+    },
 ])
 const selectedProviderOption = computed(
     () =>
@@ -520,7 +528,11 @@ async function selectProvider(provider: MultiplayerProvider) {
         return
     if (activeProvider.value && activeProvider.value !== provider) {
         if (!window.confirm(formatMessage(messages.switchWarning))) return
-        if (!(await switchProvider(provider))) return
+        if (
+            provider === 'sakura' ? !(await stopMultiplayer()) : !(await switchProvider(provider))
+        ) {
+            return
+        }
     }
     selectedProvider.value = provider
     localStorage.setItem(providerStorageKey, provider)
@@ -709,6 +721,7 @@ function submitJoin() {
         />
     </div>
     <div v-if="selectedProvider !== 'mctier'" class="flex min-h-0 w-full flex-1 flex-col gap-3">
+        <SakuraFrpPanel v-if="selectedProvider === 'sakura'" />
         <template v-if="selectedProvider === 'terracotta'">
             <Card v-if="!state" class="!m-0">
                 <div class="flex items-center gap-3">

@@ -8240,6 +8240,45 @@
   "app.multiplayer.provider.mctier": {
     "message": "MC-Trin LAN lobby"
   },
+  "app.multiplayer.provider.sakura": {
+    "message": "SakuraFrp"
+  },
+  "app.multiplayer.sakura.description": {
+    "message": "Use the official SakuraFrp client to expose your Minecraft LAN port. MC-Trin does not bundle the third-party client or handle your account."
+  },
+  "app.multiplayer.sakura.installed": {
+    "message": "The installed SakuraFrp client was opened."
+  },
+  "app.multiplayer.sakura.invalid-port": {
+    "message": "Minecraft LAN port must be between 1 and 65535."
+  },
+  "app.multiplayer.sakura.launch": {
+    "message": "Open SakuraFrp client"
+  },
+  "app.multiplayer.sakura.local-port": {
+    "message": "Minecraft LAN port"
+  },
+  "app.multiplayer.sakura.local-port-hint": {
+    "message": "Open your world to LAN first, then enter the port Minecraft shows."
+  },
+  "app.multiplayer.sakura.not-installed": {
+    "message": "SakuraFrp was not found in its standard Windows install location."
+  },
+  "app.multiplayer.sakura.public-address": {
+    "message": "SakuraFrp public address"
+  },
+  "app.multiplayer.sakura.public-address-hint": {
+    "message": "Paste the address shown by SakuraFrp after you start the tunnel."
+  },
+  "app.multiplayer.sakura.steps": {
+    "message": "Create or select a TCP tunnel in SakuraFrp, map it to the local port above, then share the public address with friends."
+  },
+  "app.multiplayer.sakura.title": {
+    "message": "SakuraFrp companion"
+  },
+  "app.multiplayer.sakura.website": {
+    "message": "Open official website"
+  },
   "app.multiplayer.provider.terracotta": {
     "message": "Terracotta"
   },

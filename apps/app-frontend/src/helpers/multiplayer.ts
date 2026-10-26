@@ -4,7 +4,12 @@ import type { MctierStartRequest, MctierState } from '@/helpers/mctier'
 import type { MctierVoiceSignal } from '@/helpers/mctier-voice'
 import type { TerracottaState } from '@/helpers/terracotta'
 
-export type MultiplayerProvider = 'terracotta' | 'hongshi' | 'mctier'
+export type MultiplayerProvider = 'terracotta' | 'hongshi' | 'mctier' | 'sakura'
+
+export interface SakuraClientStatus {
+    installed: boolean
+    path: string | null
+}
 export type HongshiStatus =
     | 'unsupported'
     | 'idle'
@@ -77,7 +82,7 @@ export interface MultiplayerState {
 }
 
 export function storedMultiplayerProvider(value: string | null): MultiplayerProvider {
-    return value === 'terracotta' || value === 'hongshi' ? value : 'mctier'
+    return value === 'terracotta' || value === 'hongshi' || value === 'sakura' ? value : 'mctier'
 }
 
 export function validLocalPort(value: string): number | null {
@@ -156,4 +161,5 @@ export const multiplayer = {
     reset: () => invoke<void>(command('multiplayer_reset')),
     getPlayerName: () => invoke<string>(command('multiplayer_get_player_name')),
     openHongshiLogs: () => invoke<void>(command('multiplayer_open_hongshi_logs')),
+    openSakuraClient: () => invoke<SakuraClientStatus>(command('multiplayer_open_sakura')),
 }
