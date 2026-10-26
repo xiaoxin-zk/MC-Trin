@@ -128,6 +128,10 @@ pub struct Settings {
     pub bypass_curseforge_download_restrictions: bool,
     #[serde(default)]
     pub ignore_ssl_errors: bool,
+    /// `direct` (default) or `configured`: whether multiplayer traffic may use
+    /// the launcher proxy instead of connecting directly.
+    #[serde(default = "default_multiplayer_proxy")]
+    pub multiplayer_proxy: String,
     #[serde(default = "default_doh_enabled")]
     pub doh_enabled: bool,
     #[serde(default)]
@@ -249,6 +253,10 @@ fn default_true() -> bool {
 
 fn default_doh_enabled() -> bool {
     true
+}
+
+fn default_multiplayer_proxy() -> String {
+    "direct".to_string()
 }
 
 /// Fully opaque home widget cards; users can dial this down to reveal the
@@ -434,6 +442,11 @@ impl Settings {
         )
         .fetch_one(&mut *connection)
         .await?;
+        let multiplayer_proxy: String = sqlx::query_scalar(
+            "SELECT multiplayer_proxy FROM settings WHERE id = 0",
+        )
+        .fetch_one(&mut *connection)
+        .await?;
         let doh_enabled: bool =
             sqlx::query_scalar("SELECT doh_enabled FROM settings WHERE id = 0")
                 .fetch_one(&mut *connection)
@@ -481,6 +494,7 @@ impl Settings {
             custom_download_sources,
             bypass_curseforge_download_restrictions,
             ignore_ssl_errors,
+            multiplayer_proxy,
             doh_enabled,
             mojang_auth_source: DownloadSourceMode::from_string(
                 &res.mojang_auth_source,
@@ -888,6 +902,10 @@ impl Settings {
             .execute(&mut *connection).await?;
         sqlx::query("UPDATE settings SET ignore_ssl_errors = ? WHERE id = 0")
             .bind(self.ignore_ssl_errors)
+            .execute(&mut *connection)
+            .await?;
+        sqlx::query("UPDATE settings SET multiplayer_proxy = ? WHERE id = 0")
+            .bind(&self.multiplayer_proxy)
             .execute(&mut *connection)
             .await?;
         sqlx::query("UPDATE settings SET mc_memory_optimize = ? WHERE id = 0")

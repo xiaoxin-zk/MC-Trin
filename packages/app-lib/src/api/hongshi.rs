@@ -492,7 +492,7 @@ fn api_error_message(status: reqwest::StatusCode, body: &str) -> String {
 }
 
 async fn download_client() -> eyre::Result<reqwest::Client> {
-    crate::util::fetch::configured_client()
+    crate::util::fetch::multiplayer_client()
         .await
         .map_err(|error| eyre::eyre!(error.to_string()))
 }

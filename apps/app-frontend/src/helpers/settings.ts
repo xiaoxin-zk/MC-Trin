@@ -52,6 +52,8 @@ export type UpdatePreferences = {
 export type DownloadSourceMode =
     'auto' | 'official_only' | 'mirror_preferred' | 'official_preferred'
 export type ProxyMode = 'none' | 'system' | 'custom'
+/** Whether multiplayer networking connects directly or uses the proxy config. */
+export type MultiplayerProxy = 'direct' | 'configured'
 export type ProxyConfig = {
     mode: ProxyMode
     url: string
@@ -149,6 +151,7 @@ export type AppSettings = DohSettings & {
     resource_chinese_filenames: boolean
     resource_preserve_filenames: boolean
     ignore_ssl_errors: boolean
+    multiplayer_proxy: MultiplayerProxy
     mojang_auth_source: DownloadSourceMode
 
     theme: ColorTheme
@@ -271,6 +274,7 @@ function normalizeDownloadSettings(settings: AppSettings & LegacyMirrorSettings)
     settings.resource_chinese_filenames ??= true
     settings.resource_preserve_filenames ??= true
     settings.ignore_ssl_errors ??= false
+    settings.multiplayer_proxy ??= 'direct'
     settings.mojang_auth_source ??= 'auto'
     settings.terracotta_public_nodes ??= ['wss://center.node.1tmc.top']
     settings.hidden_nav_items ??= []

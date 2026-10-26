@@ -32,7 +32,7 @@ import SettingsSection from './SettingsSection.vue'
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
 const settings = ref<TranslationSettingsState>({
-    provider: 'google',
+    provider: 'bilibili',
     target_language: '',
     mode: 'bilingual',
     auto_translate: false,
@@ -75,6 +75,14 @@ const messages = defineMessages({
             'Translate Modrinth project titles, summaries, and descriptions while browsing content.',
     },
     provider: { id: 'app.translation-settings.provider', defaultMessage: 'Translation service' },
+    bilibili: {
+        id: 'app.translation-settings.provider.bilibili',
+        defaultMessage: 'Index-Translate (Bilibili, free)',
+    },
+    bilibiliHint: {
+        id: 'app.translation-settings.bilibili-hint',
+        defaultMessage: 'Free Index-Translate API; Google Translate takes over when it fails.',
+    },
     google: {
         id: 'app.translation-settings.provider.google',
         defaultMessage: 'Google Translate (free)',
@@ -251,7 +259,12 @@ const targetLanguage = computed({
 
 function providerName(provider: TranslationProvider) {
     return formatMessage(
-        { google: messages.google, deepl: messages.deepl, ai: messages.ai }[provider],
+        {
+            bilibili: messages.bilibili,
+            google: messages.google,
+            deepl: messages.deepl,
+            ai: messages.ai,
+        }[provider],
     )
 }
 
@@ -277,6 +290,7 @@ function styleName(style: TranslationStyle) {
 }
 
 const translationProviders = computed<TranslationProvider[]>(() => [
+    'bilibili',
     'google',
     ...(aiAvailable.value ? (['ai'] as const) : []),
     'deepl',
@@ -589,6 +603,9 @@ async function clearCache() {
                 <template #description>
                     <span v-if="settings.provider === 'google'">
                         {{ formatMessage(messages.googleIpPool, { count: googleIpPoolSize }) }}
+                    </span>
+                    <span v-else-if="settings.provider === 'bilibili'">
+                        {{ formatMessage(messages.bilibiliHint) }}
                     </span>
                 </template>
                 <template #control>

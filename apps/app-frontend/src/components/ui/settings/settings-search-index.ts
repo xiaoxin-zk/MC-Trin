@@ -678,6 +678,25 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         ],
     },
     {
+        id: 'resources-multiplayer-proxy',
+        categoryId: 'network-multiplayer',
+        targetId: 'settings-target-resources-proxy',
+        label: message(
+            'app.settings.resources.multiplayer-proxy',
+            'Multiplayer and LAN networking',
+        ),
+        keywords: [
+            message(
+                'app.settings.resources.multiplayer-proxy.direct',
+                'Direct connection (default)',
+            ),
+            message(
+                'app.settings.resources.multiplayer-proxy.configured',
+                'Use the proxy configuration above',
+            ),
+        ],
+    },
+    {
         id: 'network-mojang-auth-source',
         categoryId: 'network-multiplayer',
         targetId: 'settings-target-network-mojang-auth-source',

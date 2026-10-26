@@ -1313,6 +1313,23 @@ pub async fn configured_client() -> crate::Result<reqwest::Client> {
     Ok(crate::State::get().await?.configured_http_client())
 }
 
+/// Multiplayer traffic connects directly by default so LAN play never inherits
+/// a system-wide proxy by surprise; users can opt into the launcher proxy.
+pub(crate) async fn multiplayer_uses_proxy() -> crate::Result<bool> {
+    let state = crate::State::get().await?;
+    let settings = crate::state::Settings::get(&state.pool).await?;
+    Ok(settings.multiplayer_proxy == "configured")
+}
+
+/// Client for multiplayer networking, following the multiplayer proxy choice
+/// instead of the download proxy configuration.
+pub(crate) async fn multiplayer_client() -> crate::Result<reqwest::Client> {
+    if multiplayer_uses_proxy().await? {
+        return configured_client().await;
+    }
+    Ok(file_reqwest_client_builder().no_proxy().build()?)
+}
+
 #[derive(Clone)]
 pub(crate) struct DownloadClients {
     pub(crate) system_proxy_fingerprint: String,

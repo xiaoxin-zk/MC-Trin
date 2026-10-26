@@ -12350,6 +12350,18 @@
   "app.settings.resources.mojang-auth-service-description": {
     "message": "Mojang login, profile, skin, cape, and session verification requests used by the launcher and the game."
   },
+  "app.settings.resources.multiplayer-proxy": {
+    "message": "Multiplayer and LAN networking"
+  },
+  "app.settings.resources.multiplayer-proxy-description": {
+    "message": "Direct connections are the default so LAN play never inherits the proxy above. Choose the proxy configuration only when your network requires it."
+  },
+  "app.settings.resources.multiplayer-proxy.configured": {
+    "message": "Use the proxy configuration above"
+  },
+  "app.settings.resources.multiplayer-proxy.direct": {
+    "message": "Direct connection (default)"
+  },
   "app.settings.resources.open-backups-folder": {
     "message": "Open backups folder"
   },
@@ -13565,6 +13577,9 @@
   "app.translation-settings.clear-cache": {
     "message": "Clear translation cache"
   },
+  "app.translation-settings.bilibili-hint": {
+    "message": "Free Index-Translate API; Google Translate takes over when it fails."
+  },
   "app.translation-settings.deepl-api-endpoint": {
     "message": "API endpoint"
   },
@@ -13606,6 +13621,9 @@
   },
   "app.translation-settings.provider.ai": {
     "message": "AI model"
+  },
+  "app.translation-settings.provider.bilibili": {
+    "message": "Index-Translate (Bilibili, free)"
   },
   "app.translation-settings.provider.deepl": {
     "message": "DeepL"

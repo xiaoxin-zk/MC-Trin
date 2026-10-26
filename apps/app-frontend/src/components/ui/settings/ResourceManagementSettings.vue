@@ -629,6 +629,23 @@ const messages = defineMessages({
         id: 'app.settings.resources.proxy-mode',
         defaultMessage: 'Proxy mode',
     },
+    multiplayerProxy: {
+        id: 'app.settings.resources.multiplayer-proxy',
+        defaultMessage: 'Multiplayer and LAN networking',
+    },
+    multiplayerProxyDescription: {
+        id: 'app.settings.resources.multiplayer-proxy-description',
+        defaultMessage:
+            'Direct connections are the default so LAN play never inherits the proxy above. Choose the proxy configuration only when your network requires it.',
+    },
+    multiplayerProxyDirect: {
+        id: 'app.settings.resources.multiplayer-proxy.direct',
+        defaultMessage: 'Direct connection (default)',
+    },
+    multiplayerProxyConfigured: {
+        id: 'app.settings.resources.multiplayer-proxy.configured',
+        defaultMessage: 'Use the proxy configuration above',
+    },
     proxyModeNone: {
         id: 'app.settings.resources.proxy-mode.none',
         defaultMessage: 'No proxy (direct connection)',
@@ -965,6 +982,17 @@ const proxyModeOptions = computed(() => [
     {
         value: 'custom',
         label: formatMessage(messages.proxyModeCustom),
+    },
+])
+
+const multiplayerProxyOptions = computed(() => [
+    {
+        value: 'direct' as const,
+        label: formatMessage(messages.multiplayerProxyDirect),
+    },
+    {
+        value: 'configured' as const,
+        label: formatMessage(messages.multiplayerProxyConfigured),
     },
 ])
 
@@ -1620,6 +1648,20 @@ function validateMinecraftDirectory(_value) {
                 <template #control>
                     <div class="w-full">
                         <Combobox v-model="proxyConfig.mode" :options="proxyModeOptions" />
+                    </div>
+                </template>
+            </SettingsRow>
+            <SettingsRow>
+                <template #label>{{ formatMessage(messages.multiplayerProxy) }}</template>
+                <template #description>
+                    {{ formatMessage(messages.multiplayerProxyDescription) }}
+                </template>
+                <template #control>
+                    <div class="w-full">
+                        <Combobox
+                            v-model="settings.multiplayer_proxy"
+                            :options="multiplayerProxyOptions"
+                        />
                     </div>
                 </template>
             </SettingsRow>

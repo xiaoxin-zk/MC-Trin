@@ -39,7 +39,7 @@ export interface TranslatableHit {
     provider_project_id?: string
 }
 
-export type TranslationProvider = 'google' | 'deepl' | 'ai'
+export type TranslationProvider = 'bilibili' | 'google' | 'deepl' | 'ai'
 export type TranslationMode = 'bilingual' | 'translation-only'
 export type TranslationStyle =
     | 'default'

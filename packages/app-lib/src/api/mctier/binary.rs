@@ -195,15 +195,19 @@ pub async fn prepare(
             let archive = format!(
                 "EasyTier/EasyTier/releases/download/v{VERSION}/easytier-{platform}-v{VERSION}.zip"
             );
-            // A configured HTTP proxy is routinely slower than going straight to
-            // the mirrors, so a proxy-free client is tried first. The proxied
-            // client only runs as a last resort for networks that need one.
+            // Direct connections come first because a proxy is routinely slower
+            // than the mirrors. The proxied client is only tried when the user
+            // opted into the proxy for multiplayer networking.
             let direct = crate::util::fetch::file_reqwest_client_builder()
                 .no_proxy()
                 .build()?;
+            let mut modes = vec![false];
+            if crate::util::fetch::multiplayer_uses_proxy().await? {
+                modes.push(true);
+            }
             let mut failures: Vec<String> = Vec::new();
             let mut downloaded: Option<Vec<u8>> = None;
-            'sources: for use_proxy in [false, true] {
+            'sources: for use_proxy in modes {
                 let client = if use_proxy {
                     match crate::util::fetch::configured_client().await {
                         Ok(client) => Some(client),

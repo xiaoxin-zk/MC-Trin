@@ -13517,6 +13517,18 @@
   "app.settings.resources.mojang-auth-service-description": {
     "message": "Mojang 登录、资料、皮肤、披风、会话验证等。"
   },
+  "app.settings.resources.multiplayer-proxy": {
+    "message": "联机网络连接"
+  },
+  "app.settings.resources.multiplayer-proxy-description": {
+    "message": "默认直连，局域网联机不会沿用上面的代理设置；只有网络环境需要时才切换为代理。"
+  },
+  "app.settings.resources.multiplayer-proxy.configured": {
+    "message": "使用上面的代理配置"
+  },
+  "app.settings.resources.multiplayer-proxy.direct": {
+    "message": "直连（默认）"
+  },
   "app.settings.resources.open-backups-folder": {
     "message": "打开备份文件夹"
   },
@@ -14558,6 +14570,9 @@
   "app.translation-settings.clear-cache": {
     "message": "清除翻译缓存"
   },
+  "app.translation-settings.bilibili-hint": {
+    "message": "B站 Index-Translate 免费接口，失败时自动改用 Google 翻译。"
+  },
   "app.translation-settings.deepl-api-endpoint": {
     "message": "API 端点"
   },
@@ -14596,6 +14611,9 @@
   },
   "app.translation-settings.provider.ai": {
     "message": "AI 模型"
+  },
+  "app.translation-settings.provider.bilibili": {
+    "message": "Index-Translate（B站，免费）"
   },
   "app.translation-settings.provider.deepl": {
     "message": "DeepL 翻译"
