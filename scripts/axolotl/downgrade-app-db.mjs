@@ -53,6 +53,8 @@ const CHANNELS = ['release', 'beta']
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
     20261026140000: { columns: [{ table: 'settings', column: 'multiplayer_proxy' }] },
+    // Theme default change; data only
+    20261026150000: {},
     // Translation provider default; data only
     20261026130000: {},
     20261026120000: { columns: [{ table: 'settings', column: 'custom_download_sources' }] },

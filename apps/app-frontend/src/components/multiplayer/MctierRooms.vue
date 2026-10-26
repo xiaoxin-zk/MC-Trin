@@ -532,7 +532,9 @@ function prefillInviteFromDeepLink() {
                         v-if="voice.outputDevices.value.length"
                         class="flex min-w-0 items-center gap-2 text-sm"
                     >
-                        <span class="w-24 shrink-0">{{ formatMessage(messages.voiceSpeaker) }}</span>
+                        <span class="w-24 shrink-0">{{
+                            formatMessage(messages.voiceSpeaker)
+                        }}</span>
                         <select
                             class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
                             :value="voice.outputDeviceId.value ?? ''"
@@ -574,9 +576,7 @@ function prefillInviteFromDeepLink() {
                     <span class="min-w-0 truncate">{{ player.playerName }}</span>
                     <span class="flex shrink-0 items-center gap-2">
                         <Button
-                            v-if="
-                                voice.active.value && player.playerId !== state?.local_player_id
-                            "
+                            v-if="voice.active.value && player.playerId !== state?.local_player_id"
                             type="quiet"
                             size="xs"
                             icon-only
@@ -593,7 +593,9 @@ function prefillInviteFromDeepLink() {
                             <MicrophoneIcon v-if="!voice.peerMuted.value[player.playerId]" />
                             <XIcon v-else />
                         </Button>
-                        <span class="text-[var(--color-text-tertiary)]">{{ player.virtualIp }}</span>
+                        <span class="text-[var(--color-text-tertiary)]">{{
+                            player.virtualIp
+                        }}</span>
                     </span>
                 </li>
             </ul>
