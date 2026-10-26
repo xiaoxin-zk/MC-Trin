@@ -249,6 +249,39 @@ jobs:
         run: |
           node scripts/axolotl/build-desktop.mjs --profile ci
           node scripts/axolotl/build-desktop.mjs --profile ci --installer-only
+      - name: Smoke test Windows application startup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP 'mctrin-startup-smoke/config'
+          New-Item -ItemType Directory -Force -Path $config | Out-Null
+          $env:THESEUS_CONFIG_DIR = $config
+          $env:AXOLOTL_DATA_DIR_SUFFIX = 'ci-smoke'
+          $binary = Resolve-Path 'target/ci/MC-Trin.exe'
+          $app = Start-Process -FilePath $binary -PassThru
+          try {
+            $windowReady = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 2
+              $app.Refresh()
+              if ($app.HasExited) {
+                throw "MC-Trin exited during startup with code $($app.ExitCode)"
+              }
+              if ($app.MainWindowHandle -ne [IntPtr]::Zero) {
+                $windowReady = $true
+                break
+              }
+            }
+            if (-not $windowReady) {
+              throw 'MC-Trin did not create its desktop window within 60 seconds'
+            }
+            Write-Host 'MC-Trin created its desktop window successfully.'
+          } finally {
+            $app.Refresh()
+            if (-not $app.HasExited) {
+              Stop-Process -Id $app.Id -Force
+            }
+          }
       - name: Package and verify both Windows installers from one binary
         if: runner.os == 'Windows'
         run: node scripts/axolotl/package-windows.mjs --profile ci --output target/ci-installers
