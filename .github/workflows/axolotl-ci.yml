@@ -75,7 +75,12 @@ jobs:
           node --test scripts/axolotl/set-version.test.mjs
           node --test scripts/axolotl/update-manifest.test.mjs scripts/axolotl/finalize-github-release.test.mjs scripts/axolotl/publish-update-server.test.mjs scripts/axolotl/cnb-release.test.mjs scripts/axolotl/gitlink-release.test.mjs scripts/axolotl/create-website-release-metadata.test.mjs
           node scripts/axolotl/create-update-server-catalog.test.mjs
-          node scripts/axolotl/check-migrations.mjs --base "${MIGRATION_BASE_REF:-HEAD^}"
+          base_ref="${MIGRATION_BASE_REF:-HEAD^}"
+          if [[ "$base_ref" =~ ^0+$ ]]; then
+            # The first push has no parent commit; release audit below checks the imported history.
+            base_ref=HEAD
+          fi
+          node scripts/axolotl/check-migrations.mjs --base "$base_ref"
           node scripts/axolotl/check-migrations.mjs --release
       - name: Check brand guidelines
         run: node scripts/axolotl/brand-guard.mjs

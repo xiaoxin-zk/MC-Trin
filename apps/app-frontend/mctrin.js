@@ -65,8 +65,8 @@
     }
 
     const cleanText = (value, max = 240) =>
-        // eslint-disable-next-line no-control-regex
         String(value ?? '')
+            // eslint-disable-next-line no-control-regex
             .replace(/[\u0000-\u001f\u007f]/g, ' ')
             .trim()
             .slice(0, max)
