@@ -64,6 +64,30 @@ export interface ToolRequest {
     end_line?: number
     query?: string
     context?: number
+    instance_id?: string
+    instance_name?: string
+    game_version?: string
+    loader?: string
+    loader_version?: string
+    patch?: Record<string, unknown>
+    java_version?: number
+    vendor?: string
+    source?: string
+    project_id?: string
+    version_id?: string
+    resource_type?: string
+    job_id?: string
+    plan_id?: string
+    plan_revision?: number
+    content_id?: string
+    enabled?: boolean
+    install_dependencies?: boolean
+}
+
+export interface AgentToolApproval {
+    name: string
+    description?: string
+    permission: 'write'
 }
 
 export interface RemoteMcpTool {

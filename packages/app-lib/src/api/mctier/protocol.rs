@@ -5,7 +5,7 @@ use async_tungstenite::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use eyre::{Context, bail};
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use p256::{
     ecdsa::{Signature, SigningKey, signature::Signer},
     pkcs8::EncodePublicKey,

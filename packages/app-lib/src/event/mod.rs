@@ -219,23 +219,6 @@ pub struct JavaDownloadConfirmationPayload {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct InstanceBulkUpdateProgressPayload {
-    pub instance_id: String,
-    pub stage: InstanceBulkUpdateProgressStage,
-    pub current: usize,
-    pub total: usize,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub enum InstanceBulkUpdateProgressStage {
-    ResolvingVersions,
-    Downloading,
-    Finishing,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct InstanceBackupProgressPayload {
     pub operation_id: Uuid,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -436,10 +419,6 @@ pub enum InstancePayloadType {
         project_ids: Vec<String>,
         #[serde(default)]
         dependency_project_ids: Vec<String>,
-    },
-    ContentInstallFailed {
-        project_ids: Vec<String>,
-        message: String,
     },
     Removed,
 }

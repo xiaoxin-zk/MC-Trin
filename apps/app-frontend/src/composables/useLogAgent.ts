@@ -4,6 +4,7 @@ import * as backend from '../logagent/backend.ts'
 import { type ActivityEntry, applyProgress } from '../logagent/progress.ts'
 import type {
     AgentGateway,
+    AgentToolApproval,
     AnalysisEvent,
     AnalysisSource,
     LocalProgress,
@@ -26,6 +27,10 @@ interface Dependencies {
         remoteMcp?: RemoteMcpGateway,
         mode?: 'assistant' | 'logs',
         agentInstructions?: string,
+        approveLocalTool?: (
+            tool: AgentToolApproval,
+            args: Record<string, unknown>,
+        ) => Promise<boolean>,
     ) => Promise<string>
     gateway: (runId: string) => AgentGateway
 }
@@ -95,6 +100,11 @@ export function useLogAgent(deps: Dependencies = dependencies) {
         remoteMcp?: RemoteMcpGateway,
         modelSelection?: { providerId: string; modelId: string },
         agentInstructions = '',
+        approveLocalTool?: (
+            tool: AgentToolApproval,
+            args: Record<string, unknown>,
+        ) => Promise<boolean>,
+        includeLogs = false,
     ) {
         if (busy.value) return
         reset()
@@ -132,8 +142,16 @@ export function useLogAgent(deps: Dependencies = dependencies) {
                       source,
                       modelSelection.providerId,
                       modelSelection.modelId,
+                      source === 'assistant' && includeLogs,
                   )
-                : await deps.prepare(instanceId, run.id, source)
+                : await deps.prepare(
+                      instanceId,
+                      run.id,
+                      source,
+                      undefined,
+                      undefined,
+                      includeLogs,
+                  )
             if (!current()) return
             model.value =
                 source === 'logshare' ? '' : `${session.provider_id} / ${session.model_id}`
@@ -150,6 +168,7 @@ export function useLogAgent(deps: Dependencies = dependencies) {
                     remoteMcp,
                     source === 'assistant' ? 'assistant' : 'logs',
                     source === 'assistant' ? agentInstructions : '',
+                    approveLocalTool,
                 )
             } else {
                 const preparedTicket = await Promise.resolve(ticket).catch(() => null)

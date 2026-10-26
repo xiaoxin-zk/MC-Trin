@@ -1,5 +1,4 @@
 use eyre::{Context, bail};
-use futures::SinkExt;
 use serde_json::json;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},

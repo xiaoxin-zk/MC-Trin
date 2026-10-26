@@ -24,7 +24,6 @@ pub(crate) enum SlowDecision {
     Continue,
     Probe { bytes_per_second: u64 },
     Idle { elapsed: Duration },
-    Commit,
 }
 
 pub(crate) struct NativeSlowPolicy {
@@ -34,7 +33,6 @@ pub(crate) struct NativeSlowPolicy {
     window_started_at: Instant,
     window_start_bytes: u64,
     slow_windows: u8,
-    committed: bool,
     expected_speed: Option<u64>,
     observed_speed: u64,
     probe_small_transfers: bool,
@@ -79,7 +77,6 @@ impl NativeSlowPolicy {
             window_started_at: now,
             window_start_bytes: starting_bytes,
             slow_windows: 0,
-            committed: false,
             expected_speed,
             observed_speed: 0,
             probe_small_transfers: false,
@@ -112,9 +109,6 @@ impl NativeSlowPolicy {
             return SlowDecision::Idle {
                 elapsed: idle_elapsed,
             };
-        }
-        if self.committed {
-            return SlowDecision::Continue;
         }
         let elapsed = self.window_started_at.elapsed();
         if elapsed < self.window {
@@ -200,10 +194,6 @@ impl NativeSlowPolicy {
         } else {
             expected_floor
         }
-    }
-
-    pub(crate) fn commit(&mut self) {
-        self.committed = true;
     }
 }
 
@@ -368,12 +358,11 @@ mod tests {
                 matches!(decision, SlowDecision::Probe { .. }),
                 expected
             );
-            assert!(!policy.committed);
         }
     }
 
     #[test]
-    fn unknown_remaining_does_not_commit_a_slow_stream() {
+    fn unknown_remaining_still_detects_a_slow_stream() {
         let mut policy = NativeSlowPolicy::new(0, None);
         policy.started_at = Instant::now() - MIN_FLOW;
         policy.window_started_at = Instant::now() - WINDOW;
@@ -382,7 +371,6 @@ mod tests {
             policy.observe(45 * 1024 * WINDOW.as_secs(), 0),
             SlowDecision::Probe { .. }
         ));
-        assert!(!policy.committed);
     }
 
     #[test]
@@ -434,21 +422,12 @@ mod tests {
         policy.started_at = Instant::now() - MIN_FLOW;
         policy.window_started_at = Instant::now() - WINDOW;
         assert_eq!(policy.observe(12 * 1024, 1024), SlowDecision::Continue);
-        assert!(!policy.committed);
         policy.window_started_at = Instant::now() - WINDOW;
         policy.slow_windows = REQUIRED_SLOW_WINDOWS - 1;
         assert!(matches!(
             policy.observe(12 * 1024 + 1, 1023),
             SlowDecision::Probe { .. }
         ));
-    }
-
-    #[test]
-    fn committed_transfer_still_recovers_from_idle() {
-        let mut policy = NativeSlowPolicy::for_http2(0, None);
-        policy.commit();
-        policy.last_data_at = Instant::now() - IDLE_TIMEOUT;
-        assert!(matches!(policy.observe(0, 1024), SlowDecision::Idle { .. }));
     }
 
     #[test]

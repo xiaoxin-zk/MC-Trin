@@ -36,10 +36,16 @@ import type { GameInstance } from '@/helpers/types'
 import {
     agentToolEnabled,
     BUILT_IN_AGENT_TOOLS,
+    enabledAgentTools,
     resetAgentTools,
     setAgentToolEnabled,
 } from '@/logagent/tool-settings'
-import type { AnalysisSettings, RemoteMcpGateway, RemoteMcpTool } from '@/logagent/types'
+import type {
+    AgentToolApproval,
+    AnalysisSettings,
+    RemoteMcpGateway,
+    RemoteMcpTool,
+} from '@/logagent/types'
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
@@ -57,7 +63,7 @@ const messages = defineMessages({
     generalPrivacy: {
         id: 'app.assistant.general-privacy',
         defaultMessage:
-            'Your question and any requested read-only launcher details are sent to your configured AI provider. The assistant cannot change files or settings.',
+            "Your question, sanitized crash logs when log tools are enabled, and any requested launcher details are sent to your configured AI provider. The assistant only performs limited local writes after your approval.",
     },
     settings: { id: 'app.assistant.settings', defaultMessage: 'AI settings' },
     loading: {
@@ -97,7 +103,7 @@ const messages = defineMessages({
     agentProfileHint: {
         id: 'app.assistant.profiles.hint',
         defaultMessage:
-            'Profiles guide the assistant. It can use built-in read-only tools and tools from connected MCP servers.',
+            'Profiles guide the assistant. Built-in tools are limited, and every write requires your approval.',
     },
     newAgentProfile: { id: 'app.assistant.profiles.create', defaultMessage: 'New agent' },
     editAgentProfile: { id: 'app.assistant.profiles.edit', defaultMessage: 'Edit agent' },
@@ -120,7 +126,7 @@ const messages = defineMessages({
     agentToolsDescription: {
         id: 'app.assistant.tools.description',
         defaultMessage:
-            'Read-only tools the local agent may call. Turn one off to keep the assistant from reading that data.',
+            'Choose which local tools the agent may call. Read tools expose sanitized data; write tools require approval for every call.',
     },
     agentToolsReset: {
         id: 'app.assistant.tools.reset',
@@ -137,7 +143,8 @@ const messages = defineMessages({
     },
     toolInstanceDescription: {
         id: 'app.assistant.tools.instance.description',
-        defaultMessage: 'Game versions, loaders and install status of installed instances.',
+        defaultMessage:
+            'Names, stable IDs, game versions, loaders and install status. Paths stay hidden.',
     },
     toolSettingsName: {
         id: 'app.assistant.tools.settings.name',
@@ -155,6 +162,166 @@ const messages = defineMessages({
     toolDiagnosticsDescription: {
         id: 'app.assistant.tools.diagnostics.description',
         defaultMessage: 'Operating system, architecture and memory totals for troubleshooting.',
+    },
+    toolJavaName: {
+        id: 'app.assistant.tools.java.name',
+        defaultMessage: 'Find installed Java',
+    },
+    toolJavaDescription: {
+        id: 'app.assistant.tools.java.description',
+        defaultMessage: 'Find local Java runtimes without exposing their paths.',
+    },
+    toolJavaVendorsName: {
+        id: 'app.assistant.tools.java-vendors.name',
+        defaultMessage: 'List Java vendors',
+    },
+    toolJavaVendorsDescription: {
+        id: 'app.assistant.tools.java-vendors.description',
+        defaultMessage: 'List Java vendors available for this platform.',
+    },
+    toolContentName: {
+        id: 'app.assistant.tools.content.name',
+        defaultMessage: 'Inspect instance content',
+    },
+    toolContentDescription: {
+        id: 'app.assistant.tools.content.description',
+        defaultMessage: 'Inspect installed mods, resource packs, shaders, updates, and compatibility warnings.',
+    },
+    toolCheckUpdatesName: {
+        id: 'app.assistant.tools.check-updates.name',
+        defaultMessage: 'Check content updates',
+    },
+    toolCheckUpdatesDescription: {
+        id: 'app.assistant.tools.check-updates.description',
+        defaultMessage: 'Find compatible updates without installing them.',
+    },
+    toolSearchResourcesName: {
+        id: 'app.assistant.tools.search-resources.name',
+        defaultMessage: 'Search resources',
+    },
+    toolSearchResourcesDescription: {
+        id: 'app.assistant.tools.search-resources.description',
+        defaultMessage: 'Search configured Modrinth, CurseForge, and other resource sources.',
+    },
+    toolResourceReleasesName: {
+        id: 'app.assistant.tools.resource-releases.name',
+        defaultMessage: 'List resource releases',
+    },
+    toolResourceReleasesDescription: {
+        id: 'app.assistant.tools.resource-releases.description',
+        defaultMessage: 'List compatible versions for a resource project.',
+    },
+    toolPrepareInstallName: {
+        id: 'app.assistant.tools.prepare-install.name',
+        defaultMessage: 'Prepare resource install',
+    },
+    toolPrepareInstallDescription: {
+        id: 'app.assistant.tools.prepare-install.description',
+        defaultMessage: 'Resolve dependencies and compatibility before downloading anything.',
+    },
+    toolPrepareUpdateName: {
+        id: 'app.assistant.tools.prepare-update.name',
+        defaultMessage: 'Prepare content update',
+    },
+    toolPrepareUpdateDescription: {
+        id: 'app.assistant.tools.prepare-update.description',
+        defaultMessage: 'Prepare a dependency-aware update plan before changing installed files.',
+    },
+    toolInstallJobName: {
+        id: 'app.assistant.tools.install-job.name',
+        defaultMessage: 'Check installation job',
+    },
+    toolInstallJobDescription: {
+        id: 'app.assistant.tools.install-job.description',
+        defaultMessage: 'Read download and installation progress or errors.',
+    },
+    toolCancelJobName: {
+        id: 'app.assistant.tools.cancel-job.name',
+        defaultMessage: 'Cancel installation job',
+    },
+    toolCancelJobDescription: {
+        id: 'app.assistant.tools.cancel-job.description',
+        defaultMessage: 'Cancel a running Java or resource installation after approval.',
+    },
+    toolUpdateSettingsName: {
+        id: 'app.assistant.tools.update-settings.name',
+        defaultMessage: 'Change launcher settings',
+    },
+    toolUpdateSettingsDescription: {
+        id: 'app.assistant.tools.update-settings.description',
+        defaultMessage: 'Change language, theme, memory and download preferences after approval.',
+    },
+    toolCreateInstanceName: {
+        id: 'app.assistant.tools.create-instance.name',
+        defaultMessage: 'Create instance',
+    },
+    toolCreateInstanceDescription: {
+        id: 'app.assistant.tools.create-instance.description',
+        defaultMessage: 'Create an empty instance record; no files are downloaded.',
+    },
+    toolRenameInstanceName: {
+        id: 'app.assistant.tools.rename-instance.name',
+        defaultMessage: 'Rename instance',
+    },
+    toolRenameInstanceDescription: {
+        id: 'app.assistant.tools.rename-instance.description',
+        defaultMessage: 'Rename an instance by ID without exposing its path.',
+    },
+    toolDeleteInstanceName: {
+        id: 'app.assistant.tools.delete-instance.name',
+        defaultMessage: 'Delete instance',
+    },
+    toolDeleteInstanceDescription: {
+        id: 'app.assistant.tools.delete-instance.description',
+        defaultMessage: 'Delete an instance and managed files after approval.',
+    },
+    toolInstallJavaName: {
+        id: 'app.assistant.tools.install-java.name',
+        defaultMessage: 'Install Java',
+    },
+    toolInstallJavaDescription: {
+        id: 'app.assistant.tools.install-java.description',
+        defaultMessage: 'Download and install a compatible Java runtime after approval.',
+    },
+    toolSetJavaDefaultName: {
+        id: 'app.assistant.tools.set-java-default.name',
+        defaultMessage: 'Set default Java',
+    },
+    toolSetJavaDefaultDescription: {
+        id: 'app.assistant.tools.set-java-default.description',
+        defaultMessage: 'Set a discovered Java runtime as the default for its major version.',
+    },
+    toolQueueInstallName: {
+        id: 'app.assistant.tools.queue-install.name',
+        defaultMessage: 'Start resource installation',
+    },
+    toolQueueInstallDescription: {
+        id: 'app.assistant.tools.queue-install.description',
+        defaultMessage: 'Download and install a reviewed resource plan after approval.',
+    },
+    toolDisableContentName: {
+        id: 'app.assistant.tools.disable-content.name',
+        defaultMessage: 'Disable content',
+    },
+    toolDisableContentDescription: {
+        id: 'app.assistant.tools.disable-content.description',
+        defaultMessage: 'Temporarily disable a mod or resource to test a reversible fix.',
+    },
+    toolEnableContentName: {
+        id: 'app.assistant.tools.enable-content.name',
+        defaultMessage: 'Enable content',
+    },
+    toolEnableContentDescription: {
+        id: 'app.assistant.tools.enable-content.description',
+        defaultMessage: 'Restore a previously disabled content entry after approval.',
+    },
+    toolRemoveContentName: {
+        id: 'app.assistant.tools.remove-content.name',
+        defaultMessage: 'Remove content',
+    },
+    toolRemoveContentDescription: {
+        id: 'app.assistant.tools.remove-content.description',
+        defaultMessage: 'Remove one identified managed content file after approval.',
     },
     toolListLogsName: {
         id: 'app.assistant.tools.list-logs.name',
@@ -206,7 +373,11 @@ const messages = defineMessages({
     },
     mcpApprovalTitle: {
         id: 'app.assistant.mcp.approval-title',
-        defaultMessage: 'Review MCP tool request',
+        defaultMessage: 'Review tool request',
+    },
+    localApprovalTitle: {
+        id: 'app.assistant.tools.approval-title',
+        defaultMessage: 'Review local write request',
     },
     mcpServer: { id: 'app.assistant.mcp.server', defaultMessage: 'Server' },
     mcpTool: { id: 'app.assistant.mcp.tool', defaultMessage: 'Tool' },
@@ -237,6 +408,86 @@ const toolLabels = {
     get_platform_diagnostics: {
         name: messages.toolDiagnosticsName,
         description: messages.toolDiagnosticsDescription,
+    },
+    discover_java_installations: {
+        name: messages.toolJavaName,
+        description: messages.toolJavaDescription,
+    },
+    list_java_vendors: {
+        name: messages.toolJavaVendorsName,
+        description: messages.toolJavaVendorsDescription,
+    },
+    inspect_instance_content: {
+        name: messages.toolContentName,
+        description: messages.toolContentDescription,
+    },
+    check_content_updates: {
+        name: messages.toolCheckUpdatesName,
+        description: messages.toolCheckUpdatesDescription,
+    },
+    search_resources: {
+        name: messages.toolSearchResourcesName,
+        description: messages.toolSearchResourcesDescription,
+    },
+    get_resource_releases: {
+        name: messages.toolResourceReleasesName,
+        description: messages.toolResourceReleasesDescription,
+    },
+    prepare_resource_install: {
+        name: messages.toolPrepareInstallName,
+        description: messages.toolPrepareInstallDescription,
+    },
+    prepare_resource_update: {
+        name: messages.toolPrepareUpdateName,
+        description: messages.toolPrepareUpdateDescription,
+    },
+    get_install_job: {
+        name: messages.toolInstallJobName,
+        description: messages.toolInstallJobDescription,
+    },
+    cancel_install_job: {
+        name: messages.toolCancelJobName,
+        description: messages.toolCancelJobDescription,
+    },
+    update_launcher_settings: {
+        name: messages.toolUpdateSettingsName,
+        description: messages.toolUpdateSettingsDescription,
+    },
+    create_instance: {
+        name: messages.toolCreateInstanceName,
+        description: messages.toolCreateInstanceDescription,
+    },
+    rename_instance: {
+        name: messages.toolRenameInstanceName,
+        description: messages.toolRenameInstanceDescription,
+    },
+    delete_instance: {
+        name: messages.toolDeleteInstanceName,
+        description: messages.toolDeleteInstanceDescription,
+    },
+    install_java_runtime: {
+        name: messages.toolInstallJavaName,
+        description: messages.toolInstallJavaDescription,
+    },
+    set_java_default_runtime: {
+        name: messages.toolSetJavaDefaultName,
+        description: messages.toolSetJavaDefaultDescription,
+    },
+    queue_resource_install: {
+        name: messages.toolQueueInstallName,
+        description: messages.toolQueueInstallDescription,
+    },
+    disable_content: {
+        name: messages.toolDisableContentName,
+        description: messages.toolDisableContentDescription,
+    },
+    enable_content: {
+        name: messages.toolEnableContentName,
+        description: messages.toolEnableContentDescription,
+    },
+    remove_content: {
+        name: messages.toolRemoveContentName,
+        description: messages.toolRemoveContentDescription,
     },
     list_log_files: {
         name: messages.toolListLogsName,
@@ -398,6 +649,7 @@ async function load() {
 async function submit() {
     if (!canSubmit.value) return
     const prompt = question.value.trim()
+    const enabledTools = enabledAgentTools(mode.value === 'general' ? 'assistant' : 'logs')
     const client = mcpClient.value
     const remoteMcp: RemoteMcpGateway | undefined = client
         ? {
@@ -408,13 +660,24 @@ async function submit() {
           }
         : undefined
     if (mode.value === 'logs') {
-        await agent.start(selectedInstanceId.value, 'custom', null, () => {}, prompt, remoteMcp)
+        await agent.start(
+            selectedInstanceId.value,
+            'custom',
+            null,
+            () => {},
+            prompt,
+            remoteMcp,
+            undefined,
+            '',
+            undefined,
+            enabledTools.has('read_log_file') || enabledTools.has('grep_log_file'),
+        )
         return
     }
     const model = assistantModel.value
     if (!model) return
     await agent.start(
-        '',
+        selectedInstanceId.value,
         'assistant',
         null,
         () => {},
@@ -425,6 +688,8 @@ async function submit() {
             modelId: model.model.id,
         },
         selectedAgentProfile.value.instructions,
+        requestLocalToolApproval,
+        enabledTools.has('read_log_file') || enabledTools.has('grep_log_file'),
     )
 }
 
@@ -567,12 +832,20 @@ function deleteAgentProfile() {
     }
 }
 
-function requestToolApproval(tool: RemoteMcpTool, args: Record<string, unknown>) {
-    const endpoint = mcpClient.value?.endpoint
+function requestToolApproval(
+    tool: RemoteMcpTool,
+    args: Record<string, unknown>,
+    endpointOverride?: string,
+) {
+    const endpoint = endpointOverride ?? mcpClient.value?.endpoint
     if (!endpoint) return Promise.resolve(false)
     return new Promise<boolean>((resolve) => {
         pendingApprovals.value = [...pendingApprovals.value, { endpoint, tool, args, resolve }]
     })
+}
+
+function requestLocalToolApproval(tool: AgentToolApproval, args: Record<string, unknown>) {
+    return requestToolApproval({ name: tool.name, description: tool.description }, args, 'MC-Trin')
 }
 
 function resolveToolApproval(approved: boolean) {
@@ -787,6 +1060,12 @@ onUnmounted(denyPendingApprovals)
                             <span class="block text-xs text-[var(--color-text-tertiary)]">
                                 {{ formatMessage(toolLabel(tool.id).description) }}
                             </span>
+                            <span
+                                v-if="tool.permission === 'write'"
+                                class="block text-xs font-semibold text-brand"
+                            >
+                                {{ formatMessage(messages.localApprovalTitle) }}
+                            </span>
                         </div>
                         <label class="flex shrink-0 items-center gap-2 text-sm">
                             <input
@@ -958,13 +1237,14 @@ onUnmounted(denyPendingApprovals)
                 @submit.prevent="submit"
             >
                 <label
-                    v-if="mode === 'logs'"
+                    v-if="mode === 'logs' || availableInstances.length"
                     class="flex max-w-2xl flex-col gap-1.5 text-sm font-semibold"
                 >
                     <span>{{ formatMessage(messages.instance) }}</span>
                     <select
                         v-model="selectedInstanceId"
                         class="h-10 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-[var(--color-text-primary)]"
+                        :required="mode === 'logs'"
                     >
                         <option
                             v-for="instance in availableInstances"
@@ -1107,7 +1387,13 @@ onUnmounted(denyPendingApprovals)
                     id="mcp-approval-title"
                     class="m-0 text-lg font-semibold text-[var(--color-text-primary)]"
                 >
-                    {{ formatMessage(messages.mcpApprovalTitle) }}
+                    {{
+                        formatMessage(
+                            currentApproval.endpoint === 'MC-Trin'
+                                ? messages.localApprovalTitle
+                                : messages.mcpApprovalTitle,
+                        )
+                    }}
                 </h2>
                 <dl class="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                     <dt class="text-[var(--color-text-tertiary)]">

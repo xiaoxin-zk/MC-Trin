@@ -358,7 +358,25 @@ watch(
     { immediate: true },
 )
 
-watch(() => props.state, voice.syncRoom, { deep: true })
+// The multiplayer state object is replaced on every backend poll. Voice only
+// needs to resync when the room lifecycle or peer membership changes; watching
+// the full object made it walk every peer on every 500ms state update.
+const voiceRoomKey = computed(() => {
+    const state = props.state
+    if (!state) return ''
+    const players = state.players
+        .map((player) => player.playerId)
+        .filter(Boolean)
+        .sort()
+        .join(',')
+    return `${state.status}:${state.local_player_id ?? ''}:${players}`
+})
+
+watch(
+    voiceRoomKey,
+    () => voice.syncRoom(props.state),
+    { immediate: true },
+)
 
 onMounted(() => {
     prefillInviteFromDeepLink()

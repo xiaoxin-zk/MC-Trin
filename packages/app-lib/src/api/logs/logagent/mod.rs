@@ -121,6 +121,7 @@ pub async fn prepare(
     source: String,
     provider_id: Option<String>,
     model_id: Option<String>,
+    include_logs: bool,
 ) -> crate::Result<PreparedSession> {
     uuid::Uuid::parse_str(&run_id)
         .map_err(|_| error("Invalid LogAgent run ID"))?;
@@ -162,6 +163,7 @@ pub async fn prepare(
             &session,
             provider_id.as_deref(),
             model_id.as_deref(),
+            include_logs,
         ) => result,
     };
     if result.is_err() {
@@ -176,6 +178,7 @@ async fn prepare_snapshot(
     session: &Session,
     requested_provider_id: Option<&str>,
     requested_model_id: Option<&str>,
+    include_logs: bool,
 ) -> crate::Result<PreparedSession> {
     let settings = get_crash_analysis_ai_settings().await?;
     let (provider_id, model_id, model) = match session.source.as_str() {
@@ -215,10 +218,12 @@ async fn prepare_snapshot(
     let share_settings = get_log_share_settings().await?;
     let state = State::get().await?;
     let locale = crate::state::Settings::get(&state.pool).await?.locale;
-    let (files, context) = if session.source == "assistant" {
+    let (files, context) = if session.source != "logshare"
+        && (!include_logs || instance_id.is_empty())
+    {
         (
             Vec::new(),
-            "Use the read-only launcher context tools only when they help answer the user's question. Do not infer details that those tools do not provide.".to_string(),
+            "Use enabled launcher context tools when local details materially improve the answer. No instance crash snapshot was selected for this run.".to_string(),
         )
     } else {
         let analysis = analyze_crash(instance_id).await?;
@@ -356,13 +361,7 @@ pub async fn model_turn(
 pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
     let session = session(run_id)?;
     if session.source == "assistant" {
-        if !assistant_tool_name(&request.name)
-            || !request.file_id.is_empty()
-            || request.start_line.is_some()
-            || request.end_line.is_some()
-            || request.query.is_some()
-            || request.context.is_some()
-        {
+        if !assistant_request_shape_valid(&request) {
             return Err(error("Unsupported launcher assistant tool request"));
         }
     } else if session.source != "custom" {
@@ -378,15 +377,17 @@ pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
             return Err(error("LogAgent reached the 40 tool call limit"));
         }
         let key = format!(
-            "{}:{}:{:?}:{:?}:{:?}:{:?}",
+            "{}:{}",
             request.name,
-            request.file_id,
-            request.start_line,
-            request.end_line,
-            request.query,
-            request.context
+            serde_json::to_string(&request).unwrap_or_default(),
         );
-        !budget.reads.insert(key)
+        if assistant_write_tool(&request.name)
+            || request.name == "get_install_job"
+        {
+            false
+        } else {
+            !budget.reads.insert(key)
+        }
     };
     if duplicate {
         return Ok(
@@ -394,7 +395,24 @@ pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
         );
     }
     if session.source == "assistant" {
-        tools::execute_assistant(&request).await
+        if matches!(
+            request.name.as_str(),
+            "list_log_files" | "read_log_file" | "grep_log_file"
+        ) {
+            Ok(tools::execute(&session.snapshot()?.files, &request))
+        } else {
+            let result =
+                tools::execute_assistant(&request, &session.cancel).await;
+            if assistant_write_tool(&request.name) {
+                session
+                    .budget
+                    .lock()
+                    .map_err(|_| error("LogAgent budget unavailable"))?
+                    .reads
+                    .clear();
+            }
+            Ok(result?)
+        }
     } else {
         Ok(tools::execute(&session.snapshot()?.files, &request))
     }
@@ -406,7 +424,427 @@ fn assistant_tool_name(name: &str) -> bool {
         "get_instance_overview"
             | "get_launcher_settings"
             | "get_platform_diagnostics"
+            | "update_launcher_settings"
+            | "create_instance"
+            | "rename_instance"
+            | "delete_instance"
+            | "discover_java_installations"
+            | "list_java_vendors"
+            | "inspect_instance_content"
+            | "check_content_updates"
+            | "search_resources"
+            | "get_resource_releases"
+            | "prepare_resource_install"
+            | "prepare_resource_update"
+            | "queue_resource_install"
+            | "get_install_job"
+            | "cancel_install_job"
+            | "install_java_runtime"
+            | "set_java_default_runtime"
+            | "disable_content"
+            | "enable_content"
+            | "remove_content"
+            | "list_log_files"
+            | "read_log_file"
+            | "grep_log_file"
     )
+}
+
+fn assistant_write_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "update_launcher_settings"
+            | "create_instance"
+            | "rename_instance"
+            | "delete_instance"
+            | "install_java_runtime"
+            | "set_java_default_runtime"
+            | "queue_resource_install"
+            | "cancel_install_job"
+            | "disable_content"
+            | "enable_content"
+            | "remove_content"
+    )
+}
+
+fn assistant_request_shape_valid(request: &ToolRequest) -> bool {
+    let allowed_fields: &[&str] = match request.name.as_str() {
+        "get_instance_overview"
+        | "get_launcher_settings"
+        | "get_platform_diagnostics"
+        | "discover_java_installations"
+        | "list_java_vendors"
+        | "list_log_files" => &[],
+        "update_launcher_settings" => &["patch"],
+        "create_instance" => {
+            &["instance_name", "game_version", "loader", "loader_version"]
+        }
+        "rename_instance" => &["instance_id", "instance_name"],
+        "delete_instance"
+        | "inspect_instance_content"
+        | "check_content_updates" => &["instance_id"],
+        "search_resources" => &[
+            "query",
+            "context",
+            "game_version",
+            "loader",
+            "source",
+            "resource_type",
+        ],
+        "get_resource_releases" => {
+            &["source", "project_id", "game_version", "loader"]
+        }
+        "prepare_resource_install" => &[
+            "instance_id",
+            "source",
+            "project_id",
+            "version_id",
+            "resource_type",
+            "install_dependencies",
+        ],
+        "prepare_resource_update" => &["instance_id", "content_id"],
+        "queue_resource_install" => &["plan_id", "plan_revision"],
+        "get_install_job" | "cancel_install_job" => &["job_id"],
+        "install_java_runtime" => &["java_version", "vendor"],
+        "set_java_default_runtime" => &["java_version"],
+        "disable_content" | "enable_content" | "remove_content" => {
+            &["instance_id", "content_id"]
+        }
+        "read_log_file" => &["file_id", "start_line", "end_line"],
+        "grep_log_file" => &["file_id", "query", "context"],
+        _ => return false,
+    };
+    if !only_expected_assistant_fields(request, allowed_fields) {
+        return false;
+    }
+    let no_log_fields = request.file_id.is_empty()
+        && request.start_line.is_none()
+        && request.end_line.is_none()
+        && request.query.is_none()
+        && request.context.is_none();
+    match request.name.as_str() {
+        "get_instance_overview"
+        | "get_launcher_settings"
+        | "get_platform_diagnostics"
+        | "list_java_vendors"
+        | "list_log_files" => {
+            no_log_fields && no_assistant_extra_fields(request)
+        }
+        "update_launcher_settings" => {
+            no_log_fields
+                && request.instance_id.is_none()
+                && request.instance_name.is_none()
+                && request.game_version.is_none()
+                && request.loader.is_none()
+                && request.loader_version.is_none()
+                && request.patch.is_some()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.version_id.is_none()
+                && request.resource_type.is_none()
+                && request.job_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.content_id.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "create_instance" => {
+            no_log_fields
+                && request.instance_id.is_none()
+                && request.instance_name.is_some()
+                && request.game_version.is_some()
+                && request
+                    .loader
+                    .as_deref()
+                    .is_none_or(|value| !value.is_empty())
+                && request
+                    .loader_version
+                    .as_deref()
+                    .is_none_or(|value| !value.is_empty())
+                && request.patch.is_none()
+        }
+        "rename_instance" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.instance_name.is_some()
+                && request.game_version.is_none()
+                && request.loader.is_none()
+                && request.loader_version.is_none()
+                && request.patch.is_none()
+        }
+        "delete_instance" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.instance_name.is_none()
+                && request.game_version.is_none()
+                && request.loader.is_none()
+                && request.loader_version.is_none()
+                && request.patch.is_none()
+        }
+        "discover_java_installations" => no_log_fields,
+        "inspect_instance_content" | "check_content_updates" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.instance_name.is_none()
+                && request.game_version.is_none()
+                && request.loader.is_none()
+                && request.loader_version.is_none()
+                && request.patch.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.version_id.is_none()
+                && request.resource_type.is_none()
+                && request.job_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.content_id.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "search_resources" => {
+            request.file_id.is_empty()
+                && request.start_line.is_none()
+                && request.end_line.is_none()
+                && request.context.is_none()
+                && request
+                    .query
+                    .as_ref()
+                    .is_some_and(|value| !value.is_empty())
+                && request.instance_id.is_none()
+                && request.instance_name.is_none()
+                && request
+                    .game_version
+                    .as_ref()
+                    .is_none_or(|value| !value.is_empty())
+                && request
+                    .loader
+                    .as_ref()
+                    .is_none_or(|value| !value.is_empty())
+                && request.patch.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.project_id.is_none()
+                && request.version_id.is_none()
+                && request
+                    .resource_type
+                    .as_ref()
+                    .is_none_or(|value| !value.is_empty())
+                && request.job_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.content_id.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "get_resource_releases" => {
+            no_log_fields
+                && request.source.is_some()
+                && request.project_id.is_some()
+                && request.instance_id.is_none()
+                && request.instance_name.is_none()
+                && request.patch.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.version_id.is_none()
+                && request.resource_type.is_none()
+                && request.job_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.content_id.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "prepare_resource_install" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.source.is_some()
+                && request.project_id.is_some()
+                && request.resource_type.is_some()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.job_id.is_none()
+                && request.content_id.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.enabled.is_none()
+        }
+        "prepare_resource_update" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.content_id.is_some()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.job_id.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.version_id.is_none()
+                && request.resource_type.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "queue_resource_install" => {
+            no_log_fields
+                && request.plan_id.is_some()
+                && request.plan_revision.is_some()
+                && request.instance_id.is_none()
+                && request.content_id.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.job_id.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "get_install_job" => {
+            no_log_fields
+                && request.job_id.is_some()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.instance_id.is_none()
+                && request.content_id.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "cancel_install_job" => {
+            no_log_fields
+                && request.job_id.is_some()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.instance_id.is_none()
+                && request.content_id.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "install_java_runtime" => {
+            no_log_fields
+                && request.java_version.is_some()
+                && request
+                    .vendor
+                    .as_ref()
+                    .is_some_and(|value| !value.is_empty())
+                && request.instance_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.job_id.is_none()
+                && request.content_id.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "set_java_default_runtime" => {
+            no_log_fields
+                && request.java_version.is_some()
+                && request.vendor.is_none()
+                && request.instance_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.job_id.is_none()
+                && request.content_id.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "disable_content" | "enable_content" | "remove_content" => {
+            no_log_fields
+                && request.instance_id.is_some()
+                && request.content_id.is_some()
+                && request.patch.is_none()
+                && request.java_version.is_none()
+                && request.vendor.is_none()
+                && request.source.is_none()
+                && request.project_id.is_none()
+                && request.resource_type.is_none()
+                && request.job_id.is_none()
+                && request.plan_id.is_none()
+                && request.plan_revision.is_none()
+                && request.enabled.is_none()
+                && request.install_dependencies.is_none()
+        }
+        "list_log_files" => {
+            request.file_id.is_empty()
+                && request.start_line.is_none()
+                && request.end_line.is_none()
+                && request.query.is_none()
+                && request.context.is_none()
+        }
+        "read_log_file" => {
+            no_assistant_extra_fields(request)
+                && !request.file_id.is_empty()
+                && request.query.is_none()
+                && request.context.is_none()
+        }
+        "grep_log_file" => {
+            no_assistant_extra_fields(request)
+                && !request.file_id.is_empty()
+                && request
+                    .query
+                    .as_ref()
+                    .is_some_and(|value| !value.is_empty())
+                && request.start_line.is_none()
+                && request.end_line.is_none()
+        }
+        _ => false,
+    }
+}
+
+fn only_expected_assistant_fields(
+    request: &ToolRequest,
+    allowed: &[&str],
+) -> bool {
+    let Ok(Value::Object(mut fields)) = serde_json::to_value(request) else {
+        return false;
+    };
+    fields.remove("name");
+    fields.remove("file_id");
+    fields.into_iter().all(|(key, value)| {
+        value.is_null()
+            || value.as_str() == Some("")
+            || allowed.contains(&key.as_str())
+    })
+}
+
+fn no_assistant_extra_fields(request: &ToolRequest) -> bool {
+    request.instance_id.is_none()
+        && request.instance_name.is_none()
+        && request.game_version.is_none()
+        && request.loader.is_none()
+        && request.loader_version.is_none()
+        && request.patch.is_none()
+        && request.java_version.is_none()
+        && request.vendor.is_none()
+        && request.source.is_none()
+        && request.project_id.is_none()
+        && request.version_id.is_none()
+        && request.resource_type.is_none()
+        && request.job_id.is_none()
+        && request.plan_id.is_none()
+        && request.plan_revision.is_none()
+        && request.content_id.is_none()
+        && request.enabled.is_none()
+        && request.install_dependencies.is_none()
 }
 
 fn remote_mcp_tool_name(name: &str) -> bool {
@@ -506,12 +944,27 @@ mod tests {
     }
 
     #[test]
-    fn assistant_tool_allowlist_is_read_only_and_accepts_remote_mcp_aliases() {
+    fn assistant_tool_allowlist_includes_bounded_writes_and_remote_mcp_aliases()
+    {
         assert!(allowed_tool_name("assistant", "get_instance_overview"));
         assert!(allowed_tool_name("assistant", "get_launcher_settings"));
         assert!(allowed_tool_name("assistant", "get_platform_diagnostics"));
+        assert!(allowed_tool_name("assistant", "update_launcher_settings"));
+        assert!(allowed_tool_name("assistant", "create_instance"));
+        assert!(allowed_tool_name("assistant", "rename_instance"));
+        assert!(allowed_tool_name("assistant", "delete_instance"));
+        assert!(allowed_tool_name(
+            "assistant",
+            "discover_java_installations"
+        ));
+        assert!(allowed_tool_name("assistant", "install_java_runtime"));
+        assert!(allowed_tool_name("assistant", "search_resources"));
+        assert!(allowed_tool_name("assistant", "prepare_resource_install"));
+        assert!(allowed_tool_name("assistant", "prepare_resource_update"));
+        assert!(allowed_tool_name("assistant", "queue_resource_install"));
+        assert!(allowed_tool_name("assistant", "disable_content"));
         assert!(allowed_tool_name("assistant", "mcp_0_lookup_server"));
-        assert!(!allowed_tool_name("assistant", "list_log_files"));
+        assert!(allowed_tool_name("assistant", "list_log_files"));
         assert!(!allowed_tool_name("assistant", "execute"));
         assert!(!allowed_tool_name("custom", "get_launcher_settings"));
         assert!(allowed_tool_name("custom", "read_log_file"));

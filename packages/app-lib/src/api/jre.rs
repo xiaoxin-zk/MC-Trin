@@ -357,11 +357,45 @@ async fn refresh_discovered_javas(
         }
     }
 
+    // Make the first matching local runtime available to each supported
+    // Minecraft Java slot without replacing a user's existing choice. This
+    // also covers runtimes found later by the bounded background scan.
+    let mut configured_defaults: HashSet<u32> =
+        JavaVersion::get_all_defaults(&state.pool)
+            .await?
+            .into_iter()
+            .map(|java| java.parsed_version)
+            .collect();
+    let mut defaults_changed = false;
+    for java in &jres {
+        if !matches!(java.parsed_version, 8 | 17 | 21 | 25)
+            || configured_defaults.contains(&java.parsed_version)
+        {
+            continue;
+        }
+        if let Err(error) = JavaVersion::set_default(
+            java.parsed_version,
+            &java.path,
+            &state.pool,
+        )
+        .await
+        {
+            tracing::warn!(
+                "Failed to set Java {} default to {}: {error}",
+                java.parsed_version,
+                java.path
+            );
+        } else {
+            configured_defaults.insert(java.parsed_version);
+            defaults_changed = true;
+        }
+    }
+
     let current: HashSet<(String, String)> = entries
         .iter()
         .map(|entry| (entry.java.path.clone(), entry.java.version.clone()))
         .collect();
-    if current != previous {
+    if current != previous || defaults_changed {
         let _ = emit_java_discovery_update(current.len()).await;
     }
 
@@ -1882,6 +1916,8 @@ async fn download_java_from_feed_inner(
         discovered.upsert(&mut *transaction).await?;
     }
     transaction.commit().await?;
+    let discovered_count = DiscoveredJava::get_all(&state.pool).await?.len();
+    let _ = emit_java_discovery_update(discovered_count).await;
 
     // Complete the remaining 10 % of the bar
     if let Some(loading_bar) = &loading_bar {

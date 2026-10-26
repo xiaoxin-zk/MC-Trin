@@ -109,19 +109,35 @@ const incomingRequests = computed(() =>
 )
 
 const loading = ref(true)
+let disposed = false
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let friendsRequest: Promise<void> | undefined
 async function loadFriends(timeout = false) {
-    loading.value = timeout
+    if (disposed) return
+    if (friendsRequest) return friendsRequest
+    if (timeout) loading.value = true
 
-    try {
-        const friendsList = await friends()
-        userFriends.value = await transformFriends(friendsList, userCredentials.value)
-        loading.value = false
-    } catch (e) {
-        console.error('Error loading friends', e)
-        if (timeout) {
-            setTimeout(() => loadFriends(), 15 * 1000)
+    friendsRequest = (async () => {
+        try {
+            const friendsList = await friends()
+            if (disposed) return
+            userFriends.value = await transformFriends(friendsList, userCredentials.value)
+            loading.value = false
+            clearTimeout(retryTimer)
+            retryTimer = undefined
+        } catch (e) {
+            console.error('Error loading friends', e)
+            if (timeout && !disposed && !retryTimer) {
+                retryTimer = setTimeout(() => {
+                    retryTimer = undefined
+                    void loadFriends()
+                }, 15 * 1000)
+            }
+        } finally {
+            friendsRequest = undefined
         }
-    }
+    })()
+    return friendsRequest
 }
 
 watch(
@@ -142,6 +158,9 @@ watch(
 
 const unlisten = await friend_listener(() => loadFriends())
 onUnmounted(() => {
+    disposed = true
+    clearTimeout(retryTimer)
+    retryTimer = undefined
     unlisten()
 })
 

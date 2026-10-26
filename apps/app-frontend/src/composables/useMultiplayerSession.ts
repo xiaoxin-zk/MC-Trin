@@ -35,8 +35,10 @@ export function useMultiplayerSession(options: { legacyProviders?: boolean } = {
     const terracottaUpdate = ref<TerracottaUpdate | null>(null)
 
     let mounted = false
+    let pageVisible = true
     let pollTimer: ReturnType<typeof setTimeout> | undefined
     let pollPromise: Promise<void> | undefined
+    let handleVisibilityChange: (() => void) | undefined
 
     const state = computed(() => multiplayerState.value?.terracotta ?? null)
     const hongshiState = computed(() => multiplayerState.value?.hongshi ?? null)
@@ -52,13 +54,13 @@ export function useMultiplayerSession(options: { legacyProviders?: boolean } = {
     }
 
     function schedulePoll() {
-        if (!mounted) return
+        if (!mounted || !pageVisible) return
         clearTimeout(pollTimer)
         pollTimer = setTimeout(() => void pollState(), pollInterval())
     }
 
-    async function pollState() {
-        if (!mounted) return
+    async function pollState(force = false) {
+        if (!mounted || (!pageVisible && !force)) return
         if (pollPromise) return pollPromise
         pollPromise = Promise.all([multiplayer.getState(), multiplayer.getDetectedPorts()])
             .then(([nextState, ports]) => {
@@ -158,6 +160,13 @@ export function useMultiplayerSession(options: { legacyProviders?: boolean } = {
 
     onMounted(() => {
         mounted = true
+        pageVisible = document.visibilityState !== 'hidden'
+        handleVisibilityChange = () => {
+            pageVisible = document.visibilityState !== 'hidden'
+            if (pageVisible) void pollState(true)
+            else clearTimeout(pollTimer)
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
         void pollState()
         if (legacyProviders) {
             void terracotta
@@ -184,6 +193,9 @@ export function useMultiplayerSession(options: { legacyProviders?: boolean } = {
     onUnmounted(() => {
         mounted = false
         clearTimeout(pollTimer)
+        if (handleVisibilityChange)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        handleVisibilityChange = undefined
     })
 
     return {

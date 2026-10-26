@@ -41,6 +41,7 @@ pub(crate) async fn send_cdn_request(
     send_cdn_request_inner(builder, None, None).await
 }
 
+#[cfg(test)]
 pub(crate) async fn send_cdn_request_with_clients(
     builder: reqwest::RequestBuilder,
     clients: &DownloadClients,

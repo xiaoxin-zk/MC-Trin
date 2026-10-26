@@ -48,10 +48,6 @@ pub(crate) async fn acquire_download<'a>(
     })
 }
 
-fn budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
-    budget_for(route, false)
-}
-
 fn budget_for(route: &DownloadRoute, asset: bool) -> Option<Arc<Semaphore>> {
     let authority = crate::util::fetch::url_authority(&route.url)?;
     let key = AuthorityKey {
@@ -75,12 +71,6 @@ fn budget_for(route: &DownloadRoute, asset: bool) -> Option<Arc<Semaphore>> {
             })
             .clone(),
     )
-}
-
-pub(crate) async fn acquire(
-    route: &DownloadRoute,
-) -> Result<H2StreamPermit, AcquireError> {
-    acquire_for(route, false).await
 }
 
 pub(crate) async fn acquire_for(

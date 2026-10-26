@@ -1,5 +1,7 @@
+#[cfg(test)]
+use crate::util::download::constants::MODEL_VERIFIED;
 use crate::util::download::constants::{
-    DIAGNOSTICS_DNS, MODEL_FASTLY_RULE, MODEL_HISTORY, MODEL_VERIFIED,
+    DIAGNOSTICS_DNS, MODEL_FASTLY_RULE, MODEL_HISTORY,
 };
 use crate::util::download_dns::DnsSource;
 use std::net::{IpAddr, SocketAddr};
@@ -9,6 +11,7 @@ use std::time::Instant;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum CandidateSource {
     Dns(DnsSource),
+    #[cfg(test)]
     Verified,
     History,
     FastlyRule(u32),
@@ -18,6 +21,7 @@ impl CandidateSource {
     pub(super) fn as_str(&self) -> &'static str {
         match self {
             Self::Dns(_) => DIAGNOSTICS_DNS,
+            #[cfg(test)]
             Self::Verified => MODEL_VERIFIED,
             Self::History => MODEL_HISTORY,
             Self::FastlyRule(_) => MODEL_FASTLY_RULE,
@@ -58,8 +62,6 @@ pub(crate) struct PoolKey {
 #[derive(Clone, Debug)]
 pub(crate) struct EndpointLease {
     pub(crate) pool: PoolKey,
-    pub(super) source: CandidateSource,
-    pub(crate) expires_at: Instant,
 }
 
 #[derive(Clone, Debug)]

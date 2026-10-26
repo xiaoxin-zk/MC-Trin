@@ -17,6 +17,7 @@ export const prepareSession = (
     source: AnalysisSource,
     providerId?: string,
     modelId?: string,
+    includeLogs?: boolean,
 ) =>
     invoke<PreparedSession>('plugin:logs|logs_logagent_prepare', {
         instanceId,
@@ -24,6 +25,7 @@ export const prepareSession = (
         source,
         providerId,
         modelId,
+        includeLogs: includeLogs ?? source === 'custom',
     })
 
 export const cancelSession = (runId: string) =>

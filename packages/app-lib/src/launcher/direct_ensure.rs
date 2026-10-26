@@ -402,25 +402,7 @@ async fn ensure_file(st: &State, plan: &LinkedFilePlan) -> crate::Result<bool> {
 const MINECRAFT_RESOURCES_BASE: &str =
     "https://resources.download.minecraft.net";
 
-/// Ensures the assets index exists under the linked `assets/indexes` and then
-/// backfills missing or corrupt asset objects under `assets/objects`.
-pub(crate) async fn ensure_linked_assets(
-    st: &State,
-    direct: &DirectLinkedLaunch,
-    asset_index: &AssetIndex,
-    with_legacy: bool,
-) -> crate::Result<()> {
-    ensure_linked_assets_from_with_progress(
-        st,
-        direct,
-        asset_index,
-        MINECRAFT_RESOURCES_BASE,
-        with_legacy,
-        None,
-    )
-    .await
-}
-
+#[cfg(test)]
 pub(crate) async fn ensure_linked_assets_from(
     st: &State,
     direct: &DirectLinkedLaunch,

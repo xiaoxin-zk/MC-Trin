@@ -168,13 +168,6 @@ export function createContentInstall(opts: {
             markInstanceContentChanged(event.instance_id)
             removeInstallingItems(event.instance_id, event.project_ids ?? [])
             void notifyInstalledDependencies(event.instance_id, event.dependency_project_ids ?? [])
-        } else if (event.event === 'content_install_failed') {
-            removeInstallingItems(event.instance_id, event.project_ids ?? [])
-            markInstanceContentInstallFailed(event.instance_id)
-            markInstanceContentChanged(event.instance_id)
-            opts.handleError(
-                event.message ?? formatMessage(contentInstallMessages.errorMessages.installFailed),
-            )
         }
     }).catch(opts.handleError)
 

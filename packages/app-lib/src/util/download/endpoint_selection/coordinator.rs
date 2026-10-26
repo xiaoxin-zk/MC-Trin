@@ -133,7 +133,6 @@ struct ActiveRound {
     epoch: u64,
     generation: u64,
     cancellation: CancellationToken,
-    status: watch::Sender<RoundStatus>,
 }
 
 struct State {
@@ -606,8 +605,6 @@ impl EndpointSelector {
                 }),
                 protocol,
             },
-            source: selection.preferred.source.clone(),
-            expires_at: selection.expires_at,
         })
     }
 
@@ -712,7 +709,6 @@ impl EndpointSelector {
             epoch,
             generation,
             cancellation: cancellation.clone(),
-            status: status.clone(),
         });
         Some(RoundStart {
             guard: RoundGuard {
@@ -733,6 +729,7 @@ impl EndpointSelector {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn on_slow(
         self: &Arc<Self>,
         request: &DownloadRequest,

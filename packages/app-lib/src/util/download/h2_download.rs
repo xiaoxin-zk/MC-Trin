@@ -874,19 +874,16 @@ impl Clone for H2BatchAsset {
 /// Selects every asset stream through the shared authority scheduler.
 struct AssetBatchConnectionGroup {
     primary: Arc<SharedH2Connection>,
-    route: DownloadRoute,
     reserve_native_budget: bool,
 }
 
 impl AssetBatchConnectionGroup {
     fn new(
         primary: Arc<SharedH2Connection>,
-        route: &DownloadRoute,
         reserve_native_budget: bool,
     ) -> Self {
         Self {
             primary,
-            route: route.clone(),
             reserve_native_budget,
         }
     }
@@ -912,10 +909,6 @@ impl AssetBatchConnectionGroup {
                 Arc::clone(&self.primary)
             }
         }
-    }
-
-    async fn connection(&self, rescue: bool) -> Arc<SharedH2Connection> {
-        self.connection_for(&self.route, rescue).await
     }
 }
 
@@ -1146,7 +1139,6 @@ where
     };
     let connections = Arc::new(AssetBatchConnectionGroup::new(
         connection,
-        route,
         apply_native_policy,
     ));
     let route_authority = fetch::url_authority(&route.url);

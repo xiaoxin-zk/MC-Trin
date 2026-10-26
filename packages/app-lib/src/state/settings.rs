@@ -136,10 +136,13 @@ pub struct Settings {
     pub doh_enabled: bool,
     #[serde(default)]
     pub mojang_auth_source: DownloadSourceMode,
+    #[cfg(test)]
     #[serde(default, rename = "use_minecraft_mirror", skip_serializing)]
     legacy_use_minecraft_mirror: Option<bool>,
+    #[cfg(test)]
     #[serde(default, rename = "use_modrinth_mirror", skip_serializing)]
     legacy_use_modrinth_mirror: Option<bool>,
+    #[cfg(test)]
     #[serde(default, rename = "use_curseforge_mirror", skip_serializing)]
     legacy_use_curseforge_mirror: Option<bool>,
 
@@ -499,8 +502,11 @@ impl Settings {
             mojang_auth_source: DownloadSourceMode::from_string(
                 &res.mojang_auth_source,
             ),
+            #[cfg(test)]
             legacy_use_minecraft_mirror: None,
+            #[cfg(test)]
             legacy_use_modrinth_mirror: None,
+            #[cfg(test)]
             legacy_use_curseforge_mirror: None,
             theme: Theme::from_string(&res.theme),
             accent_color: AccentColor::from_string(&res.accent_color),
@@ -959,6 +965,7 @@ impl Settings {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn apply_legacy_download_source_settings(&mut self) {
         let has_legacy_settings = self.legacy_use_minecraft_mirror.is_some()
             || self.legacy_use_modrinth_mirror.is_some()
@@ -1100,6 +1107,7 @@ fn locale_prefers_mirror(value: &str) -> bool {
         || normalized.contains("asia/urumqi")
 }
 
+#[cfg(test)]
 fn legacy_download_source(enabled: bool) -> DownloadSourceMode {
     if enabled {
         DownloadSourceMode::MirrorPreferred

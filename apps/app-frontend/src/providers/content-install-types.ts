@@ -35,7 +35,6 @@ export type ContentInstallInstanceEvent = {
     instance_id: string
     project_ids?: string[]
     dependency_project_ids?: string[]
-    message?: string
 }
 
 export interface ContentInstallContext {

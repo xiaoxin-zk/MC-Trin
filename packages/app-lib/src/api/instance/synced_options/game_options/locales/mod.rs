@@ -80,6 +80,7 @@ struct Candidate {
 
 pub(crate) fn queue_game_locale_index() {
     if let Some(state) = State::get_if_initialized() {
+        start_game_locale_indexer(Arc::clone(&state));
         tracing::info!(
             started = state.game_locale_indexer.started.load(Ordering::Acquire),
             "Game setting locales: indexing queued"

@@ -17907,7 +17907,7 @@
     "message": "获取 MC-Trin、Minecraft 设置和启动器问题的帮助。"
   },
   "app.assistant.general-privacy": {
-    "message": "你的问题和按需读取的启动器信息会发送给所配置的 AI 服务商。助手不会修改文件或设置。"
+    "message": "你的问题、启用日志工具时所选实例的脱敏崩溃日志，以及按需读取的启动器信息会发送给所配置的 AI 服务商。助手只会在你确认后执行受限的本地写操作。"
   },
   "app.assistant.general-question-placeholder": {
     "message": "描述你遇到的问题，或提出 Minecraft 相关问题。"
@@ -17943,7 +17943,7 @@
     "message": "请检查 Agent 名称和指令后重试。"
   },
   "app.assistant.profiles.hint": {
-    "message": "Agent 指令用于调整回答重点。Agent 只能使用启动器内置的只读工具和已连接的 MCP 工具。"
+    "message": "Agent 指令用于调整回答重点。内置工具可按需关闭；读取工具返回脱敏信息，写入工具每次都需要确认。"
   },
   "app.assistant.profiles.instructions": {
     "message": "Agent 指令"
@@ -17977,6 +17977,177 @@
   },
   "app.assistant.title": {
     "message": "AI 助手"
+  },
+  "app.assistant.tools.title": {
+    "message": "本地 Agent 工具"
+  },
+  "app.assistant.tools.description": {
+    "message": "选择 Agent 可以调用的本地工具。读取工具仅返回脱敏信息，写入工具每次调用都需要你的确认。"
+  },
+  "app.assistant.tools.reset": {
+    "message": "启用全部工具"
+  },
+  "app.assistant.tools.external": {
+    "message": "已连接的远程 MCP 工具仍需在每次调用前单独确认。"
+  },
+  "app.assistant.tools.instance.name": {
+    "message": "读取实例概览"
+  },
+  "app.assistant.tools.instance.description": {
+    "message": "读取实例名称、稳定 ID、游戏版本、加载器和安装状态，不显示路径。"
+  },
+  "app.assistant.tools.settings.name": {
+    "message": "读取启动器设置"
+  },
+  "app.assistant.tools.settings.description": {
+    "message": "读取语言、主题、内存和下载偏好，不包含凭据、路径、代理或启动命令。"
+  },
+  "app.assistant.tools.diagnostics.name": {
+    "message": "读取系统诊断"
+  },
+  "app.assistant.tools.diagnostics.description": {
+    "message": "读取操作系统、架构、处理器数量和内存总量。"
+  },
+  "app.assistant.tools.java.name": {
+    "message": "查找本机 Java"
+  },
+  "app.assistant.tools.java.description": {
+    "message": "查找本机 Java 运行时，不显示路径。"
+  },
+  "app.assistant.tools.java-vendors.name": {
+    "message": "查看 Java 厂商"
+  },
+  "app.assistant.tools.java-vendors.description": {
+    "message": "列出当前平台可用的 Java 厂商。"
+  },
+  "app.assistant.tools.content.name": {
+    "message": "检查实例内容"
+  },
+  "app.assistant.tools.content.description": {
+    "message": "检查已安装模组、资源包、光影、更新和兼容性警告。"
+  },
+  "app.assistant.tools.check-updates.name": {
+    "message": "检查内容更新"
+  },
+  "app.assistant.tools.check-updates.description": {
+    "message": "查找兼容更新，不会直接安装。"
+  },
+  "app.assistant.tools.search-resources.name": {
+    "message": "搜索资源"
+  },
+  "app.assistant.tools.search-resources.description": {
+    "message": "搜索已配置的 Modrinth、CurseForge 和其他资源源。"
+  },
+  "app.assistant.tools.resource-releases.name": {
+    "message": "列出资源版本"
+  },
+  "app.assistant.tools.resource-releases.description": {
+    "message": "列出资源项目的兼容版本。"
+  },
+  "app.assistant.tools.prepare-install.name": {
+    "message": "准备资源安装"
+  },
+  "app.assistant.tools.prepare-install.description": {
+    "message": "在下载前解析依赖和兼容性。"
+  },
+  "app.assistant.tools.prepare-update.name": {
+    "message": "准备内容更新"
+  },
+  "app.assistant.tools.prepare-update.description": {
+    "message": "在修改已安装文件前生成包含依赖的更新计划。"
+  },
+  "app.assistant.tools.install-job.name": {
+    "message": "查看安装任务"
+  },
+  "app.assistant.tools.install-job.description": {
+    "message": "读取下载和安装进度或错误。"
+  },
+  "app.assistant.tools.cancel-job.name": {
+    "message": "取消安装任务"
+  },
+  "app.assistant.tools.cancel-job.description": {
+    "message": "在确认后取消正在运行的 Java 或资源安装任务。"
+  },
+  "app.assistant.tools.update-settings.name": {
+    "message": "修改启动器设置"
+  },
+  "app.assistant.tools.update-settings.description": {
+    "message": "在确认后修改语言、主题、内存和下载偏好等非敏感设置。"
+  },
+  "app.assistant.tools.create-instance.name": {
+    "message": "创建实例"
+  },
+  "app.assistant.tools.create-instance.description": {
+    "message": "创建空的实例记录，不会下载文件。"
+  },
+  "app.assistant.tools.rename-instance.name": {
+    "message": "重命名实例"
+  },
+  "app.assistant.tools.rename-instance.description": {
+    "message": "根据实例 ID 重命名实例，不显示路径。"
+  },
+  "app.assistant.tools.delete-instance.name": {
+    "message": "删除实例"
+  },
+  "app.assistant.tools.delete-instance.description": {
+    "message": "在确认后删除实例及其由启动器管理的文件。"
+  },
+  "app.assistant.tools.install-java.name": {
+    "message": "安装 Java"
+  },
+  "app.assistant.tools.install-java.description": {
+    "message": "在确认后下载并安装兼容的 Java 运行时。"
+  },
+  "app.assistant.tools.set-java-default.name": {
+    "message": "设置默认 Java"
+  },
+  "app.assistant.tools.set-java-default.description": {
+    "message": "将发现的 Java 运行时设为对应主版本的默认项。"
+  },
+  "app.assistant.tools.queue-install.name": {
+    "message": "开始资源安装"
+  },
+  "app.assistant.tools.queue-install.description": {
+    "message": "在确认后下载并安装已审核的资源计划。"
+  },
+  "app.assistant.tools.disable-content.name": {
+    "message": "禁用内容"
+  },
+  "app.assistant.tools.disable-content.description": {
+    "message": "临时禁用模组或资源以测试可恢复的修复方案。"
+  },
+  "app.assistant.tools.enable-content.name": {
+    "message": "启用内容"
+  },
+  "app.assistant.tools.enable-content.description": {
+    "message": "在确认后恢复之前禁用的内容。"
+  },
+  "app.assistant.tools.remove-content.name": {
+    "message": "移除内容"
+  },
+  "app.assistant.tools.remove-content.description": {
+    "message": "在确认后移除指定的启动器管理内容文件。"
+  },
+  "app.assistant.tools.list-logs.name": {
+    "message": "列出日志文件"
+  },
+  "app.assistant.tools.list-logs.description": {
+    "message": "列出日志快照的文件 ID、名称和原始行号范围。"
+  },
+  "app.assistant.tools.read-log.name": {
+    "message": "读取日志文件"
+  },
+  "app.assistant.tools.read-log.description": {
+    "message": "从日志快照中读取有限的原始行，不能读取文件路径。"
+  },
+  "app.assistant.tools.grep-log.name": {
+    "message": "搜索日志文件"
+  },
+  "app.assistant.tools.grep-log.description": {
+    "message": "在日志快照中进行不区分大小写的文本搜索并返回上下文。"
+  },
+  "app.assistant.tools.approval-title": {
+    "message": "确认本地写操作"
   },
   "app.browse.categories-failed": {
     "message": "无法加载 CurseForge 分类，请稍后重试。"

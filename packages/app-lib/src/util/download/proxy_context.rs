@@ -37,6 +37,7 @@ pub(crate) async fn with_snapshot<F: std::future::Future>(
     CLIENTS.scope(clients, future).await
 }
 
+#[cfg(test)]
 pub(crate) fn fingerprint(
     config: &ProxyConfig,
     ignore_ssl_errors: bool,

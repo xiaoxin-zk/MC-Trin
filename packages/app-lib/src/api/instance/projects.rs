@@ -1,6 +1,6 @@
 use crate::event::InstancePayloadType;
 use crate::event::emit::emit_instance;
-use crate::state::instances::adapters::sqlite::{content_rows, instance_rows};
+use crate::state::instances::adapters::sqlite::content_rows;
 use crate::state::instances::{
     ContentOwnershipKind, PackMemberMaterializationState,
     PackMemberOverrideKind,
@@ -710,15 +710,4 @@ fn unmanaged_pack_error(instance_id: &str) -> crate::ErrorKind {
     crate::ErrorKind::InputError(format!(
         "Instance {instance_id} is not a managed Modrinth pack, or has been disconnected."
     ))
-}
-
-async fn get_instance_display_info(
-    instance_id: &str,
-    state: &State,
-) -> crate::Result<instance_rows::InstanceDisplayInfo> {
-    instance_rows::get_instance_display_info(instance_id, &state.pool)
-        .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string()).into()
-        })
 }

@@ -1178,6 +1178,7 @@ static H2_FALLBACK_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
 static HTTP1_PREFERENCE_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+#[cfg(test)]
 pub(crate) fn authority_uses_http1_fallback(authority: &str) -> bool {
     authority_uses_http1_fallback_for(authority, ProxyPolicy::System)
 }
@@ -1206,6 +1207,7 @@ pub(crate) fn authority_uses_http1_fallback_for(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn record_authority_h2_failure(authority: &str) {
     record_authority_h2_failure_for(authority, ProxyPolicy::System);
 }
@@ -5731,14 +5733,6 @@ async fn try_segmented_download(
                         downloaded,
                     )));
                 }
-                if matches!(
-                    slow_decision,
-                    crate::util::download::native_slow::SlowDecision::Commit
-                ) {
-                    alternate_probe = None;
-                    alternate_probe_finished = true;
-                    slow_policy.commit();
-                }
                 if hedge_active.load(Ordering::Acquire) {
                     continue;
                 }
@@ -7902,14 +7896,6 @@ async fn run_native_route_attempts(
                             format!("download body idle for {}", elapsed.as_secs()),
                         ).into());
                         break;
-                    }
-                    if matches!(
-                        slow_decision,
-                        crate::util::download::native_slow::SlowDecision::Commit
-                    ) {
-                        alternate_probe = None;
-                        alternate_probe_finished = true;
-                        slow_policy.commit();
                     }
                 }
                 probe = async {

@@ -52,6 +52,7 @@ import {
 import { shouldShowMinecraftCrash } from '@/helpers/process.js'
 import { visibleDraft } from '@/logagent/progress'
 import { parseLogAgentInsight } from '@/logagent/result'
+import { enabledAgentTools } from '@/logagent/tool-settings'
 import type { AnalysisSource } from '@/logagent/types'
 
 import { createCrashModalSession } from './crash-modal-session'
@@ -1160,6 +1161,7 @@ async function openAIAnalysis(): Promise<void> {
     const source = selectedSource.value
     const instanceId = payload.value.instance_id
     const ticket = source === 'logshare' ? (uploadTicketPromise ?? uploadTicket.value) : null
+    const enabledTools = enabledAgentTools('logs')
     if (version !== analysisVersion || source !== selectedSource.value) return
     await agent.start(instanceId, source, ticket, (ticket) => {
         if (version === analysisVersion) {
@@ -1167,7 +1169,8 @@ async function openAIAnalysis(): Promise<void> {
                 void recordShared({ ...ticket, provider: 'logshare', truncated: false })
             uploadTicket.value = ticket
         }
-    })
+    }, '', undefined, undefined, '', undefined,
+    enabledTools.has('read_log_file') || enabledTools.has('grep_log_file'))
 }
 
 async function refreshAIAvailability(): Promise<void> {

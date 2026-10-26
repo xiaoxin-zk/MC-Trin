@@ -70,11 +70,11 @@ test("passes the user's question with the prepared log context", async () => {
     assert.match(userMessage, /User request: Find the first error and explain it\./)
 })
 
-test('assistant mode exposes only read-only launcher context tools', async () => {
+test('assistant mode exposes bounded troubleshooting tools', async () => {
     let turns = 0
     const requests: string[] = []
     const output = await runLocalAgent(
-        { ...session, context: 'Read-only launcher assistant session.' },
+        { ...session, context: 'Launcher assistant session.' },
         {
             modelTurn: async (turn) => {
                 const names = turn.tools.map((entry) => (entry.function as { name: string }).name)
@@ -82,6 +82,29 @@ test('assistant mode exposes only read-only launcher context tools', async () =>
                     'get_instance_overview',
                     'get_launcher_settings',
                     'get_platform_diagnostics',
+                    'discover_java_installations',
+                    'list_java_vendors',
+                    'inspect_instance_content',
+                    'check_content_updates',
+                    'search_resources',
+                    'get_resource_releases',
+                    'prepare_resource_install',
+                    'prepare_resource_update',
+                    'get_install_job',
+                    'list_log_files',
+                    'read_log_file',
+                    'grep_log_file',
+                    'update_launcher_settings',
+                    'create_instance',
+                    'rename_instance',
+                    'delete_instance',
+                    'install_java_runtime',
+                    'set_java_default_runtime',
+                    'cancel_install_job',
+                    'queue_resource_install',
+                    'disable_content',
+                    'enable_content',
+                    'remove_content',
                 ])
                 if (++turns === 1)
                     return {

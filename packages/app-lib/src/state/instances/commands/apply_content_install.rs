@@ -2432,29 +2432,6 @@ pub(crate) async fn add_project_bytes(
     .await
 }
 
-pub(crate) async fn add_project_bytes_from_provider(
-    instance_id: &str,
-    file_name: &str,
-    bytes: Bytes,
-    hash: Option<&str>,
-    project_type: ProjectType,
-    source_kind: ContentSourceKind,
-    provider_ref: &ContentProviderRef,
-    state: &State,
-) -> crate::Result<String> {
-    add_project_bytes_with_provider(
-        instance_id,
-        file_name,
-        bytes,
-        hash,
-        Some(project_type),
-        source_kind,
-        Some(provider_ref),
-        state,
-    )
-    .await
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn add_project_bytes_with_provider(
     instance_id: &str,
@@ -2840,6 +2817,7 @@ pub(crate) async fn record_verified_curseforge_project_file_atomic(
     .await
 }
 
+#[cfg(test)]
 pub(crate) async fn record_project_files_with_verified_curseforge_atomic(
     instance_id: &str,
     records: &[ProjectFileRecord],

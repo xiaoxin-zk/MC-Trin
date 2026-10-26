@@ -327,7 +327,6 @@ pub(crate) const CONTENT_DATABASE_BATCH_SIZE: usize = 25;
 pub(crate) const CONTENT_DATABASE_FLUSH_INTERVAL: Duration =
     Duration::from_millis(500);
 pub(crate) const CURSEFORGE_H2_RANGE_THRESHOLD: u64 = 64 * 1024 * 1024;
-pub(crate) const CURSEFORGE_OVERRIDE_EXTRACTION_CONCURRENCY: usize = 4;
 pub(crate) const CURSEFORGE_REQUESTED_H2_RANGES: usize = 4;
 pub(crate) const CURSEFORGE_VERIFY_BUFFER_SIZE: usize = 256 * 1024;
 pub(crate) const FINALIZE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -675,6 +674,7 @@ pub(crate) const INTEGRITY_SHA256: &str = "sha256";
 pub(crate) const INTEGRITY_SHA512: &str = "sha512";
 pub(crate) const MODEL_FASTLY_RULE: &str = "fastly_rule";
 pub(crate) const MODEL_HISTORY: &str = "history";
+#[cfg(test)]
 pub(crate) const MODEL_VERIFIED: &str = "verified";
 pub(crate) const MODRINTH_CDN_REPLACING_A_VALIDATED_HOSTNAME_PRESERVES_URL_VALIDITY: &str = "replacing a validated hostname preserves URL validity";
 pub(crate) const MODRINTH_REDIRECT_HTTPS: &str = "https://";

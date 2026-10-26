@@ -161,13 +161,16 @@ pub async fn logs_logagent_prepare(
     source: String,
     provider_id: Option<String>,
     model_id: Option<String>,
+    include_logs: Option<bool>,
 ) -> Result<logs::logagent::PreparedSession> {
+    let include_logs = include_logs.unwrap_or(source == "custom");
     Ok(logs::logagent::prepare(
         instance_id,
         run_id,
         source,
         provider_id,
         model_id,
+        include_logs,
     )
     .await?)
 }

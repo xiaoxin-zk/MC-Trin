@@ -1201,6 +1201,7 @@ fn validate_zip_extraction_budget<R: std::io::Read + std::io::Seek>(
     Ok(total_bytes)
 }
 
+#[cfg(test)]
 fn extract_all(
     archive: &mut zip::ZipArchive<std::fs::File>,
     base_dir: &Path,
@@ -1601,13 +1602,6 @@ fn classify_file(path: &Path) -> DroppedItemType {
 }
 
 // ─── Step 7: Content-type detection for folders/extracted ZIPs ─────────────
-
-pub(crate) fn classify_folder_content(
-    path: &Path,
-    allow_nested_unpack: bool,
-) -> DroppedItemType {
-    classify_folder_content_with_cancellation(path, allow_nested_unpack, None)
-}
 
 fn classify_folder_content_with_cancellation(
     path: &Path,

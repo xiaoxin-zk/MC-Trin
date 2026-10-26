@@ -53,6 +53,7 @@ impl ProbeBudget {
         reserved
     }
 
+    #[cfg(test)]
     pub(super) fn used(&self) -> u64 {
         self.used
     }
@@ -136,6 +137,7 @@ pub(super) fn rank_candidates(
     ranked
 }
 
+#[cfg(test)]
 pub(super) fn should_publish(
     current_speed: u64,
     candidate_speed: u64,

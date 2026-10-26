@@ -230,6 +230,7 @@ pub struct CurseForgeFileDependency {
 }
 
 impl CurseForgeFileDependency {
+    #[cfg(test)]
     pub(crate) fn new(mod_id: u32, relation: DependencyRelation) -> Self {
         Self {
             mod_id,

@@ -884,6 +884,7 @@ impl DownloadDnsResolver {
         }
     }
 
+    #[cfg(test)]
     fn score(&self, address: IpAddr) -> f64 {
         self.reliability
             .lock()

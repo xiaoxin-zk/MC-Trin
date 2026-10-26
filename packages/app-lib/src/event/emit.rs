@@ -1,8 +1,8 @@
 use super::{FriendPayload, LoadingBarId};
 use crate::event::{
     CommandPayload, EventError, InstanceBackupProgressPayload,
-    InstanceBulkUpdateProgressPayload, InstancePayloadType, LoadingBar,
-    LoadingBarType, ProcessPayloadType, ServerPayloadType,
+    InstancePayloadType, LoadingBar, LoadingBarType, ProcessPayloadType,
+    ServerPayloadType,
 };
 #[cfg(feature = "tauri")]
 use crate::event::{
@@ -283,21 +283,6 @@ pub fn respond_to_java_download_confirmation(
     JAVA_DOWNLOAD_CONFIRMATIONS
         .remove(&request_id)
         .is_some_and(|(_, sender)| sender.send(approved).is_ok())
-}
-
-#[allow(unused_variables)]
-pub async fn emit_instance_bulk_update_progress(
-    payload: InstanceBulkUpdateProgressPayload,
-) -> crate::Result<()> {
-    #[cfg(feature = "tauri")]
-    {
-        let event_state = crate::EventState::get()?;
-        event_state
-            .app
-            .emit("instance_bulk_update_progress", payload)
-            .map_err(EventError::from)?;
-    }
-    Ok(())
 }
 
 #[allow(unused_variables)]
