@@ -381,8 +381,8 @@ onUnmounted(() => {
 <style scoped>
 .minimal-home-stage {
     min-height: calc(100vh - var(--top-bar-height) - 4rem);
-    // The design's ambient page wash: a brand-tinted glow top-right and a cool
-    // one bottom-left, both far behind the content.
+    /* The design's ambient page wash: a brand-tinted glow top-right and a cool
+       one bottom-left, both far behind the content. */
     background:
         radial-gradient(
             1100px 520px at 82% -12%,

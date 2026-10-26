@@ -784,8 +784,8 @@ defineExpose({ openWidgetPicker, setLayout })
         filter 120ms ease;
 }
 
-// The greeting widget is the dashboard's hero: accent-washed panel with a soft
-// radial glow, mirroring `.hero` / `.hero-glow` in the design.
+/* The greeting widget is the dashboard's hero: accent-washed panel with a soft
+   radial glow, mirroring `.hero` / `.hero-glow` in the design. */
 .home-widget[data-widget-kind='greeting'] {
     border-color: var(--dc-panel-border, var(--color-divider));
     border-radius: var(--dc-radius-card, var(--radius-lg));
