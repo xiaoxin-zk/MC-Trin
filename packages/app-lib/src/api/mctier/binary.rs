@@ -12,6 +12,21 @@ use tokio_util::sync::CancellationToken;
 const VERSION: &str = "2.6.4";
 const MAX_DOWNLOAD: usize = 128 * 1024 * 1024;
 
+// Mirrors published on https://easytier.cn/guide/download.html, ordered by the
+// throughput measured without an HTTP proxy. The origin stays as the fallback.
+const DOWNLOAD_BASES: [&str; 5] = [
+    "https://v6.gh-proxy.org/",
+    "https://cdn.gh-proxy.org/",
+    "https://hk.gh-proxy.org/",
+    "https://edgeone.gh-proxy.org/",
+    "https://github.com/",
+];
+
+const PER_SOURCE_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(120);
+const DOWNLOAD_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(600);
+
 pub fn release_for(
     os: &str,
     arch: &str,
@@ -165,26 +180,83 @@ pub async fn prepare(
         let bytes = if let Some(cached) = cached {
             cached
         } else {
-            let client = crate::util::fetch::configured_client().await?;
-            let response = client.get(format!("https://github.com/EasyTier/EasyTier/releases/download/v{VERSION}/easytier-{platform}-v{VERSION}.zip")).send().await?.error_for_status()?;
-            if response
-                .content_length()
-                .is_some_and(|size| size > MAX_DOWNLOAD as u64)
-            {
-                bail!("EasyTier download exceeds the size limit");
-            }
-            let mut stream = response.bytes_stream();
-            let mut bytes = Vec::new();
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk?;
-                if bytes.len() + chunk.len() > MAX_DOWNLOAD {
-                    bail!("EasyTier download exceeds the size limit");
+            let archive = format!(
+                "EasyTier/EasyTier/releases/download/v{VERSION}/easytier-{platform}-v{VERSION}.zip"
+            );
+            // A configured HTTP proxy is routinely slower than going straight to
+            // the mirrors, so a proxy-free client is tried first. The proxied
+            // client only runs as a last resort for networks that need one.
+            let direct = crate::util::fetch::file_reqwest_client_builder()
+                .no_proxy()
+                .build()?;
+            let mut failures: Vec<String> = Vec::new();
+            let mut downloaded: Option<Vec<u8>> = None;
+            'sources: for use_proxy in [false, true] {
+                let client = if use_proxy {
+                    match crate::util::fetch::configured_client().await {
+                        Ok(client) => Some(client),
+                        Err(error) => {
+                            failures
+                                .push(format!("proxy client unavailable: {error:#}"));
+                            None
+                        }
+                    }
+                } else {
+                    Some(direct.clone())
+                };
+                let Some(client) = client else { continue };
+                for base in DOWNLOAD_BASES {
+                    if cancellation.is_cancelled() {
+                        bail!("lobby operation cancelled");
+                    }
+                    let url = format!("{base}{archive}");
+                    let attempt = async {
+                        let response =
+                            client.get(&url).send().await?.error_for_status()?;
+                        if response
+                            .content_length()
+                            .is_some_and(|size| size > MAX_DOWNLOAD as u64)
+                        {
+                            bail!("EasyTier download exceeds the size limit");
+                        }
+                        let mut stream = response.bytes_stream();
+                        let mut bytes = Vec::new();
+                        while let Some(chunk) = stream.next().await {
+                            let chunk = chunk?;
+                            if bytes.len() + chunk.len() > MAX_DOWNLOAD {
+                                bail!(
+                                    "EasyTier download exceeds the size limit"
+                                );
+                            }
+                            bytes.extend_from_slice(&chunk);
+                        }
+                        if hash(&bytes) != expected {
+                            bail!(
+                                "official EasyTier archive failed SHA-256 verification"
+                            );
+                        }
+                        Ok::<Vec<u8>, eyre::Report>(bytes)
+                    };
+                    match tokio::time::timeout(PER_SOURCE_TIMEOUT, attempt)
+                        .await
+                    {
+                        Ok(Ok(bytes)) => {
+                            downloaded = Some(bytes);
+                            break 'sources;
+                        }
+                        Ok(Err(error)) => {
+                            failures.push(format!("{url}: {error:#}"))
+                        }
+                        Err(_) => failures.push(format!("{url}: timed out")),
+                    }
                 }
-                bytes.extend_from_slice(&chunk);
             }
-            if hash(&bytes) != expected {
-                bail!("official EasyTier archive failed SHA-256 verification");
-            }
+            let Some(bytes) = downloaded else {
+                bail!(
+                    "EasyTier download failed from every source: {}",
+                    failures.join("; ")
+                );
+            };
             tokio::fs::create_dir_all(&root).await?;
             tokio::fs::write(&archive_path, &bytes).await?;
             bytes
@@ -211,6 +283,8 @@ pub async fn prepare(
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => bail!("lobby operation cancelled"),
-        result = tokio::time::timeout(std::time::Duration::from_secs(180), work) => result.wrap_err("EasyTier preparation timed out")?,
+        result = tokio::time::timeout(DOWNLOAD_TIMEOUT, work) => {
+            result.wrap_err("EasyTier preparation timed out")?
+        }
     }
 }
