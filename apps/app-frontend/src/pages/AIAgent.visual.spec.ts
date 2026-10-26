@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
     mcpTools: [{ name: 'lookup_server', description: 'Read a server status' }],
     mcpToken: '',
     mcpCalls: [] as unknown[][],
+    requestLocalToolApproval: false,
+    localApprovalResult: null as Promise<boolean> | null,
     agent: undefined as unknown as ReturnType<typeof useLogAgent>,
 }))
 
@@ -112,6 +114,14 @@ function mountPage() {
     return mount(AIAgent)
 }
 
+function latestStartCall(): unknown[] {
+    return (
+        mocks.agent.start as unknown as {
+            mock: { calls: unknown[][] }
+        }
+    ).mock.calls.at(-1)!
+}
+
 beforeEach(() => {
     vi.resetAllMocks()
     localStorage.removeItem('mc-trin:ai-agent-profiles:v1')
@@ -124,6 +134,8 @@ beforeEach(() => {
     mocks.mcpTools = [{ name: 'lookup_server', description: 'Read a server status' }]
     mocks.mcpToken = ''
     mocks.mcpCalls = []
+    mocks.requestLocalToolApproval = false
+    mocks.localApprovalResult = null
     mocks.agent = {
         status: ref('idle'),
         output: ref(''),
@@ -149,11 +161,32 @@ beforeEach(() => {
                       ) => Promise<unknown>
                   }
                 | undefined
-            if (!remote) return
-            const callArgs = { address: 'play.example.test' }
-            const allowed = await remote.approveTool(remote.tools[0], callArgs)
-            if (allowed)
-                await remote.callTool(remote.tools[0].name, callArgs, new AbortController().signal)
+            if (remote) {
+                const callArgs = { address: 'play.example.test' }
+                const allowed = await remote.approveTool(remote.tools[0], callArgs)
+                if (allowed)
+                    await remote.callTool(
+                        remote.tools[0].name,
+                        callArgs,
+                        new AbortController().signal,
+                    )
+            }
+            const approveLocalTool = args[8] as
+                | ((
+                      tool: { name: string; description: string; permission: 'write' },
+                      args: Record<string, unknown>,
+                  ) => Promise<boolean>)
+                | undefined
+            if (mocks.requestLocalToolApproval && approveLocalTool) {
+                mocks.localApprovalResult = approveLocalTool(
+                    {
+                        name: 'update_launcher_settings',
+                        description: 'Update non-sensitive launcher settings.',
+                        permission: 'write',
+                    },
+                    { patch: { theme: 'dark' } },
+                )
+            }
         }),
         cancel: vi.fn(),
         reset: vi.fn(),
@@ -204,14 +237,17 @@ it('starts a local analysis for the selected instance and question', async () =>
         .find((button) => button.text().includes('Analyze logs'))!
         .trigger('click')
 
-    expect(mocks.agent.start).toHaveBeenCalledWith(
-        'instance-1',
-        'custom',
-        null,
-        expect.any(Function),
+    const args = latestStartCall()
+    expect(args.slice(0, 3)).toEqual(['instance-1', 'custom', null])
+    expect(typeof args[3]).toBe('function')
+    expect(args.slice(4)).toEqual([
         'Find the earliest error.',
         undefined,
-    )
+        undefined,
+        '',
+        undefined,
+        true,
+    ])
 })
 
 it('answers general questions without an installed instance or enabled log analysis', async () => {
@@ -227,19 +263,20 @@ it('answers general questions without an installed instance or enabled log analy
         .findAll('button')
         .find((button) => button.text().includes('Ask assistant'))!
         .trigger('click')
-    expect(mocks.agent.start).toHaveBeenCalledWith(
-        '',
-        'assistant',
-        null,
-        expect.any(Function),
+    const args = latestStartCall()
+    expect(args.slice(0, 3)).toEqual(['', 'assistant', null])
+    expect(typeof args[3]).toBe('function')
+    expect(args.slice(4, 8)).toEqual([
         'How do I change the game memory limit?',
         undefined,
         { providerId: 'openai', modelId: 'gpt-4o-mini' },
-        expect.any(String),
-    )
+        '',
+    ])
+    expect(typeof args[8]).toBe('function')
+    expect(args[9]).toBe(true)
 })
 
-it('creates a named agent profile and applies its instructions to the assistant run', async () => {
+it('creates a named agent profile and requires approval for assistant write tools', async () => {
     const wrapper = mountPage()
     await flushPromises()
     await wrapper
@@ -253,22 +290,38 @@ it('creates a named agent profile and applies its instructions to the assistant 
     await wrapper.get('[role="dialog"]').trigger('submit')
 
     expect(wrapper.text()).toContain('Modpack helper')
+    mocks.requestLocalToolApproval = true
     await wrapper.get('textarea').setValue('Why does this pack fail to launch?')
     await wrapper
         .findAll('button')
         .find((button) => button.text().includes('Ask assistant'))!
         .trigger('click')
 
-    expect(mocks.agent.start).toHaveBeenCalledWith(
-        '',
-        'assistant',
-        null,
-        expect.any(Function),
+    const args = latestStartCall()
+    expect(args.slice(0, 3)).toEqual(['instance-1', 'assistant', null])
+    expect(typeof args[3]).toBe('function')
+    expect(args.slice(4, 8)).toEqual([
         'Why does this pack fail to launch?',
         undefined,
         { providerId: 'openai', modelId: 'gpt-4o-mini' },
         'Focus on loader and dependency compatibility.',
-    )
+    ])
+    expect(typeof args[8]).toBe('function')
+    expect(args[9]).toBe(true)
+
+    await flushPromises()
+    const approval = wrapper.get('[role="alertdialog"]')
+    expect(approval.text()).toContain('Review local write request')
+    expect(approval.text()).toContain('MC-Trin')
+    expect(approval.text()).toContain('update_launcher_settings')
+    expect(approval.text()).toContain('Update non-sensitive launcher settings.')
+    expect(approval.text()).toContain('"theme": "dark"')
+    expect(mocks.localApprovalResult).not.toBeNull()
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().trim() === 'Deny')!
+        .trigger('click')
+    expect(await mocks.localApprovalResult).toBe(false)
 })
 
 it('offers instance creation only when log diagnosis needs an instance', async () => {
