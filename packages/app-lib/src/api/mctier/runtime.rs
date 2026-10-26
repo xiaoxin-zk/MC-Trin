@@ -193,6 +193,64 @@ async fn free_port() -> eyre::Result<u16> {
         .port())
 }
 
+/// One status handshake against the local end of the lobby port forward.
+async fn ping_forwarded_game(port: u16) -> eyre::Result<()> {
+    let connection = async_minecraft_ping::ConnectionConfig::build("127.0.0.1")
+        .with_port(port)
+        .with_timeout(Duration::from_secs(10))
+        .connect()
+        .await
+        .wrap_err("the lobby network refused the Minecraft handshake")?
+        .status()
+        .await
+        .wrap_err("the lobby network did not deliver a Minecraft status")?;
+    connection
+        .ping(1)
+        .await
+        .wrap_err("the lobby network did not deliver a Minecraft ping")?;
+    Ok(())
+}
+
+fn error_chain(error: &eyre::Report) -> String {
+    error
+        .chain()
+        .map(|cause| cause.to_string())
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
+/// The port forwarder binds its local socket as soon as EasyTier launches, which
+/// happens well before the peer tunnel carries traffic. Early handshakes are
+/// therefore reset, so retry until Minecraft answers instead of failing the
+/// join on the first attempt.
+async fn verify_forwarded_game(
+    child: &mut Child,
+    port: u16,
+    cancellation: &CancellationToken,
+) -> eyre::Result<()> {
+    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let mut last_error = String::new();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            bail!("EasyTier exited before the lobby network was ready: {status}");
+        }
+        match ping_forwarded_game(port).await {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = error_chain(&error),
+        }
+        if tokio::time::Instant::now() >= deadline {
+            bail!(
+                "Minecraft did not answer through the lobby network at {address}: {last_error}. Ask the host to keep the world open on LAN and to check the shared port."
+            );
+        }
+        tokio::select! {
+            _ = cancellation.cancelled() => bail!("lobby operation cancelled"),
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+        }
+    }
+}
+
 async fn wait_for_listener(child: &mut Child, port: u16) -> eyre::Result<()> {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -256,15 +314,7 @@ pub async fn run(
         if let Some((port, _)) = forwarding {
             wait_for_listener(&mut child, port).await?;
             // A bound local socket alone does not prove that Minecraft can be reached.
-            let connection =
-                async_minecraft_ping::ConnectionConfig::build("127.0.0.1")
-                    .with_port(port)
-                    .with_timeout(Duration::from_secs(20))
-                    .connect()
-                    .await?
-                    .status()
-                    .await?;
-            connection.ping(1).await?;
+            verify_forwarded_game(&mut child, port, cancellation).await?;
         }
         if request.is_public {
             set_lobby_visibility(

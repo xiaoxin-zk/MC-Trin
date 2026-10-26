@@ -8171,6 +8171,15 @@
   "app.multiplayer.mctier.signaling": {
     "message": "Lobby service"
   },
+  "app.multiplayer.mctier.stage.downloading": {
+    "message": "Downloading the networking component…"
+  },
+  "app.multiplayer.mctier.stage.extracting": {
+    "message": "Extracting the networking component…"
+  },
+  "app.multiplayer.mctier.stage.verifying": {
+    "message": "Verifying the networking component…"
+  },
   "app.multiplayer.mctier.title": {
     "message": "MC-Trin LAN lobby"
   },

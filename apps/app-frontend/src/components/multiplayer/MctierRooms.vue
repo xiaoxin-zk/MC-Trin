@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { MicrophoneIcon, XIcon } from '@modrinth/assets'
-import { Button, CopyCode, defineMessages, StyledInput, useVIntl } from '@modrinth/ui'
+import {
+    Button,
+    CopyCode,
+    defineMessages,
+    ProgressBar,
+    StyledInput,
+    useVIntl,
+} from '@modrinth/ui'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -40,6 +47,18 @@ const messages = defineMessages({
     connecting: {
         id: 'app.multiplayer.mctier.connecting',
         defaultMessage: 'Connecting to the lobby…',
+    },
+    stageDownloading: {
+        id: 'app.multiplayer.mctier.stage.downloading',
+        defaultMessage: 'Downloading the networking component…',
+    },
+    stageExtracting: {
+        id: 'app.multiplayer.mctier.stage.extracting',
+        defaultMessage: 'Extracting the networking component…',
+    },
+    stageVerifying: {
+        id: 'app.multiplayer.mctier.stage.verifying',
+        defaultMessage: 'Verifying the networking component…',
     },
     hosting: { id: 'app.multiplayer.mctier.hosting', defaultMessage: 'Lobby created' },
     joined: {
@@ -157,6 +176,19 @@ const canCreate = computed(
 const status = computed(() => {
     const value = props.state?.status
     return value && value in messages ? formatMessage(messages[value as 'hosting']) : ''
+})
+const preparing = computed(() => props.state?.status === 'downloading')
+const preparationStage = computed(() => {
+    switch (props.state?.download_stage) {
+        case 'downloading':
+            return formatMessage(messages.stageDownloading)
+        case 'extracting':
+            return formatMessage(messages.stageExtracting)
+        case 'verifying':
+            return formatMessage(messages.stageVerifying)
+        default:
+            return ''
+    }
 })
 const voice = useMctierVoice(multiplayer.sendMctierVoiceSignal)
 let unlistenVoice: UnlistenFn | undefined
@@ -296,6 +328,15 @@ function prefillInviteFromDeepLink() {
             </p>
         </div>
         <p v-if="status" class="m-0 text-sm" role="status">{{ status }}</p>
+        <ProgressBar
+            v-if="preparing"
+            full-width
+            :progress="state?.download_progress ?? 0"
+            :max="100"
+            :waiting="state?.download_progress === null || state?.download_progress === undefined"
+            :label="preparationStage"
+            show-progress
+        />
         <p
             v-if="error || state?.error_message"
             class="m-0 text-sm text-[var(--color-red)]"

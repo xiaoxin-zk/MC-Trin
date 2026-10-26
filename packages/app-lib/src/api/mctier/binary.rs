@@ -9,6 +9,8 @@ use std::{
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
+use super::PreparationStage;
+
 const VERSION: &str = "2.6.4";
 const MAX_DOWNLOAD: usize = 128 * 1024 * 1024;
 
@@ -76,6 +78,13 @@ pub fn hidden_command(path: &Path) -> Command {
         }
     }
     command
+}
+
+/// Percentage of the archive received so far. The last unit is reserved for the
+/// SHA-256 check so the bar never claims completion before it is verified.
+fn download_percent(downloaded: usize, total: u64) -> u8 {
+    let share = downloaded as u64 * 100 / total.max(1);
+    share.min(99) as u8
 }
 
 fn hash(bytes: &[u8]) -> String {
@@ -159,6 +168,7 @@ pub fn extract(bytes: Vec<u8>, root: &Path) -> eyre::Result<PathBuf> {
 
 pub async fn prepare(
     cancellation: &CancellationToken,
+    progress: &(dyn Fn(PreparationStage, Option<u8>) + Sync),
 ) -> eyre::Result<PathBuf> {
     let (platform, expected) =
         release_for(std::env::consts::OS, std::env::consts::ARCH)?;
@@ -210,6 +220,9 @@ pub async fn prepare(
                         bail!("lobby operation cancelled");
                     }
                     let url = format!("{base}{archive}");
+                    // The size is unknown until a response arrives, so the bar
+                    // stays indeterminate while a new source is connecting.
+                    progress(PreparationStage::Downloading, None);
                     let attempt = async {
                         let response =
                             client.get(&url).send().await?.error_for_status()?;
@@ -219,8 +232,10 @@ pub async fn prepare(
                         {
                             bail!("EasyTier download exceeds the size limit");
                         }
+                        let total = response.content_length();
                         let mut stream = response.bytes_stream();
                         let mut bytes = Vec::new();
+                        let mut reported = None;
                         while let Some(chunk) = stream.next().await {
                             let chunk = chunk?;
                             if bytes.len() + chunk.len() > MAX_DOWNLOAD {
@@ -229,6 +244,16 @@ pub async fn prepare(
                                 );
                             }
                             bytes.extend_from_slice(&chunk);
+                            if let Some(total) = total {
+                                let percent = download_percent(bytes.len(), total);
+                                if reported != Some(percent) {
+                                    reported = Some(percent);
+                                    progress(
+                                        PreparationStage::Downloading,
+                                        Some(percent),
+                                    );
+                                }
+                            }
                         }
                         if hash(&bytes) != expected {
                             bail!(
@@ -261,10 +286,12 @@ pub async fn prepare(
             tokio::fs::write(&archive_path, &bytes).await?;
             bytes
         };
+        progress(PreparationStage::Extracting, None);
         let output_root = root.clone();
         let path =
             tokio::task::spawn_blocking(move || extract(bytes, &output_root))
                 .await??;
+        progress(PreparationStage::Verifying, None);
         let output = hidden_command(&path)
             .arg("--help")
             .stdout(Stdio::piped())

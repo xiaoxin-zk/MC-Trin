@@ -127,6 +127,16 @@ pub enum Status {
     Error,
 }
 
+/// Stage of the EasyTier runtime preparation shown while a lobby starts.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreparationStage {
+    #[default]
+    Downloading,
+    Extracting,
+    Verifying,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Player {
@@ -150,6 +160,10 @@ pub struct MctierState {
     pub error_message: Option<String>,
     pub is_public: bool,
     pub has_password: bool,
+    /// Preparation stage, only meaningful while `status` is `downloading`.
+    pub download_stage: Option<PreparationStage>,
+    /// Download percentage (`0..=100`), or `None` when the size is unknown.
+    pub download_progress: Option<u8>,
 }
 
 #[derive(Default)]
@@ -190,6 +204,30 @@ pub type VoiceSignalEmitter = std::sync::Arc<dyn Fn(Value) + Send + Sync>;
 static SERVICE: LazyLock<Mutex<Service>> =
     LazyLock::new(|| Mutex::new(Service::default()));
 
+/// Preparation progress lives outside `SERVICE` so the download loop can report
+/// it synchronously, without awaiting the service lock between chunks.
+#[derive(Default)]
+struct Preparation {
+    stage: Option<PreparationStage>,
+    progress: Option<u8>,
+}
+
+static PREPARATION: LazyLock<std::sync::Mutex<Preparation>> =
+    LazyLock::new(|| std::sync::Mutex::new(Preparation::default()));
+
+fn report_preparation(stage: PreparationStage, percent: Option<u8>) {
+    if let Ok(mut preparation) = PREPARATION.lock() {
+        preparation.stage = Some(stage);
+        preparation.progress = percent;
+    }
+}
+
+fn reset_preparation() {
+    if let Ok(mut preparation) = PREPARATION.lock() {
+        *preparation = Preparation::default();
+    }
+}
+
 pub struct PendingStart(oneshot::Receiver<eyre::Result<()>>);
 
 impl PendingStart {
@@ -205,7 +243,14 @@ pub fn is_supported() -> bool {
 }
 
 pub async fn get_state() -> MctierState {
-    SERVICE.lock().await.state.clone()
+    let mut state = SERVICE.lock().await.state.clone();
+    if state.status == Status::Downloading
+        && let Ok(preparation) = PREPARATION.lock()
+    {
+        state.download_stage = preparation.stage;
+        state.download_progress = preparation.progress;
+    }
+    state
 }
 
 async fn update(generation: u64, change: impl FnOnce(&mut MctierState)) {
@@ -262,12 +307,14 @@ pub async fn begin_start(
         has_password: !request.password.is_empty(),
         ..MctierState::default()
     };
+    report_preparation(PreparationStage::Downloading, None);
     let (ready, result) = oneshot::channel();
     tokio::spawn(async move {
         use futures::FutureExt;
         let mut ready = Some(ready);
+        let reporter: fn(PreparationStage, Option<u8>) = report_preparation;
         let outcome = std::panic::AssertUnwindSafe(async {
-            let binary = binary::prepare(&cancellation).await?;
+            let binary = binary::prepare(&cancellation, &reporter).await?;
             runtime::run(
                 generation,
                 request,
@@ -303,6 +350,9 @@ pub async fn begin_start(
             service.state.players.clear();
             service.state.local_player_id = None;
             service.state.voice_ice_server = None;
+            service.state.download_stage = None;
+            service.state.download_progress = None;
+            reset_preparation();
             if cancellation.is_cancelled() || outcome.is_ok() {
                 service.state = MctierState::default();
             } else {

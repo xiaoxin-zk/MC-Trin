@@ -23,6 +23,8 @@ export interface MctierPlayer {
     sessionGeneration: number
 }
 
+export type MctierPreparationStage = 'downloading' | 'extracting' | 'verifying'
+
 export interface MctierState {
     status: 'idle' | 'downloading' | 'connecting' | 'hosting' | 'joined' | 'error'
     mode: 'create' | 'join' | null
@@ -36,6 +38,8 @@ export interface MctierState {
     error_message: string | null
     is_public: boolean
     has_password: boolean
+    download_stage: MctierPreparationStage | null
+    download_progress: number | null
 }
 
 export const DEFAULT_MCTIER_SIGNALING = 'wss://mctier.pmhs.top/signaling'

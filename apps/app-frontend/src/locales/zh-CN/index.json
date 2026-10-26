@@ -239,6 +239,15 @@
   "app.multiplayer.mctier.connecting": {
     "message": "正在连接房间…"
   },
+  "app.multiplayer.mctier.stage.downloading": {
+    "message": "正在下载网络组件…"
+  },
+  "app.multiplayer.mctier.stage.extracting": {
+    "message": "正在解压网络组件…"
+  },
+  "app.multiplayer.mctier.stage.verifying": {
+    "message": "正在校验网络组件…"
+  },
   "app.multiplayer.mctier.hosting": {
     "message": "房间已创建"
   },

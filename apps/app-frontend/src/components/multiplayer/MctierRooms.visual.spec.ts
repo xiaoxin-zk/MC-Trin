@@ -50,6 +50,21 @@ vi.mock('@modrinth/ui', async () => {
             props: ['text'],
             setup: (props) => () => h('code', props.text),
         }),
+        ProgressBar: defineComponent({
+            props: ['progress', 'max', 'waiting', 'label', 'fullWidth', 'showProgress'],
+            setup:
+                (props) =>
+                () =>
+                    h(
+                        'div',
+                        {
+                            role: 'progressbar',
+                            'data-waiting': props.waiting ? 'true' : 'false',
+                            'aria-valuenow': props.waiting ? undefined : String(props.progress),
+                        },
+                        props.label ? String(props.label) : undefined,
+                    ),
+        }),
         StyledInput: input,
         defineMessages: (messages: unknown) => messages,
         useVIntl: () => ({
@@ -78,6 +93,8 @@ const idle = {
     error_message: null,
     is_public: false,
     has_password: false,
+    download_stage: null,
+    download_progress: null,
 }
 
 let wrappers: VueWrapper[] = []
@@ -166,6 +183,31 @@ it('cancels an in-progress network operation', async () => {
     const wrapper = page({ ...idle, status: 'connecting' })
     await wrapper.get('button').trigger('click')
     expect(fixture.stop).toHaveBeenCalledOnce()
+})
+
+it('shows preparation progress while the network component downloads', () => {
+    const wrapper = page({
+        ...idle,
+        status: 'downloading',
+        download_stage: 'downloading',
+        download_progress: 42,
+    })
+    const bar = wrapper.get('[role="progressbar"]')
+    expect(bar.attributes('aria-valuenow')).toBe('42')
+    expect(bar.attributes('data-waiting')).toBe('false')
+    expect(wrapper.text()).toContain('Downloading the networking component…')
+})
+
+it('shows an indeterminate bar when the download size is unknown', () => {
+    const wrapper = page({
+        ...idle,
+        status: 'downloading',
+        download_stage: 'extracting',
+        download_progress: null,
+    })
+    const bar = wrapper.get('[role="progressbar"]')
+    expect(bar.attributes('data-waiting')).toBe('true')
+    expect(wrapper.text()).toContain('Extracting the networking component…')
 })
 
 it('keeps public rooms passwordless and sends the chosen visibility', async () => {
