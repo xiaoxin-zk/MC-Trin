@@ -52,13 +52,10 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
-    // Translation default provider; data only
-    20261026130000: {},
     20261026140000: { columns: [{ table: 'settings', column: 'multiplayer_proxy' }] },
-    20261026120000: { columns: [{ table: 'settings', column: 'custom_download_sources' }] },
     // Translation provider default; data only
     20261026130000: {},
-    20261026140000: { columns: [{ table: 'settings', column: 'multiplayer_proxy' }] },
+    20261026120000: { columns: [{ table: 'settings', column: 'custom_download_sources' }] },
     20261022120000: { columns: [{ table: 'settings', column: 'curseforge_api_key' }] },
     // CodeFlow endpoint domain move; data only
     20261021120000: {},
