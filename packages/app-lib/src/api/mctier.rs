@@ -466,6 +466,13 @@ pub async fn create_invite() -> eyre::Result<String> {
     if service.state.status != Status::Hosting {
         bail!("create an active room before generating an invitation");
     }
+    // The signaling server may have suffixed the room name after a collision,
+    // so the invite must follow the name the lobby was actually registered with.
+    let registered_lobby_name = service
+        .state
+        .lobby_name
+        .clone()
+        .filter(|name| !name.trim().is_empty());
     let context = service
         .invite_context
         .as_mut()
@@ -473,11 +480,13 @@ pub async fn create_invite() -> eyre::Result<String> {
     if let Some(invite) = context.invite.clone() {
         return Ok(invite);
     }
+    let lobby_name =
+        registered_lobby_name.unwrap_or_else(|| context.lobby_name.clone());
     let secret = invite::export_password(&context.password)?;
     let mut serializer = url::form_urlencoded::Serializer::new(String::new());
     serializer
         .append_pair("v", "3")
-        .append_pair("name", &context.lobby_name)
+        .append_pair("name", &lobby_name)
         .append_pair("secret", &secret)
         .append_pair("node", &context.server_node)
         .append_pair("signal", &context.signaling_server);

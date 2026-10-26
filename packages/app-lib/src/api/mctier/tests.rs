@@ -462,7 +462,7 @@ async fn an_address_collision_retries_with_the_same_identity_and_a_new_ip() {
     let (url, attempts) = collision_signaling(1, 2).await;
     let mut input = request();
     input.signaling_server = url;
-    let (identity, registered) = runtime::register_with_retry(
+    let (identity, registered, _) = runtime::register_with_retry(
         &input,
         protocol::Identity::generate().unwrap(),
         &CancellationToken::new(),

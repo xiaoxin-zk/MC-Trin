@@ -128,7 +128,28 @@ pub(super) async fn register_with_retry(
     request: &StartRequest,
     mut identity: protocol::Identity,
     cancellation: &CancellationToken,
-) -> eyre::Result<(protocol::Identity, protocol::Registered)> {
+) -> eyre::Result<(protocol::Identity, protocol::Registered, StartRequest)> {
+    /// The signaling server owns the public lobby list and rejects a name that
+    /// another host already registered, whatever the password is. Suffixing the
+    /// room once keeps the host in control instead of failing the whole room.
+    fn lobby_name_taken(message: &str) -> bool {
+        let message = message.to_lowercase();
+        [
+            "已被占用",
+            "已被使用",
+            "已存在",
+            "occupied",
+            "already taken",
+            "already in use",
+            "duplicate",
+        ]
+        .iter()
+        .any(|needle| message.contains(needle))
+    }
+
+    let mut request = request.clone();
+    let requested_name = request.lobby_name.clone();
+    let mut renamed = false;
     for attempt in 0..254 {
         identity.ip = identity.candidate_ip(attempt).ok_or_else(|| {
             eyre::eyre!("the signaling address pool is exhausted")
@@ -136,12 +157,20 @@ pub(super) async fn register_with_retry(
         let result = tokio::select! {
             biased;
             _ = cancellation.cancelled() => bail!("lobby operation cancelled"),
-            result = protocol::register(request, &identity) => result,
+            result = protocol::register(&request, &identity) => result,
         };
         match result {
-            Ok(session) => return Ok((identity, session)),
+            Ok(session) => return Ok((identity, session, request)),
             Err(protocol::RegistrationError::AddressInUse) => continue,
             Err(protocol::RegistrationError::Failed(error)) => {
+                if !renamed && lobby_name_taken(&format!("{error:#}")) {
+                    request.lobby_name = format!(
+                        "{requested_name}-{:04x}",
+                        rand::random::<u16>()
+                    );
+                    renamed = true;
+                    continue;
+                }
                 return Err(error);
             }
         }
@@ -282,8 +311,13 @@ pub async fn run(
 ) -> eyre::Result<()> {
     update(generation, |state| state.status = Status::Connecting).await;
     let identity = protocol::Identity::generate()?;
-    let (identity, mut registration) =
+    let requested_lobby_name = request.lobby_name.clone();
+    let (identity, mut registration, request) =
         register_with_retry(&request, identity, cancellation).await?;
+    if request.lobby_name != requested_lobby_name {
+        let lobby_name = request.lobby_name.clone();
+        update(generation, |state| state.lobby_name = Some(lobby_name)).await;
+    }
     let forwarding = if request.mode == EntryMode::Join {
         let remote = registration
             .players
