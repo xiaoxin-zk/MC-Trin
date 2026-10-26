@@ -223,6 +223,8 @@ const REVERTIBLE_SCHEMA = {
 			{ table: 'synced_pack_catalog', column: 'selection_order' },
 		],
 	},
+	// Discovered game option defaults; data only
+	20260922100000: {},
 	// settings.allow_external_scheme
 	20260922120000: {
 		columns: [{ table: 'settings', column: 'allow_external_scheme' }],
