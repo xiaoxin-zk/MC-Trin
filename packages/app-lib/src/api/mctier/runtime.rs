@@ -230,20 +230,19 @@ async fn verify_forwarded_game(
 ) -> eyre::Result<()> {
     let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    let mut last_error = String::new();
     loop {
         if let Some(status) = child.try_wait()? {
             bail!(
                 "EasyTier exited before the lobby network was ready: {status}"
             );
         }
-        match ping_forwarded_game(port).await {
+        let failure = match ping_forwarded_game(port).await {
             Ok(()) => return Ok(()),
-            Err(error) => last_error = error_chain(&error),
-        }
+            Err(error) => error_chain(&error),
+        };
         if tokio::time::Instant::now() >= deadline {
             bail!(
-                "Minecraft did not answer through the lobby network at {address}: {last_error}. Ask the host to keep the world open on LAN and to check the shared port."
+                "Minecraft did not answer through the lobby network at {address}: {failure}. Ask the host to keep the world open on LAN and to check the shared port."
             );
         }
         tokio::select! {
