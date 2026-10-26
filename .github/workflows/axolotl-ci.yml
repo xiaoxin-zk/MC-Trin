@@ -64,6 +64,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Setup Rustfmt
         run: rustup component add rustfmt
+      - name: Fetch canonical migration history
+        run: |
+          git fetch --no-tags https://github.com/Axolotl-Launcher/Axolotl.git \
+            7ddbfb8e57db4b0044a04cf28f25fb29e08c3279:refs/remotes/AXL/canonical-bootstrap \
+            b505dd9e1e98da845d84af28c5a79036e107493c:refs/remotes/AXL/canonical-backup
       - name: Check immutable database migrations
         env:
           MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
