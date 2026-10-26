@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { TerracottaState } from '@/helpers/terracotta'
+import type { MctierStartRequest, MctierState } from '@/helpers/mctier'
 import type { MctierVoiceSignal } from '@/helpers/mctier-voice'
-import type { MctierState, MctierStartRequest } from '@/helpers/mctier'
+import type { TerracottaState } from '@/helpers/terracotta'
 
 export type MultiplayerProvider = 'terracotta' | 'hongshi' | 'mctier'
 export type HongshiStatus =

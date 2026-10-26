@@ -22,16 +22,16 @@ import {
     getAICatalog,
     getAIState,
 } from '@/helpers/ai'
-import { list } from '@/helpers/instance'
-import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import {
     addAgentProfile,
+    type AIAgentProfile,
     DEFAULT_AI_AGENT_PROFILE,
     getAgentProfiles,
     removeAgentProfile,
     updateAgentProfile,
-    type AIAgentProfile,
 } from '@/helpers/ai-agent-profiles'
+import { list } from '@/helpers/instance'
+import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
 import type { AnalysisSettings, RemoteMcpGateway, RemoteMcpTool } from '@/logagent/types'
 

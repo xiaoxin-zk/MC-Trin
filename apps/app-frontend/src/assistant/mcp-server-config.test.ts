@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import type { McpServerConfig, McpServerConfigStorage } from './mcp-server-config.ts'
 import {
     MCP_SERVER_CONFIG_STORAGE_KEY,
     readMcpServerConfigs,
@@ -8,7 +9,6 @@ import {
     upsertMcpServerConfig,
     writeMcpServerConfigs,
 } from './mcp-server-config.ts'
-import type { McpServerConfig, McpServerConfigStorage } from './mcp-server-config.ts'
 
 function createStorage(initial?: string): McpServerConfigStorage & { value: string | null } {
     return {

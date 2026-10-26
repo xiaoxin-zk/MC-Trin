@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
 
+import type { useLogAgent } from '@/composables/useLogAgent'
+
 import AIAgent from './AIAgent.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -14,7 +16,7 @@ const mocks = vi.hoisted(() => ({
     mcpTools: [{ name: 'lookup_server', description: 'Read a server status' }],
     mcpToken: '',
     mcpCalls: [] as unknown[][],
-    agent: undefined as any,
+    agent: undefined as unknown as ReturnType<typeof useLogAgent>,
 }))
 
 vi.mock('@/helpers/instance', () => ({ list: mocks.instances }))
@@ -126,7 +128,10 @@ beforeEach(() => {
         status: ref('idle'),
         output: ref(''),
         error: ref(''),
+        event: ref(null),
         busy: computed(() => false),
+        runSource: ref(''),
+        model: ref(''),
         activity: ref([]),
         elapsed: ref(0),
         start: vi.fn(async (...args: unknown[]) => {
@@ -151,7 +156,8 @@ beforeEach(() => {
                 await remote.callTool(remote.tools[0].name, callArgs, new AbortController().signal)
         }),
         cancel: vi.fn(),
-    }
+        reset: vi.fn(),
+    } as unknown as ReturnType<typeof useLogAgent>
 })
 
 it('routes missing provider configuration to AI settings', async () => {

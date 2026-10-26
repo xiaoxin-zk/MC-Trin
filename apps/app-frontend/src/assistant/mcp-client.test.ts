@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { StreamableHttpMcpClient, type McpFetch } from './mcp-client.ts'
+import { type McpFetch, StreamableHttpMcpClient } from './mcp-client.ts'
 
 const endpoint = 'https://mcp.example.test/api/mcp'
 

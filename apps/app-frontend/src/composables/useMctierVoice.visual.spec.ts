@@ -1,7 +1,8 @@
-import { effectScope } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
+import { effectScope } from 'vue'
 
 import type { MctierState } from '@/helpers/mctier'
+
 import { useMctierVoice } from './useMctierVoice'
 
 const rtcOperations: string[] = []

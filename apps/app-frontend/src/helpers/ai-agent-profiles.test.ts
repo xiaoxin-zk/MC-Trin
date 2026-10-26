@@ -4,10 +4,10 @@ import test from 'node:test'
 import {
     addAgentProfile,
     AI_AGENT_PROFILES_STORAGE_KEY,
+    DEFAULT_AI_AGENT_PROFILE,
     getAgentProfiles,
     removeAgentProfile,
     updateAgentProfile,
-    DEFAULT_AI_AGENT_PROFILE,
 } from './ai-agent-profiles.ts'
 
 function memoryStorage(initial?: string) {

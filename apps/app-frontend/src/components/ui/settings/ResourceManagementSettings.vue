@@ -30,11 +30,11 @@ import {
     validateCurseForgeCredentials,
 } from '@/helpers/curseforge'
 import { syncConfiguredDirectLinks } from '@/helpers/direct-link-sync'
+import { normalizeDownloadSourceUrl, orderDownloadSources } from '@/helpers/download-sources'
 import {
     getMissingContentScannerSettings,
     setMissingContentScannerSettings,
 } from '@/helpers/downloads-scanner'
-import { normalizeDownloadSourceUrl, orderDownloadSources } from '@/helpers/download-sources'
 import { resourcePreferredSource, resourceSetPreferredSource } from '@/helpers/resources'
 import { get, getProxyConfig, setProxyConfig, testProxyConfig, update } from '@/helpers/settings.ts'
 import { createSettingsPatchSaver } from '@/helpers/settings-patch'

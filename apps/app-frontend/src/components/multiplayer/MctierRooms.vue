@@ -4,15 +4,15 @@ import { Button, CopyCode, defineMessages, StyledInput, useVIntl } from '@modrin
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import { useMctierVoice } from '@/composables/useMctierVoice'
 import {
     DEFAULT_MCTIER_NODE,
     DEFAULT_MCTIER_SIGNALING,
-    parseMctierInviteCode,
     type MctierInvite,
     type MctierState,
+    parseMctierInviteCode,
 } from '@/helpers/mctier'
 import { multiplayer, multiplayerErrorText, validLocalPort } from '@/helpers/multiplayer'
-import { useMctierVoice } from '@/composables/useMctierVoice'
 
 const props = defineProps<{ state?: MctierState }>()
 const { formatMessage } = useVIntl()

@@ -1,12 +1,13 @@
 import { computed, ref } from 'vue'
 
+import type { MctierState } from '@/helpers/mctier'
+
 import {
     MctierVoiceSession,
-    parseMctierVoiceSignal,
     type MctierVoiceSignal,
+    parseMctierVoiceSignal,
     type VoicePeer,
 } from '../helpers/mctier-voice'
-import type { MctierState } from '@/helpers/mctier'
 
 type VoiceError = 'permission' | 'unsupported' | 'unavailable'
 type QueuedSignal = { signal: unknown; size: number }

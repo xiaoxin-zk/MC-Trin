@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    type CustomDownloadSource,
     normalizeDownloadSourceUrl,
     orderDownloadSources,
-    type CustomDownloadSource,
 } from './download-sources.ts'
 
 function source(id: string, priority: number): CustomDownloadSource {

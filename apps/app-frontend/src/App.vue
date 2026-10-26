@@ -127,7 +127,6 @@ import {
 } from '@/helpers/direct-link-sync'
 import { getMissingContentScannerSettings } from '@/helpers/downloads-scanner'
 import { classifyDroppedItem } from '@/helpers/drop'
-import { startStartupJavaScan } from '@/helpers/startup-java-scan'
 import {
     command_listener,
     drop_classify_progress_listener,
@@ -176,6 +175,7 @@ import {
 } from '@/helpers/shortcut-actions'
 import { resolveAllBindings } from '@/helpers/shortcut-bindings'
 import { getSidebarExpanded, setSidebarExpanded } from '@/helpers/sidebar-state.ts'
+import { startStartupJavaScan } from '@/helpers/startup-java-scan'
 import { get_opening_command, initialize_state, set_discord_activity } from '@/helpers/state'
 import {
     areUpdatesEnabled,
@@ -1496,7 +1496,6 @@ async function setupApp() {
         theme,
         accent_color,
         locale,
-        discord_rpc,
         hide_nametag_skins_page,
         advanced_rendering,
         onboarded,

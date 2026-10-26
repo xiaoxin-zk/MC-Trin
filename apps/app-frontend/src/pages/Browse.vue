@@ -50,11 +50,11 @@ import {
     usesTargetGameVersion,
     useVIntl,
 } from '@modrinth/ui'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import type { Ref } from 'vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { LocationQuery } from 'vue-router'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { openUrl } from '@tauri-apps/plugin-opener'
 
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
