@@ -99,13 +99,13 @@ useHead({
 
         <h2>4. 品牌、商标与受限素材</h2>
         <p>
-            开源软件许可证不自动授予商标权。MC-Trin 是独立的非官方项目，与
-            Mojang、Microsoft、Rinth, Inc.、Modrinth、CurseForge 或 MinecraftSearch
+            开源软件许可证不自动授予商标权。MC-Trin 是独立的非官方项目，与 Mojang、Microsoft、Rinth,
+            Inc.、Modrinth、CurseForge 或 MinecraftSearch
             不存在隶属、认可或背书关系。相关名称和商标归各自权利人所有。
         </p>
         <p>
-            Modrinth 商标、徽标、封面和其他受限品牌素材不属于 MC-Trin
-            品牌。网站复制声明列出的 Modrinth 品牌元素未经 Rinth, Inc.
+            Modrinth 商标、徽标、封面和其他受限品牌素材不属于 MC-Trin 品牌。网站复制声明列出的
+            Modrinth 品牌元素未经 Rinth, Inc.
             明确书面许可不得使用。外部徽标须遵守各权利人的品牌规范。使用或再分发其他第三方图片、图标、数据和素材前，也应核对对应声明。
         </p>
 
@@ -171,8 +171,8 @@ useHead({
     >
         <h2>1. Scope and Effect of This Document</h2>
         <p>
-            These terms apply to the official MC-Trin website, the officially published
-            desktop application, and related services operated by the project maintainers. Copying,
+            These terms apply to the official MC-Trin website, the officially published desktop
+            application, and related services operated by the project maintainers. Copying,
             modification, distribution, and network deployment of the software are governed by the
             licenses and copying notices in the corresponding files of the repository; this page is
             a plain-language explanation and does not replace, modify, or restrict the original
@@ -250,9 +250,9 @@ useHead({
         </p>
         <p>
             Modrinth trademarks, logos, covers, and other restricted brand assets are not part of
-            the MC-Trin brand. Modrinth brand elements listed in the repository's copying
-            notices must not be used without the explicit written permission of Rinth, Inc. External
-            logos must follow each owner's brand guidelines. Before using or redistributing other
+            the MC-Trin brand. Modrinth brand elements listed in the repository's copying notices
+            must not be used without the explicit written permission of Rinth, Inc. External logos
+            must follow each owner's brand guidelines. Before using or redistributing other
             third-party images, icons, data, and assets, check the corresponding notices.
         </p>
 

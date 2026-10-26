@@ -154,10 +154,10 @@ useHead({
     >
         <h2>1. Scope</h2>
         <p>
-            This policy applies to the www.axlmc.org official website and the MC-Trin
-            desktop application. Third-party websites, APIs, authentication services, servers, and
-            content download addresses accessed through the launcher are governed by their own
-            privacy policies.
+            This policy applies to the www.axlmc.org official website and the MC-Trin desktop
+            application. Third-party websites, APIs, authentication services, servers, and content
+            download addresses accessed through the launcher are governed by their own privacy
+            policies.
         </p>
 
         <h2>2. Data Processed by the Official Website</h2>

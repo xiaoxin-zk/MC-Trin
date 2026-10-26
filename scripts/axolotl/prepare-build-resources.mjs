@@ -60,7 +60,6 @@ function verify() {
         throw new Error('Invalid resource manifest')
     const actualFiles = ['java', 'blockbench']
         .flatMap((name) => files(path.join(directory, name)))
-        .concat(path.join(directory, 'contributors.json'))
         .map((file) => path.relative(directory, file).replaceAll('\\', '/'))
     if (
         actualFiles.length !== Object.keys(manifest.files).length ||
@@ -72,7 +71,6 @@ function verify() {
         'java/theseus.jar',
         'java/authlib-injector.jar',
         'blockbench/dist/skin.bundle.js.gz',
-        'contributors.json',
     ]) {
         if (!manifest.files[required]) throw new Error(`Missing prepared resource: ${required}`)
     }
