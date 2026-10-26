@@ -21,6 +21,8 @@ export type VoiceDevice = { deviceId: string; label: string }
 type VoicePreferences = {
     muted: boolean
     outputVolume: number
+    inputVolume: number
+    peerVolumes: Record<string, number>
     inputDeviceId: string | null
     outputDeviceId: string | null
 }
@@ -29,8 +31,18 @@ const PREFERENCES_KEY = 'mctier.voice.preferences'
 const DEFAULT_PREFERENCES: VoicePreferences = {
     muted: false,
     outputVolume: 1,
+    inputVolume: 1,
+    peerVolumes: {},
     inputDeviceId: null,
     outputDeviceId: null,
+}
+
+function clampPeerVolumes(value: unknown): Record<string, number> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([playerId, volume]) => playerId && typeof volume === 'number')
+        .map(([playerId, volume]) => [playerId, clampVolume(Number(volume))] as const)
+    return Object.fromEntries(entries)
 }
 
 function clampVolume(volume: number): number {
@@ -50,6 +62,8 @@ function loadPreferences(): VoicePreferences {
         return {
             muted: parsed.muted === true,
             outputVolume: clampVolume(Number(parsed.outputVolume ?? 1)),
+            inputVolume: clampVolume(Number(parsed.inputVolume ?? 1)),
+            peerVolumes: clampPeerVolumes(parsed.peerVolumes),
             inputDeviceId:
                 typeof parsed.inputDeviceId === 'string' && parsed.inputDeviceId
                     ? parsed.inputDeviceId
@@ -79,6 +93,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const starting = ref(false)
     const muted = ref(preferences.muted)
     const outputVolume = ref(preferences.outputVolume)
+    const inputVolume = ref(preferences.inputVolume)
+    const peerVolumes = ref<Record<string, number>>(preferences.peerVolumes)
     const inputDeviceId = ref<string | null>(preferences.inputDeviceId)
     const outputDeviceId = ref<string | null>(preferences.outputDeviceId)
     const inputDevices = ref<VoiceDevice[]>([])
@@ -105,6 +121,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         storePreferences({
             muted: muted.value,
             outputVolume: outputVolume.value,
+            inputVolume: inputVolume.value,
+            peerVolumes: peerVolumes.value,
             inputDeviceId: inputDeviceId.value,
             outputDeviceId: outputDeviceId.value,
         })
@@ -207,10 +225,14 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             session = startingSession
             sessionReady = false
             startingSession.setOutputVolume(outputVolume.value)
+            startingSession.setInputVolume(inputVolume.value)
             if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
             if (muted.value) startingSession.setMicrophoneEnabled(false)
             for (const [playerId, isMuted] of Object.entries(peerMuted.value)) {
                 if (isMuted) startingSession.setPeerMuted(playerId, true)
+            }
+            for (const [playerId, volume] of Object.entries(peerVolumes.value)) {
+                startingSession.setPeerVolume(playerId, volume)
             }
             await startingSession.syncPeers(state.players as VoicePeer[])
             if (generation !== startGeneration || session !== startingSession) {
@@ -287,6 +309,18 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         session?.setOutputVolume(outputVolume.value)
     }
 
+    function setInputVolume(value: number) {
+        inputVolume.value = clampVolume(value)
+        persistPreferences()
+        session?.setInputVolume(inputVolume.value)
+    }
+
+    function setPeerVolume(playerId: string, value: number) {
+        peerVolumes.value = { ...peerVolumes.value, [playerId]: clampVolume(value) }
+        persistPreferences()
+        session?.setPeerVolume(playerId, peerVolumes.value[playerId])
+    }
+
     function togglePeerMuted(playerId: string) {
         const next = !peerMuted.value[playerId]
         peerMuted.value = { ...peerMuted.value, [playerId]: next }
@@ -345,6 +379,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         error,
         connectedPeers,
         outputVolume,
+        inputVolume,
+        peerVolumes,
         inputDeviceId,
         outputDeviceId,
         inputDevices,
@@ -356,6 +392,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         toggleMute,
         togglePeerMuted,
         setOutputVolume,
+        setInputVolume,
+        setPeerVolume,
         setInputDevice,
         setOutputDevice,
         refreshDevices,

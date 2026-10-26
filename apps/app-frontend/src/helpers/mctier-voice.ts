@@ -29,6 +29,8 @@ export type MctierVoiceSessionOptions = {
 const MAX_SIGNAL_BYTES = 256 * 1024
 const MAX_PENDING_CANDIDATES = 128
 const DEFAULT_OUTPUT_VOLUME = 1
+const DEFAULT_INPUT_VOLUME = 1
+const DEFAULT_PEER_VOLUME = 1
 
 /** Playback volume is stored as a 0-1 gain so the slider and the element agree. */
 function clampVolume(volume: number): number {
@@ -96,20 +98,52 @@ export class MctierVoiceSession {
     private readonly peers = new Map<string, PeerConnectionState>()
     private activePlayerIds = new Set<string>()
     private readonly mutedPeers = new Set<string>()
+    private readonly peerVolumes = new Map<string, number>()
     private outputVolume = DEFAULT_OUTPUT_VOLUME
+    private inputVolume = DEFAULT_INPUT_VOLUME
     private outputDeviceId: string | null = null
     private closed = false
+    private audioContext: AudioContext | null = null
+    private inputGain: GainNode | null = null
+    private outgoingStream: MediaStream
     private readonly rtcConfiguration: RTCConfiguration
     private readonly options: MctierVoiceSessionOptions
 
     constructor(options: MctierVoiceSessionOptions) {
         this.options = options
+        this.outgoingStream = options.stream
         const iceServers = [
             ...(options.iceServer ? [{ urls: options.iceServer }] : []),
             { urls: 'stun:stun.qq.com:3478' },
             { urls: 'stun:stun.miwifi.com:3478' },
         ]
         this.rtcConfiguration = { iceServers }
+        this.setupInputGain()
+    }
+
+    /** Routes the microphone through a gain node so the host can lower their
+     * own outgoing level; peers receive the adjusted stream instead of the raw
+     * capture. Environments without Web Audio keep the untouched capture. */
+    private setupInputGain() {
+        const AudioContextConstructor = globalThis.AudioContext
+        if (!AudioContextConstructor) return
+        try {
+            const context = new AudioContextConstructor()
+            const source = context.createMediaStreamSource(this.options.stream)
+            const gain = context.createGain()
+            gain.gain.value = this.inputVolume
+            const destination = context.createMediaStreamDestination()
+            source.connect(gain)
+            gain.connect(destination)
+            this.audioContext = context
+            this.inputGain = gain
+            this.outgoingStream = destination.stream
+            void context.resume().catch(() => {})
+        } catch {
+            this.audioContext = null
+            this.inputGain = null
+            this.outgoingStream = this.options.stream
+        }
     }
 
     async syncPeers(players: VoicePeer[]) {
@@ -170,7 +204,13 @@ export class MctierVoiceSession {
         this.closed = true
         for (const [playerId, peer] of this.peers) this.closePeer(playerId, peer)
         this.activePlayerIds.clear()
+        this.peerVolumes.clear()
         this.options.stream.getTracks().forEach((track) => track.stop())
+        if (this.audioContext) {
+            void this.audioContext.close().catch(() => {})
+            this.audioContext = null
+            this.inputGain = null
+        }
     }
 
     setMicrophoneEnabled(enabled: boolean) {
@@ -181,9 +221,21 @@ export class MctierVoiceSession {
     /** Applies a 0-1 gain to every remote player, including ones that join later. */
     setOutputVolume(volume: number) {
         this.outputVolume = clampVolume(volume)
-        for (const peer of this.peers.values()) {
-            if (peer.audio) peer.audio.volume = this.outputVolume
-        }
+        for (const [playerId, peer] of this.peers) this.applyPlaybackVolume(playerId, peer)
+    }
+
+    /** Applies a 0-1 gain to the local microphone capture, so everyone in the
+     * room hears the host at the chosen level. */
+    setInputVolume(volume: number) {
+        this.inputVolume = clampVolume(volume)
+        if (this.inputGain) this.inputGain.gain.value = this.inputVolume
+    }
+
+    /** Sets one remote player's level on top of the shared output volume. */
+    setPeerVolume(playerId: string, volume: number) {
+        this.peerVolumes.set(playerId, clampVolume(volume))
+        const peer = this.peers.get(playerId)
+        if (peer) this.applyPlaybackVolume(playerId, peer)
     }
 
     /** Mutes one remote player locally; the room is not told about it. */
@@ -192,6 +244,13 @@ export class MctierVoiceSession {
         else this.mutedPeers.delete(playerId)
         const peer = this.peers.get(playerId)
         if (peer?.audio) peer.audio.muted = muted
+    }
+
+    private applyPlaybackVolume(playerId: string, peer: PeerConnectionState) {
+        if (!peer.audio) return
+        const peerVolume = this.peerVolumes.get(playerId) ?? DEFAULT_PEER_VOLUME
+        peer.audio.volume = clampVolume(this.outputVolume * peerVolume)
+        peer.audio.muted = this.mutedPeers.has(playerId)
     }
 
     /** Routes playback to a specific output device. Browsers without
@@ -222,8 +281,8 @@ export class MctierVoiceSession {
             audio: null,
         }
         this.peers.set(playerId, peer)
-        for (const track of this.options.stream.getAudioTracks())
-            connection.addTrack(track, this.options.stream)
+        for (const track of this.outgoingStream.getAudioTracks())
+            connection.addTrack(track, this.outgoingStream)
 
         connection.onicecandidate = (event) => {
             if (!event.candidate || this.closed || this.peers.get(playerId) !== peer) return
@@ -242,10 +301,9 @@ export class MctierVoiceSession {
                 audio.autoplay = true
                 audio.setAttribute('aria-hidden', 'true')
                 audio.dataset.mctierVoicePeer = playerId
-                audio.volume = this.outputVolume
-                audio.muted = this.mutedPeers.has(playerId)
                 if (this.outputDeviceId) void this.applySink(audio)
                 peer.audio = audio
+                this.applyPlaybackVolume(playerId, peer)
                 document.body.append(audio)
             }
             peer.audio.srcObject = event.streams[0] ?? new MediaStream([event.track])

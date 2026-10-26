@@ -146,6 +146,14 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.volume',
         defaultMessage: 'Output volume',
     },
+    voiceInputVolume: {
+        id: 'app.multiplayer.mctier.voice.input-volume',
+        defaultMessage: 'Microphone volume',
+    },
+    voicePeerVolume: {
+        id: 'app.multiplayer.mctier.voice.peer-volume',
+        defaultMessage: 'Volume for {player}',
+    },
     voiceMicrophone: {
         id: 'app.multiplayer.mctier.voice.microphone',
         defaultMessage: 'Microphone',
@@ -239,6 +247,18 @@ function onVolumeInput(event: Event) {
     voice.setOutputVolume(Number(target.value) / 100)
 }
 
+function onInputVolumeInput(event: Event) {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    voice.setInputVolume(Number(target.value) / 100)
+}
+
+function onPeerVolumeInput(event: Event, playerId: string) {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    voice.setPeerVolume(playerId, Number(target.value) / 100)
+}
+
 function onInputDeviceChange(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLSelectElement)) return
@@ -321,11 +341,16 @@ async function refreshInvite() {
     }
 }
 
+// The state poll replaces the whole object, so the watcher compares a stable
+// key: watching the pair as an array re-ran on every poll and minted a new
+// invite each time, which made the code on screen keep changing.
+const roomKey = computed(() => `${props.state?.status ?? ''}:${props.state?.mode ?? ''}`)
+
 watch(
-    () => [props.state?.status, props.state?.mode] as const,
-    ([status, mode]) => {
-        if (status === 'hosting' && mode === 'create') {
-            void refreshInvite()
+    roomKey,
+    (key) => {
+        if (key === 'hosting:create') {
+            if (!inviteCode.value && !inviteLoading.value) void refreshInvite()
         } else {
             inviteCode.value = ''
         }
@@ -508,6 +533,24 @@ function prefillInviteFromDeepLink() {
                     </label>
                     <label class="flex min-w-0 items-center gap-2 text-sm">
                         <span class="w-24 shrink-0">{{
+                            formatMessage(messages.voiceInputVolume)
+                        }}</span>
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            class="min-w-0 flex-1"
+                            :value="Math.round(voice.inputVolume.value * 100)"
+                            :aria-label="formatMessage(messages.voiceInputVolume)"
+                            @input="onInputVolumeInput"
+                        />
+                        <span class="w-10 shrink-0 text-right tabular-nums">
+                            {{ Math.round(voice.inputVolume.value * 100) }}%
+                        </span>
+                    </label>
+                    <label class="flex min-w-0 items-center gap-2 text-sm">
+                        <span class="w-24 shrink-0">{{
                             formatMessage(messages.voiceMicrophone)
                         }}</span>
                         <select
@@ -593,6 +636,23 @@ function prefillInviteFromDeepLink() {
                             <MicrophoneIcon v-if="!voice.peerMuted.value[player.playerId]" />
                             <XIcon v-else />
                         </Button>
+                        <input
+                            v-if="voice.active.value && player.playerId !== state?.local_player_id"
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            class="w-24"
+                            :value="
+                                Math.round((voice.peerVolumes.value[player.playerId] ?? 1) * 100)
+                            "
+                            :aria-label="
+                                formatMessage(messages.voicePeerVolume, {
+                                    player: player.playerName,
+                                })
+                            "
+                            @input="onPeerVolumeInput($event, player.playerId)"
+                        />
                         <span class="text-[var(--color-text-tertiary)]">{{
                             player.virtualIp
                         }}</span>

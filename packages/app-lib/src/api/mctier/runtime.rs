@@ -346,7 +346,10 @@ pub async fn run(
             // A bound local socket alone does not prove that Minecraft can be reached.
             verify_forwarded_game(&mut child, port, cancellation).await?;
         }
-        if request.is_public {
+        // The lobby service keeps a freshly registered room in the public list
+        // until the host opts out, so private rooms have to state their
+        // visibility explicitly instead of relying on the default.
+        if request.is_public && request.password.is_empty() {
             set_lobby_visibility(
                 &mut registration.socket,
                 &identity.id,
@@ -355,6 +358,18 @@ pub async fn run(
                 cancellation,
             )
             .await?;
+        } else if let Err(error) = set_lobby_visibility(
+            &mut registration.socket,
+            &identity.id,
+            &request.server_node,
+            false,
+            cancellation,
+        )
+        .await
+        {
+            // A service that refuses the option must not stop the room: the
+            // host still keeps the password, and the local state stays private.
+            tracing::warn!(%error, "could not unlist the lobby from the public list");
         }
         voice_discovery = Some(VoiceDiscovery(Some(spawn_voice_discovery(
             generation,

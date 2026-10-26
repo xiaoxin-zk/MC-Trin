@@ -189,6 +189,10 @@ struct InviteContext {
     password: String,
     server_node: String,
     signaling_server: String,
+    /// The invite is minted once per session. Rebuilding it would produce a
+    /// different envelope (fresh key and nonce), so an invite that is fetched
+    /// on every state poll would appear to change on screen.
+    invite: Option<String>,
 }
 
 struct Session {
@@ -308,6 +312,7 @@ pub async fn begin_start(
             password: request.password.clone(),
             server_node: request.server_node.clone(),
             signaling_server: request.signaling_server.clone(),
+            invite: None,
         });
     service.state = MctierState {
         status: Status::Downloading,
@@ -457,14 +462,17 @@ pub async fn set_public(is_public: bool) -> eyre::Result<()> {
 }
 
 pub async fn create_invite() -> eyre::Result<String> {
-    let service = SERVICE.lock().await;
+    let mut service = SERVICE.lock().await;
     if service.state.status != Status::Hosting {
         bail!("create an active room before generating an invitation");
     }
     let context = service
         .invite_context
-        .as_ref()
+        .as_mut()
         .ok_or_else(|| eyre::eyre!("room invitation data is unavailable"))?;
+    if let Some(invite) = context.invite.clone() {
+        return Ok(invite);
+    }
     let secret = invite::export_password(&context.password)?;
     let mut serializer = url::form_urlencoded::Serializer::new(String::new());
     serializer
@@ -476,7 +484,9 @@ pub async fn create_invite() -> eyre::Result<String> {
     let query = serializer.finish();
     // `mctrin` is the scheme registered by the desktop bundle. Keep parsing
     // legacy `mctier://` links in the frontend for invites shared earlier.
-    Ok(format!("mctrin://join?{query}"))
+    let invite = format!("mctrin://join?{query}");
+    context.invite = Some(invite.clone());
+    Ok(invite)
 }
 
 pub async fn stop() -> eyre::Result<()> {
