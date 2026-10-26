@@ -1,0 +1,13 @@
+name: Configure Ubuntu package downloads
+description: Use the official Ubuntu HTTPS archive and IPv4 for package downloads
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        for apt_source in /etc/apt/apt-mirrors.txt /etc/apt/apt-security-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+          if [ -f "$apt_source" ]; then
+            sudo sed -E -i 's#http://azure\.archive\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://archive.ubuntu.com/ubuntu\1#g' "$apt_source"
+          fi
+        done
+        echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99-ci-network

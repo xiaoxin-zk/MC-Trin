@@ -335,7 +335,13 @@ export async function runLocalAgent(
                           description:
                               'Update non-sensitive launcher preferences such as language, theme, memory, download source, and concurrency. Credentials, paths, hooks, telemetry, and proxy settings are not accepted. Every call requires user approval.',
                           schema: z.object({
-                              patch: z.record(z.string(), z.unknown()).min(1).max(8),
+                              patch: z
+                                  .record(z.string(), z.unknown())
+                                  .refine((patch) => {
+                                      const fields = Object.keys(patch).length
+                                      return fields >= 1 && fields <= 8
+                                  }, 'Settings patch must contain 1 to 8 fields')
+                                  .meta({ minProperties: 1, maxProperties: 8 }),
                           }),
                       },
                   ),

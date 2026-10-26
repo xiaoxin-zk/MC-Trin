@@ -146,8 +146,8 @@ jobs:
           pnpm --filter @modrinth/api-client lint
           pnpm --filter @modrinth/tooling-config lint
           pnpm --filter @axolotl/website lint
-      - name: Configure APT network for browser dependencies
-        run: echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99-ci-network
+      - name: Configure Ubuntu package downloads
+        uses: ./.github/actions/configure-linux-apt
       - name: Install Playwright browser for visual tests
         timeout-minutes: 10
         run: pnpm --filter @modrinth/ui exec playwright install --with-deps chromium
@@ -180,7 +180,7 @@ jobs:
       - name: Prepare build resources
         run: node scripts/axolotl/prepare-build-resources.mjs
       - name: Upload build resources
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-resources
           path: target/build-resources/
@@ -293,7 +293,7 @@ jobs:
       # build that passed CI locally without rebuilding it.
       - name: Upload Windows CI binary
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mctrin-windows-ci
           # The binary loads the seed map engine and the Blockbench skin bundle

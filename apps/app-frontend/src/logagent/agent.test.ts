@@ -106,6 +106,15 @@ test('assistant mode exposes bounded troubleshooting tools', async () => {
                     'enable_content',
                     'remove_content',
                 ])
+                const updateSettings = turn.tools.find(
+                    (entry) => entry.function.name === 'update_launcher_settings',
+                )
+                assert.ok(updateSettings)
+                const parameters = updateSettings.function.parameters as {
+                    properties: { patch: { minProperties?: number; maxProperties?: number } }
+                }
+                assert.equal(parameters.properties.patch.minProperties, 1)
+                assert.equal(parameters.properties.patch.maxProperties, 8)
                 if (++turns === 1)
                     return {
                         role: 'assistant',

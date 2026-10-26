@@ -53,6 +53,9 @@ jobs:
           profile: release
           target: ${{ matrix.target }}
           save-cache: 'true'
+      - name: Configure Ubuntu package downloads
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/configure-linux-apt
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
