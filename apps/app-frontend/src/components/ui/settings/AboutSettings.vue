@@ -43,8 +43,7 @@ const messages = defineMessages({
     },
     thirdPartyNotice: {
         id: 'app.settings.about.third-party-notice',
-        defaultMessage:
-            'The source notices retain copyright and third-party license terms.',
+        defaultMessage: 'The source notices retain copyright and third-party license terms.',
     },
 })
 

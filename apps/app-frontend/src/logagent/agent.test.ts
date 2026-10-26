@@ -77,9 +77,7 @@ test('assistant mode exposes only read-only launcher context tools', async () =>
         { ...session, context: 'Read-only launcher assistant session.' },
         {
             modelTurn: async (turn) => {
-                const names = turn.tools.map(
-                    (entry) => (entry.function as { name: string }).name,
-                )
+                const names = turn.tools.map((entry) => (entry.function as { name: string }).name)
                 assert.deepEqual(names, [
                     'get_instance_overview',
                     'get_launcher_settings',

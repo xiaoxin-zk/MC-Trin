@@ -230,7 +230,6 @@ watch(
         </div>
     </SettingsSection>
 
-
     <SettingsSection v-if="isDevEnvironment">
         <template #header>
             <h2

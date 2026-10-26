@@ -139,9 +139,7 @@ async function toggleFollowSystem() {
                     <AxolotlLogo icon-only />
                 </div>
                 <div class="onboarding-welcome-wordmark" aria-label="MC-Trin">
-                    <span class="onboarding-welcome-wordmark-core" data-wordmark="MC">
-                        MC
-                    </span>
+                    <span class="onboarding-welcome-wordmark-core" data-wordmark="MC"> MC </span>
                     <span class="onboarding-welcome-wordmark-suffix" data-wordmark="-Trin">
                         -Trin
                     </span>

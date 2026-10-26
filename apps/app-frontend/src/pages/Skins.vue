@@ -177,8 +177,7 @@ const messages = defineMessages({
     },
     signInDescription: {
         id: 'app.skins.sign-in.description',
-        defaultMessage:
-            'Sign in with a Minecraft account using the account panel on the right.',
+        defaultMessage: 'Sign in with a Minecraft account using the account panel on the right.',
     },
     offlineCompatibility: {
         id: 'app.skins.offline-account.compatibility',
@@ -1317,11 +1316,7 @@ watch(offline, () => {
         </div>
     </div>
 
-    <div
-        v-else
-        data-onboarding-id="skins-page"
-        class="box-border flex min-h-full flex-col p-6"
-    >
+    <div v-else data-onboarding-id="skins-page" class="box-border flex min-h-full flex-col p-6">
         <h1 class="m-0 text-2xl font-bold flex items-center gap-2">
             {{ formatMessage(messages.skinSelectorTitle) }}
         </h1>

@@ -45,15 +45,15 @@ function label(entry: ActivityEntry) {
             ? messages.list
             : entry.name === 'read_log_file'
               ? messages.read
-                : entry.name === 'grep_log_file'
-                  ? messages.grep
-                  : entry.name === 'get_instance_overview'
-                    ? messages.instances
-                    : entry.name === 'get_launcher_settings'
-                      ? messages.settings
-                      : entry.name === 'get_platform_diagnostics'
-                        ? messages.platform
-                        : messages.external,
+              : entry.name === 'grep_log_file'
+                ? messages.grep
+                : entry.name === 'get_instance_overview'
+                  ? messages.instances
+                  : entry.name === 'get_launcher_settings'
+                    ? messages.settings
+                    : entry.name === 'get_platform_diagnostics'
+                      ? messages.platform
+                      : messages.external,
     )
 }
 </script>

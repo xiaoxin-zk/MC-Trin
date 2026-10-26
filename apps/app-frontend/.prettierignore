@@ -6,3 +6,7 @@ src/assets/**/*.svg
 src/lab/**/assets/**
 src/data/about/
 src/data/lobehub-provider-descriptions/
+# Standalone prototype shell is not part of the Vue application build.
+app.js
+mctrin-prototype.html
+styles.css

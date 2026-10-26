@@ -60,10 +60,7 @@ export async function showLauncherLogsFolder() {
     return await invoke('plugin:utils|show_launcher_logs_folder', {})
 }
 
-export async function exportErrorLogs(
-    errorMessage,
-    fileNamePrefix = 'MC-Trin error logs',
-) {
+export async function exportErrorLogs(errorMessage, fileNamePrefix = 'MC-Trin error logs') {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const outputPath = await save({
         defaultPath: `${fileNamePrefix} ${timestamp}.zip`,
