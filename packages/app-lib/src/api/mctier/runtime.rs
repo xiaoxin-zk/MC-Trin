@@ -298,9 +298,19 @@ pub async fn run(
         }
         Some((free_port().await?, remote))
     } else {
-        TcpStream::connect((Ipv4Addr::LOCALHOST, request.game_port))
-            .await
-            .wrap_err("Minecraft is not listening on the selected port")?;
+        // Hosting must not depend on the LAN world already being open: players
+        // routinely create the room first and open the world afterwards. The
+        // port forward only dials this socket per incoming connection, so a
+        // closed port here is worth a warning, never a failed room.
+        if let Err(error) =
+            TcpStream::connect((Ipv4Addr::LOCALHOST, request.game_port)).await
+        {
+            tracing::warn!(
+                port = request.game_port,
+                %error,
+                "Minecraft is not listening on the selected port yet; the room keeps waiting for it"
+            );
+        }
         None
     };
     let rpc_port = free_port().await?;

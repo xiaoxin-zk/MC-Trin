@@ -1218,7 +1218,8 @@ impl Theme {
             "light" => Theme::Light,
             "oled" => Theme::Oled,
             "system" => Theme::System,
-            _ => Theme::Dark,
+            // Unknown values fall back to following the OS colour scheme.
+            _ => Theme::System,
         }
     }
 }

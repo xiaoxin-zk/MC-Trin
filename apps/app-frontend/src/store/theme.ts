@@ -180,7 +180,7 @@ export type ThemeStore = {
 }
 
 export const DEFAULT_THEME_STORE: ThemeStore = {
-    selectedTheme: 'dark',
+    selectedTheme: 'system',
     selectedAccentColor: 'green',
     systemAccentColor: null,
     systemAccentSupported: null,

@@ -215,6 +215,22 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
             tracing::warn!(%error, "Could not notify frontend of offline account eligibility");
         }
     });
+    // Discover the Java runtimes already installed on this machine right away,
+    // so "Java & performance" is populated without the user pressing Find Java.
+    tauri::async_runtime::spawn(async {
+        let started = std::time::Instant::now();
+        match theseus::prelude::jre::get_available_jres(false, true, false).await
+        {
+            Ok(jres) => tracing::info!(
+                count = jres.len(),
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "Synchronized locally installed Java runtimes"
+            ),
+            Err(error) => {
+                tracing::warn!(%error, "Startup Java synchronization failed");
+            }
+        }
+    });
     // A recreated webview must not recover or interrupt backup operations a second time.
     static BACKUP_STARTUP: tokio::sync::OnceCell<()> =
         tokio::sync::OnceCell::const_new();
