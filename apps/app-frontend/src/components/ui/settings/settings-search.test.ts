@@ -186,11 +186,7 @@ test('settings navigation groups preserve the intended MC-Trin information archi
         'network-multiplayer',
     ])
     assert.deepEqual(categoriesForGroup('data-privacy'), ['storage-backups'])
-    assert.deepEqual(categoriesForGroup('support'), [
-        'about',
-        'network-connection',
-        'logs',
-    ])
+    assert.deepEqual(categoriesForGroup('support'), ['about', 'network-connection', 'logs'])
     assert.deepEqual(categoriesForGroup('developer'), [])
     assert.deepEqual(categoriesForGroup('developer', true), ['feature-flags'])
 })

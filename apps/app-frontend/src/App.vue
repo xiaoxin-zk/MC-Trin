@@ -564,13 +564,6 @@ const {
 } = appUpdateState
 let delayedUpdatePopupTimeout: ReturnType<Window['setTimeout']> | undefined
 
-async function checkUpdates() {
-    // MC-Trin currently distributes builds through GitHub Actions/releases;
-    // do not query or display the inherited Axolotl update service.
-    updatesEnabled.value = false
-    updatesPaused.value = true
-}
-
 /**
  * Keep browser/webview shortcuts from escaping the launcher UI. F12 remains
  * available when the in-app developer mode is enabled so development tools
