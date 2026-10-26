@@ -35,7 +35,9 @@ pub struct DirectoryInfo {
 pub fn component_root_path() -> PathBuf {
     let configured = configured_component_root();
     match launcher_dir_if_writable() {
-        Some(launcher_dir) if !configured.starts_with(&launcher_dir) => launcher_dir,
+        Some(launcher_dir) if !configured.starts_with(&launcher_dir) => {
+            launcher_dir
+        }
         _ => configured,
     }
 }
@@ -44,7 +46,9 @@ fn configured_component_root() -> PathBuf {
     DirectoryInfo::global_handle_if_ready()
         .map(|directories| directories.config_dir.clone())
         .or_else(|| {
-            DirectoryInfo::initial_settings_dir_path(crate::brand::BUNDLE_IDENTIFIER)
+            DirectoryInfo::initial_settings_dir_path(
+                crate::brand::BUNDLE_IDENTIFIER,
+            )
         })
         .unwrap_or_else(|| PathBuf::from("."))
 }

@@ -121,7 +121,7 @@ jobs:
     name: Run frontend lint and tests
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -136,8 +136,6 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install Playwright browser for visual tests
-        run: pnpm --filter @modrinth/ui exec playwright install --with-deps chromium
       - name: Lint frontend packages
         run: |
           pnpm --filter @modrinth/ui lint
@@ -148,6 +146,11 @@ jobs:
           pnpm --filter @modrinth/api-client lint
           pnpm --filter @modrinth/tooling-config lint
           pnpm --filter @axolotl/website lint
+      - name: Configure APT network for browser dependencies
+        run: echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99-ci-network
+      - name: Install Playwright browser for visual tests
+        timeout-minutes: 10
+        run: pnpm --filter @modrinth/ui exec playwright install --with-deps chromium
       - name: Test shared UI package
         run: pnpm --filter @modrinth/ui test
       - name: Test desktop frontend

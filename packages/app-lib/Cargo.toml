@@ -4,6 +4,13 @@ name = "theseus"
 version = "1.10.0"
 edition.workspace = true
 
+[package.metadata.cargo-shear]
+# These standalone fake kernels are compiled by rustc from the integration tests.
+ignored-paths = [
+  "src/api/hongshi/kernel-fixture.rs",
+  "src/api/mctier/kernel-fixture.rs",
+]
+
 [dependencies]
 aes-gcm = { workspace = true }
 ariadne = { workspace = true }
