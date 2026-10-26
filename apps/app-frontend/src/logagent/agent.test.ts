@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { AIMessage, ToolMessage } from '@langchain/core/messages'
 
 import { diagnosticText, runLocalAgent } from './agent.ts'
-import { LogAgentModel } from './model.ts'
+import { LogAgentModel, readableMessageContent } from './model.ts'
 import type { AgentGateway, ModelTurn } from './types.ts'
 
 const session = {
@@ -518,6 +518,16 @@ test('accepts standard content blocks without displaying reasoning blocks', () =
         ],
     })
     assert.equal(diagnosticText(message), 'Java is incompatible.\nSelect a supported Java version.')
+})
+
+test('renders structured text blocks without coercing objects to [object Object]', () => {
+    assert.equal(
+        readableMessageContent([
+            { type: 'text', text: { value: 'Java is incompatible.' } },
+            { type: 'reasoning', reasoning: 'private' },
+        ]),
+        '{"value":"Java is incompatible."}',
+    )
 })
 
 test('the complete agent loop accepts a final response normalized into content blocks', async (context) => {

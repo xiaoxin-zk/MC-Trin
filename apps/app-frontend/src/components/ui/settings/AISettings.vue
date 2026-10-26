@@ -74,12 +74,28 @@ const customModelId = ref('')
 const customModelName = ref('')
 const modelSearch = ref('')
 const status = ref('')
+const testError = ref('')
 const busy = ref(false)
 const masterBusy = ref(false)
 const oauthInfo = ref<OAuthDeviceCode | null>(null)
 const oauthStatus = ref<OAuthPollStatus | null>(null)
 const oauthChecking = ref(false)
 let oauthTimer: ReturnType<typeof setTimeout> | undefined
+
+function readableError(error: unknown): string {
+    if (error instanceof Error) return error.message
+    if (typeof error === 'string') return error
+    if (error && typeof error === 'object') {
+        const record = error as Record<string, unknown>
+        if (typeof record.message === 'string') return record.message
+        try {
+            return JSON.stringify(error) ?? 'The provider test failed.'
+        } catch {
+            return 'The provider test failed.'
+        }
+    }
+    return String(error)
+}
 
 const messages = defineMessages({
     title: { id: 'app.ai-settings.title', defaultMessage: 'AI providers' },
@@ -210,6 +226,10 @@ const messages = defineMessages({
     testSuccess: {
         id: 'app.ai-settings.test-success',
         defaultMessage: 'Connection succeeded: {response}',
+    },
+    testFailed: {
+        id: 'app.ai-settings.test-failed',
+        defaultMessage: 'Connection failed: {error}',
     },
     connect: { id: 'app.ai-settings.oauth.connect', defaultMessage: 'Connect account' },
     reconnect: { id: 'app.ai-settings.oauth.reconnect', defaultMessage: 'Reconnect account' },
@@ -642,6 +662,7 @@ async function testProvider() {
     if (!selectedConfig.value || !selectedTestModel.value) return
     busy.value = true
     status.value = ''
+    testError.value = ''
     try {
         if (!(await saveProvider())) return
         const response = await testAIProvider(
@@ -650,7 +671,7 @@ async function testProvider() {
         )
         status.value = formatMessage(messages.testSuccess, { response })
     } catch (error) {
-        handleError(error)
+        testError.value = readableError(error)
     } finally {
         busy.value = false
     }
@@ -1532,7 +1553,9 @@ onMounted(async () => {
                         </Button>
                     </div>
                 </div>
+            </div>
 
+            <div class="ai-provider-test-footer">
                 <div class="ai-provider-actions">
                     <label
                         class="flex min-w-48 flex-1 flex-col gap-1.5 text-sm font-semibold text-[var(--color-text-primary)]"
@@ -1552,8 +1575,15 @@ onMounted(async () => {
                         <PlugIcon />{{ formatMessage(busy ? messages.testing : messages.test) }}
                     </Button>
                 </div>
-                <p v-if="status" class="m-0 text-sm text-[var(--color-text-tertiary)]">
+                <p
+                    v-if="status"
+                    class="m-0 text-sm text-[var(--color-text-tertiary)]"
+                    role="status"
+                >
                     {{ status }}
+                </p>
+                <p v-if="testError" class="m-0 text-sm text-red" role="alert">
+                    {{ formatMessage(messages.testFailed, { error: testError }) }}
                 </p>
             </div>
         </section>
@@ -1824,6 +1854,17 @@ onMounted(async () => {
     flex-wrap: wrap;
     align-items: end;
     gap: 0.5rem;
+}
+
+.ai-provider-test-footer {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: var(--gap-md) var(--gap-xl);
+    border-top: 1px solid
+        var(--settings-divider, color-mix(in srgb, var(--surface-4) 55%, transparent));
+    background: var(--surface-2);
 }
 
 .ai-model-actions {

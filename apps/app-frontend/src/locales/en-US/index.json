@@ -467,6 +467,9 @@
   "app.ai-settings.test-success": {
     "message": "Connection succeeded: {response}"
   },
+  "app.ai-settings.test-failed": {
+    "message": "Connection failed: {error}"
+  },
   "app.ai-settings.testing": {
     "message": "Testing…"
   },
@@ -898,6 +901,15 @@
   },
   "app.assistant.result": {
     "message": "Analysis"
+  },
+  "app.assistant.result.root-cause": {
+    "message": "Root cause"
+  },
+  "app.assistant.result.evidence": {
+    "message": "Evidence"
+  },
+  "app.assistant.result.steps": {
+    "message": "Next steps"
   },
   "app.assistant.settings": {
     "message": "AI settings"

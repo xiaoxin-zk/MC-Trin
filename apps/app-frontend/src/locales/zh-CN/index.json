@@ -1046,6 +1046,9 @@
   "app.ai-settings.test-success": {
     "message": "连接成功：{response}"
   },
+  "app.ai-settings.test-failed": {
+    "message": "连接失败：{error}"
+  },
   "app.ai-settings.testing": {
     "message": "正在测试……"
   },
@@ -17968,6 +17971,15 @@
   },
   "app.assistant.result": {
     "message": "分析结果"
+  },
+  "app.assistant.result.root-cause": {
+    "message": "根因"
+  },
+  "app.assistant.result.evidence": {
+    "message": "证据"
+  },
+  "app.assistant.result.steps": {
+    "message": "处理步骤"
   },
   "app.assistant.settings": {
     "message": "AI 设置"

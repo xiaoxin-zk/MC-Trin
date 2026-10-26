@@ -13,17 +13,41 @@ interface ModelOptions extends BaseChatModelCallOptions {
     tools?: ModelToolDefinition[]
 }
 
+export function readableMessageContent(value: unknown): string {
+    if (typeof value === 'string') return value
+    if (Array.isArray(value)) {
+        return value
+            .filter(
+                (block) =>
+                    !block ||
+                    typeof block !== 'object' ||
+                    !('type' in block) ||
+                    (block as { type?: unknown }).type === 'text',
+            )
+            .map(readableMessageContent)
+            .filter(Boolean)
+            .join('\n')
+    }
+    if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>
+        if (typeof record.type === 'string' && record.type !== 'text') return ''
+        if (record.text !== undefined) return readableMessageContent(record.text)
+        if (typeof record.content === 'string') return record.content
+        if (Array.isArray(record.content)) return readableMessageContent(record.content)
+        try {
+            return JSON.stringify(value) ?? ''
+        } catch {
+            return ''
+        }
+    }
+    return value == null ? '' : String(value)
+}
+
 function serializeMessage(message: BaseMessage): ModelMessage {
     const type = message.type
     return {
         role: type === 'human' ? 'user' : type === 'ai' ? 'assistant' : type,
-        content:
-            typeof message.content === 'string'
-                ? message.content
-                : message.content
-                      .filter((block) => block.type === 'text')
-                      .map((block) => String(block.text ?? ''))
-                      .join('\n'),
+        content: readableMessageContent(message.content),
         tool_calls: AIMessage.isInstance(message)
             ? message.tool_calls?.map((call) => ({
                   id: call.id ?? '',

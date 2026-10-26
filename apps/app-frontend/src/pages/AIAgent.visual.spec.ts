@@ -126,6 +126,7 @@ function latestStartCall(): unknown[] {
 beforeEach(() => {
     vi.resetAllMocks()
     localStorage.removeItem('mc-trin:ai-agent-profiles:v1')
+    localStorage.removeItem('mctrin.assistant.tool-settings.v1')
     localStorage.removeItem('mctrin.assistant.mcp-servers.v1')
     localStorage.removeItem('mctrin.assistant.mcp-endpoint.v1')
     mocks.instances.mockResolvedValue([installedInstance])
@@ -275,6 +276,25 @@ it('answers general questions without an installed instance or enabled log analy
     ])
     expect(typeof args[8]).toBe('function')
     expect(args[9]).toBe(true)
+})
+
+it('keeps tool settings collapsed and shows a visible reset result', async () => {
+    localStorage.setItem(
+        'mctrin.assistant.tool-settings.v1',
+        JSON.stringify({ disabled: ['get_instance_overview'] }),
+    )
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const tools = wrapper.get('details.assistant-tools')
+    expect(tools.attributes('open')).toBeUndefined()
+    expect(tools.text()).toMatch(/\d+\/\d+/)
+    await tools
+        .findAll('button')
+        .find((button) => button.text().includes('Enable all'))!
+        .trigger('click')
+    expect(tools.get('[role="status"]').exists()).toBe(true)
+    expect(tools.text()).toMatch(/\d+\/\d+/)
 })
 
 it('creates a named agent profile and requires approval for assistant write tools', async () => {

@@ -35,6 +35,23 @@ interface Dependencies {
     gateway: (runId: string) => AgentGateway
 }
 
+function readableError(cause: unknown): string {
+    if (cause instanceof Error) return cause.message
+    if (typeof cause === 'string') return cause
+    if (cause && typeof cause === 'object') {
+        const record = cause as Record<string, unknown>
+        for (const key of ['message', 'error', 'details']) {
+            if (typeof record[key] === 'string' && record[key]) return record[key]
+        }
+        try {
+            return JSON.stringify(cause) ?? 'The assistant request failed.'
+        } catch {
+            return 'The assistant request failed.'
+        }
+    }
+    return String(cause)
+}
+
 const dependencies: Dependencies = {
     prepare: backend.prepareSession,
     cancel: backend.cancelSession,
@@ -178,12 +195,7 @@ export function useLogAgent(deps: Dependencies = dependencies) {
             status.value = 'ready'
         } catch (cause) {
             if (!current()) return
-            error.value =
-                cause instanceof Error
-                    ? cause.message
-                    : typeof cause === 'string'
-                      ? cause
-                      : JSON.stringify(cause)
+            error.value = readableError(cause)
             event.value = null
             status.value = 'error'
             activity.value = activity.value.map((entry) =>

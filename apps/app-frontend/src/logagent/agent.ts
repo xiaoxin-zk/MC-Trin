@@ -4,7 +4,7 @@ import { createDeepAgent, registerHarnessProfile } from 'deepagents/browser'
 import { createMiddleware } from 'langchain'
 import { z } from 'zod'
 
-import { LogAgentModel } from './model.ts'
+import { LogAgentModel, readableMessageContent } from './model.ts'
 import { LAUNCHER_ASSISTANT_PROMPT, LOGAGENT_PROMPT } from './prompts.ts'
 import { enabledAgentTools } from './tool-settings.ts'
 import type {
@@ -36,7 +36,7 @@ export function diagnosticText(message: BaseMessage | undefined): string {
         throw new Error('LogAgent finished without a final assistant reply')
     if (message.tool_calls?.length)
         throw new Error('LogAgent finished with unresolved tool calls instead of a diagnosis')
-    const text = message.text
+    const text = readableMessageContent(message.content)
     if (!text.trim()) {
         const blocks = message.contentBlocks.map((block) => block.type).join(', ') || 'empty'
         throw new Error(`LogAgent final reply contains no diagnostic text (content: ${blocks})`)

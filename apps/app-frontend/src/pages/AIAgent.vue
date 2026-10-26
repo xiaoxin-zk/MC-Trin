@@ -33,6 +33,7 @@ import {
 import { list } from '@/helpers/instance'
 import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
+import { parseLogAgentInsight } from '@/logagent/result'
 import {
     agentToolEnabled,
     BUILT_IN_AGENT_TOOLS,
@@ -84,6 +85,9 @@ const messages = defineMessages({
     analyze: { id: 'app.assistant.analyze', defaultMessage: 'Analyze logs' },
     stop: { id: 'app.assistant.stop', defaultMessage: 'Stop analysis' },
     result: { id: 'app.assistant.result', defaultMessage: 'Analysis' },
+    rootCause: { id: 'app.assistant.result.root-cause', defaultMessage: 'Root cause' },
+    evidence: { id: 'app.assistant.result.evidence', defaultMessage: 'Evidence' },
+    steps: { id: 'app.assistant.result.steps', defaultMessage: 'Next steps' },
     createInstance: { id: 'app.assistant.create-instance', defaultMessage: 'Create an instance' },
     noInstances: {
         id: 'app.assistant.no-instances',
@@ -397,6 +401,7 @@ const question = ref('')
 const loading = ref(true)
 const agentTools = BUILT_IN_AGENT_TOOLS
 const toolEnabled = ref<Record<string, boolean>>({})
+const toolResetNotice = ref(false)
 const toolLabels = {
     get_instance_overview: {
         name: messages.toolInstanceName,
@@ -511,11 +516,13 @@ function syncToolStates() {
 function toggleAgentTool(id: string, enabled: boolean) {
     setAgentToolEnabled(id, enabled)
     syncToolStates()
+    toolResetNotice.value = false
 }
 
 function enableAllAgentTools() {
     resetAgentTools()
     syncToolStates()
+    toolResetNotice.value = true
 }
 
 const mcpEndpoint = ref('')
@@ -550,6 +557,7 @@ const selectedAgentProfile = computed(
         agentProfiles.value.find((profile) => profile.id === selectedAgentProfileId.value) ??
         DEFAULT_AI_AGENT_PROFILE,
 )
+const enabledToolCount = computed(() => Object.values(toolEnabled.value).filter(Boolean).length)
 
 const availableInstances = computed(() =>
     instances.value.filter((instance) => instance.install_stage === 'installed'),
@@ -624,6 +632,7 @@ const canSubmit = computed(
         (mode.value === 'general' || Boolean(selectedInstanceId.value)) &&
         Boolean(question.value.trim()),
 )
+const parsedResult = computed(() => parseLogAgentInsight(agent.output.value))
 
 async function load() {
     loading.value = true
@@ -1028,213 +1037,242 @@ onUnmounted(denyPendingApprovals)
                 {{ formatMessage(messages.generalPrivacy) }}
             </p>
 
-            <section
-                class="flex max-w-4xl flex-col gap-3 border-b border-solid border-surface-4 pb-4"
+            <details
+                class="assistant-tools order-4 max-w-4xl rounded-md border border-solid border-surface-4 bg-surface-2 p-3"
             >
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
-                        {{ formatMessage(messages.agentToolsTitle) }}
-                    </h2>
-                    <Button
-                        type="outlined"
-                        :disabled="agent.busy.value"
-                        @click="enableAllAgentTools"
-                    >
+                <summary
+                    class="cursor-pointer text-base font-semibold text-[var(--color-text-primary)]"
+                >
+                    {{ formatMessage(messages.agentToolsTitle) }}
+                    <span class="ml-2 text-xs font-normal text-[var(--color-text-tertiary)]">
+                        {{ enabledToolCount }}/{{ agentTools.length }}
+                    </span>
+                </summary>
+                <div class="mt-3 flex flex-col gap-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
+                            {{ formatMessage(messages.agentToolsDescription) }}
+                        </p>
+                        <Button
+                            type="outlined"
+                            :disabled="agent.busy.value"
+                            @click="enableAllAgentTools"
+                        >
+                            {{ formatMessage(messages.agentToolsReset) }}
+                        </Button>
+                    </div>
+                    <p v-if="toolResetNotice" class="m-0 text-sm text-brand" role="status">
                         {{ formatMessage(messages.agentToolsReset) }}
-                    </Button>
+                    </p>
+                    <ul class="m-0 flex flex-col gap-2 p-0">
+                        <li
+                            v-for="tool in agentTools"
+                            :key="tool.id"
+                            class="flex min-w-0 items-start justify-between gap-3 border-t border-solid border-surface-4 pt-2"
+                        >
+                            <div class="min-w-0 flex-1">
+                                <strong
+                                    class="block break-words text-sm text-[var(--color-text-primary)]"
+                                >
+                                    {{ formatMessage(toolLabel(tool.id).name) }}
+                                </strong>
+                                <span class="block text-xs text-[var(--color-text-tertiary)]">
+                                    {{ formatMessage(toolLabel(tool.id).description) }}
+                                </span>
+                                <span
+                                    v-if="tool.permission === 'write'"
+                                    class="block text-xs font-semibold text-brand"
+                                >
+                                    {{ formatMessage(messages.localApprovalTitle) }}
+                                </span>
+                            </div>
+                            <label class="flex shrink-0 items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    class="h-4 w-4"
+                                    :checked="toolEnabled[tool.id]"
+                                    :aria-label="formatMessage(toolLabel(tool.id).name)"
+                                    @change="
+                                        toggleAgentTool(
+                                            tool.id,
+                                            ($event.target as HTMLInputElement).checked,
+                                        )
+                                    "
+                                />
+                            </label>
+                        </li>
+                    </ul>
+                    <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
+                        {{ formatMessage(messages.agentToolsExternal) }}
+                    </p>
                 </div>
-                <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
-                    {{ formatMessage(messages.agentToolsDescription) }}
-                </p>
-                <ul class="m-0 flex flex-col gap-2 p-0">
-                    <li
-                        v-for="tool in agentTools"
-                        :key="tool.id"
-                        class="flex min-w-0 items-start justify-between gap-3 border-t border-solid border-surface-4 pt-2"
-                    >
-                        <div class="min-w-0 flex-1">
-                            <strong
-                                class="block break-words text-sm text-[var(--color-text-primary)]"
-                            >
-                                {{ formatMessage(toolLabel(tool.id).name) }}
-                            </strong>
-                            <span class="block text-xs text-[var(--color-text-tertiary)]">
-                                {{ formatMessage(toolLabel(tool.id).description) }}
-                            </span>
-                            <span
-                                v-if="tool.permission === 'write'"
-                                class="block text-xs font-semibold text-brand"
-                            >
-                                {{ formatMessage(messages.localApprovalTitle) }}
-                            </span>
-                        </div>
-                        <label class="flex shrink-0 items-center gap-2 text-sm">
+            </details>
+
+            <details
+                class="assistant-mcp order-6 max-w-4xl rounded-md border border-solid border-surface-4 bg-surface-2 p-3"
+            >
+                <summary
+                    class="cursor-pointer text-base font-semibold text-[var(--color-text-primary)]"
+                >
+                    {{ formatMessage(messages.mcpTitle) }}
+                    <span class="ml-2 text-xs font-normal text-[var(--color-text-tertiary)]">
+                        {{
+                            mcpClient
+                                ? formatMessage(messages.mcpConnected, {
+                                      count: remoteTools.length,
+                                  })
+                                : formatMessage(messages.mcpDisconnected)
+                        }}
+                    </span>
+                </summary>
+                <div class="mt-3 flex flex-col gap-3">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
+                            <span>{{ formatMessage(messages.mcpServerName) }}</span>
                             <input
-                                type="checkbox"
-                                class="h-4 w-4"
-                                :checked="toolEnabled[tool.id]"
-                                :aria-label="formatMessage(toolLabel(tool.id).name)"
-                                @change="
-                                    toggleAgentTool(
-                                        tool.id,
-                                        ($event.target as HTMLInputElement).checked,
-                                    )
-                                "
+                                v-model="mcpServerName"
+                                class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
+                                type="text"
+                                maxlength="64"
+                                autocomplete="off"
                             />
                         </label>
-                    </li>
-                </ul>
-                <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
-                    {{ formatMessage(messages.agentToolsExternal) }}
-                </p>
-            </section>
-
-            <section
-                class="flex max-w-4xl flex-col gap-3 border-b border-solid border-surface-4 pb-4"
-            >
-                <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
-                    {{ formatMessage(messages.mcpTitle) }}
-                </h2>
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
-                        <span>{{ formatMessage(messages.mcpServerName) }}</span>
-                        <input
-                            v-model="mcpServerName"
-                            class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
-                            type="text"
-                            maxlength="64"
-                            autocomplete="off"
-                        />
-                    </label>
-                    <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
-                        <span>{{ formatMessage(messages.mcpEndpoint) }}</span>
-                        <input
-                            v-model="mcpEndpoint"
-                            class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
-                            type="url"
-                            autocomplete="url"
-                            :placeholder="formatMessage(messages.mcpEndpointPlaceholder)"
-                        />
-                    </label>
-                    <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
-                        <span>{{ formatMessage(messages.mcpToken) }}</span>
-                        <input
-                            v-model="mcpToken"
-                            class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
-                            type="password"
-                            autocomplete="off"
-                        />
-                    </label>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <Button
-                        type="outlined"
-                        :disabled="agent.busy.value || !mcpServerName.trim() || !mcpEndpoint.trim()"
-                        @click="saveMcpServer"
-                    >
-                        {{
-                            selectedMcpServerId
-                                ? formatMessage(messages.mcpUpdateServer)
-                                : formatMessage(messages.mcpSaveServer)
-                        }}
-                    </Button>
-                    <Button
-                        type="outlined"
-                        :disabled="mcpConnecting || agent.busy.value || !mcpEndpoint.trim()"
-                        @click="connectMcp"
-                    >
-                        {{ formatMessage(messages.mcpConnect) }}
-                    </Button>
-                    <Button
-                        v-if="mcpClient"
-                        type="outlined"
-                        :disabled="agent.busy.value"
-                        @click="disconnectMcp"
-                    >
-                        {{ formatMessage(messages.mcpDisconnect) }}
-                    </Button>
-                    <span
-                        v-if="mcpClient"
-                        class="text-sm text-[var(--color-text-tertiary)]"
-                        role="status"
-                    >
-                        {{ formatMessage(messages.mcpConnected, { count: remoteTools.length }) }}
-                    </span>
-                    <span
-                        v-else-if="!mcpError"
-                        class="text-sm text-[var(--color-text-tertiary)]"
-                        role="status"
-                    >
-                        {{ formatMessage(messages.mcpDisconnected) }}
-                    </span>
-                    <span v-if="mcpError" class="text-sm text-red" role="alert">{{
-                        mcpError
-                    }}</span>
-                    <span v-if="mcpConfigError" class="text-sm text-red" role="alert">{{
-                        mcpConfigError
-                    }}</span>
-                </div>
-                <ul
-                    v-if="mcpServerConfigs.length"
-                    class="m-0 flex flex-col gap-2 p-0"
-                    :aria-label="formatMessage(messages.mcpSavedServers)"
-                >
-                    <li
-                        v-for="server in mcpServerConfigs"
-                        :key="server.id"
-                        class="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-solid border-surface-4 pt-2"
-                    >
-                        <div class="min-w-0 flex-1">
-                            <strong
-                                class="block break-words text-sm text-[var(--color-text-primary)]"
-                            >
-                                {{ server.name }}
-                            </strong>
-                            <span class="block break-all text-xs text-[var(--color-text-tertiary)]">
-                                {{ server.endpoint }}
-                            </span>
-                        </div>
-                        <div class="flex shrink-0 items-center gap-1">
-                            <Button
-                                type="outlined"
-                                :disabled="agent.busy.value"
-                                @click="selectMcpServer(server)"
-                            >
-                                {{ formatMessage(messages.mcpUseServer) }}
-                            </Button>
-                            <Button
-                                type="quiet"
-                                :disabled="agent.busy.value"
-                                :aria-label="formatMessage(messages.mcpRemoveServer)"
-                                @click="removeMcpServer(server)"
-                            >
-                                <TrashIcon />
-                            </Button>
-                        </div>
-                    </li>
-                </ul>
-                <ul v-if="remoteTools.length" class="m-0 flex flex-col gap-2 p-0 text-sm">
-                    <li
-                        v-for="tool in remoteTools"
-                        :key="tool.name"
-                        class="flex min-w-0 flex-wrap items-baseline gap-x-2 border-t border-solid border-surface-4 pt-2"
-                    >
-                        <strong class="break-all text-[var(--color-text-primary)]">{{
-                            tool.name
-                        }}</strong>
-                        <span
-                            v-if="tool.description"
-                            class="min-w-0 break-words text-[var(--color-text-tertiary)]"
+                        <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
+                            <span>{{ formatMessage(messages.mcpEndpoint) }}</span>
+                            <input
+                                v-model="mcpEndpoint"
+                                class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
+                                type="url"
+                                autocomplete="url"
+                                :placeholder="formatMessage(messages.mcpEndpointPlaceholder)"
+                            />
+                        </label>
+                        <label class="flex min-w-0 flex-col gap-1.5 text-sm font-semibold">
+                            <span>{{ formatMessage(messages.mcpToken) }}</span>
+                            <input
+                                v-model="mcpToken"
+                                class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
+                                type="password"
+                                autocomplete="off"
+                            />
+                        </label>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                            type="outlined"
+                            :disabled="
+                                agent.busy.value || !mcpServerName.trim() || !mcpEndpoint.trim()
+                            "
+                            @click="saveMcpServer"
                         >
-                            {{ tool.description }}
+                            {{
+                                selectedMcpServerId
+                                    ? formatMessage(messages.mcpUpdateServer)
+                                    : formatMessage(messages.mcpSaveServer)
+                            }}
+                        </Button>
+                        <Button
+                            type="outlined"
+                            :disabled="mcpConnecting || agent.busy.value || !mcpEndpoint.trim()"
+                            @click="connectMcp"
+                        >
+                            {{ formatMessage(messages.mcpConnect) }}
+                        </Button>
+                        <Button
+                            v-if="mcpClient"
+                            type="outlined"
+                            :disabled="agent.busy.value"
+                            @click="disconnectMcp"
+                        >
+                            {{ formatMessage(messages.mcpDisconnect) }}
+                        </Button>
+                        <span
+                            v-if="mcpClient"
+                            class="text-sm text-[var(--color-text-tertiary)]"
+                            role="status"
+                        >
+                            {{
+                                formatMessage(messages.mcpConnected, { count: remoteTools.length })
+                            }}
                         </span>
-                    </li>
-                </ul>
-            </section>
+                        <span
+                            v-else-if="!mcpError"
+                            class="text-sm text-[var(--color-text-tertiary)]"
+                            role="status"
+                        >
+                            {{ formatMessage(messages.mcpDisconnected) }}
+                        </span>
+                        <span v-if="mcpError" class="text-sm text-red" role="alert">{{
+                            mcpError
+                        }}</span>
+                        <span v-if="mcpConfigError" class="text-sm text-red" role="alert">{{
+                            mcpConfigError
+                        }}</span>
+                    </div>
+                    <ul
+                        v-if="mcpServerConfigs.length"
+                        class="m-0 flex flex-col gap-2 p-0"
+                        :aria-label="formatMessage(messages.mcpSavedServers)"
+                    >
+                        <li
+                            v-for="server in mcpServerConfigs"
+                            :key="server.id"
+                            class="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-solid border-surface-4 pt-2"
+                        >
+                            <div class="min-w-0 flex-1">
+                                <strong
+                                    class="block break-words text-sm text-[var(--color-text-primary)]"
+                                >
+                                    {{ server.name }}
+                                </strong>
+                                <span
+                                    class="block break-all text-xs text-[var(--color-text-tertiary)]"
+                                >
+                                    {{ server.endpoint }}
+                                </span>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-1">
+                                <Button
+                                    type="outlined"
+                                    :disabled="agent.busy.value"
+                                    @click="selectMcpServer(server)"
+                                >
+                                    {{ formatMessage(messages.mcpUseServer) }}
+                                </Button>
+                                <Button
+                                    type="quiet"
+                                    :disabled="agent.busy.value"
+                                    :aria-label="formatMessage(messages.mcpRemoveServer)"
+                                    @click="removeMcpServer(server)"
+                                >
+                                    <TrashIcon />
+                                </Button>
+                            </div>
+                        </li>
+                    </ul>
+                    <ul v-if="remoteTools.length" class="m-0 flex flex-col gap-2 p-0 text-sm">
+                        <li
+                            v-for="tool in remoteTools"
+                            :key="tool.name"
+                            class="flex min-w-0 flex-wrap items-baseline gap-x-2 border-t border-solid border-surface-4 pt-2"
+                        >
+                            <strong class="break-all text-[var(--color-text-primary)]">{{
+                                tool.name
+                            }}</strong>
+                            <span
+                                v-if="tool.description"
+                                class="min-w-0 break-words text-[var(--color-text-tertiary)]"
+                            >
+                                {{ tool.description }}
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </details>
 
             <form
                 v-if="mode === 'general' || availableInstances.length"
-                class="flex max-w-4xl flex-col gap-4"
+                class="order-2 flex max-w-4xl flex-col gap-4"
                 @submit.prevent="submit"
             >
                 <label
@@ -1291,12 +1329,17 @@ onUnmounted(denyPendingApprovals)
             </form>
 
             <LogAgentActivity
+                class="order-3"
                 :entries="agent.activity.value"
                 :busy="agent.busy.value"
                 :elapsed="agent.elapsed.value"
             />
 
-            <section v-if="agent.error.value" class="max-w-4xl" role="alert">
+            <section
+                v-if="agent.error.value"
+                class="assistant-result order-3 max-w-4xl"
+                role="alert"
+            >
                 <h2 class="mb-2 mt-0 text-base font-semibold text-red">
                     {{ formatMessage(messages.result) }}
                 </h2>
@@ -1305,13 +1348,46 @@ onUnmounted(denyPendingApprovals)
                 </p>
             </section>
 
-            <section v-if="agent.output.value" class="max-w-4xl">
+            <section v-if="agent.output.value" class="assistant-result order-3 max-w-4xl">
                 <h2 class="mb-2 mt-0 text-base font-semibold text-[var(--color-text-primary)]">
                     {{ formatMessage(messages.result) }}
                 </h2>
                 <pre
                     class="m-0 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-solid border-surface-4 bg-surface-2 p-4 text-sm text-[var(--color-text-primary)]"
-                    >{{ agent.output.value }}</pre>
+                    >{{ parsedResult.markdown }}</pre>
+                <div
+                    v-if="parsedResult.insight"
+                    class="mt-3 flex flex-col gap-3 rounded-md border border-solid border-surface-4 bg-surface-2 p-4 text-sm"
+                >
+                    <div>
+                        <h3 class="m-0 text-sm font-semibold text-[var(--color-text-primary)]">
+                            {{ formatMessage(messages.rootCause) }}
+                        </h3>
+                        <p class="m-0 mt-1 whitespace-pre-wrap break-words">
+                            {{ parsedResult.insight.rootCause }}
+                        </p>
+                    </div>
+                    <div v-if="parsedResult.insight.evidence.length">
+                        <h3 class="m-0 text-sm font-semibold text-[var(--color-text-primary)]">
+                            {{ formatMessage(messages.evidence) }}
+                        </h3>
+                        <ul class="m-0 mt-1 list-disc pl-5">
+                            <li v-for="item in parsedResult.insight.evidence" :key="item">
+                                {{ item }}
+                            </li>
+                        </ul>
+                    </div>
+                    <div v-if="parsedResult.insight.steps.length">
+                        <h3 class="m-0 text-sm font-semibold text-[var(--color-text-primary)]">
+                            {{ formatMessage(messages.steps) }}
+                        </h3>
+                        <ol class="m-0 mt-1 list-decimal pl-5">
+                            <li v-for="item in parsedResult.insight.steps" :key="item">
+                                {{ item }}
+                            </li>
+                        </ol>
+                    </div>
+                </div>
             </section>
         </template>
 
