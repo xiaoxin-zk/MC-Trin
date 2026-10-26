@@ -26,7 +26,15 @@ export function readableMessageContent(value: unknown): string {
             )
             .map(readableMessageContent)
             .filter(Boolean)
-            .join('\n')
+            .reduce(
+                (result, part) =>
+                    !result
+                        ? part
+                        : result.endsWith('\n') || part.startsWith('\n')
+                          ? result + part
+                          : `${result}\n${part}`,
+                '',
+            )
     }
     if (value && typeof value === 'object') {
         const record = value as Record<string, unknown>
