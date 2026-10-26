@@ -35,7 +35,7 @@ const settings = ref<TranslationSettingsState>({
     provider: 'bilibili',
     target_language: '',
     mode: 'bilingual',
-    auto_translate: false,
+    auto_translate: true,
     style: 'weakened',
     ai_provider_id: '',
     ai_model_id: '',
