@@ -53,6 +53,11 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.stage.verifying',
         defaultMessage: 'Verifying the networking component…',
     },
+    gamePortClosed: {
+        id: 'app.multiplayer.mctier.host-hint-game-port',
+        defaultMessage:
+            'Minecraft is not listening on port {port} yet. Open the world to LAN in game so friends can join.',
+    },
     hosting: { id: 'app.multiplayer.mctier.hosting', defaultMessage: 'Lobby created' },
     joined: {
         id: 'app.multiplayer.mctier.joined',
@@ -182,6 +187,12 @@ const preparationStage = computed(() => {
         default:
             return ''
     }
+})
+const hostHint = computed(() => {
+    if (props.state?.host_hint !== 'game_port_closed') return ''
+    return formatMessage(messages.gamePortClosed, {
+        port: props.state?.game_port ?? 0,
+    })
 })
 const voice = useMctierVoice(multiplayer.sendMctierVoiceSignal)
 let unlistenVoice: UnlistenFn | undefined
@@ -330,6 +341,7 @@ function prefillInviteFromDeepLink() {
             :label="preparationStage"
             show-progress
         />
+        <p v-if="hostHint" class="m-0 text-xs text-secondary">{{ hostHint }}</p>
         <p
             v-if="error || state?.error_message"
             class="m-0 text-sm text-[var(--color-red)]"

@@ -260,6 +260,9 @@
   "app.multiplayer.mctier.host-hint": {
     "message": "先在世界中开放局域网，再填写 Minecraft 显示的端口。朋友使用邀请码加入，并填写自己的局域网端口。"
   },
+  "app.multiplayer.mctier.host-hint-game-port": {
+    "message": "Minecraft 还没有在 {port} 端口监听，请在游戏里开启「对局域网开放」，朋友才能加入。"
+  },
   "app.multiplayer.mctier.players": {
     "message": "玩家"
   },

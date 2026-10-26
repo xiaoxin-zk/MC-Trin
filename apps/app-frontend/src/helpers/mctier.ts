@@ -40,6 +40,7 @@ export interface MctierState {
     has_password: boolean
     download_stage: MctierPreparationStage | null
     download_progress: number | null
+    host_hint: 'game_port_closed' | null
 }
 
 export const DEFAULT_MCTIER_SIGNALING = 'wss://mctier.pmhs.top/signaling'

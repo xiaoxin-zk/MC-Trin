@@ -93,6 +93,7 @@ const idle = {
     has_password: false,
     download_stage: null,
     download_progress: null,
+    host_hint: null,
 }
 
 let wrappers: VueWrapper[] = []
@@ -194,6 +195,16 @@ it('shows preparation progress while the network component downloads', () => {
     expect(bar.attributes('aria-valuenow')).toBe('42')
     expect(bar.attributes('data-waiting')).toBe('false')
     expect(wrapper.text()).toContain('Downloading the networking component…')
+})
+
+it('warns the host while Minecraft is not listening on the game port', () => {
+    const wrapper = page({
+        ...idle,
+        status: 'hosting',
+        game_port: 25565,
+        host_hint: 'game_port_closed',
+    })
+    expect(wrapper.text()).toContain('Minecraft is not listening on port 25565 yet')
 })
 
 it('shows an indeterminate bar when the download size is unknown', () => {

@@ -137,6 +137,14 @@ pub enum PreparationStage {
     Verifying,
 }
 
+/// Non-fatal notices surfaced while a room is running.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HostHint {
+    /// Hosting started before Minecraft opened its LAN port.
+    GamePortClosed,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Player {
@@ -164,6 +172,8 @@ pub struct MctierState {
     pub download_stage: Option<PreparationStage>,
     /// Download percentage (`0..=100`), or `None` when the size is unknown.
     pub download_progress: Option<u8>,
+    /// Actionable notice for the host, cleared once it no longer applies.
+    pub host_hint: Option<HostHint>,
 }
 
 #[derive(Default)]
@@ -352,6 +362,7 @@ pub async fn begin_start(
             service.state.voice_ice_server = None;
             service.state.download_stage = None;
             service.state.download_progress = None;
+            service.state.host_hint = None;
             reset_preparation();
             if cancellation.is_cancelled() || outcome.is_ok() {
                 service.state = MctierState::default();

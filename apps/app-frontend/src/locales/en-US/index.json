@@ -8117,6 +8117,9 @@
   "app.multiplayer.mctier.host-hint": {
     "message": "Open your world to LAN first and enter the port shown by Minecraft. Guests use the invite code and enter their own LAN port."
   },
+  "app.multiplayer.mctier.host-hint-game-port": {
+    "message": "Minecraft is not listening on port {port} yet. Open the world to LAN in game so friends can join."
+  },
   "app.multiplayer.mctier.hosting": {
     "message": "Lobby created"
   },

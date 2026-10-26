@@ -15,8 +15,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    ControlMessage, EntryMode, StartRequest, Status, VoiceSignalEmitter,
-    binary, protocol, update,
+    ControlMessage, EntryMode, HostHint, StartRequest, Status,
+    VoiceSignalEmitter, binary, protocol, update,
 };
 
 fn stun_binding_response(
@@ -310,6 +310,25 @@ pub async fn run(
                 %error,
                 "Minecraft is not listening on the selected port yet; the room keeps waiting for it"
             );
+            update(generation, |state| {
+                state.host_hint = Some(HostHint::GamePortClosed);
+            })
+            .await;
+            // Clear the notice as soon as the player opens the world to LAN.
+            let game_port = request.game_port;
+            tokio::spawn(async move {
+                for _ in 0..120 {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    if TcpStream::connect((Ipv4Addr::LOCALHOST, game_port))
+                        .await
+                        .is_ok()
+                    {
+                        update(generation, |state| state.host_hint = None)
+                            .await;
+                        return;
+                    }
+                }
+            });
         }
         None
     };
