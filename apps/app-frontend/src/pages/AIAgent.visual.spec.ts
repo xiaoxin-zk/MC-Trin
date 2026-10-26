@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
 
+import { DEFAULT_AI_AGENT_PROFILE } from '@/helpers/ai-agent-profiles'
 import type { useLogAgent } from '@/composables/useLogAgent'
 
 import AIAgent from './AIAgent.vue'
@@ -270,7 +271,7 @@ it('answers general questions without an installed instance or enabled log analy
         'How do I change the game memory limit?',
         undefined,
         { providerId: 'openai', modelId: 'gpt-4o-mini' },
-        '',
+        DEFAULT_AI_AGENT_PROFILE.instructions,
     ])
     expect(typeof args[8]).toBe('function')
     expect(args[9]).toBe(true)
