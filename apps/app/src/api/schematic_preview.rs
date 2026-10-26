@@ -1566,11 +1566,7 @@ fn export_litematic(session: &PreviewSession) -> Result<Vec<u8>, String> {
     );
     metadata.insert(
         "Author",
-        session
-            .manifest
-            .author
-            .as_deref()
-            .unwrap_or("MC-Trin"),
+        session.manifest.author.as_deref().unwrap_or("MC-Trin"),
     );
     metadata.insert(
         "Description",

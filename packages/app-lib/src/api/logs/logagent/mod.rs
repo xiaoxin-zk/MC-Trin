@@ -181,23 +181,36 @@ async fn prepare_snapshot(
     let (provider_id, model_id, model) = match session.source.as_str() {
         "custom" => {
             if !settings.enabled {
-                return Err(error("Enable local LogAgent in analysis settings"));
+                return Err(error(
+                    "Enable local LogAgent in analysis settings",
+                ));
             }
-            let model = ChatModel::prepare(&settings.provider_id, &settings.model_id)
-                .await?;
-            (settings.provider_id.clone(), settings.model_id.clone(), Some(model))
+            let model =
+                ChatModel::prepare(&settings.provider_id, &settings.model_id)
+                    .await?;
+            (
+                settings.provider_id.clone(),
+                settings.model_id.clone(),
+                Some(model),
+            )
         }
         "assistant" => {
             let provider_id = requested_provider_id
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| error("Select an AI provider for the assistant"))?;
+                .ok_or_else(|| {
+                    error("Select an AI provider for the assistant")
+                })?;
             let model_id = requested_model_id
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| error("Select an AI model for the assistant"))?;
             let model = ChatModel::prepare(provider_id, model_id).await?;
             (provider_id.to_string(), model_id.to_string(), Some(model))
         }
-        _ => (settings.provider_id.clone(), settings.model_id.clone(), None),
+        _ => (
+            settings.provider_id.clone(),
+            settings.model_id.clone(),
+            None,
+        ),
     };
     let share_settings = get_log_share_settings().await?;
     let state = State::get().await?;
@@ -390,7 +403,9 @@ pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
 fn assistant_tool_name(name: &str) -> bool {
     matches!(
         name,
-        "get_instance_overview" | "get_launcher_settings" | "get_platform_diagnostics"
+        "get_instance_overview"
+            | "get_launcher_settings"
+            | "get_platform_diagnostics"
     )
 }
 
@@ -405,18 +420,17 @@ fn remote_mcp_tool_name(name: &str) -> bool {
         && index.bytes().all(|byte| byte.is_ascii_digit())
         && !tool.is_empty()
         && tool.len() <= 48
-        && tool
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        && tool.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+        })
 }
 
 fn allowed_tool_name(source: &str, name: &str) -> bool {
     let local_allowed = match source {
         "assistant" => assistant_tool_name(name),
-        "custom" => matches!(
-            name,
-            "list_log_files" | "read_log_file" | "grep_log_file"
-        ),
+        "custom" => {
+            matches!(name, "list_log_files" | "read_log_file" | "grep_log_file")
+        }
         _ => false,
     };
     local_allowed || remote_mcp_tool_name(name)

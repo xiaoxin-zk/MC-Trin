@@ -162,7 +162,14 @@ pub async fn logs_logagent_prepare(
     provider_id: Option<String>,
     model_id: Option<String>,
 ) -> Result<logs::logagent::PreparedSession> {
-    Ok(logs::logagent::prepare(instance_id, run_id, source, provider_id, model_id).await?)
+    Ok(logs::logagent::prepare(
+        instance_id,
+        run_id,
+        source,
+        provider_id,
+        model_id,
+    )
+    .await?)
 }
 
 #[tauri::command]

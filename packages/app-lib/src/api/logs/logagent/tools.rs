@@ -112,7 +112,9 @@ pub async fn execute_assistant(request: &ToolRequest) -> crate::Result<Value> {
                     })
                 })
                 .collect::<Vec<_>>();
-            Ok(json!({ "instances": items, "total_count": total, "truncated": total > 100 }))
+            Ok(
+                json!({ "instances": items, "total_count": total, "truncated": total > 100 }),
+            )
         }
         "get_launcher_settings" => {
             let state = crate::State::get().await?;

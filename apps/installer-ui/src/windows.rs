@@ -950,20 +950,15 @@ mod tests {
     #[test]
     fn nsis_option_keeps_name_outside_quoted_value() {
         assert_eq!(
-            nsis_value_option(
-                "INSTALL_DIR",
-                r"C:\Program Files\MC-Trin",
-            ),
+            nsis_value_option("INSTALL_DIR", r"C:\Program Files\MC-Trin",),
             r#"/INSTALL_DIR="C:\Program Files\MC-Trin""#,
         );
     }
 
     #[test]
     fn uninstall_directory_is_the_last_unquoted_argument() {
-        for directory in [
-            r"C:\Program Files\MC-Trin",
-            "D:\\游戏\\MC-Trin\\",
-        ] {
+        for directory in [r"C:\Program Files\MC-Trin", "D:\\游戏\\MC-Trin\\"]
+        {
             for delete_app_data in [false, true] {
                 let args = uninstaller_arguments(
                     &PathBuf::from(directory),
@@ -1069,9 +1064,7 @@ mod tests {
         fs::create_dir_all(&directory)
             .expect("test directory should be created");
 
-        assert!(!install_dir_requires_elevation(
-            &directory.join("MC-Trin")
-        ));
+        assert!(!install_dir_requires_elevation(&directory.join("MC-Trin")));
 
         fs::remove_dir_all(directory)
             .expect("test directory should be removed");
