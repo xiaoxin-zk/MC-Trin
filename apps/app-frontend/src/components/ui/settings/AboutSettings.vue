@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ExternalIcon } from '@modrinth/assets'
-import { defineMessages, useVIntl } from '@modrinth/ui'
+import { Button, defineMessages, useVIntl } from '@modrinth/ui'
 import { getVersion } from '@tauri-apps/api/app'
-import { onMounted, ref } from 'vue'
+import { inject, onMounted, ref } from 'vue'
 
 import { MCTrinBrandConfig } from '@/config'
 
@@ -10,6 +10,7 @@ import SettingsSection from './SettingsSection.vue'
 
 const { formatMessage } = useVIntl()
 const version = ref('')
+const replayOnboarding = inject<(mode: 'main') => Promise<void>>('replayOnboarding')
 
 const messages = defineMessages({
     productTitle: {
@@ -19,6 +20,10 @@ const messages = defineMessages({
     productDescription: {
         id: 'app.settings.about.description',
         defaultMessage: 'A Minecraft Java Edition launcher.',
+    },
+    replayOnboarding: {
+        id: 'app.settings.about.replay-onboarding',
+        defaultMessage: 'Replay tour',
     },
     version: {
         id: 'app.settings.about.version',
@@ -72,6 +77,14 @@ onMounted(() => {
             <p class="m-0 mt-3 text-[var(--color-text-default)]">
                 {{ formatMessage(messages.productDescription) }}
             </p>
+            <Button
+                id="settings-target-about-replay-tour"
+                type="quiet"
+                class="mt-3"
+                @click="replayOnboarding?.('main')"
+            >
+                {{ formatMessage(messages.replayOnboarding) }}
+            </Button>
         </section>
 
         <SettingsSection :title="formatMessage(messages.author)">

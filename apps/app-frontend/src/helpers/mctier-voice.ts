@@ -86,8 +86,10 @@ export class MctierVoiceSession {
     private activePlayerIds = new Set<string>()
     private closed = false
     private readonly rtcConfiguration: RTCConfiguration
+    private readonly options: MctierVoiceSessionOptions
 
-    constructor(private readonly options: MctierVoiceSessionOptions) {
+    constructor(options: MctierVoiceSessionOptions) {
+        this.options = options
         const iceServers = [
             ...(options.iceServer ? [{ urls: options.iceServer }] : []),
             { urls: 'stun:stun.qq.com:3478' },
