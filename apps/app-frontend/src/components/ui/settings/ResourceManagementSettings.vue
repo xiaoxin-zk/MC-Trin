@@ -987,11 +987,11 @@ const proxyModeOptions = computed(() => [
 
 const multiplayerProxyOptions = computed(() => [
     {
-        value: 'direct' as const,
+        value: 'direct',
         label: formatMessage(messages.multiplayerProxyDirect),
     },
     {
-        value: 'configured' as const,
+        value: 'configured',
         label: formatMessage(messages.multiplayerProxyConfigured),
     },
 ])
