@@ -605,6 +605,15 @@ async fn scan_with_directories_progress(
             1,
         ),
     ];
+    let components_root = crate::state::component_root_path();
+    for name in ["hongshi", "terracotta", "mctier"] {
+        let path = components_root.join(name);
+        if !targets.iter().any(|(existing, _, _)| {
+            ownership_key(existing) == ownership_key(&path)
+        }) {
+            targets.push((path, StorageNodeType::Components, 1));
+        }
+    }
     for root in [&directories.settings_dir, &directories.config_dir] {
         for (name, kind, depth) in [
             ("caches", StorageNodeType::Cache, 2),

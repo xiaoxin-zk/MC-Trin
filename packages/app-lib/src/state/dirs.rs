@@ -6,7 +6,7 @@ use crate::state::{JavaVersion, Settings};
 use crate::util::fetch::IoSemaphore;
 use dashmap::DashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::fs;
 
 pub const CACHES_FOLDER_NAME: &str = "caches";
@@ -21,6 +21,50 @@ pub struct DirectoryInfo {
     pub settings_dir: PathBuf, // Base settings directory- app database
     pub config_dir: PathBuf, // Base config directory- instances, minecraft downloads, etc. Changeable as a setting.
     pub app_identifier: String,
+}
+
+/// Root that holds launcher-managed runtime components, such as the multiplayer
+/// binaries and their caches.
+///
+/// Components live beside the launcher executable so that an install keeps its
+/// dependencies in the program folder while user data (instances, caches,
+/// database) still follows the configured directories. A directory that cannot
+/// be written to, such as an install under `Program Files`, falls back to
+/// `config_dir`. A portable install already keeps everything inside the program
+/// folder, so its `config_dir` is used as-is instead of climbing one level up.
+pub fn component_root_path() -> PathBuf {
+    let configured = configured_component_root();
+    match launcher_dir_if_writable() {
+        Some(launcher_dir) if !configured.starts_with(&launcher_dir) => launcher_dir,
+        _ => configured,
+    }
+}
+
+fn configured_component_root() -> PathBuf {
+    DirectoryInfo::global_handle_if_ready()
+        .map(|directories| directories.config_dir.clone())
+        .or_else(|| {
+            DirectoryInfo::initial_settings_dir_path(crate::brand::BUNDLE_IDENTIFIER)
+        })
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Directory containing the launcher executable, but only when it accepts
+/// writes. The probe runs once per process because the answer cannot change
+/// while the launcher is running.
+fn launcher_dir_if_writable() -> Option<PathBuf> {
+    static WRITABLE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+    WRITABLE
+        .get_or_init(|| {
+            let launcher_dir =
+                std::env::current_exe().ok()?.parent()?.to_path_buf();
+            let probe = launcher_dir.join(".mctrin-write-probe");
+            std::fs::write(&probe, b"").ok()?;
+            let _ = std::fs::remove_file(&probe);
+            Some(launcher_dir)
+        })
+        .clone()
 }
 
 impl DirectoryInfo {

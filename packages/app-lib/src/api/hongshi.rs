@@ -282,15 +282,7 @@ pub fn is_supported() -> bool {
 }
 
 fn hongshi_root() -> PathBuf {
-    let base = crate::state::DirectoryInfo::global_handle_if_ready()
-        .map(|directories| directories.config_dir.clone())
-        .or_else(|| {
-            crate::state::DirectoryInfo::initial_settings_dir_path(
-                crate::brand::BUNDLE_IDENTIFIER,
-            )
-        })
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("hongshi")
+    crate::state::component_root_path().join("hongshi")
 }
 
 pub fn logs_dir() -> PathBuf {

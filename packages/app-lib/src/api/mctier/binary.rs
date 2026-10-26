@@ -174,14 +174,7 @@ pub async fn prepare(
 ) -> eyre::Result<PathBuf> {
     let (platform, expected) =
         release_for(std::env::consts::OS, std::env::consts::ARCH)?;
-    let base = crate::state::DirectoryInfo::global_handle_if_ready()
-        .map(|directories| directories.config_dir.clone())
-        .or_else(|| {
-            crate::state::DirectoryInfo::initial_settings_dir_path(
-                crate::brand::BUNDLE_IDENTIFIER,
-            )
-        })
-        .ok_or_else(|| eyre::eyre!("launcher data directory is unavailable"))?;
+    let base = crate::state::component_root_path();
     let root = base.join("mctier").join(VERSION).join(platform);
     let archive_path = root.join("official.zip");
     let work = async {

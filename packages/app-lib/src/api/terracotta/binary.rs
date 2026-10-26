@@ -156,16 +156,7 @@ pub(super) fn find_terracotta_executable(
 }
 
 pub(super) fn terracotta_binary_path() -> PathBuf {
-    let base_dir = crate::state::DirectoryInfo::global_handle_if_ready()
-        .map(|directories| directories.config_dir.clone())
-        .or_else(|| {
-            crate::state::DirectoryInfo::initial_settings_dir_path(
-                crate::brand::BUNDLE_IDENTIFIER,
-            )
-        })
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    terracotta_binary_path_in(&base_dir)
+    terracotta_binary_path_in(&crate::state::component_root_path())
 }
 
 pub(super) fn terracotta_binary_path_in(base_dir: &Path) -> PathBuf {
