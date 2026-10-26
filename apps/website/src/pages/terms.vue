@@ -7,12 +7,12 @@ const { locale } = useVIntl()
 const isChinese = computed(() => locale.value === 'zh-CN')
 
 const seoTitle = computed(() =>
-    isChinese.value ? '服务条款 - Axolotl Launcher' : 'Terms of Service - Axolotl Launcher',
+    isChinese.value ? '服务条款 - MC-Trin' : 'Terms of Service - MC-Trin',
 )
 const seoDescription = computed(() =>
     isChinese.value
-        ? '使用 Axolotl Launcher 官方网站及桌面应用前，请阅读本服务条款。'
-        : 'Read these terms of service before using the Axolotl Launcher website and desktop application.',
+        ? '使用 MC-Trin 官方网站及桌面应用前，请阅读本服务条款。'
+        : 'Read these terms of service before using the MC-Trin website and desktop application.',
 )
 
 useSeoMeta({
@@ -36,12 +36,12 @@ useHead({
         :key="`zh-${locale}`"
         eyebrow="服务条款"
         title="服务条款"
-        description="本条款说明 Axolotl Launcher 各部分适用的开源许可证、官方服务规则及第三方权利边界。"
+        description="本条款说明 MC-Trin 各部分适用的开源许可证、官方服务规则及第三方权利边界。"
         updated-at="2026 年 8 月 2 日"
     >
         <h2>1. 适用范围与文件效力</h2>
         <p>
-            本条款适用于 Axolotl Launcher
+            本条款适用于 MC-Trin
             官方网站、官方发布的桌面应用及项目维护者提供的相关服务。软件的复制、修改、分发和网络部署，以仓库中对应文件的许可证与复制声明为准；本页面只是中文说明，不替代、修改或限制原始许可证。
         </p>
         <p>
@@ -99,12 +99,12 @@ useHead({
 
         <h2>4. 品牌、商标与受限素材</h2>
         <p>
-            开源软件许可证不自动授予商标权。Axolotl Launcher 是独立的非官方项目，与
+            开源软件许可证不自动授予商标权。MC-Trin 是独立的非官方项目，与
             Mojang、Microsoft、Rinth, Inc.、Modrinth、CurseForge 或 MinecraftSearch
             不存在隶属、认可或背书关系。相关名称和商标归各自权利人所有。
         </p>
         <p>
-            Modrinth 商标、徽标、封面和其他受限品牌素材不属于 Axolotl Launcher
+            Modrinth 商标、徽标、封面和其他受限品牌素材不属于 MC-Trin
             品牌。网站复制声明列出的 Modrinth 品牌元素未经 Rinth, Inc.
             明确书面许可不得使用。外部徽标须遵守各权利人的品牌规范。使用或再分发其他第三方图片、图标、数据和素材前，也应核对对应声明。
         </p>
@@ -114,7 +114,7 @@ useHead({
             桌面启动器的中文内容搜索包含来自 Plain Craft Launcher 的未修改
             <code>WikiEntries.txt</code> 快照，该文件采用 PCL Limited Distribution License，并包含由
             MC 百科贡献的中文项目名称信息。种子地图功能还包含 MIT 许可的 cubiomes，以及权利归
-            MinecraftSearch、Mojang 或各素材创作者所有的图像。它们不适用 Axolotl 桌面代码的
+            MinecraftSearch、Mojang 或各素材创作者所有的图像。它们不适用 MC-Trin 桌面代码的
             GPL-3.0-only 授权，具体范围以仓库复制声明为准。
         </p>
 
@@ -166,12 +166,12 @@ useHead({
         :key="`en-${locale}`"
         eyebrow="Terms of Service"
         title="Terms of Service"
-        description="These terms explain the open-source licenses that apply to each part of Axolotl Launcher, the rules for official services, and the boundaries of third-party rights."
+        description="These terms explain the open-source licenses that apply to each part of MC-Trin, the rules for official services, and the boundaries of third-party rights."
         updated-at="August 2, 2026"
     >
         <h2>1. Scope and Effect of This Document</h2>
         <p>
-            These terms apply to the official Axolotl Launcher website, the officially published
+            These terms apply to the official MC-Trin website, the officially published
             desktop application, and related services operated by the project maintainers. Copying,
             modification, distribution, and network deployment of the software are governed by the
             licenses and copying notices in the corresponding files of the repository; this page is
@@ -243,14 +243,14 @@ useHead({
 
         <h2>4. Branding, Trademarks, and Restricted Assets</h2>
         <p>
-            Open-source licenses do not automatically grant trademark rights. Axolotl Launcher is an
+            Open-source licenses do not automatically grant trademark rights. MC-Trin is an
             independent, unofficial project with no affiliation, endorsement, or sponsorship from
             Mojang, Microsoft, Rinth, Inc., Modrinth, CurseForge, or MinecraftSearch. The related
             names and trademarks belong to their respective owners.
         </p>
         <p>
             Modrinth trademarks, logos, covers, and other restricted brand assets are not part of
-            the Axolotl Launcher brand. Modrinth brand elements listed in the repository's copying
+            the MC-Trin brand. Modrinth brand elements listed in the repository's copying
             notices must not be used without the explicit written permission of Rinth, Inc. External
             logos must follow each owner's brand guidelines. Before using or redistributing other
             third-party images, icons, data, and assets, check the corresponding notices.
@@ -263,7 +263,7 @@ useHead({
             PCL Limited Distribution License and containing Chinese project-name information
             contributed by MC Wiki. The seed-map feature also includes MIT-licensed cubiomes and
             images owned by MinecraftSearch, Mojang, or the respective asset creators. These are not
-            covered by the GPL-3.0-only license of Axolotl's desktop code; the exact scope is
+            covered by the GPL-3.0-only license of MC-Trin's desktop code; the exact scope is
             defined by the repository's copying notices.
         </p>
 

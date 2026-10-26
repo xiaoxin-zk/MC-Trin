@@ -282,6 +282,19 @@ jobs:
               Stop-Process -Id $app.Id -Force
             }
           }
+      # The Windows CI binary is published so a contributor can run the exact
+      # build that passed CI locally without rebuilding it.
+      - name: Upload Windows CI binary
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mctrin-windows-ci
+          path: |
+            target/ci/MC-Trin.exe
+            target/ci/*.dll
+          overwrite: true
+          retention-days: 7
+          if-no-files-found: error
       - name: Package and verify both Windows installers from one binary
         if: runner.os == 'Windows'
         run: node scripts/axolotl/package-windows.mjs --profile ci --output target/ci-installers

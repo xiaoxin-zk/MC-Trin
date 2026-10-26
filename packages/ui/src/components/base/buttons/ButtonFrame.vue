@@ -30,10 +30,10 @@ const baseClasses = [
 
 const sizeClasses: Record<ButtonSize, string> = {
     '2xs': 'h-6 gap-1 rounded-lg px-1.5 text-sm font-semibold leading-5 [&>svg]:size-4 [&>svg]:min-h-4 [&>svg]:min-w-4 [&>svg]:shrink-0',
-    xs: 'h-7 gap-1 rounded-lg px-1.5 text-sm font-semibold leading-5 [&>svg]:size-4 [&>svg]:min-h-4 [&>svg]:min-w-4 [&>svg]:shrink-0',
-    sm: 'h-8 gap-1 rounded-[10px] px-1.5 text-sm font-semibold leading-5 [&>svg]:size-4 [&>svg]:min-h-4 [&>svg]:min-w-4 [&>svg]:shrink-0',
-    md: 'h-9 gap-1.5 rounded-xl px-2.5 text-base font-semibold leading-5 [&>svg]:size-5 [&>svg]:min-h-5 [&>svg]:min-w-5 [&>svg]:shrink-0',
-    lg: 'h-10 gap-2 rounded-[14px] px-4 text-base font-semibold leading-5 [&>svg]:size-5 [&>svg]:min-h-5 [&>svg]:min-w-5 [&>svg]:shrink-0',
+    xs: 'h-7 gap-[5px] rounded-[7px] px-2.5 text-xs font-medium leading-5 [&>svg]:size-4 [&>svg]:min-h-4 [&>svg]:min-w-4 [&>svg]:shrink-0',
+    sm: 'h-8 gap-[6px] rounded-lg px-2.5 text-xs font-semibold leading-5 [&>svg]:size-4 [&>svg]:min-h-4 [&>svg]:min-w-4 [&>svg]:shrink-0',
+    md: 'h-9 gap-[7px] rounded-[10px] px-3.5 text-sm font-semibold leading-5 [&>svg]:size-5 [&>svg]:min-h-5 [&>svg]:min-w-5 [&>svg]:shrink-0',
+    lg: 'h-11 gap-2 rounded-xl px-5 text-sm font-semibold leading-5 [&>svg]:size-5 [&>svg]:min-h-5 [&>svg]:min-w-5 [&>svg]:shrink-0',
     xl: 'h-12 gap-2 rounded-2xl px-3.5 text-base font-extrabold leading-5 [&>svg]:size-6 [&>svg]:min-h-6 [&>svg]:min-w-6 [&>svg]:shrink-0',
 }
 
@@ -42,7 +42,7 @@ const iconOnlySizeClasses: Record<ButtonSize, string> = {
     xs: 'min-w-7 w-7 !px-0',
     sm: 'min-w-8 w-8 !px-0',
     md: 'min-w-9 w-9 !px-0',
-    lg: 'min-w-10 w-10 !px-0',
+    lg: 'min-w-11 w-11 !px-0',
     xl: 'min-w-12 w-12 !px-0',
 }
 

@@ -568,7 +568,7 @@ async fn privileged_settings_payload(
     }
     Ok(CommandPayload::UpdateSettings {
         changes,
-        source: format!("axolotl://{sublink}"),
+        source: format!("mctrin://{sublink}"),
     })
 }
 
@@ -579,7 +579,7 @@ fn stop_payload(
     match instance_id {
         Some(instance_id) => Ok(CommandPayload::StopInstance {
             instance_id,
-            source: format!("axolotl://{sublink}"),
+            source: format!("mctrin://{sublink}"),
         }),
         None => Err(crate::ErrorKind::InputError(
             "Stop command requires an instance_id query parameter".to_string(),

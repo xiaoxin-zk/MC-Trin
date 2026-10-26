@@ -4,12 +4,13 @@
         :to="to"
         v-bind="$attrs"
         active-class="nav-router-active"
+        :data-nav-expanded="expanded"
         :class="[activeClasses, buttonLayoutClasses]"
     >
         <slot />
         <span
             v-if="expanded && label"
-            class="min-w-0 flex-1 truncate text-left text-sm font-medium"
+            class="min-w-0 flex-1 truncate text-left text-[13.5px] font-medium"
         >
             {{ label }}
         </span>
@@ -20,6 +21,7 @@
         type="button"
         aria-disabled="true"
         tabindex="-1"
+        :data-nav-expanded="expanded"
         :class="[activeClasses, buttonLayoutClasses]"
         @click.prevent
         @keydown.enter.prevent
@@ -30,7 +32,7 @@
         <slot />
         <span
             v-if="expanded && label"
-            class="min-w-0 flex-1 truncate text-left text-sm font-medium"
+            class="min-w-0 flex-1 truncate text-left text-[13.5px] font-medium"
         >
             {{ label }}
         </span>
@@ -38,6 +40,7 @@
     <button
         v-else
         v-bind="$attrs"
+        :data-nav-expanded="expanded"
         :class="[buttonLayoutClasses, 'button-animation border-none cursor-pointer']"
         :disabled="disabled"
         @click="to"
@@ -45,7 +48,7 @@
         <slot />
         <span
             v-if="expanded && label"
-            class="min-w-0 flex-1 truncate text-left text-sm font-medium"
+            class="min-w-0 flex-1 truncate text-left text-[13.5px] font-medium"
         >
             {{ label }}
         </span>
@@ -83,8 +86,8 @@ const props = withDefaults(
 const link = useLink({ to: computed(() => (typeof props.to === 'string' ? props.to : '/')) })
 const buttonLayoutClasses = computed(() =>
     props.expanded
-        ? 'flex h-10 w-full min-w-0 items-center justify-start gap-3 rounded-md px-3 text-base text-[var(--color-text-default)] transition-colors bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:size-6 [&>svg]:shrink-0'
-        : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl text-[var(--color-text-default)] transition-all bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] [&>svg]:shrink-0',
+        ? 'relative flex h-10 w-full min-w-0 items-center justify-start gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium text-[var(--dc-text-default,var(--color-text-default))] transition-colors bg-transparent hover:bg-[--dc-panel-hover] hover:text-[var(--dc-text-strong,var(--color-text-primary))] [&>svg]:size-[18px] [&>svg]:shrink-0'
+        : 'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl text-[var(--dc-text-default,var(--color-text-default))] transition-all bg-transparent hover:bg-[--dc-panel-hover] hover:text-[var(--dc-text-strong,var(--color-text-primary))] [&>svg]:shrink-0',
 )
 const activeClasses = computed(() => {
     const primary = props.isPrimary ? props.isPrimary(route) : link.isActive.value
@@ -109,6 +112,21 @@ defineOptions({
 
 .router-link-active {
     @apply text-[--color-button-text-selected] bg-[--color-button-bg-selected];
+    font-weight: 600;
+
+    // Expanded rail: accent bar pinned to the rail's left edge, matching the
+    // design's `.nav-item.is-active::before`.
+    &[data-nav-expanded='true']::before {
+        content: '';
+        position: absolute;
+        left: -0.5rem;
+        top: 50%;
+        width: 3px;
+        height: 18px;
+        transform: translateY(-50%);
+        border-radius: 0 3px 3px 0;
+        background-color: var(--color-brand);
+    }
 }
 
 .subpage-active {

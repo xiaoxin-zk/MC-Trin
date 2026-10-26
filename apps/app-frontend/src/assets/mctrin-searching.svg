@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" role="img">
+  <defs>
+    <linearGradient id="mcBlock" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ef2a0" />
+      <stop offset="1" stop-color="#17a35c" />
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="118" cy="176" rx="58" ry="9" fill="#0e1116" opacity="0.16" />
+
+  <g transform="rotate(-8 118 100)">
+    <rect x="60" y="42" width="116" height="116" rx="26" fill="url(#mcBlock)" />
+    <rect
+      x="60"
+      y="42"
+      width="116"
+      height="116"
+      rx="26"
+      fill="none"
+      stroke="#0b3d24"
+      stroke-opacity="0.35"
+      stroke-width="3"
+    />
+    <path
+      d="M84 128 V76 h13 l21 25 21-25 h13 v52 h-15 V99 l-19 22-19-22 v29 z"
+      fill="#ffffff"
+      fill-opacity="0.95"
+    />
+  </g>
+
+  <g>
+    <circle cx="178" cy="58" r="23" fill="#eaf7ef" fill-opacity="0.92" stroke="#0e1116" stroke-width="5" />
+    <circle cx="178" cy="58" r="14" fill="#8ff0b6" fill-opacity="0.7" />
+    <line
+      x1="194"
+      y1="75"
+      x2="209"
+      y2="90"
+      stroke="#0e1116"
+      stroke-width="9"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <circle cx="52" cy="46" r="4" fill="#3ddc84" fill-opacity="0.85" />
+  <circle cx="210" cy="130" r="5" fill="#3ddc84" fill-opacity="0.6" />
+  <circle cx="40" cy="130" r="3" fill="#3ddc84" fill-opacity="0.5" />
+</svg>

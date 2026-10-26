@@ -725,7 +725,7 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         id: 'storage-app-directory',
         categoryId: 'storage-backups',
         targetId: 'settings-target-storage-app-directory',
-        label: message('app.settings.resources.axolotl-data-directory', 'MC-Trin data directory'),
+        label: message('app.settings.resources.mctrin-data-directory', 'MC-Trin data directory'),
     },
     {
         id: 'storage-minecraft-directories',

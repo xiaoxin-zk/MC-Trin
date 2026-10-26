@@ -1,6 +1,6 @@
 # MC-Trin
 
-MC-Trin is a Minecraft desktop launcher built on the Axolotl Tauri runtime with a DeepCraft-inspired interface. The original Axolotl frontend entry is preserved as `apps/app-frontend/index.axolotl.html`.
+MC-Trin is a Minecraft desktop launcher built on a Tauri runtime with a DeepCraft-inspired interface.
 
 ## Features
 
@@ -25,4 +25,4 @@ pnpm app:dev
 
 ## Licensing
 
-The reused Axolotl launcher source is GPL-3.0-only. Preserve the upstream license and attribution files listed in [MC-TRIN-NOTICES.md](MC-TRIN-NOTICES.md).
+The reused launcher source is GPL-3.0-only. Preserve the upstream license and attribution files listed in [MC-TRIN-NOTICES.md](MC-TRIN-NOTICES.md).

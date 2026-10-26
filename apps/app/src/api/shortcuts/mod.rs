@@ -223,7 +223,7 @@ fn instance_launch_url(
     singleplayer_world: Option<String>,
 ) -> Url {
     let mut launch_url =
-        Url::parse("axolotl://launch").expect("static launch URL should parse");
+        Url::parse("mctrin://launch").expect("static launch URL should parse");
 
     launch_url
         .query_pairs_mut()
@@ -314,7 +314,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "axolotl://launch?instance_id=instance+id%2F%E6%B5%8B%E8%AF%95&server=example.org%3A25565"
+            "mctrin://launch?instance_id=instance+id%2F%E6%B5%8B%E8%AF%95&server=example.org%3A25565"
         );
     }
 
@@ -322,9 +322,9 @@ mod tests {
     fn desktop_shortcut_name_is_safe_on_all_supported_platforms() {
         assert_eq!(
             desktop_shortcut_name("My: Instance?/ "),
-            "Axolotl - My_ Instance__"
+            "MC-Trin - My_ Instance__"
         );
-        assert_eq!(desktop_shortcut_name(" ... "), "Axolotl - Instance");
+        assert_eq!(desktop_shortcut_name(" ... "), "MC-Trin - Instance");
     }
 
     #[cfg(target_os = "windows")]

@@ -16,10 +16,74 @@ const MAX_PENDING_SIGNALS = 128
 const MAX_PENDING_SIGNAL_BYTES = 1024 * 1024
 const MAX_SIGNAL_BYTES = 256 * 1024
 
+export type VoiceDevice = { deviceId: string; label: string }
+
+type VoicePreferences = {
+    muted: boolean
+    outputVolume: number
+    inputDeviceId: string | null
+    outputDeviceId: string | null
+}
+
+const PREFERENCES_KEY = 'mctier.voice.preferences'
+const DEFAULT_PREFERENCES: VoicePreferences = {
+    muted: false,
+    outputVolume: 1,
+    inputDeviceId: null,
+    outputDeviceId: null,
+}
+
+function clampVolume(volume: number): number {
+    if (!Number.isFinite(volume)) return 1
+    return Math.min(1, Math.max(0, volume))
+}
+
+/** Device ids and the chosen mic state outlive the room, so they are kept in
+ * localStorage rather than in memory only. Storage being unavailable (private
+ * mode, tests) just means the defaults are used for the session. */
+function loadPreferences(): VoicePreferences {
+    try {
+        if (typeof localStorage === 'undefined') return { ...DEFAULT_PREFERENCES }
+        const raw = localStorage.getItem(PREFERENCES_KEY)
+        if (!raw) return { ...DEFAULT_PREFERENCES }
+        const parsed = JSON.parse(raw) as Partial<VoicePreferences>
+        return {
+            muted: parsed.muted === true,
+            outputVolume: clampVolume(Number(parsed.outputVolume ?? 1)),
+            inputDeviceId:
+                typeof parsed.inputDeviceId === 'string' && parsed.inputDeviceId
+                    ? parsed.inputDeviceId
+                    : null,
+            outputDeviceId:
+                typeof parsed.outputDeviceId === 'string' && parsed.outputDeviceId
+                    ? parsed.outputDeviceId
+                    : null,
+        }
+    } catch {
+        return { ...DEFAULT_PREFERENCES }
+    }
+}
+
+function storePreferences(preferences: VoicePreferences) {
+    try {
+        if (typeof localStorage === 'undefined') return
+        localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences))
+    } catch {
+        // Persisting the preference is best effort.
+    }
+}
+
 export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void>) {
+    const preferences = loadPreferences()
     const active = ref(false)
     const starting = ref(false)
-    const muted = ref(false)
+    const muted = ref(preferences.muted)
+    const outputVolume = ref(preferences.outputVolume)
+    const inputDeviceId = ref<string | null>(preferences.inputDeviceId)
+    const outputDeviceId = ref<string | null>(preferences.outputDeviceId)
+    const inputDevices = ref<VoiceDevice[]>([])
+    const outputDevices = ref<VoiceDevice[]>([])
+    const peerMuted = ref<Record<string, boolean>>({})
     const error = ref<VoiceError | null>(null)
     const peerStates = ref<Record<string, string>>({})
     const connectedPeers = computed(
@@ -31,10 +95,45 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     let session: MctierVoiceSession | null = null
     let sessionReady = false
     let roomLocalPlayerId: string | null = null
+    let lastState: MctierState | null = null
     let startGeneration = 0
     let signalDelivery = Promise.resolve()
     const pendingSignals: QueuedSignal[] = []
     let pendingSignalBytes = 0
+
+    function persistPreferences() {
+        storePreferences({
+            muted: muted.value,
+            outputVolume: outputVolume.value,
+            inputDeviceId: inputDeviceId.value,
+            outputDeviceId: outputDeviceId.value,
+        })
+    }
+
+    /** Opens the saved microphone, falling back to the system default once when
+     * that device is gone (unplugged headset, driver reset). */
+    async function openMicrophone(): Promise<MediaStream> {
+        const constraints: MediaTrackConstraints = {
+            autoGainControl: true,
+            echoCancellation: true,
+            noiseSuppression: true,
+        }
+        const deviceId = inputDeviceId.value
+        if (!deviceId) {
+            return navigator.mediaDevices.getUserMedia({ audio: constraints, video: false })
+        }
+        try {
+            return await navigator.mediaDevices.getUserMedia({
+                audio: { ...constraints, deviceId: { exact: deviceId } },
+                video: false,
+            })
+        } catch (cause) {
+            if (cause instanceof DOMException && cause.name === 'NotAllowedError') throw cause
+            inputDeviceId.value = null
+            persistPreferences()
+            return navigator.mediaDevices.getUserMedia({ audio: constraints, video: false })
+        }
+    }
 
     function enqueueSignal(signal: unknown) {
         let size: number
@@ -90,14 +189,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         let stream: MediaStream | null = null
         let startingSession: MctierVoiceSession | null = null
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    autoGainControl: true,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                },
-                video: false,
-            })
+            stream = await openMicrophone()
             if (generation !== startGeneration) {
                 stream.getTracks().forEach((track) => track.stop())
                 return
@@ -114,6 +206,12 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             })
             session = startingSession
             sessionReady = false
+            startingSession.setOutputVolume(outputVolume.value)
+            if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
+            if (muted.value) startingSession.setMicrophoneEnabled(false)
+            for (const [playerId, isMuted] of Object.entries(peerMuted.value)) {
+                if (isMuted) startingSession.setPeerMuted(playerId, true)
+            }
             await startingSession.syncPeers(state.players as VoicePeer[])
             if (generation !== startGeneration || session !== startingSession) {
                 startingSession.close()
@@ -165,9 +263,9 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     }
 
     function toggleMute() {
-        if (!session) return
         muted.value = !muted.value
-        session.setMicrophoneEnabled(!muted.value)
+        persistPreferences()
+        session?.setMicrophoneEnabled(!muted.value)
     }
 
     function stop() {
@@ -177,19 +275,61 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         sessionReady = false
         starting.value = false
         active.value = false
-        muted.value = false
         peerStates.value = {}
         error.value = null
         clearPendingSignals()
         signalDelivery = Promise.resolve()
     }
 
+    function setOutputVolume(value: number) {
+        outputVolume.value = clampVolume(value)
+        persistPreferences()
+        session?.setOutputVolume(outputVolume.value)
+    }
+
+    function togglePeerMuted(playerId: string) {
+        const next = !peerMuted.value[playerId]
+        peerMuted.value = { ...peerMuted.value, [playerId]: next }
+        session?.setPeerMuted(playerId, next)
+    }
+
+    async function setInputDevice(deviceId: string | null) {
+        inputDeviceId.value = deviceId
+        persistPreferences()
+        const state = lastState
+        if (!active.value || !state) return
+        // Microphones are attached when peer connections are built, so switching
+        // input rebuilds the session; the room and its signalling are untouched.
+        stop()
+        await start(state)
+    }
+
+    async function setOutputDevice(deviceId: string | null) {
+        outputDeviceId.value = deviceId
+        persistPreferences()
+        await session?.setOutputDevice(deviceId)
+    }
+
+    async function refreshDevices() {
+        const mediaDevices = navigator.mediaDevices
+        if (!mediaDevices?.enumerateDevices) return
+        const devices = await mediaDevices.enumerateDevices().catch(() => [])
+        inputDevices.value = devices
+            .filter((device) => device.kind === 'audioinput')
+            .map((device) => ({ deviceId: device.deviceId, label: device.label }))
+        outputDevices.value = devices
+            .filter((device) => device.kind === 'audiooutput')
+            .map((device) => ({ deviceId: device.deviceId, label: device.label }))
+    }
+
     function syncRoom(state: MctierState | undefined) {
         if (!state || state.status === 'idle' || state.status === 'error') {
             roomLocalPlayerId = null
+            lastState = null
             stop()
             return
         }
+        lastState = state
         const nextLocalPlayerId = state.local_player_id
         if (roomLocalPlayerId && nextLocalPlayerId && roomLocalPlayerId !== nextLocalPlayerId) {
             stop()
@@ -204,10 +344,21 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         muted,
         error,
         connectedPeers,
+        outputVolume,
+        inputDeviceId,
+        outputDeviceId,
+        inputDevices,
+        outputDevices,
+        peerMuted,
         start,
         syncRoom,
         receiveSignal,
         toggleMute,
+        togglePeerMuted,
+        setOutputVolume,
+        setInputDevice,
+        setOutputDevice,
+        refreshDevices,
         stop,
     }
 }

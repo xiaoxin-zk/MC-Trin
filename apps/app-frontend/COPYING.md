@@ -1,10 +1,10 @@
 # Copying
 
-Axolotl Launcher's frontend is a modified version of Modrinth App's frontend. It is licensed under the GNU General Public License, Version 3 only, provided in [LICENSE](./LICENSE).
+MC-Trin's frontend is a modified version of Modrinth App's frontend. It is licensed under the GNU General Public License, Version 3 only, provided in [LICENSE](./LICENSE).
 
-Copyright for the original work remains with Rinth, Inc. and the original contributors. Axolotl modifications are Copyright © 2026 Garbage Human Studio and were developed by Mystic Stars.
+Copyright for the original work remains with Rinth, Inc. and the original contributors. MC-Trin modifications are Copyright © 2026 Garbage Human Studio and were developed by Mystic Stars.
 
-Axolotl Launcher is an independent, unofficial client. Modrinth is a trademark of Rinth, Inc. and is referenced only to identify API and file-format compatibility. Axolotl Launcher is not affiliated with or endorsed by Rinth, Inc.
+MC-Trin is an independent, unofficial client. Modrinth is a trademark of Rinth, Inc. and is referenced only to identify API and file-format compatibility. MC-Trin is not affiliated with or endorsed by Rinth, Inc.
 
 ## Schematic preview attribution
 
@@ -12,7 +12,7 @@ The local schematic preview uses [Deepslate](https://github.com/misode/deepslate
 
 The bundled blockstate data, block models, default block properties, and texture atlas are sourced from the public [Misode mcmeta](https://github.com/misode/mcmeta) dataset, which is generated from Minecraft: Java Edition client resources and Mojang's data generator. The current bundle is pinned to `summary@b8170fbc07725bf4930d189ad5dc16f70e09b9cd` and `atlas@a73f0316d9cea52a53381664328bda00e5fe79e4` (Minecraft `26.3-snapshot-6`) and can be reproduced with `scripts/axolotl/sync-schematic-resources.mjs`.
 
-Minecraft and its original resources are Copyright Mojang AB. Their namespaced identifiers are retained only where required to identify compatible game content. Axolotl Launcher is not affiliated with or endorsed by Mojang or Microsoft.
+Minecraft and its original resources are Copyright Mojang AB. Their namespaced identifiers are retained only where required to identify compatible game content. MC-Trin is not affiliated with or endorsed by Mojang or Microsoft.
 
 ## Recipe generator attribution
 
@@ -20,7 +20,7 @@ The recipe generator's vanilla recipe catalogs and expanded item tags are source
 
 Item identifiers, readable names, and textures are sourced from the `minecraft-textures` npm package version `26.2.1` by destruc7i0n, which is distributed under the GNU General Public License, Version 3. The GPL-3.0 text is provided in the app frontend [LICENSE](./LICENSE).
 
-The recipe data and item artwork ultimately derive from Minecraft data generator output and Minecraft game resources. Minecraft and its original resources are Copyright Mojang Studios / Microsoft and are used only to identify compatible game content. Axolotl Launcher is not affiliated with or endorsed by Mojang Studios or Microsoft.
+The recipe data and item artwork ultimately derive from Minecraft data generator output and Minecraft game resources. Minecraft and its original resources are Copyright Mojang Studios / Microsoft and are used only to identify compatible game content. MC-Trin is not affiliated with or endorsed by Mojang Studios or Microsoft.
 
 ## AI integration attribution
 
@@ -34,4 +34,4 @@ The translation provider and model selection workflow is adapted from [Read Frog
 
 Local crash analysis uses [Deep Agents JS](https://github.com/langchain-ai/deepagentsjs) 1.14.2 with LangChain. These packages are distributed under the MIT License; their licenses are included with the installed dependencies. The browser entry is loaded only when a local analysis starts. Model requests and credentials are handled by the launcher Rust gateway.
 
-Axolotl Launcher's LogAgent is adapted with authorization from [LogShare](https://github.com/anylyralabs/LogShare). Its diagnostic workflow, focused log windows, bounded file tools and result contract are adapted from LogShare's PHP LogAgent. The local implementation omits RAG and external search tools. LogShare's source license credits Aternos GmbH & ZeinkLab (2018–2024). No LogShare server credentials are bundled.
+MC-Trin's LogAgent is adapted with authorization from [LogShare](https://github.com/anylyralabs/LogShare). Its diagnostic workflow, focused log windows, bounded file tools and result contract are adapted from LogShare's PHP LogAgent. The local implementation omits RAG and external search tools. LogShare's source license credits Aternos GmbH & ZeinkLab (2018–2024). No LogShare server credentials are bundled.

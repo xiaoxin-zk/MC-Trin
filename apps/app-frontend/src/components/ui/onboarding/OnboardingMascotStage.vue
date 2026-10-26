@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import searchingVisual from '@/assets/axo-searching.svg?url'
-import teachingVisual from '@/assets/axo-teaching.svg?url'
+import searchingVisual from '@/assets/mctrin-searching.svg?url'
+import teachingVisual from '@/assets/mctrin-teaching.svg?url'
 
 defineProps<{
     alt: string

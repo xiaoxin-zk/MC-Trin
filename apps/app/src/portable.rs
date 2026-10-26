@@ -1,11 +1,14 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-const PORTABLE_DIR_NAME: &str = ".Axolotl";
+const PORTABLE_DIR_NAME: &str = ".MC-Trin";
+/// Folder name used by earlier builds. It is renamed in place on first run so
+/// existing portable installations keep their data across the rename.
+const LEGACY_PORTABLE_DIR_NAME: &str = ".Axolotl";
 
 static PORTABLE_MODE: AtomicBool = AtomicBool::new(false);
 
 /// 在启动时初始化便携模式
-/// 检查 `.Axolotl` 文件夹是否存在且可写
+/// 检查 `.MC-Trin` 文件夹是否存在且可写
 /// 如果存在且可写，将 `THESEUS_CONFIG_DIR` 环境变量设置为该路径
 /// 返回 `true` 如果便携模式已启用，否则返回 `false`
 ///
@@ -21,7 +24,32 @@ pub unsafe fn init_portable_mode() -> bool {
         return false;
     };
 
-    let portable_dir = app_dir.join(PORTABLE_DIR_NAME);
+    let requested_dir = app_dir.join(PORTABLE_DIR_NAME);
+    let portable_dir = if requested_dir.is_dir() {
+        requested_dir
+    } else {
+        let legacy_dir = app_dir.join(LEGACY_PORTABLE_DIR_NAME);
+        if !legacy_dir.is_dir() {
+            return false;
+        }
+        match std::fs::rename(&legacy_dir, &requested_dir) {
+            Ok(()) => {
+                tracing::info!(
+                    "Migrated portable directory to {}",
+                    requested_dir.display()
+                );
+                requested_dir
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "Could not rename {} ({}), continuing with it",
+                    legacy_dir.display(),
+                    error
+                );
+                legacy_dir
+            }
+        }
+    };
 
     if !portable_dir.is_dir() {
         return false;

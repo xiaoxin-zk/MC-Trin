@@ -95,7 +95,7 @@ async fn run(port: u16) {
     let target =
         SockAddr::from(SocketAddrV4::new(Ipv4Addr::new(224, 0, 2, 60), 4445));
     let message =
-        format!("[MOTD]Terracotta | Axolotl Multiplayer[/MOTD][AD]{port}[/AD]");
+        format!("[MOTD]Terracotta | MC-Trin Multiplayer[/MOTD][AD]{port}[/AD]");
     let mut interval =
         tokio::time::interval(std::time::Duration::from_millis(1500));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

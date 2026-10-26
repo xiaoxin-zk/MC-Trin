@@ -2,13 +2,15 @@
     <div
         ref="rail"
         data-tooltip-group="navigation"
-        class="nav-rail relative flex flex-col gap-[0.5rem]"
+        class="nav-rail relative flex flex-col"
+        :class="expanded ? 'gap-[2px]' : 'gap-[0.5rem]'"
     >
         <slot />
         <div
-            class="nav-rail-slider pointer-events-none absolute rounded-full"
+            class="nav-rail-slider pointer-events-none absolute"
             :class="[
-                subpageSelected ? 'bg-surface-4' : 'bg-button-bgSelected',
+                expanded ? 'rounded-[10px]' : 'rounded-full',
+                subpageSelected ? 'bg-[--dc-panel-hover]' : 'bg-button-bgSelected',
                 transitionsEnabled ? 'nav-rail-slider-transition' : '',
             ]"
             :style="sliderStyle"

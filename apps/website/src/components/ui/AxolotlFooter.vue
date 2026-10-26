@@ -11,10 +11,10 @@ const messages = defineMessages({
     community: { id: 'axolotl-site.navigation.community', defaultMessage: 'Community' },
     terms: { id: 'axolotl-site.navigation.terms', defaultMessage: 'Terms of Service' },
     privacy: { id: 'axolotl-site.navigation.privacy', defaultMessage: 'Privacy Policy' },
-    developer: { id: 'axolotl-site.footer.developer', defaultMessage: 'Axolotl Launcher Team' },
+    developer: { id: 'axolotl-site.footer.developer', defaultMessage: 'MC-Trin Team' },
     openSourcePrefix: {
         id: 'axolotl-site.footer.open-source-prefix',
-        defaultMessage: 'Axolotl is',
+        defaultMessage: 'MC-Trin is',
     },
     openSourceLink: {
         id: 'axolotl-site.footer.open-source-link',

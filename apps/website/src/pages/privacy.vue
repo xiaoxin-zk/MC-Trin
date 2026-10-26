@@ -7,12 +7,12 @@ const { locale } = useVIntl()
 const isChinese = computed(() => locale.value === 'zh-CN')
 
 const seoTitle = computed(() =>
-    isChinese.value ? '隐私政策 - Axolotl Launcher' : 'Privacy Policy - Axolotl Launcher',
+    isChinese.value ? '隐私政策 - MC-Trin' : 'Privacy Policy - MC-Trin',
 )
 const seoDescription = computed(() =>
     isChinese.value
-        ? '了解 Axolotl Launcher 官方网站和桌面应用如何处理数据。'
-        : 'Learn how the Axolotl Launcher official website and desktop application handle data.',
+        ? '了解 MC-Trin 官方网站和桌面应用如何处理数据。'
+        : 'Learn how the MC-Trin official website and desktop application handle data.',
 )
 
 useSeoMeta({
@@ -36,12 +36,12 @@ useHead({
         :key="`zh-${locale}`"
         eyebrow="隐私政策"
         title="隐私政策"
-        description="本政策说明 Axolotl Launcher 官方网站和桌面应用处理数据的方式，以及第三方服务可能接收的信息。"
+        description="本政策说明 MC-Trin 官方网站和桌面应用处理数据的方式，以及第三方服务可能接收的信息。"
         updated-at="2026 年 8 月 14 日"
     >
         <h2>1. 适用范围</h2>
         <p>
-            本政策适用于 www.axlmc.org 官方网站和 Axolotl Launcher
+            本政策适用于 www.axlmc.org 官方网站和 MC-Trin
             桌面应用。通过启动器访问的第三方网站、API、认证服务、服务器及内容下载地址，适用对应第三方自己的隐私政策。
         </p>
 
@@ -149,12 +149,12 @@ useHead({
         :key="`en-${locale}`"
         eyebrow="Privacy Policy"
         title="Privacy Policy"
-        description="This policy explains how the Axolotl Launcher official website and desktop application handle data, and what information third-party services may receive."
+        description="This policy explains how the MC-Trin official website and desktop application handle data, and what information third-party services may receive."
         updated-at="August 14, 2026"
     >
         <h2>1. Scope</h2>
         <p>
-            This policy applies to the www.axlmc.org official website and the Axolotl Launcher
+            This policy applies to the www.axlmc.org official website and the MC-Trin
             desktop application. Third-party websites, APIs, authentication services, servers, and
             content download addresses accessed through the launcher are governed by their own
             privacy policies.

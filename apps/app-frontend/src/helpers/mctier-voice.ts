@@ -28,6 +28,17 @@ export type MctierVoiceSessionOptions = {
 
 const MAX_SIGNAL_BYTES = 256 * 1024
 const MAX_PENDING_CANDIDATES = 128
+const DEFAULT_OUTPUT_VOLUME = 1
+
+/** Playback volume is stored as a 0-1 gain so the slider and the element agree. */
+function clampVolume(volume: number): number {
+    if (!Number.isFinite(volume)) return DEFAULT_OUTPUT_VOLUME
+    return Math.min(1, Math.max(0, volume))
+}
+
+type SinkCapableAudio = HTMLAudioElement & {
+    setSinkId?: (deviceId: string) => Promise<void>
+}
 
 export function parseMctierVoiceSignal(
     value: unknown,
@@ -84,6 +95,9 @@ export function parseMctierVoiceSignal(
 export class MctierVoiceSession {
     private readonly peers = new Map<string, PeerConnectionState>()
     private activePlayerIds = new Set<string>()
+    private readonly mutedPeers = new Set<string>()
+    private outputVolume = DEFAULT_OUTPUT_VOLUME
+    private outputDeviceId: string | null = null
     private closed = false
     private readonly rtcConfiguration: RTCConfiguration
     private readonly options: MctierVoiceSessionOptions
@@ -164,6 +178,37 @@ export class MctierVoiceSession {
         this.options.stream.getAudioTracks().forEach((track) => (track.enabled = enabled))
     }
 
+    /** Applies a 0-1 gain to every remote player, including ones that join later. */
+    setOutputVolume(volume: number) {
+        this.outputVolume = clampVolume(volume)
+        for (const peer of this.peers.values()) {
+            if (peer.audio) peer.audio.volume = this.outputVolume
+        }
+    }
+
+    /** Mutes one remote player locally; the room is not told about it. */
+    setPeerMuted(playerId: string, muted: boolean) {
+        if (muted) this.mutedPeers.add(playerId)
+        else this.mutedPeers.delete(playerId)
+        const peer = this.peers.get(playerId)
+        if (peer?.audio) peer.audio.muted = muted
+    }
+
+    /** Routes playback to a specific output device. Browsers without
+     * `setSinkId` keep playing through the default device. */
+    async setOutputDevice(deviceId: string | null) {
+        this.outputDeviceId = deviceId
+        for (const peer of this.peers.values()) {
+            if (peer.audio) await this.applySink(peer.audio).catch(() => {})
+        }
+    }
+
+    private async applySink(audio: HTMLAudioElement) {
+        const sink = (audio as SinkCapableAudio).setSinkId
+        if (!sink) return
+        await sink.call(audio, this.outputDeviceId ?? '')
+    }
+
     private ensurePeer(playerId: string): PeerConnectionState {
         const existing = this.peers.get(playerId)
         if (existing) return existing
@@ -197,6 +242,9 @@ export class MctierVoiceSession {
                 audio.autoplay = true
                 audio.setAttribute('aria-hidden', 'true')
                 audio.dataset.mctierVoicePeer = playerId
+                audio.volume = this.outputVolume
+                audio.muted = this.mutedPeers.has(playerId)
+                if (this.outputDeviceId) void this.applySink(audio)
                 peer.audio = audio
                 document.body.append(audio)
             }

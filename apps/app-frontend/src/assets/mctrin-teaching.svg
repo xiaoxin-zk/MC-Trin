@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" role="img">
+  <defs>
+    <linearGradient id="mcBlockTeach" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ef2a0" />
+      <stop offset="1" stop-color="#17a35c" />
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="118" cy="176" rx="58" ry="9" fill="#0e1116" opacity="0.16" />
+
+  <g transform="rotate(7 118 100)">
+    <rect x="60" y="42" width="116" height="116" rx="26" fill="url(#mcBlockTeach)" />
+    <rect
+      x="60"
+      y="42"
+      width="116"
+      height="116"
+      rx="26"
+      fill="none"
+      stroke="#0b3d24"
+      stroke-opacity="0.35"
+      stroke-width="3"
+    />
+    <path
+      d="M84 128 V76 h13 l21 25 21-25 h13 v52 h-15 V99 l-19 22-19-22 v29 z"
+      fill="#ffffff"
+      fill-opacity="0.95"
+    />
+  </g>
+
+  <g transform="translate(156 28) rotate(8)">
+    <rect width="62" height="76" rx="9" fill="#f7fbf8" stroke="#0e1116" stroke-width="4" />
+    <rect x="10" y="13" width="42" height="7" rx="3.5" fill="#3ddc84" />
+    <rect x="10" y="28" width="30" height="6" rx="3" fill="#cfe8da" />
+    <rect x="10" y="42" width="38" height="6" rx="3" fill="#cfe8da" />
+    <rect x="10" y="56" width="24" height="6" rx="3" fill="#cfe8da" />
+  </g>
+
+  <circle cx="50" cy="44" r="4" fill="#3ddc84" fill-opacity="0.85" />
+  <circle cx="212" cy="128" r="5" fill="#3ddc84" fill-opacity="0.6" />
+  <circle cx="42" cy="132" r="3" fill="#3ddc84" fill-opacity="0.5" />
+</svg>

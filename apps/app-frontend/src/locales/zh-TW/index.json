@@ -6428,12 +6428,6 @@
   "app.servers.modpack.unsupported-loader-description": {
     "message": "此整合包使用 {loader}，但 MC-Trin 目前僅支援原版、Fabric 與 Quilt 整合包伺服器端。{loader} 支援即將推出。"
   },
-  "app.settings.about.afdian": {
-    "message": "在愛發電贊助"
-  },
-  "app.settings.about.afdian-description": {
-    "message": "支持專案持續開發"
-  },
   "app.settings.about.attribution": {
     "message": "MC-Trin 依 GPL-3.0 授權發布。版權與第三方授權聲明保留在專案原始碼中。"
   },
@@ -6734,7 +6728,7 @@
   "app.settings.resources.app-directory": {
     "message": "應用程式目錄"
   },
-  "app.settings.resources.axolotl-data-directory": {
+  "app.settings.resources.mctrin-data-directory": {
     "message": "MC-Trin 資料目錄"
   },
   "app.settings.resources.app-directory-description": {
@@ -7424,7 +7418,7 @@
   "app.skins.section.tiny-takeover": {
     "message": "小鬼當家"
   },
-  "app.skins.sign-in.axolotl-alt": {
+  "app.skins.sign-in.mctrin-alt": {
     "message": "MC-Trin"
   },
   "app.skins.sign-in.button": {
@@ -8139,7 +8133,7 @@
     "message": "光影包"
   },
   "drop.help.title": {
-    "message": "我可以拖入什麼到 Axolotl？"
+    "message": "我可以拖入什麼到 MC-Trin？"
   },
   "drop.help.worlds-desc": {
     "message": "拖放存檔文件夾來導入到實例。"

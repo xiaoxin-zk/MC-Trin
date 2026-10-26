@@ -296,7 +296,7 @@ const messages = defineMessages({
     },
     appDirectory: { id: 'app.settings.resources.app-directory', defaultMessage: 'App directory' },
     mctrinDataDirectory: {
-        id: 'app.settings.resources.axolotl-data-directory',
+        id: 'app.settings.resources.mctrin-data-directory',
         defaultMessage: 'MC-Trin data directory',
     },
     appDirectoryDescription: {

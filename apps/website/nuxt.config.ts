@@ -18,7 +18,7 @@ export default defineNuxtConfig({
                 class: 'accent-pink dark-mode',
                 lang: 'zh-CN',
             },
-            title: 'Axolotl Launcher - 免费开源的 Minecraft 启动器',
+            title: 'MC-Trin - 免费开源的 Minecraft 启动器',
             // 在 body 渲染前同步应用已保存的主题偏好，避免浅色用户首屏闪深色
             script: [
                 {
@@ -27,8 +27,8 @@ export default defineNuxtConfig({
                 },
             ],
             link: [
-                { rel: 'icon', type: 'image/png', href: '/axolotl.png' },
-                { rel: 'apple-touch-icon', type: 'image/png', href: '/axolotl.png' },
+                { rel: 'icon', type: 'image/png', href: '/mctrin.png' },
+                { rel: 'apple-touch-icon', type: 'image/png', href: '/mctrin.png' },
             ],
         },
     },

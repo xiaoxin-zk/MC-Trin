@@ -359,13 +359,16 @@ a:not(.no-click-animation),
 
 // CARDS
 .base-card {
-    padding: 1rem;
+    // Design `.card` / `.block`: slightly wider inline padding than block
+    // padding, plus a soft raised shadow so cards sit above the page surface.
+    padding: 1rem 1.125rem;
     position: relative;
     min-height: var(--font-size-2xl);
 
     background-color: var(--surface-3);
     border-radius: var(--radius-lg);
     border: 1px solid var(--surface-4);
+    box-shadow: var(--shadow-card);
 
     margin-bottom: var(--gap-md);
     outline: 2px solid transparent;

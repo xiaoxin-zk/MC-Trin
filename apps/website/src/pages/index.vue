@@ -249,7 +249,7 @@ const messages = defineMessages({
     recentDescription: {
         id: 'axolotl-marketing.recent.description',
         defaultMessage:
-            'Find something new to play, spend less time downloading, and keep a backup to return to. Axolotl helps with the work around your Minecraft worlds.',
+            'Find something new to play, spend less time downloading, and keep a backup to return to. MC-Trin helps with the work around your Minecraft worlds.',
     },
     recentResourcesTitle: {
         id: 'axolotl-marketing.recent.resources.title',
@@ -294,27 +294,27 @@ const messages = defineMessages({
     recentLabDescription: {
         id: 'axolotl-marketing.recent.lab.description',
         defaultMessage:
-            'Edit skins, create gradient text, explore Java Edition seeds, and preview schematics without leaving Axolotl.',
+            'Edit skins, create gradient text, explore Java Edition seeds, and preview schematics without leaving MC-Trin.',
     },
     recentDownloadsScreenshotAlt: {
         id: 'axolotl-marketing.recent.downloads.alt',
         defaultMessage:
-            'Axolotl Launcher showing an active download, task progress, and the download status panel.',
+            'MC-Trin showing an active download, task progress, and the download status panel.',
     },
     recentBackupsScreenshotAlt: {
         id: 'axolotl-marketing.recent.backups.alt',
         defaultMessage:
-            'Axolotl Launcher instance backup settings showing a saved snapshot and restore action.',
+            'MC-Trin instance backup settings showing a saved snapshot and restore action.',
     },
     recentStorageScreenshotAlt: {
         id: 'axolotl-marketing.recent.storage.alt',
         defaultMessage:
-            'Axolotl Launcher storage analysis showing disk usage by instances, caches, shared files, and backups.',
+            'MC-Trin storage analysis showing disk usage by instances, caches, shared files, and backups.',
     },
     recentLabScreenshotAlt: {
         id: 'axolotl-marketing.recent.lab.alt',
         defaultMessage:
-            'Axolotl Launcher Lab showing the skin editor, gradient text generator, seed map, and schematic workshop.',
+            'MC-Trin Lab showing the skin editor, gradient text generator, seed map, and schematic workshop.',
     },
     openSourceBadge: {
         id: 'axolotl-marketing.hero.open-source',
@@ -332,22 +332,22 @@ const messages = defineMessages({
         id: 'axolotl-marketing.demo.included-mods',
         defaultMessage: 'Included mods',
     },
-    downloadAxolotl: {
+    downloadMcTrin: {
         id: 'axolotl-marketing.hero.download',
-        defaultMessage: 'Axolotl Launcher',
+        defaultMessage: 'MC-Trin',
     },
-    downloadAxolotlForOs: {
+    downloadMcTrinForOs: {
         id: 'axolotl-marketing.hero.download-for-os',
-        defaultMessage: 'Axolotl Launcher for {os}',
+        defaultMessage: 'MC-Trin for {os}',
     },
     description: {
         id: 'app-marketing.hero.description',
         defaultMessage:
-            'Axolotl Launcher is a free, open-source, ad-free Minecraft Java Edition launcher for Windows, macOS, and Linux. Find mods and modpacks from Modrinth and CurseForge, bring your existing game folders, and keep downloads, updates, and backups in one place.',
+            'MC-Trin is a free, open-source, ad-free Minecraft Java Edition launcher for Windows, macOS, and Linux. Find mods and modpacks from Modrinth and CurseForge, bring your existing game folders, and keep downloads, updates, and backups in one place.',
     },
     heroScreenshotAlt: {
         id: 'axolotl-marketing.hero.screenshot-alt',
-        defaultMessage: 'Axolotl Launcher home screen.',
+        defaultMessage: 'MC-Trin home screen.',
     },
     builtOnModrinth: {
         id: 'axolotl-marketing.highlights.eyebrow',
@@ -364,7 +364,7 @@ const messages = defineMessages({
     highlightsDescription: {
         id: 'axolotl-marketing.highlights.description',
         defaultMessage:
-            'Find a mod, choose a modpack, or return to a familiar world. Discover content from Modrinth and CurseForge, then let Axolotl handle installation, dependencies, and updates.',
+            'Find a mod, choose a modpack, or return to a familiar world. Discover content from Modrinth and CurseForge, then let MC-Trin handle installation, dependencies, and updates.',
     },
     adFree: {
         id: 'axolotl-marketing.highlights.ad-free.title',
@@ -373,7 +373,7 @@ const messages = defineMessages({
     adFreeDescription: {
         id: 'axolotl-marketing.highlights.ad-free.description',
         defaultMessage:
-            'GPL-3.0, free to use, and ad-free. Axolotl is not an official Modrinth client.',
+            'GPL-3.0, free to use, and ad-free. MC-Trin is not an official Modrinth client.',
     },
     localized: {
         id: 'axolotl-marketing.highlights.localized.title',
@@ -409,7 +409,7 @@ const messages = defineMessages({
     minecraftSupportDescription: {
         id: 'axolotl-marketing.improvements.minecraft.description',
         defaultMessage:
-            'Add your existing .minecraft folders and manage their game versions in Axolotl. Keep multiple game folders without copying everything into a new location.',
+            'Add your existing .minecraft folders and manage their game versions in MC-Trin. Keep multiple game folders without copying everything into a new location.',
     },
     offlineAccounts: {
         id: 'axolotl-marketing.showcase.offline.title',
@@ -436,29 +436,29 @@ const messages = defineMessages({
     },
     translation: {
         id: 'axolotl-marketing.showcase.translation.title',
-        defaultMessage: 'Axolotl Lab, inside the launcher',
+        defaultMessage: 'MC-Trin Lab, inside the launcher',
     },
     translationDescription: {
         id: 'axolotl-marketing.showcase.translation.description',
         defaultMessage:
-            'Use the gradient text generator, Java Edition seed map, and 3D schematic workshop directly in Axolotl, not through external web pages.',
+            'Use the gradient text generator, Java Edition seed map, and 3D schematic workshop directly in MC-Trin, not through external web pages.',
     },
     translateLabel: { id: 'axolotl-marketing.showcase.translation.label', defaultMessage: 'Lab' },
     offlineScreenshotAlt: {
         id: 'axolotl-marketing.showcase.offline.alt',
-        defaultMessage: 'Axolotl Launcher offline account dialog.',
+        defaultMessage: 'MC-Trin offline account dialog.',
     },
     themesScreenshotAlt: {
         id: 'axolotl-marketing.showcase.themes.alt',
-        defaultMessage: 'Axolotl Launcher theme customization settings.',
+        defaultMessage: 'MC-Trin theme customization settings.',
     },
     translationScreenshotAlt: {
         id: 'axolotl-marketing.showcase.translation.alt',
-        defaultMessage: 'Axolotl Launcher Lab.',
+        defaultMessage: 'MC-Trin Lab.',
     },
-    downloadAxolotlButton: {
+    downloadMcTrinButton: {
         id: 'axolotl-marketing.hero.download-button',
-        defaultMessage: 'Download Axolotl',
+        defaultMessage: 'Download MC-Trin',
     },
     fetchingDownloadLinks: {
         id: 'axolotl-marketing.download.fetching-links',
@@ -553,7 +553,7 @@ const messages = defineMessages({
     profileImportingDescription: {
         id: 'app-marketing.features.importing.description',
         defaultMessage:
-            'Bring instances from supported launchers into Axolotl and keep playing. When you want a new Minecraft version, review mod compatibility and choose to upgrade the current instance or a copy.',
+            'Bring instances from supported launchers into MC-Trin and keep playing. When you want a new Minecraft version, review mod compatibility and choose to upgrade the current instance or a copy.',
     },
     offlineMode: {
         id: 'app-marketing.features.offline.title',
@@ -577,9 +577,9 @@ const messages = defineMessages({
         id: 'app-marketing.download.options-title',
         defaultMessage: 'Download options',
     },
-    downloadAxolotlTitle: {
+    downloadMcTrinTitle: {
         id: 'axolotl-marketing.download.title',
-        defaultMessage: 'Download Axolotl Launcher',
+        defaultMessage: 'Download MC-Trin',
     },
     downloadDescription: {
         id: 'app-marketing.download.description',
@@ -629,7 +629,7 @@ const messages = defineMessages({
     downloadTerms: {
         id: 'app-marketing.download.terms',
         defaultMessage:
-            'Axolotl is free software released under <terms-link>GPL-3.0</terms-link>. Read the <privacy-link>Privacy Policy</privacy-link> before installing.',
+            'MC-Trin is free software released under <terms-link>GPL-3.0</terms-link>. Read the <privacy-link>Privacy Policy</privacy-link> before installing.',
     },
     linuxDisclaimer: {
         id: 'app-marketing.download.linux-disclaimer',
@@ -638,16 +638,16 @@ const messages = defineMessages({
     },
     seoTitle: {
         id: 'axolotl-site.seo.title',
-        defaultMessage: 'Axolotl Launcher - Free, Open-Source Minecraft Java Launcher',
+        defaultMessage: 'MC-Trin - Free, Open-Source Minecraft Java Launcher',
     },
     seoDescription: {
         id: 'axolotl-site.seo.description',
         defaultMessage:
-            'Download Axolotl Launcher for Windows, macOS, and Linux. Manage Minecraft mods and modpacks, choose alternative download sources, reuse existing game folders, and back up instances.',
+            'Download MC-Trin for Windows, macOS, and Linux. Manage Minecraft mods and modpacks, choose alternative download sources, reuse existing game folders, and back up instances.',
     },
     socialImageAlt: {
         id: 'axolotl-site.seo.social-image-alt',
-        defaultMessage: 'Axolotl Launcher showing a Minecraft instance and its installed content.',
+        defaultMessage: 'MC-Trin showing a Minecraft instance and its installed content.',
     },
     faqEyebrow: {
         id: 'axolotl-site.faq.eyebrow',
@@ -655,7 +655,7 @@ const messages = defineMessages({
     },
     faqTitle: {
         id: 'axolotl-site.faq.title',
-        defaultMessage: 'Everything you need to know about Axolotl',
+        defaultMessage: 'Everything you need to know about MC-Trin',
     },
     faqDescription: {
         id: 'axolotl-site.faq.description',
@@ -664,21 +664,21 @@ const messages = defineMessages({
     },
     faqPlatformsQuestion: {
         id: 'axolotl-site.faq.platforms.question',
-        defaultMessage: 'Which operating systems does Axolotl Launcher support?',
+        defaultMessage: 'Which operating systems does MC-Trin support?',
     },
     faqPlatformsAnswer: {
         id: 'axolotl-site.faq.platforms.answer',
         defaultMessage:
-            'Axolotl Launcher supports Windows 10 and 11 on x64, macOS on Intel and Apple Silicon, and Linux x64 through AppImage, DEB, and RPM packages.',
+            'MC-Trin supports Windows 10 and 11 on x64, macOS on Intel and Apple Silicon, and Linux x64 through AppImage, DEB, and RPM packages.',
     },
     faqFreeQuestion: {
         id: 'axolotl-site.faq.free.question',
-        defaultMessage: 'Is Axolotl Launcher free and open source?',
+        defaultMessage: 'Is MC-Trin free and open source?',
     },
     faqFreeAnswer: {
         id: 'axolotl-site.faq.free.answer',
         defaultMessage:
-            'Yes. Axolotl Launcher is free software released under GPL-3.0. Its source code and release history are publicly available on GitHub.',
+            'Yes. MC-Trin is free software released under GPL-3.0. Its source code and release history are publicly available on GitHub.',
     },
     faqAccountsQuestion: {
         id: 'axolotl-site.faq.accounts.question',
@@ -687,16 +687,16 @@ const messages = defineMessages({
     faqAccountsAnswer: {
         id: 'axolotl-site.faq.accounts.answer',
         defaultMessage:
-            'Yes. Axolotl supports Microsoft Minecraft accounts, local offline accounts subject to launcher eligibility rules, and third-party Yggdrasil authentication, including LittleSkin presets and custom servers.',
+            'Yes. MC-Trin supports Microsoft Minecraft accounts, local offline accounts subject to launcher eligibility rules, and third-party Yggdrasil authentication, including LittleSkin presets and custom servers.',
     },
     faqContentQuestion: {
         id: 'axolotl-site.faq.content.question',
-        defaultMessage: 'Where can I find mods and modpacks in Axolotl?',
+        defaultMessage: 'Where can I find mods and modpacks in MC-Trin?',
     },
     faqContentAnswer: {
         id: 'axolotl-site.faq.content.answer',
         defaultMessage:
-            'Axolotl brings Modrinth and CurseForge mods, modpacks, resource packs, and shaders into the launcher. You can also browse content from MCArchive and Planet Minecraft. Available content and installation methods vary by source. Before installing, review required mods; afterward, manage updates and versions in the launcher. Some files may require manual download because of distribution restrictions.',
+            'MC-Trin brings Modrinth and CurseForge mods, modpacks, resource packs, and shaders into the launcher. You can also browse content from MCArchive and Planet Minecraft. Available content and installation methods vary by source. Before installing, review required mods; afterward, manage updates and versions in the launcher. Some files may require manual download because of distribution restrictions.',
     },
     faqNetworkQuestion: {
         id: 'axolotl-site.faq.network.question',
@@ -705,7 +705,7 @@ const messages = defineMessages({
     faqNetworkAnswer: {
         id: 'axolotl-site.faq.network.answer',
         defaultMessage:
-            'Yes. For supported Minecraft resources and Modrinth or CurseForge downloads, resource settings let you choose automatic, mirror-preferred, or official sources. Available mirrors depend on your region. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
+            'Yes. For supported Minecraft resources and Modrinth or CurseForge downloads, resource settings let you choose automatic, mirror-preferred, or official sources. Available mirrors depend on your region. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the MC-Trin installer source.',
     },
     faqMigrationQuestion: {
         id: 'axolotl-site.faq.migration.question',
@@ -714,7 +714,7 @@ const messages = defineMessages({
     faqMigrationAnswer: {
         id: 'axolotl-site.faq.migration.answer',
         defaultMessage:
-            'Yes. Axolotl can directly link an existing .minecraft folder, so you can keep your game files without downloading them again or changing your settings.',
+            'Yes. MC-Trin can directly link an existing .minecraft folder, so you can keep your game files without downloading them again or changing your settings.',
     },
     faqBackupsQuestion: {
         id: 'axolotl-site.faq.backups.question',
@@ -723,7 +723,7 @@ const messages = defineMessages({
     faqBackupsAnswer: {
         id: 'axolotl-site.faq.backups.answer',
         defaultMessage:
-            'Yes. For supported local instances, Axolotl creates deduplicated snapshots with optional file and folder exclusions. Backup tasks run in the background, and a restore preview shows which files will change before you confirm. Directly linked instances and instances using external game directories do not currently support snapshot backups.',
+            'Yes. For supported local instances, MC-Trin creates deduplicated snapshots with optional file and folder exclusions. Backup tasks run in the background, and a restore preview shows which files will change before you confirm. Directly linked instances and instances using external game directories do not currently support snapshot backups.',
     },
     faqStorageQuestion: {
         id: 'axolotl-site.faq.storage.question',
@@ -736,7 +736,7 @@ const messages = defineMessages({
     },
     appScreenshotAlt: {
         id: 'app-marketing.hero.app-screenshot-alt',
-        defaultMessage: `Axolotl Launcher instance content preview.`,
+        defaultMessage: `MC-Trin instance content preview.`,
     },
     structuredFeatureDownloads: {
         id: 'axolotl-site.structured-data.feature.downloads',
@@ -769,7 +769,7 @@ const messages = defineMessages({
     structuredFeatureLab: {
         id: 'axolotl-site.structured-data.feature.lab',
         defaultMessage:
-            'Axolotl Labs with gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and mod translation tools',
+            'MC-Trin Labs with gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and mod translation tools',
     },
     structuredFeatureInstances: {
         id: 'axolotl-site.structured-data.feature.instances',
@@ -782,26 +782,26 @@ const messages = defineMessages({
     },
     faqLabQuestion: {
         id: 'axolotl-site.faq.lab.question',
-        defaultMessage: 'What is Axolotl Labs?',
+        defaultMessage: 'What is MC-Trin Labs?',
     },
     faqLabAnswer: {
         id: 'axolotl-site.faq.lab.answer',
         defaultMessage:
-            'Axolotl Labs includes a gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and Minecraft mod translation tools.',
+            'MC-Trin Labs includes a gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and Minecraft mod translation tools.',
     },
     faqProjectDisclaimerQuestion: {
         id: 'axolotl-site.faq.project-disclaimer.question',
-        defaultMessage: 'Is Axolotl Launcher and Axolotl Client the same project?',
+        defaultMessage: 'Is MC-Trin and MC-Trin Client the same project?',
     },
     faqProjectDisclaimerAnswer: {
         id: 'axolotl-site.faq.project-disclaimer.answer',
         defaultMessage:
-            'No. Axolotl Launcher and Axolotl Client are separate projects. Axolotl Launcher is an independent, unofficial downstream launcher based on the Modrinth monorepo. It is not affiliated with other Minecraft projects named Axolotl Client.',
+            'No. MC-Trin and MC-Trin Client are separate projects. MC-Trin is an independent, unofficial downstream launcher based on the Modrinth monorepo. It is not affiliated with other Minecraft projects named MC-Trin Client.',
     },
     seoKeywords: {
         id: 'axolotl-site.seo.keywords',
         defaultMessage:
-            'Axolotl Launcher, Minecraft Launcher, Modrinth, CurseForge, MCArchive, Planet Minecraft, Minecraft Java Edition, DoH, alternative download sources, instance backup, storage analysis, .minecraft, Axolotl Labs',
+            'MC-Trin, Minecraft Launcher, Modrinth, CurseForge, MCArchive, Planet Minecraft, Minecraft Java Edition, DoH, alternative download sources, instance backup, storage analysis, .minecraft, MC-Trin Labs',
     },
 })
 
@@ -877,7 +877,7 @@ const structuredData = computed(() => ({
             '@type': 'WebSite',
             '@id': `${canonicalUrl}#website`,
             url: canonicalUrl,
-            name: 'Axolotl Launcher',
+            name: 'MC-Trin',
             description: description.value,
             inLanguage: locale.value,
             publisher: { '@id': `${canonicalUrl}#organization` },
@@ -885,11 +885,11 @@ const structuredData = computed(() => ({
         {
             '@type': 'Organization',
             '@id': `${canonicalUrl}#organization`,
-            name: 'Axolotl Launcher Team',
+            name: 'MC-Trin Team',
             url: canonicalUrl,
             logo: {
                 '@type': 'ImageObject',
-                url: `${siteUrl}/axolotl.png`,
+                url: `${siteUrl}/mctrin.png`,
                 width: 256,
                 height: 256,
             },
@@ -898,7 +898,7 @@ const structuredData = computed(() => ({
         {
             '@type': 'SoftwareApplication',
             '@id': `${canonicalUrl}#software`,
-            name: 'Axolotl Launcher',
+            name: 'MC-Trin',
             alternateName: ['美西螈启动器', 'AXL Launcher'],
             sameAs: [githubUrl],
             description: description.value,
@@ -945,15 +945,15 @@ useSeoMeta({
     title: () => title.value,
     description: () => description.value,
     robots: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1',
-    author: 'Axolotl Launcher Team',
-    applicationName: 'Axolotl Launcher',
+    author: 'MC-Trin Team',
+    applicationName: 'MC-Trin',
     themeColor: '#ff82b2',
     colorScheme: 'dark light',
     ogTitle: () => title.value,
     ogDescription: () => description.value,
     ogType: 'website',
     ogUrl: canonicalUrl,
-    ogSiteName: 'Axolotl Launcher',
+    ogSiteName: 'MC-Trin',
     ogLocale: () => locale.value.replace('-', '_'),
     ogLocaleAlternate: () => (locale.value === 'zh-CN' ? 'en_US' : 'zh_CN'),
     ogImage: socialImageUrl,
@@ -998,7 +998,7 @@ useHead(() => ({
                 <h1
                     class="main-header mb-8 mt-4 max-w-[52rem] text-balance text-[5.25rem] font-semibold leading-none text-[var(--color-contrast)]"
                 >
-                    {{ formatMessage(messages.downloadAxolotl) }}
+                    {{ formatMessage(messages.downloadMcTrin) }}
                 </h1>
                 <p class="main-subheader">
                     {{ formatMessage(messages.description) }}
@@ -1019,7 +1019,7 @@ useHead(() => ({
                             heroDownloadState === 'loading'
                                 ? formatMessage(messages.fetchingDownloadLinks)
                                 : heroDownloadState === 'ready'
-                                  ? formatMessage(messages.downloadAxolotlButton)
+                                  ? formatMessage(messages.downloadMcTrinButton)
                                   : formatMessage(messages.viewDownloads)
                         }}
                     </Button>
@@ -1374,7 +1374,7 @@ useHead(() => ({
             <div class="section-badge">{{ formatMessage(messages.downloadOptions) }}</div>
             <div class="section-subheader">
                 <div class="section-subheader-title">
-                    {{ formatMessage(messages.downloadAxolotlTitle) }}
+                    {{ formatMessage(messages.downloadMcTrinTitle) }}
                 </div>
                 <div class="section-subheader-description">
                     {{ formatMessage(messages.downloadDescription) }}

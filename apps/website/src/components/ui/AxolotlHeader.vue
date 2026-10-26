@@ -40,7 +40,7 @@ onBeforeUnmount(() => {
 })
 
 const messages = defineMessages({
-    home: { id: 'axolotl-site.navigation.home', defaultMessage: 'Axolotl Launcher home' },
+    home: { id: 'axolotl-site.navigation.home', defaultMessage: 'MC-Trin home' },
     primary: { id: 'axolotl-site.navigation.primary', defaultMessage: 'Primary navigation' },
     mobile: { id: 'axolotl-site.navigation.mobile', defaultMessage: 'Mobile navigation' },
     features: { id: 'axolotl-site.navigation.features', defaultMessage: 'Features' },

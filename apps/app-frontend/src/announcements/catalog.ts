@@ -3675,7 +3675,7 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
             fixed: [
                 {
                     'en-US':
-                        'Fixed corrupted launcher databases repeatedly showing errors when opening instance content; Axolotl now restores the latest verified backup while preserving the damaged database files.',
+                        'Fixed corrupted launcher databases repeatedly showing errors when opening instance content; MC-Trin now restores the latest verified backup while preserving the damaged database files.',
                     'zh-CN':
                         '修复启动器数据库损坏后，打开实例内容页会反复报错的问题；现在会从最新且校验正常的备份恢复，并保留损坏的数据库文件。',
                 },
@@ -4654,9 +4654,9 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Improved the Linux desktop file (.desktop) with Comment, Keywords, StartupWMClass, and StartupNotify fields; added x-scheme-handler/axolotl protocol association and Chinese localization; and set WEBKIT_DISABLE_DMABUF_RENDERER=1 for Exec.',
+                        'Improved the Linux desktop file (.desktop) with Comment, Keywords, StartupWMClass, and StartupNotify fields; added x-scheme-handler/mctrin protocol association and Chinese localization; and set WEBKIT_DISABLE_DMABUF_RENDERER=1 for Exec.',
                     'zh-CN':
-                        '优化 Linux 桌面文件（.desktop）：补充 Comment、Keywords、StartupWMClass、StartupNotify 等字段, 添加 x-scheme-handler/axolotl 协议关联与中文本地化, 并为 Exec 添加 WEBKIT_DISABLE_DMABUF_RENDERER=1 环境变量。',
+                        '优化 Linux 桌面文件（.desktop）：补充 Comment、Keywords、StartupWMClass、StartupNotify 等字段, 添加 x-scheme-handler/mctrin 协议关联与中文本地化, 并为 Exec 添加 WEBKIT_DISABLE_DMABUF_RENDERER=1 环境变量。',
                 },
                 {
                     'en-US':
@@ -4996,7 +4996,7 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Empty log consoles now show Chinese startup guidance with a pink side-view axolotl illustration matching the launcher icon.',
+                        'Empty log consoles now show Chinese startup guidance with a pink launcher mark illustration matching the app icon.',
                     'zh-CN':
                         '空日志控制台现在会显示中文启动提示, 以及贴近启动器图标的粉色美西螈侧视字符画。',
                 },

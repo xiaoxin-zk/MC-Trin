@@ -1,6 +1,6 @@
 <template>
     <div class="mt-4 flex h-20 items-center justify-center">
-        <img src="/axolotl.png" alt="" />
+        <img src="/mctrin.png" alt="" />
     </div>
 </template>
 

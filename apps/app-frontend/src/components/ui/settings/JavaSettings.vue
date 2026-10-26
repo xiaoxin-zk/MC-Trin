@@ -11,7 +11,7 @@ import {
 } from '@modrinth/ui'
 import { open } from '@tauri-apps/plugin-dialog'
 import { platform } from '@tauri-apps/plugin-os'
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import JavaArgumentsInput from '@/components/ui/JavaArgumentsInput.vue'
 import JavaSelector from '@/components/ui/JavaSelector.vue'
@@ -20,6 +20,7 @@ import DownloadJavaModal from '@/components/ui/settings/DownloadJavaModal.vue'
 import InstalledJavaModal from '@/components/ui/settings/InstalledJavaModal.vue'
 import useMemorySlider from '@/composables/useMemorySlider'
 import { trackEvent } from '@/helpers/analytics'
+import { java_discovery_listener } from '@/helpers/events'
 import { collectGcContext } from '@/helpers/gc/context'
 import { wait_for_install_job } from '@/helpers/install'
 import { getJavaArgumentPresets } from '@/helpers/java-argument-presets'
@@ -131,6 +132,20 @@ const showDeepScanConfirm = ref(false)
 const downloadJavaModal = ref(null)
 const installedJavaModal = ref(null)
 const defaultSaveQueues = new Map()
+
+// The launcher rescans installed runtimes on startup and on every background
+// validation pass; follow that event so the per-version defaults reflect what
+// is actually on disk without the player pressing "Find Java".
+let unlistenJavaDiscovery = null
+onMounted(async () => {
+    unlistenJavaDiscovery = await java_discovery_listener(() => {
+        void reloadDefaults()
+    })
+})
+onUnmounted(() => {
+    unlistenJavaDiscovery?.()
+    unlistenJavaDiscovery = null
+})
 
 const currentPlatform = await platform()
 const supportsHighPerformanceMode = ['windows', 'linux'].includes(currentPlatform)

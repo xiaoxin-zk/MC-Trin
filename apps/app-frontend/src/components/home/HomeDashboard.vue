@@ -545,7 +545,7 @@ defineExpose({ openWidgetPicker, setLayout })
         :player-name="playerName"
         @save="saveGreetingSettings"
     />
-    <section class="home-dashboard p-6 pb-20" :class="{ 'is-dragging': dragging }">
+    <section class="home-dashboard p-[20px_22px_26px]" :class="{ 'is-dragging': dragging }">
         <div ref="gridContainer" class="mx-auto w-full max-w-[96rem]">
             <Draggable
                 :list="draggableWidgets"
@@ -770,11 +770,11 @@ defineExpose({ openWidgetPicker, setLayout })
     flex-direction: column;
     overflow: hidden;
     box-sizing: border-box;
-    border: 1px solid transparent;
-    border-radius: var(--radius-lg);
+    border: 1px solid var(--dc-panel-border, transparent);
+    border-radius: var(--dc-radius-card, var(--radius-lg));
     background: color-mix(
         in srgb,
-        var(--surface-3) var(--home-widget-bg-opacity, 100%),
+        var(--dc-panel-bg, var(--surface-3)) var(--home-widget-bg-opacity, 100%),
         transparent
     );
     box-shadow: var(--shadow-card);
@@ -784,10 +784,40 @@ defineExpose({ openWidgetPicker, setLayout })
         filter 120ms ease;
 }
 
+// The greeting widget is the dashboard's hero: accent-washed panel with a soft
+// radial glow, mirroring `.hero` / `.hero-glow` in the design.
 .home-widget[data-widget-kind='greeting'] {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+    border-color: var(--dc-panel-border, var(--color-divider));
+    border-radius: var(--dc-radius-card, var(--radius-lg));
+    background: linear-gradient(
+        120deg,
+        color-mix(in srgb, var(--color-brand) 10%, var(--dc-panel-bg, var(--surface-3))),
+        var(--dc-panel-bg, var(--surface-3)) 58%
+    );
+    box-shadow: var(--dc-panel-shadow, var(--shadow-card));
+
+    &::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        z-index: 0;
+        width: 420px;
+        height: 420px;
+        border-radius: 50%;
+        background: radial-gradient(
+            circle,
+            color-mix(in srgb, var(--color-brand) 18%, transparent),
+            transparent 68%
+        );
+        filter: blur(8px);
+        pointer-events: none;
+    }
+
+    > .home-widget-content {
+        position: relative;
+        z-index: 1;
+    }
 }
 
 .home-dashboard-grid:not(.is-editing)

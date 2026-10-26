@@ -277,6 +277,19 @@ type LauncherCredentials = ModrinthCredentials & { user?: Labrinth.Users.v2.User
 const credentials = ref<LauncherCredentials | null>()
 const sidebarToggled = ref(getSidebarExpanded())
 const navigationExpanded = ref(false)
+/**
+ * Group headers borrow their visibility from the items beneath them, so a rail
+ * with every item of a group hidden does not leave an orphaned label behind.
+ */
+const navGroupVisibility = computed(() => ({
+    game:
+        !themeStore.isNavItemHidden('home') ||
+        !themeStore.isNavItemHidden('screenshots') ||
+        (themeStore.featureFlags.worlds_tab && !themeStore.isNavItemHidden('worlds')) ||
+        !themeStore.isNavItemHidden('discover') ||
+        !themeStore.isNavItemHidden('skins'),
+    social: !themeStore.isNavItemHidden('multiplayer'),
+}))
 
 async function toggleNavigation() {
     const collapsed = navigationExpanded.value
@@ -1135,6 +1148,22 @@ const messages = defineMessages({
     expandNavigation: {
         id: 'app.navigation.expand',
         defaultMessage: 'Expand navigation',
+    },
+    navGroupGame: {
+        id: 'app.navigation.group-game',
+        defaultMessage: 'Game',
+    },
+    navGroupSocial: {
+        id: 'app.navigation.group-social',
+        defaultMessage: 'Social',
+    },
+    navGroupAi: {
+        id: 'app.navigation.group-ai',
+        defaultMessage: 'AI',
+    },
+    navGroupExtend: {
+        id: 'app.navigation.group-extend',
+        defaultMessage: 'Extend',
     },
     warning: {
         id: 'app.notification.warning',
@@ -2945,7 +2974,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         />
         <UnknownPackWarningModal ref="unknownPackWarningModal" />
         <div
-            class="app-grid-navbar bg-surface-bar flex flex-col p-[0.5rem] pt-0 gap-[0.5rem] w-[--left-bar-width] overflow-hidden"
+            class="app-grid-navbar bg-[--dc-chrome-bg] flex flex-col p-[0.5rem] pt-0 gap-[0.5rem] w-[--left-bar-width] overflow-hidden"
         >
             <NavRail :expanded="navigationExpanded">
                 <NavButton
@@ -2975,6 +3004,12 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                         :class="{ 'rotate-180': navigationExpanded }"
                     />
                 </NavButton>
+                <p
+                    v-if="navigationExpanded && navGroupVisibility.game"
+                    class="nav-label"
+                >
+                    {{ formatMessage(messages.navGroupGame) }}
+                </p>
                 <NavButton
                     v-if="!themeStore.isNavItemHidden('home')"
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.home)"
@@ -3031,6 +3066,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                 >
                     <ChangeSkinIcon />
                 </NavButton>
+                <p v-if="navigationExpanded && navGroupVisibility.social" class="nav-label">
+                    {{ formatMessage(messages.navGroupSocial) }}
+                </p>
                 <NavButton
                     v-if="!themeStore.isNavItemHidden('multiplayer')"
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.multiplayer)"
@@ -3041,6 +3079,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                 >
                     <UsersIcon />
                 </NavButton>
+                <p v-if="navigationExpanded" class="nav-label">
+                    {{ formatMessage(messages.navGroupAi) }}
+                </p>
                 <NavButton
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.aiAssistant)"
                     :expanded="navigationExpanded"
@@ -3050,6 +3091,9 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                 >
                     <SparklesIcon />
                 </NavButton>
+                <p v-if="navigationExpanded" class="nav-label">
+                    {{ formatMessage(messages.navGroupExtend) }}
+                </p>
                 <NavButton
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.plugins)"
                     :expanded="navigationExpanded"
@@ -3172,7 +3216,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         </div>
         <AppTitlebar
             ref="titlebar"
-            class="app-grid-statusbar bg-surface-bar h-[--top-bar-height]"
+            class="app-grid-statusbar bg-[--dc-chrome-bg] h-[--top-bar-height]"
             :is-beta-build="isBetaBuild"
         >
             <div class="flex min-w-0 mr-3">
@@ -3609,14 +3653,14 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 
 .app-grid-layout,
 .app-contents {
-    --top-bar-height: 3rem;
+    --top-bar-height: var(--dc-titlebar-height, 52px);
     --left-bar-width: 4rem;
     --right-bar-width: 300px;
 }
 
 .app-grid-layout.navigation-expanded,
 .app-contents.navigation-expanded {
-    --left-bar-width: 14rem;
+    --left-bar-width: var(--dc-sidebar-width, 238px);
 }
 
 .app-contents.studio-mode {
@@ -3639,7 +3683,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
     grid-template-rows: auto 1fr;
     position: relative;
     //z-index: 0;
-    background-color: var(--surface-3);
+    background-color: var(--dc-app-bg, var(--surface-3));
     height: 100vh;
 }
 
@@ -3708,6 +3752,32 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
     position: relative;
     z-index: 2;
     user-select: none;
+
+    // Rail separator drawn as an overlay so the 4rem collapsed width still fits
+    // the 3rem nav buttons exactly (a real border would shave a pixel off them).
+    &::after {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        right: 0;
+        width: 1px;
+        background-color: var(--dc-chrome-line, var(--surface-5));
+        pointer-events: none;
+    }
+}
+
+// Section captions in the expanded rail, mirroring the design's `.nav-label`.
+.nav-label {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    padding: 12px 10px 5px;
+    color: var(--dc-text-faint, var(--color-text-tertiary));
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    user-select: none;
 }
 
 .app-grid-statusbar {
@@ -3715,6 +3785,10 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
     padding-right: var(--window-controls-width, 0px);
     position: relative;
     z-index: 200;
+    // Design's `.titlebar`: a hairline under the chrome plus a live backdrop
+    // blur. Transparent/custom-background modes already force both off.
+    border-bottom: 1px solid var(--dc-chrome-line, var(--color-divider));
+    backdrop-filter: blur(14px);
 }
 
 [data-tauri-drag-region-exclude] {
@@ -3729,8 +3803,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
     right: 0;
     bottom: 0;
     height: calc(100vh - var(--top-bar-height));
-    background-color: var(--color-bg);
-    border-top-left-radius: var(--radius-xl);
+    background-color: var(--dc-panel-bg, var(--color-bg));
+    border-top-left-radius: var(--dc-radius-card, var(--radius-xl));
     overflow: hidden;
     // Keep sticky/fixed chrome and the page-layer stack from spilling or
     // re-anchoring while slide/opacity transitions repaint.

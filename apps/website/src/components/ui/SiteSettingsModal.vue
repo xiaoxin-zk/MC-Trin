@@ -39,7 +39,7 @@ const messages = defineMessages({
     title: { id: 'axolotl-settings.title', defaultMessage: 'Display settings' },
     description: {
         id: 'axolotl-settings.description',
-        defaultMessage: 'Customize how Axolotl looks and reads on this device.',
+        defaultMessage: 'Customize how MC-Trin looks and reads on this device.',
     },
     close: { id: 'axolotl-settings.close', defaultMessage: 'Close settings' },
     appearanceTitle: { id: 'axolotl-settings.appearance.title', defaultMessage: 'Appearance' },
@@ -51,7 +51,7 @@ const messages = defineMessages({
     downloadsTitle: { id: 'axolotl-settings.downloads.title', defaultMessage: 'Downloads' },
     downloadsDescription: {
         id: 'axolotl-settings.downloads.description',
-        defaultMessage: 'Choose where Axolotl Launcher installers are downloaded from.',
+        defaultMessage: 'Choose where MC-Trin installers are downloaded from.',
     },
     downloadSourceTitle: {
         id: 'axolotl-settings.download-source.title',
@@ -76,7 +76,7 @@ const messages = defineMessages({
     themeTitle: { id: 'axolotl-settings.theme.title', defaultMessage: 'Color theme' },
     themeDescription: {
         id: 'axolotl-settings.theme.description',
-        defaultMessage: 'Select your preferred color theme for Axolotl on this device.',
+        defaultMessage: 'Select your preferred color theme for MC-Trin on this device.',
     },
     interfaceTitle: { id: 'axolotl-settings.interface.title', defaultMessage: 'Interface' },
     interfaceDescription: {
@@ -318,9 +318,9 @@ onBeforeUnmount(() => {
                             <div
                                 class="settings-brand mt-auto flex items-center gap-3 px-1 pt-4 text-[0.8rem] text-[var(--color-secondary)]"
                             >
-                                <img src="/axolotl.png" alt="" />
+                                <img src="/mctrin.png" alt="" />
                                 <div>
-                                    <strong>Axolotl Launcher</strong>
+                                    <strong>MC-Trin</strong>
                                     <span>Website {{ new Date().getFullYear() }}</span>
                                 </div>
                             </div>

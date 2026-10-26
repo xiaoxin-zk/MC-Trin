@@ -3,7 +3,7 @@ import { MonitorIcon, RightArrowIcon } from '@modrinth/assets'
 import { Button, defineMessages, LOCALES, useVIntl } from '@modrinth/ui'
 import { computed, onMounted, ref } from 'vue'
 
-import MCTrinLogo from '@/components/ui/AxolotlLogo.vue'
+import MCTrinLogo from '@/components/ui/MCTrinLogo.vue'
 import { get, update } from '@/helpers/settings.ts'
 import i18n, {
     getSystemResolvedLocale,

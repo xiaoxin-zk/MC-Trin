@@ -518,8 +518,8 @@ async function exportPresets(template = false) {
     try {
         const path = await save({
             defaultPath: template
-                ? 'axolotl-gradient-presets-template.json'
-                : 'axolotl-gradient-presets.json',
+                ? 'mctrin-gradient-presets-template.json'
+                : 'mctrin-gradient-presets.json',
             filters: [{ name: 'JSON', extensions: ['json'] }],
         })
         if (!path) return

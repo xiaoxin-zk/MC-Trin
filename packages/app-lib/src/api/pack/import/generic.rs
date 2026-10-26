@@ -209,7 +209,7 @@ async fn build_dependencies(
     for (loader, version) in components {
         if loader.eq_ignore_ascii_case("labymod") {
             return Err(crate::ErrorKind::InputError(
-                "Unsupported loader LabyMod: Axolotl does not install, update, or repair LabyMod instances"
+                "Unsupported loader LabyMod: MC-Trin does not install, update, or repair LabyMod instances"
                     .to_string(),
             )
             .into());

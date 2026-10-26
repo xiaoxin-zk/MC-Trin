@@ -275,6 +275,27 @@
   "app.multiplayer.mctier.visibility": {
     "message": "将房间发布到公开大厅"
   },
+  "app.multiplayer.mctier.voice.microphone": {
+    "message": "麦克风"
+  },
+  "app.multiplayer.mctier.voice.mute-player": {
+    "message": "静音 {player}"
+  },
+  "app.multiplayer.mctier.voice.speaker": {
+    "message": "扬声器"
+  },
+  "app.multiplayer.mctier.voice.system-default": {
+    "message": "系统默认"
+  },
+  "app.multiplayer.mctier.voice.unnamed-device": {
+    "message": "未命名设备"
+  },
+  "app.multiplayer.mctier.voice.unmute-player": {
+    "message": "取消静音 {player}"
+  },
+  "app.multiplayer.mctier.voice.volume": {
+    "message": "输出音量"
+  },
   "app.multiplayer.mctier.public-password-hint": {
     "message": "公开房间不能设置密码。"
   },
@@ -10301,6 +10322,18 @@
   "app.navigation.forward": {
     "message": "前进"
   },
+  "app.navigation.group-ai": {
+    "message": "智能"
+  },
+  "app.navigation.group-extend": {
+    "message": "扩展"
+  },
+  "app.navigation.group-game": {
+    "message": "游戏"
+  },
+  "app.navigation.group-social": {
+    "message": "社交"
+  },
   "app.navigation.home": {
     "message": "主页"
   },
@@ -10836,7 +10869,7 @@
     "message": "访问官网"
   },
   "app.remote-announcements.preview-content": {
-    "message": "## 公告预览\n\n这是**示例正文**，不是已发布公告。\n\n- 支持标题、列表和链接\n- 默认自带关闭按钮\n\n> 预览不会影响真实公告的已读状态。\n\n| 类型 | 展示方式 |\n| --- | --- |\n| 启动弹窗 | 完整 Markdown 正文 |\n| Popup 通知 | 先显示摘要，再查看全文 |\n\n[访问官网](https://axlmc.org)"
+    "message": "## 公告预览\n\n这是**示例正文**，不是已发布公告。\n\n- 支持标题、列表和链接\n- 默认自带关闭按钮\n\n> 预览不会影响真实公告的已读状态。\n\n| 类型 | 展示方式 |\n| --- | --- |\n| 启动弹窗 | 完整 Markdown 正文 |\n| Popup 通知 | 先显示摘要，再查看全文 |\n\n[访问官网](https://github.com/xiaoxin-zk/MC-Trin)"
   },
   "app.remote-announcements.preview-summary": {
     "message": "这是一条本地预览通知，点击“查看公告”可查看完整 Markdown 正文。"
@@ -11672,12 +11705,6 @@
   "app.servers.wizard.type-title": {
     "message": "服务器类型"
   },
-  "app.settings.about.afdian": {
-    "message": "在爱发电赞助"
-  },
-  "app.settings.about.afdian-description": {
-    "message": "支持项目持续开发"
-  },
   "app.settings.about.attribution": {
     "message": "MC-Trin 依据 GPL-3.0 许可证发布，版权与第三方许可声明保留在项目源码中。"
   },
@@ -11720,63 +11747,6 @@
   "app.settings.about.easteregg.game-title": {
     "message": "彩蛋小游戏"
   },
-  "app.settings.about.game.best": {
-    "message": "最高分：{score}"
-  },
-  "app.settings.about.game.best-label": {
-    "message": "最高分"
-  },
-  "app.settings.about.game.completed": {
-    "message": "彩虹美西螈！"
-  },
-  "app.settings.about.game.exit": {
-    "message": "退出游戏"
-  },
-  "app.settings.about.game.game-over": {
-    "message": "美西螈搁浅了！"
-  },
-  "app.settings.about.game.highest-level": {
-    "message": "最高等级：{level}"
-  },
-  "app.settings.about.game.level-label": {
-    "message": "最高等级"
-  },
-  "app.settings.about.game.new-record": {
-    "message": "新纪录！"
-  },
-  "app.settings.about.game.overtime": {
-    "message": "潮水大涨！"
-  },
-  "app.settings.about.game.overtime-detail": {
-    "message": "水位回升，继续合成！"
-  },
-  "app.settings.about.game.overtimes-label": {
-    "message": "加时次数"
-  },
-  "app.settings.about.game.restart": {
-    "message": "重新开始"
-  },
-  "app.settings.about.game.score": {
-    "message": "分数：{score}"
-  },
-  "app.settings.about.game.score-label": {
-    "message": "分数"
-  },
-  "app.settings.about.game.settle": {
-    "message": "结算"
-  },
-  "app.settings.about.game.settle-title": {
-    "message": "结算完成！"
-  },
-  "app.settings.about.game.tap-to-drop": {
-    "message": "点击场地，投放粉色美西螈"
-  },
-  "app.settings.about.game.tide-hint": {
-    "message": "潮水正在退去，别让美西螈搁浅！"
-  },
-  "app.settings.about.game.title": {
-    "message": "合成美西螈"
-  },
   "app.settings.about.license-attribution": {
     "message": "许可证与来源声明"
   },
@@ -11812,93 +11782,6 @@
   },
   "app.settings.about.repository": {
     "message": "源代码"
-  },
-  "app.settings.about.run.apex": {
-    "message": "极限高度 +{score}"
-  },
-  "app.settings.about.run.best": {
-    "message": "最佳：{score}"
-  },
-  "app.settings.about.run.best-label": {
-    "message": "最佳"
-  },
-  "app.settings.about.run.chain": {
-    "message": "连锁！"
-  },
-  "app.settings.about.run.chain-jump": {
-    "message": "连跳 +{score}"
-  },
-  "app.settings.about.run.combo": {
-    "message": "连击 {count}"
-  },
-  "app.settings.about.run.conduit": {
-    "message": "潮涌核心"
-  },
-  "app.settings.about.run.diamond": {
-    "message": "钻石"
-  },
-  "app.settings.about.run.dolphin": {
-    "message": "海豚的恩惠"
-  },
-  "app.settings.about.run.exit": {
-    "message": "退出游戏"
-  },
-  "app.settings.about.run.game-over": {
-    "message": "游戏结束"
-  },
-  "app.settings.about.run.hold-to-jump": {
-    "message": "轻点为小跳，按住可高跳"
-  },
-  "app.settings.about.run.last-stand": {
-    "message": "残血通关 +{score}"
-  },
-  "app.settings.about.run.milk": {
-    "message": "牛奶"
-  },
-  "app.settings.about.run.new-record": {
-    "message": "新纪录！"
-  },
-  "app.settings.about.run.poison": {
-    "message": "中毒"
-  },
-  "app.settings.about.run.restart": {
-    "message": "重新开始"
-  },
-  "app.settings.about.run.score": {
-    "message": "得分：{score}"
-  },
-  "app.settings.about.run.score-label": {
-    "message": "得分"
-  },
-  "app.settings.about.run.shield": {
-    "message": "护盾"
-  },
-  "app.settings.about.run.slow": {
-    "message": "迟缓"
-  },
-  "app.settings.about.run.slow-fall": {
-    "message": "缓降"
-  },
-  "app.settings.about.run.stew": {
-    "message": "迷之炖菜"
-  },
-  "app.settings.about.run.streak": {
-    "message": "无伤 x{count}"
-  },
-  "app.settings.about.run.swift": {
-    "message": "迅捷"
-  },
-  "app.settings.about.run.tap-to-start": {
-    "message": "按空格或点击开始"
-  },
-  "app.settings.about.run.tnt": {
-    "message": "TNT"
-  },
-  "app.settings.about.run.title": {
-    "message": "美西螈快跑"
-  },
-  "app.settings.about.run.totem": {
-    "message": "不死图腾"
   },
   "app.settings.about.test-error": {
     "message": "触发测试错误"
@@ -13298,7 +13181,7 @@
   "app.settings.resources.app-directory-description-portable": {
     "message": "正在以便携模式运行，所有数据已固定在程序目录下，无法修改。"
   },
-  "app.settings.resources.axolotl-data-directory": {
+  "app.settings.resources.mctrin-data-directory": {
     "message": "MC-Trin 数据目录"
   },
   "app.settings.resources.concurrency.manual": {

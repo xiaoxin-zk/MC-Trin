@@ -15,9 +15,14 @@ use theseus::{
 use tokio::time::Instant;
 use url::Url;
 
-const UPDATE_SERVER_LATEST_URL: &str = "https://update.axlmc.org/latest";
-const UPDATE_SERVER_API: &str = "https://update.axlmc.org/api/versions";
-const UPDATE_ARTIFACT_BASE: &str = "https://dist.axlmc.org/";
+/// The updater manifest is published as an asset on the latest GitHub release,
+/// so updates need no separately hosted update server.
+const UPDATE_MANIFEST_URL: &str =
+    "https://github.com/xiaoxin-zk/MC-Trin/releases/latest/download/latest.json";
+/// Only the apt-managed Linux path needs this: the signed updater manifest
+/// carries AppImage/NSIS artifacts, not the .deb.
+const GITHUB_RELEASE_API: &str =
+    "https://api.github.com/repos/xiaoxin-zk/MC-Trin/releases/latest";
 
 // The updater plugin builds `Update` with no request timeout, so a stalled
 // connection would hang the download forever. Bound the whole download.
@@ -42,36 +47,26 @@ pub struct UpdateMetadata {
 #[derive(Default)]
 pub struct PendingUpdateData(pub Mutex<Option<(Arc<Update>, Vec<u8>)>>);
 
-// ── Update Server API types ─────────────────────────────────────
+// ── GitHub release types ────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct VersionsResponse {
-    versions: Vec<VersionEntry>,
+struct GithubRelease {
+    assets: Vec<GithubReleaseAsset>,
 }
 
 #[derive(Deserialize)]
-struct VersionEntry {
-    version: String,
-    artifacts: Vec<ArtifactEntry>,
-}
-
-#[derive(Deserialize)]
-struct ArtifactEntry {
-    kind: String,
-    #[serde(default)]
-    variant: Option<String>,
-    platform: String,
-    architecture: String,
-    relative_path: String,
-    #[serde(default)]
-    sha256: Option<String>,
-    #[serde(default)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
     size: u64,
+    /// `sha256:<hex>` when GitHub exposes the asset digest.
+    #[serde(default)]
+    digest: Option<String>,
 }
 
-/// The .deb asset for an apt-managed Linux update, from the Update Server
-/// catalog (`/api/versions`). The deb has no minisign signature, so its
-/// integrity is verified with the catalog's sha256 and size instead.
+/// The .deb asset for an apt-managed Linux update, taken from the GitHub
+/// release the updater manifest points at. The deb has no minisign signature,
+/// so its integrity is verified with the asset digest and size instead.
 struct AptDebAsset {
     url: Url,
     sha256: String,
@@ -94,57 +89,64 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
         .user_agent(launcher_user_agent())
         .timeout(UPDATE_DOWNLOAD_TIMEOUT)
         .build()?
-        .get(UPDATE_SERVER_API)
+        .get(GITHUB_RELEASE_API)
+        .header("Accept", "application/vnd.github+json")
         .send()
         .await?;
 
     if !response.status().is_success() {
         return Err(Error::Network(format!(
-            "Failed to fetch update catalog: {}",
+            "Failed to fetch the GitHub release: {}",
             response.status()
         ))
         .into());
     }
 
-    let catalog: VersionsResponse = response.json().await?;
-    let release = catalog
-        .versions
+    let release: GithubRelease = response.json().await?;
+    let arch = apt_deb_arch()?;
+    let candidates: Vec<GithubReleaseAsset> = release
+        .assets
+        .into_iter()
+        .filter(|asset| asset.name.ends_with(".deb") && asset.name.contains(arch))
+        .collect();
+    let asset = candidates
         .iter()
-        .find(|entry| entry.version == version)
+        .find(|asset| asset.name.contains(version))
+        .or_else(|| candidates.first())
         .ok_or_else(|| {
             theseus::Error::from(theseus::ErrorKind::OtherError(format!(
-                "Update catalog has no entry for version {version}"
+                "The GitHub release has no .deb asset for {version} ({arch})"
             )))
         })?;
 
-    let arch = std::env::consts::ARCH;
-    let artifact = release
-        .artifacts
-        .iter()
-        .find(|entry| {
-            entry.kind == "installer"
-                && entry.variant.as_deref() == Some("deb")
-                && entry.platform == "linux"
-                && entry.architecture == arch
-        })
+    let sha256 = asset
+        .digest
+        .as_deref()
+        .and_then(|digest| digest.strip_prefix("sha256:"))
+        .map(str::to_owned)
         .ok_or_else(|| {
             theseus::Error::from(theseus::ErrorKind::OtherError(format!(
-                "Update catalog has no deb artifact for {version} on {arch}"
+                "The GitHub release has no sha256 digest for {}",
+                asset.name
             )))
         })?;
 
-    let sha256 = artifact.sha256.clone().ok_or_else(|| {
+    let url = Url::parse(&asset.browser_download_url).map_err(|error| {
         theseus::Error::from(theseus::ErrorKind::OtherError(format!(
-            "Update catalog has no sha256 for the deb artifact of {version}"
+            "Invalid download URL for {}: {error}",
+            asset.name
         )))
     })?;
-
-    let url = update_artifact_url(&artifact.relative_path)?;
+    if url.scheme() != "https" {
+        return Err(
+            Error::Network("Update assets must use HTTPS".to_string()).into()
+        );
+    }
 
     Ok(AptDebAsset {
         url,
         sha256,
-        size: artifact.size,
+        size: asset.size,
     })
 }
 
@@ -160,52 +162,11 @@ fn update_channel(channel: &str) -> Result<&str> {
     }
 }
 
-fn update_platform() -> Result<&'static str> {
-    match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("windows", "x86_64") => Ok("windows-x86_64"),
-        ("linux", "x86_64") => Ok("linux-x86_64"),
-        ("linux", "aarch64") => Ok("linux-aarch64"),
-        ("macos", "x86_64") => Ok("darwin-x86_64"),
-        ("macos", "aarch64") => Ok("darwin-aarch64"),
-        (os, arch) => {
-            Err(theseus::Error::from(theseus::ErrorKind::OtherError(format!(
-                "Unsupported updater platform: {os}-{arch}"
-            )))
-            .into())
-        }
-    }
-}
-
 fn update_endpoint() -> Result<Url> {
-    Url::parse(UPDATE_SERVER_LATEST_URL).map_err(|error| {
+    Url::parse(UPDATE_MANIFEST_URL).map_err(|error| {
         theseus::Error::from(theseus::ErrorKind::OtherError(error.to_string()))
             .into()
     })
-}
-
-fn update_artifact_url(relative_path: &str) -> Result<Url> {
-    let relative_path =
-        relative_path.strip_prefix('/').unwrap_or(relative_path);
-    if !relative_path.starts_with("dist/") {
-        return Err(
-            Error::Network("Invalid update artifact path".to_string()).into()
-        );
-    }
-    let base = Url::parse(UPDATE_ARTIFACT_BASE)
-        .map_err(|error| Error::Network(error.to_string()))?;
-    let url = base
-        .join(relative_path)
-        .map_err(|error| Error::Network(error.to_string()))?;
-    if url.origin() != base.origin()
-        || !url.path().starts_with("/dist/")
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(
-            Error::Network("Invalid update artifact path".to_string()).into()
-        );
-    }
-    Ok(url)
 }
 
 /// Build the platform-updater with the given endpoints and run a check.
@@ -213,17 +174,13 @@ async fn check_with_endpoints<R: Runtime>(
     webview: &Webview<R>,
     channel: &str,
 ) -> Result<Option<Update>> {
-    let channel = update_channel(channel)?;
-    let platform = update_platform()?;
-    let current_version =
-        webview.app_handle().package_info().version.to_string();
+    // The channel is still validated so an unknown value fails here rather
+    // than silently checking the default manifest.
+    let _channel = update_channel(channel)?;
     let mut updater = webview
         .updater_builder()
         .endpoints(vec![update_endpoint()?])?
-        .header("Accept", "application/json")?
-        .header("X-Axolotl-Channel", channel)?
-        .header("X-Axolotl-Platform", platform)?
-        .header("X-Axolotl-Version", current_version)?;
+        .header("Accept", "application/json")?;
 
     #[cfg(target_os = "windows")]
     {
@@ -266,13 +223,11 @@ async fn check_with_updater<R: Runtime>(
     update.timeout = Some(UPDATE_DOWNLOAD_TIMEOUT);
 
     // On Debian and derivatives the plugin's minisign signature check cannot
-    // validate the unsigned .deb, so point the download at the deb from the
-    // Update Server catalog instead of the AppImage artifact. Its integrity
-    // is verified with the catalog's sha256/size during the download.
+    // validate the unsigned .deb, so point the download at the .deb asset from
+    // the same GitHub release instead of the signed AppImage artifact. Its
+    // integrity is verified with the asset digest/size during the download.
     if is_apt_linux() {
         update.download_url = fetch_apt_deb_asset(&update.version).await?.url;
-    } else {
-        update.download_url = update_artifact_url(update.download_url.path())?;
     }
 
     let published_at = update
@@ -530,8 +485,8 @@ pub async fn install_apt_package(version: &str, data: &[u8]) -> Result<()> {
     }
 
     let arch = apt_deb_arch()?;
-    let deb_path = std::env::temp_dir()
-        .join(format!("Axolotl.Launcher_{version}_{arch}.deb"));
+    let deb_path =
+        std::env::temp_dir().join(format!("MC-Trin_{version}_{arch}.deb"));
     std::fs::write(&deb_path, data).map_err(|io| {
         theseus::Error::from(theseus::ErrorKind::OtherError(format!(
             "Failed to write the downloaded deb: {io}"
@@ -594,59 +549,40 @@ impl Drop for TempDebFile {
 
 #[cfg(test)]
 mod tests {
-    use super::{UPDATE_SERVER_API, update_artifact_url, update_endpoint};
+    use super::{UPDATE_MANIFEST_URL, apt_deb_arch, update_channel, update_endpoint};
 
     #[test]
-    fn metadata_endpoints_stay_on_update_server() {
+    fn metadata_endpoint_is_the_release_manifest() {
+        assert_eq!(update_endpoint().unwrap().as_str(), UPDATE_MANIFEST_URL);
         assert_eq!(
-            update_endpoint().unwrap().as_str(),
-            "https://update.axlmc.org/latest"
-        );
-        assert_eq!(UPDATE_SERVER_API, "https://update.axlmc.org/api/versions");
-    }
-
-    #[test]
-    fn relative_artifacts_use_the_distribution_origin() {
-        for path in [
-            "dist/1.10.0/Axolotl_amd64.deb",
-            "/dist/1.10.0/Axolotl_x64-setup.nsis.zip",
-        ] {
-            let url = update_artifact_url(path).unwrap();
-            assert_eq!(url.host_str(), Some("dist.axlmc.org"));
-            assert_eq!(url.scheme(), "https");
-            assert_eq!(
-                url.path().trim_start_matches('/'),
-                path.trim_start_matches('/')
-            );
-        }
-    }
-
-    #[test]
-    fn manifest_paths_keep_their_encoding_on_distribution() {
-        let manifest_url = url::Url::parse(
-            "https://update.axlmc.org/dist/1.10.0/Axolotl%20Launcher%25.zip",
-        )
-        .unwrap();
-        assert_eq!(
-            update_artifact_url(manifest_url.path()).unwrap().as_str(),
-            "https://dist.axlmc.org/dist/1.10.0/Axolotl%20Launcher%25.zip"
+            UPDATE_MANIFEST_URL,
+            "https://github.com/xiaoxin-zk/MC-Trin/releases/latest/download/latest.json"
         );
     }
 
     #[test]
-    fn artifact_paths_cannot_escape_distribution_or_add_url_parameters() {
-        for path in [
-            "https://example.com/dist/file.zip",
-            "//example.com/dist/file.zip",
-            "../file.zip",
-            "dist/../../file.zip",
-            "dist/1.10.0/file.zip?token=value",
-            "dist/1.10.0/file.zip#fragment",
-        ] {
+    fn known_update_channels_are_accepted() {
+        assert_eq!(update_channel("release").unwrap(), "release");
+        assert_eq!(update_channel("beta").unwrap(), "beta");
+    }
+
+    #[test]
+    fn unknown_update_channels_are_rejected() {
+        for channel in ["", "nightly", "Release", "release "] {
             assert!(
-                update_artifact_url(path).is_err(),
-                "accepted invalid path: {path}"
+                update_channel(channel).is_err(),
+                "accepted unknown channel: {channel:?}"
             );
         }
+    }
+
+    #[test]
+    fn apt_arch_matches_the_debian_naming() {
+        let expected = match std::env::consts::ARCH {
+            "x86_64" => "amd64",
+            "aarch64" => "arm64",
+            _ => return,
+        };
+        assert_eq!(apt_deb_arch().unwrap(), expected);
     }
 }

@@ -130,7 +130,7 @@ const projects: ShowcaseProject[] = [
     },
 ].map((project) => ({
     ...project,
-    description: `${project.title} is available through Axolotl's content browser.`,
+    description: `${project.title} is available through MC-Trin's content browser.`,
 }))
 
 // 每行渲染两份内容保证动画无缝衔接；后半轮是视觉重复，对屏幕阅读器隐藏
@@ -164,7 +164,7 @@ const messages = defineMessages({
 
 <template>
     <div class="projects-showcase">
-        <img class="website-logo" src="/axolotl.png" alt="" aria-hidden="true" />
+        <img class="website-logo" src="/mctrin.png" alt="" aria-hidden="true" />
         <div v-for="(row, index) in rows" :key="index" class="row">
             <div v-for="n in 2" :key="n" class="row__content" :class="{ offset: index % 2 }">
                 <div

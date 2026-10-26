@@ -301,9 +301,9 @@ fn is_eula_refusal(line: &str) -> bool {
 }
 
 const JNA_CRASH_HINT_LINES: [&str; 3] = [
-    "[Axolotl] This crash matches a known JNA bug on macOS (java-native-access#1452):",
-    "[Axolotl] mods bundling JNA below 5.13.0 abort when a native library fails to load.",
-    "[Axolotl] Update or remove the affected mod, or ask the modpack author to bump JNA to 5.13.0+.",
+    "[MC-Trin] This crash matches a known JNA bug on macOS (java-native-access#1452):",
+    "[MC-Trin] mods bundling JNA below 5.13.0 abort when a native library fails to load.",
+    "[MC-Trin] Update or remove the affected mod, or ask the modpack author to bump JNA to 5.13.0+.",
 ];
 
 /// Removes ANSI escape sequences (SGR colors, cursor control, OSC titles) that

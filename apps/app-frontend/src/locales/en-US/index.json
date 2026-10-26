@@ -8189,6 +8189,27 @@
   "app.multiplayer.mctier.visibility": {
     "message": "Publish this room in the public lobby list"
   },
+  "app.multiplayer.mctier.voice.microphone": {
+    "message": "Microphone"
+  },
+  "app.multiplayer.mctier.voice.mute-player": {
+    "message": "Mute {player}"
+  },
+  "app.multiplayer.mctier.voice.speaker": {
+    "message": "Speaker"
+  },
+  "app.multiplayer.mctier.voice.system-default": {
+    "message": "System default"
+  },
+  "app.multiplayer.mctier.voice.unnamed-device": {
+    "message": "Unnamed device"
+  },
+  "app.multiplayer.mctier.voice.unmute-player": {
+    "message": "Unmute {player}"
+  },
+  "app.multiplayer.mctier.voice.volume": {
+    "message": "Output volume"
+  },
   "app.multiplayer.no-players": {
     "message": "No players in room"
   },
@@ -8413,6 +8434,18 @@
   },
   "app.navigation.forward": {
     "message": "Forward"
+  },
+  "app.navigation.group-ai": {
+    "message": "AI"
+  },
+  "app.navigation.group-extend": {
+    "message": "Extend"
+  },
+  "app.navigation.group-game": {
+    "message": "Game"
+  },
+  "app.navigation.group-social": {
+    "message": "Social"
   },
   "app.navigation.home": {
     "message": "Home"
@@ -8937,7 +8970,7 @@
     "message": "Shows your current launcher or game activity in Discord when Discord is running."
   },
   "app.privacy-consent.intro": {
-    "message": "Choose what Axolotl may send or display. Nothing is sent until you confirm these choices."
+    "message": "Choose what MC-Trin may send or display. Nothing is sent until you confirm these choices."
   },
   "app.privacy-consent.privacy-policy": {
     "message": "Read the privacy policy"
@@ -9138,7 +9171,7 @@
     "message": "Visit website"
   },
   "app.remote-announcements.preview-content": {
-    "message": "## Announcement preview\n\nThis is **sample content**, not a published announcement.\n\n- Supports headings, lists, and links\n- Close buttons are always available\n\n> Previewing does not change real announcement read status.\n\n| Type | Display |\n| --- | --- |\n| Modal | Full Markdown content |\n| Popup | Summary, then full content |\n\n[Visit the website](https://axlmc.org)"
+    "message": "## Announcement preview\n\nThis is **sample content**, not a published announcement.\n\n- Supports headings, lists, and links\n- Close buttons are always available\n\n> Previewing does not change real announcement read status.\n\n| Type | Display |\n| --- | --- |\n| Modal | Full Markdown content |\n| Popup | Summary, then full content |\n\n[Visit the website](https://github.com/xiaoxin-zk/MC-Trin)"
   },
   "app.remote-announcements.preview-summary": {
     "message": "This is a local preview. Select View announcement to preview the full Markdown content."
@@ -10349,63 +10382,6 @@
   "app.settings.about.easteregg.game-title": {
     "message": "Mini Game"
   },
-  "app.settings.about.game.best": {
-    "message": "Best: {score}"
-  },
-  "app.settings.about.game.best-label": {
-    "message": "Best"
-  },
-  "app.settings.about.game.completed": {
-    "message": "Rainbow axolotl!"
-  },
-  "app.settings.about.game.exit": {
-    "message": "Exit game"
-  },
-  "app.settings.about.game.game-over": {
-    "message": "The axolotls got stranded!"
-  },
-  "app.settings.about.game.highest-level": {
-    "message": "Highest: level {level}"
-  },
-  "app.settings.about.game.level-label": {
-    "message": "Highest level"
-  },
-  "app.settings.about.game.new-record": {
-    "message": "New record!"
-  },
-  "app.settings.about.game.overtime": {
-    "message": "Tide surge!"
-  },
-  "app.settings.about.game.overtime-detail": {
-    "message": "The water rushes back — keep merging!"
-  },
-  "app.settings.about.game.overtimes-label": {
-    "message": "Overtimes"
-  },
-  "app.settings.about.game.restart": {
-    "message": "Restart"
-  },
-  "app.settings.about.game.score": {
-    "message": "Score: {score}"
-  },
-  "app.settings.about.game.score-label": {
-    "message": "Score"
-  },
-  "app.settings.about.game.settle": {
-    "message": "Settle"
-  },
-  "app.settings.about.game.settle-title": {
-    "message": "Run settled!"
-  },
-  "app.settings.about.game.tap-to-drop": {
-    "message": "Click to drop a pink axolotl"
-  },
-  "app.settings.about.game.tide-hint": {
-    "message": "The tide is falling — keep your axolotls underwater!"
-  },
-  "app.settings.about.game.title": {
-    "message": "Axolotl merge"
-  },
   "app.settings.about.license-attribution": {
     "message": "License and attribution"
   },
@@ -10417,93 +10393,6 @@
   },
   "app.settings.about.project-license": {
     "message": "GPL-3.0 license"
-  },
-  "app.settings.about.run.apex": {
-    "message": "Apex clear +{score}"
-  },
-  "app.settings.about.run.best": {
-    "message": "Best: {score}"
-  },
-  "app.settings.about.run.best-label": {
-    "message": "Best"
-  },
-  "app.settings.about.run.chain": {
-    "message": "Chain!"
-  },
-  "app.settings.about.run.chain-jump": {
-    "message": "Chain jump +{score}"
-  },
-  "app.settings.about.run.combo": {
-    "message": "Combo {count}"
-  },
-  "app.settings.about.run.conduit": {
-    "message": "Conduit power"
-  },
-  "app.settings.about.run.diamond": {
-    "message": "Diamond"
-  },
-  "app.settings.about.run.dolphin": {
-    "message": "Dolphin’s Grace"
-  },
-  "app.settings.about.run.exit": {
-    "message": "Exit game"
-  },
-  "app.settings.about.run.game-over": {
-    "message": "Game over"
-  },
-  "app.settings.about.run.hold-to-jump": {
-    "message": "Short tap for a small hop, hold for a high jump"
-  },
-  "app.settings.about.run.last-stand": {
-    "message": "Last stand +{score}"
-  },
-  "app.settings.about.run.milk": {
-    "message": "Milk"
-  },
-  "app.settings.about.run.new-record": {
-    "message": "New record!"
-  },
-  "app.settings.about.run.poison": {
-    "message": "Poison"
-  },
-  "app.settings.about.run.restart": {
-    "message": "Restart"
-  },
-  "app.settings.about.run.score": {
-    "message": "Score: {score}"
-  },
-  "app.settings.about.run.score-label": {
-    "message": "Score"
-  },
-  "app.settings.about.run.shield": {
-    "message": "Shield"
-  },
-  "app.settings.about.run.slow": {
-    "message": "Slowness"
-  },
-  "app.settings.about.run.slow-fall": {
-    "message": "Slow Falling"
-  },
-  "app.settings.about.run.stew": {
-    "message": "Suspicious Stew"
-  },
-  "app.settings.about.run.streak": {
-    "message": "No damage x{count}"
-  },
-  "app.settings.about.run.swift": {
-    "message": "Swiftness"
-  },
-  "app.settings.about.run.tap-to-start": {
-    "message": "Press Space or click to start"
-  },
-  "app.settings.about.run.title": {
-    "message": "Axolotl run"
-  },
-  "app.settings.about.run.tnt": {
-    "message": "TNT"
-  },
-  "app.settings.about.run.totem": {
-    "message": "Totem of Undying"
   },
   "app.settings.about.test-error": {
     "message": "Trigger test error"
@@ -12128,7 +12017,7 @@
   "app.settings.resources.app-directory-description-portable": {
     "message": "You are currently running in portable mode. The app directory is fixed and cannot be changed."
   },
-  "app.settings.resources.axolotl-data-directory": {
+  "app.settings.resources.mctrin-data-directory": {
     "message": "MC-Trin data directory"
   },
   "app.settings.resources.chinese-names": {

@@ -10,8 +10,9 @@ import {
     Table,
     useVIntl,
 } from '@modrinth/ui'
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
+import { java_discovery_listener } from '@/helpers/events'
 import { get_java_versions, remove_java_version } from '@/helpers/jre'
 
 const { handleError } = injectNotificationManager()
@@ -56,6 +57,8 @@ const emit = defineEmits(['changed'])
 const modal = ref(null)
 const loading = ref(false)
 const javaVersions = ref([])
+const visible = ref(false)
+let unlistenJavaDiscovery = null
 
 const columns = [
     { key: 'parsed_version', label: formatMessage(messages.version), width: '8rem' },
@@ -81,9 +84,24 @@ async function reload() {
 }
 
 async function show() {
+    visible.value = true
     modal.value?.show()
     await reload()
 }
+
+// The startup scan writes its results and fires this event. Refreshing here is
+// what makes runtimes found in the background show up in a list that is already
+// open, instead of the player having to close and reopen the modal.
+onMounted(async () => {
+    unlistenJavaDiscovery = await java_discovery_listener(() => {
+        if (visible.value && !loading.value) void reload()
+    })
+})
+
+onUnmounted(() => {
+    unlistenJavaDiscovery?.()
+    unlistenJavaDiscovery = null
+})
 
 async function removeEntry(javaVersion) {
     const removed = await remove_java_version(javaVersion.path)

@@ -1,10 +1,10 @@
 # MC-Trin Notices
 
-MC-Trin reuses the Axolotl Launcher source tree as its desktop runtime. The reused launcher source is licensed under GNU GPL version 3 only. Preserve the upstream `apps/app/LICENSE`, `apps/app/COPYING.md`, `apps/app-frontend/LICENSE`, and `apps/app-frontend/COPYING.md` when modifying or distributing this project.
+MC-Trin reuses an upstream GPL-licensed launcher source tree as its desktop runtime. The reused launcher source is licensed under GNU GPL version 3 only. Preserve the upstream `apps/app/LICENSE`, `apps/app/COPYING.md`, `apps/app-frontend/LICENSE`, and `apps/app-frontend/COPYING.md` when modifying or distributing this project.
 
-The DeepCraft layout supplied in `D:/mc/ui模板/deepseek` is retained as a UI prototype at `apps/app-frontend/mctrin-prototype.html`. The desktop entry uses the Axolotl Vue runtime and its existing native launcher workflows, with MC-Trin branding. MCTier is used as a protocol and feature reference; its application source is not included in this project.
+The DeepCraft layout supplied in `D:/mc/ui模板/deepseek` is retained as a UI prototype at `apps/app-frontend/mctrin-prototype.html`. The desktop entry uses the Vue runtime and its existing native launcher workflows, with MC-Trin branding. MCTier is used as a protocol and feature reference; its application source is not included in this project.
 
-MC-Trin is an independent community project and is not affiliated with Mojang, Microsoft, CurseForge, Modrinth, Axolotl, or MCTier.
+MC-Trin is an independent community project and is not affiliated with Mojang, Microsoft, CurseForge, Modrinth, or MCTier.
 
 ## EasyTier runtime
 
