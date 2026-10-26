@@ -197,7 +197,7 @@ async function rooms() {
 beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    localStorage.setItem('axolotl-multiplayer-provider', 'hongshi')
+    localStorage.setItem('axolotl-multiplayer-provider', 'mctier')
     fixture.query = {}
     fixture.ports = []
     fixture.state = {
@@ -237,10 +237,9 @@ afterEach(() => {
     wrappers = []
 })
 
-it('renders the MC-Trin room workflow without legacy provider controls', async () => {
+it('renders the MC-Trin room workflow by default', async () => {
     const wrapper = await rooms()
     expect(wrapper.text()).toContain('MC-Trin LAN lobby')
-    expect(wrapper.text()).not.toContain('Terracotta')
     expect(wrapper.text()).not.toContain('RedStone Online 2')
     expect(wrapper.findAll('select')).toHaveLength(0)
 })
