@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { MicrophoneIcon, XIcon } from '@modrinth/assets'
-import {
-    Button,
-    CopyCode,
-    defineMessages,
-    ProgressBar,
-    StyledInput,
-    useVIntl,
-} from '@modrinth/ui'
+import { Button, CopyCode, defineMessages, ProgressBar, StyledInput, useVIntl } from '@modrinth/ui'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 

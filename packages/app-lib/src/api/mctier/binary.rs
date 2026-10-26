@@ -212,8 +212,9 @@ pub async fn prepare(
                     match crate::util::fetch::configured_client().await {
                         Ok(client) => Some(client),
                         Err(error) => {
-                            failures
-                                .push(format!("proxy client unavailable: {error:#}"));
+                            failures.push(format!(
+                                "proxy client unavailable: {error:#}"
+                            ));
                             None
                         }
                     }
@@ -230,8 +231,11 @@ pub async fn prepare(
                     // stays indeterminate while a new source is connecting.
                     progress(PreparationStage::Downloading, None);
                     let attempt = async {
-                        let response =
-                            client.get(&url).send().await?.error_for_status()?;
+                        let response = client
+                            .get(&url)
+                            .send()
+                            .await?
+                            .error_for_status()?;
                         if response
                             .content_length()
                             .is_some_and(|size| size > MAX_DOWNLOAD as u64)
@@ -251,7 +255,8 @@ pub async fn prepare(
                             }
                             bytes.extend_from_slice(&chunk);
                             if let Some(total) = total {
-                                let percent = download_percent(bytes.len(), total);
+                                let percent =
+                                    download_percent(bytes.len(), total);
                                 if reported != Some(percent) {
                                     reported = Some(percent);
                                     progress(

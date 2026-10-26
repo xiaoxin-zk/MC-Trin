@@ -233,7 +233,9 @@ async fn verify_forwarded_game(
     let mut last_error = String::new();
     loop {
         if let Some(status) = child.try_wait()? {
-            bail!("EasyTier exited before the lobby network was ready: {status}");
+            bail!(
+                "EasyTier exited before the lobby network was ready: {status}"
+            );
         }
         match ping_forwarded_game(port).await {
             Ok(()) => return Ok(()),

@@ -52,18 +52,16 @@ vi.mock('@modrinth/ui', async () => {
         }),
         ProgressBar: defineComponent({
             props: ['progress', 'max', 'waiting', 'label', 'fullWidth', 'showProgress'],
-            setup:
-                (props) =>
-                () =>
-                    h(
-                        'div',
-                        {
-                            role: 'progressbar',
-                            'data-waiting': props.waiting ? 'true' : 'false',
-                            'aria-valuenow': props.waiting ? undefined : String(props.progress),
-                        },
-                        props.label ? String(props.label) : undefined,
-                    ),
+            setup: (props) => () =>
+                h(
+                    'div',
+                    {
+                        role: 'progressbar',
+                        'data-waiting': props.waiting ? 'true' : 'false',
+                        'aria-valuenow': props.waiting ? undefined : String(props.progress),
+                    },
+                    props.label ? String(props.label) : undefined,
+                ),
         }),
         StyledInput: input,
         defineMessages: (messages: unknown) => messages,
