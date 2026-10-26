@@ -3004,10 +3004,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                         :class="{ 'rotate-180': navigationExpanded }"
                     />
                 </NavButton>
-                <p
-                    v-if="navigationExpanded && navGroupVisibility.game"
-                    class="nav-label"
-                >
+                <p v-if="navigationExpanded && navGroupVisibility.game" class="nav-label">
                     {{ formatMessage(messages.navGroupGame) }}
                 </p>
                 <NavButton

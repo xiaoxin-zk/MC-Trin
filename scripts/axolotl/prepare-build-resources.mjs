@@ -99,10 +99,6 @@ if (values.verify || values.consume) {
                 fs.copyFileSync(file, target)
             }
         }
-        const contributors = path.join(root, 'apps/app-frontend/src/data/about/contributors.json')
-        if (sha256(contributors) !== sha256(path.join(directory, 'contributors.json'))) {
-            fs.copyFileSync(path.join(directory, 'contributors.json'), contributors)
-        }
         console.log(`Using verified build resources from ${directory}`)
     }
 } else {
@@ -124,14 +120,9 @@ if (values.verify || values.consume) {
     fs.cpSync(path.join(app, 'resources/blockbench-skin'), path.join(directory, 'blockbench'), {
         recursive: true,
     })
-    fs.copyFileSync(
-        path.join(root, 'apps/app-frontend/src/data/about/contributors.json'),
-        path.join(directory, 'contributors.json'),
-    )
     const checksums = Object.fromEntries(
         ['java', 'blockbench']
             .flatMap((name) => files(path.join(directory, name)))
-            .concat(path.join(directory, 'contributors.json'))
             .map((file) => [path.relative(directory, file).replaceAll('\\', '/'), sha256(file)]),
     )
     fs.writeFileSync(
