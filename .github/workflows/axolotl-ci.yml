@@ -293,9 +293,13 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mctrin-windows-ci
+          # The binary loads the seed map engine and the Blockbench skin bundle
+          # from `resources/` next to the executable, so the whole folder has to
+          # travel with it or those features fail at runtime.
           path: |
             target/ci/MC-Trin.exe
             target/ci/*.dll
+            target/ci/resources/**
           overwrite: true
           retention-days: 7
           if-no-files-found: error
