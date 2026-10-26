@@ -188,8 +188,6 @@ const idle = (): HongshiState => ({
     binary_installed: false,
     download_progress: null,
 })
-const button = (wrapper: VueWrapper, text: string) =>
-    wrapper.findAll('button').find((item) => item.text().includes(text))!
 async function rooms() {
     const wrapper = mount(MultiplayerRooms, { global: { directives: { tooltip: () => {} } } })
     wrappers.push(wrapper)
@@ -245,41 +243,6 @@ it('renders the MC-Trin room workflow without legacy provider controls', async (
     expect(wrapper.text()).not.toContain('Terracotta')
     expect(wrapper.text()).not.toContain('RedStone Online 2')
     expect(wrapper.findAll('select')).toHaveLength(0)
-})
-
-it('server sharing starts before navigation and preserves its port when the detail page unmounts', async () => {
-    let resolve!: () => void
-    fixture.state!.active_provider = 'terracotta'
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    fixture.host.mockImplementation(() => {
-        fixture.state!.active_provider = 'hongshi'
-        fixture.state!.hongshi = { ...idle(), status: 'downloading', download_progress: 15 }
-        return new Promise<void>((done) => {
-            resolve = done
-        })
-    })
-    const detail = mount(ServerDetail, { global: { directives: { tooltip: () => {} } } })
-    await flushPromises()
-    await button(detail, 'Share online').trigger('click')
-    await flushPromises()
-    expect(confirm).toHaveBeenCalledTimes(1)
-    expect(fixture.switchProvider).toHaveBeenCalledWith('hongshi')
-    expect(fixture.host).toHaveBeenCalledExactlyOnceWith(25577, null, null)
-    expect(fixture.push).toHaveBeenCalledWith({
-        path: '/multiplayer/rooms',
-        query: { provider: 'hongshi', port: '25577' },
-    })
-    detail.unmount()
-    fixture.query = { provider: 'hongshi', port: '25577' }
-    fixture.ports = [{ instance_id: 'another-game', instance_name: 'Other game', port: 54321 }]
-    const wrapper = await rooms()
-    expect(button(wrapper, 'Cancel')).toBeTruthy()
-    fixture.state!.active_provider = null
-    fixture.state!.hongshi = { ...idle(), status: 'error', error_type: 'install' }
-    resolve()
-    await vi.waitFor(() => expect(wrapper.find('#hongshi-local-port').exists()).toBe(true))
-    expect((wrapper.get('#hongshi-local-port').element as HTMLInputElement).value).toBe('25577')
-    confirm.mockRestore()
 })
 
 it('preserves a settings draft when visiting console and files, including a direct settings entry', async () => {

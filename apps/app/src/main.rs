@@ -219,7 +219,8 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
     // so "Java & performance" is populated without the user pressing Find Java.
     tauri::async_runtime::spawn(async {
         let started = std::time::Instant::now();
-        match theseus::prelude::jre::get_available_jres(false, true, false).await
+        match theseus::prelude::jre::get_available_jres(false, true, false)
+            .await
         {
             Ok(jres) => tracing::info!(
                 count = jres.len(),
