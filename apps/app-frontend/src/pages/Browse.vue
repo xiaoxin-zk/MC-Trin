@@ -1015,6 +1015,11 @@ const messages = defineMessages({
         id: 'app.browse.source.curseforge',
         defaultMessage: 'CurseForge',
     },
+    curseForgeNotConfigured: {
+        id: 'app.browse.source.curseforge-unavailable',
+        defaultMessage:
+            'CurseForge is hidden because this build has no API key. Add one in Settings → Resource management to search it here.',
+    },
     mcArchiveSource: {
         id: 'app.browse.source.mcarchive',
         defaultMessage: 'MCArchive',
@@ -2742,6 +2747,12 @@ provideBrowseManager({
                                 <component :is="option.icon" class="h-4 w-4" />
                                 {{ formatMessage(option.label) }}
                             </Button>
+                            <p
+                                v-if="!curseForgeCapability.configured"
+                                class="m-0 max-w-64 px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+                            >
+                                {{ formatMessage(messages.curseForgeNotConfigured) }}
+                            </p>
                         </div>
                     </template>
                 </PopoutMenu>
