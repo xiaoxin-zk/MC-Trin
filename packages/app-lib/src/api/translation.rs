@@ -981,8 +981,10 @@ async fn google_translate_segments(
         &request.source_language,
         TranslationProvider::Google,
     );
-    let target =
-        provider_language(&request.target_language, TranslationProvider::Google);
+    let target = provider_language(
+        &request.target_language,
+        TranslationProvider::Google,
+    );
     stream::iter(segments.iter().cloned())
         .map(|segment| {
             let source = &source;
@@ -1107,8 +1109,10 @@ async fn translate_uncached(
             google_translate_segments(segments, request).await
         }
         TranslationProvider::Bilibili => {
-            match bilibili_translate_with_retry(http, segments, settings, request)
-                .await
+            match bilibili_translate_with_retry(
+                http, segments, settings, request,
+            )
+            .await
             {
                 Ok(results) => Ok(results),
                 Err(error) => {
