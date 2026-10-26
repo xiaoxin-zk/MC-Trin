@@ -3,8 +3,8 @@ import { LeftArrowIcon, RightArrowIcon } from '@modrinth/assets'
 import { commonMessages, defineMessages, useVIntl } from '@modrinth/ui'
 import { useRouter } from 'vue-router'
 
-import MCTrinLogo from './MCTrinLogo.vue'
 import Breadcrumbs from './Breadcrumbs.vue'
+import MCTrinLogo from './MCTrinLogo.vue'
 
 defineProps<{
     isBetaBuild?: boolean
