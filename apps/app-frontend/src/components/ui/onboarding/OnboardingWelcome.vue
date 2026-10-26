@@ -3,7 +3,7 @@ import { MonitorIcon, RightArrowIcon } from '@modrinth/assets'
 import { Button, defineMessages, LOCALES, useVIntl } from '@modrinth/ui'
 import { computed, onMounted, ref } from 'vue'
 
-import AxolotlLogo from '@/components/ui/AxolotlLogo.vue'
+import MCTrinLogo from '@/components/ui/AxolotlLogo.vue'
 import { get, update } from '@/helpers/settings.ts'
 import i18n, {
     getSystemResolvedLocale,
@@ -136,7 +136,7 @@ async function toggleFollowSystem() {
         <div class="onboarding-welcome-brand-stage">
             <div class="onboarding-welcome-brand">
                 <div class="onboarding-welcome-logo">
-                    <AxolotlLogo icon-only />
+                    <MCTrinLogo icon-only />
                 </div>
                 <div class="onboarding-welcome-wordmark" aria-label="MC-Trin">
                     <span class="onboarding-welcome-wordmark-core" data-wordmark="MC"> MC </span>

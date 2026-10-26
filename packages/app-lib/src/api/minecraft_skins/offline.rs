@@ -236,7 +236,7 @@ fn build_resource_pack(
     let mut metadata = json!({
         "pack": {
             "pack_format": pack_format,
-            "description": "Axolotl Launcher offline skin"
+            "description": "MC-Trin offline skin"
         }
     });
 

@@ -14,7 +14,7 @@ use crate::state::{clear_log_buffer, push_log_line};
 const MAX_PTY_LINE_BYTES: usize = 256 * 1024;
 const MAX_SERVER_LOG_LINE_BYTES: usize = 64 * 1024;
 const SERVER_LOG_TRUNCATION_MARKER: &str =
-    " … [log output truncated by Axolotl] … ";
+    " … [log output truncated by MC-Trin] … ";
 
 async fn read_bounded_server_log_line<R>(
     reader: &mut R,
@@ -403,7 +403,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert!(first.contains("truncated by Axolotl"));
+        assert!(first.contains("truncated by MC-Trin"));
         assert!(first.len() <= MAX_SERVER_LOG_LINE_BYTES);
         assert_eq!(second, "next\n");
     }

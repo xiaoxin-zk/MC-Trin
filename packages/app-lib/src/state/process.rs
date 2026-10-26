@@ -33,7 +33,7 @@ const LOG_BUFFER_CAPACITY: usize = 10_000;
 const LOG_BUFFER_BYTE_CAPACITY: usize = 4 * 1024 * 1024;
 const MAX_LIVE_LOG_LINE_BYTES: usize = 64 * 1024;
 const MAX_PERSISTED_LOG_LINE_BYTES: usize = 256 * 1024;
-const LOG_TRUNCATION_MARKER: &str = " … [log output truncated by Axolotl] … ";
+const LOG_TRUNCATION_MARKER: &str = " … [log output truncated by MC-Trin] … ";
 const PROCESS_INITIALIZATION_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(15);
 
@@ -1504,7 +1504,7 @@ mod post_upgrade_tests {
 
         assert!(truncated.is_char_boundary(truncated.len()));
         assert!(truncated.len() <= MAX_LIVE_LOG_LINE_BYTES);
-        assert!(truncated.contains("truncated by Axolotl"));
+        assert!(truncated.contains("truncated by MC-Trin"));
         assert!(truncated.starts_with("prefix"));
         assert!(truncated.ends_with("suffix"));
     }
@@ -1521,7 +1521,7 @@ mod post_upgrade_tests {
 
         assert!(content.len() <= MAX_PERSISTED_LOG_LINE_BYTES);
         assert_eq!(content.len(), length_after_overflow);
-        assert!(content.contains("truncated by Axolotl"));
+        assert!(content.contains("truncated by MC-Trin"));
     }
 
     #[tokio::test]
@@ -1539,7 +1539,7 @@ mod post_upgrade_tests {
             .unwrap()
             .unwrap();
 
-        assert!(first.contains("truncated by Axolotl"));
+        assert!(first.contains("truncated by MC-Trin"));
         assert!(first.len() <= MAX_PERSISTED_LOG_LINE_BYTES);
         assert_eq!(second, "next\n");
     }

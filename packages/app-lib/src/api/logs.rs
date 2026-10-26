@@ -114,7 +114,7 @@ const LOG_COMPACTION_THRESHOLD: usize = 20;
 const MAX_LOG_DISPLAY_BYTES: usize = 2 * 1024 * 1024;
 const MAX_LOG_DISPLAY_LINE_BYTES: usize = 64 * 1024;
 const LOG_DISPLAY_TRUNCATION_MARKER: &str =
-    "\n… [log display truncated by Axolotl] …\n";
+    "\n… [log display truncated by MC-Trin] …\n";
 
 #[derive(Serialize, Debug)]
 pub struct LatestLogCursor {
@@ -250,7 +250,7 @@ fn push_compacted_log_run(
     if count >= LOG_COMPACTION_THRESHOLD {
         output.push_str(line);
         let _ =
-            write!(output, " (x{count} times - compacted by Axolotl Launcher)");
+            write!(output, " (x{count} times - compacted by MC-Trin)");
         output.push_str(line_ending);
         stats.compacted_runs += 1;
         stats.compacted_lines += count;
@@ -439,7 +439,7 @@ async fn maybe_emit_log_compaction_warning(
     }
 
     let _ = crate::event::emit::emit_warning(&format!(
-        "Axolotl Launcher has compacted {} repeated log lines in {} before displaying it for performance reasons.",
+        "MC-Trin has compacted {} repeated log lines in {} before displaying it for performance reasons.",
         format_count(stats.compacted_lines),
         file_name,
     ))
@@ -455,7 +455,7 @@ async fn maybe_emit_log_display_truncation_warning(
     }
 
     let _ = crate::event::emit::emit_warning(&format!(
-        "Axolotl Launcher truncated {file_name} before displaying it to keep the console responsive. The original log file remains unchanged.",
+        "MC-Trin truncated {file_name} before displaying it to keep the console responsive. The original log file remains unchanged.",
     ))
     .await;
 }
@@ -970,7 +970,7 @@ mod tests {
 
         assert!(compacted.display_truncated);
         assert!(compacted.output.len() <= MAX_LOG_DISPLAY_BYTES);
-        assert!(compacted.output.contains("truncated by Axolotl"));
+        assert!(compacted.output.contains("truncated by MC-Trin"));
         assert!(compacted.output.is_char_boundary(compacted.output.len()));
     }
 

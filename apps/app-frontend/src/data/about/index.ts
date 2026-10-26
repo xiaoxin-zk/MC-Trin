@@ -1,6 +1,3 @@
-import contributorsData from './contributors.json'
-import teamData from './team.json'
-
 export interface TeamMember {
 	name: string
 	avatar: string
@@ -16,15 +13,8 @@ export interface Contributor {
 	contributions: number
 }
 
-const teamAvatarModules = import.meta.glob('./avatars/*', {
-	eager: true,
-	import: 'default',
-	query: '?url',
-}) as Record<string, string>
-
-export const teamMembers: (TeamMember & { avatarUrl: string })[] = teamData.map((member) => ({
-	...member,
-	avatarUrl: teamAvatarModules[`./avatars/${member.avatar}`],
-}))
-
-export const contributors = contributorsData as Contributor[]
+// MC-Trin intentionally exposes only its author on the About page. Keep the
+// typed exports for plugin compatibility without loading the upstream team or
+// contributor catalog into the application bundle.
+export const teamMembers: (TeamMember & { avatarUrl: string })[] = []
+export const contributors: Contributor[] = []

@@ -621,7 +621,7 @@ pub(crate) const FETCH_V3_FRIEND: &str = "/v3/friend/";
 pub(crate) const FETCH_V3_FRIENDS: &str = "/v3/friends";
 pub(crate) const FETCH_V3_NOTIFICATION: &str = "/v3/notification";
 pub(crate) const H2_DOWNLOAD_ASSET: &str = "asset";
-pub(crate) const H2_DOWNLOAD_AXOLOTL_LAUNCHER: &str = "Axolotl Launcher";
+pub(crate) const H2_DOWNLOAD_AXOLOTL_LAUNCHER: &str = "MC-Trin";
 pub(crate) const H2_DOWNLOAD_BELOW_EXPECTATION: &str = "below expectation";
 pub(crate) const H2_DOWNLOAD_BYTES_0_0: &str = "bytes=0-0";
 pub(crate) const H2_DOWNLOAD_CONTENT_RANGE: &str = "Content-Range";

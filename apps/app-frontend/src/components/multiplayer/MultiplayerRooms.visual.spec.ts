@@ -37,6 +37,11 @@ vi.mock('@/helpers/multiplayer', async (original) => ({
         hostHongshi: fixture.host,
         stop: fixture.stop,
         switchProvider: fixture.switchProvider,
+        startMctier: vi.fn(),
+        stopMctier: vi.fn(),
+        createMctierInvite: vi.fn(),
+        setMctierPublic: vi.fn(),
+        sendMctierVoiceSignal: vi.fn(),
     },
 }))
 vi.mock('@/helpers/terracotta', () => ({
@@ -234,80 +239,12 @@ afterEach(() => {
     wrappers = []
 })
 
-it('first room automatically installs and can be cancelled while its request is pending', async () => {
-    let reject!: (error: unknown) => void
-    fixture.host.mockImplementation(() => {
-        fixture.state!.active_provider = 'hongshi'
-        fixture.state!.hongshi = { ...idle(), status: 'downloading', download_progress: 42 }
-        return new Promise((_, fail) => {
-            reject = fail
-        })
-    })
-    fixture.stop.mockImplementation(async () => {
-        fixture.state!.active_provider = null
-        fixture.state!.hongshi = idle()
-        reject({ message: 'RedStone operation cancelled' })
-    })
+it('renders the MC-Trin room workflow without legacy provider controls', async () => {
     const wrapper = await rooms()
-    expect(button(wrapper, 'Create public room').attributes('disabled')).toBeUndefined()
-    await button(wrapper, 'Create public room').trigger('click')
-    await vi.waitFor(() =>
-        expect(wrapper.get('[role=progressbar]').attributes('aria-valuenow')).toBe('42'),
-    )
-    expect(button(wrapper, 'Cancel').attributes('disabled')).toBeUndefined()
-    await button(wrapper, 'Cancel').trigger('click')
-    await vi.waitFor(() => expect(button(wrapper, 'Create public room')).toBeTruthy())
-    expect(fixture.host).toHaveBeenCalledExactlyOnceWith(25565, null, null)
-    expect(fixture.stop).toHaveBeenCalledTimes(1)
-    expect(fixture.notify).not.toHaveBeenCalled()
-})
-
-it('an unpublished macOS build keeps port and node inputs and succeeds on retry', async () => {
-    fixture.host
-        .mockImplementationOnce(async () => {
-            fixture.state!.hongshi = { ...idle(), status: 'error', error_type: 'build_unavailable' }
-            throw { message: 'not uploaded yet (hongshic-macos-arm64)' }
-        })
-        .mockImplementationOnce(async () => {
-            fixture.state!.active_provider = 'hongshi'
-            fixture.state!.hongshi = {
-                ...idle(),
-                binary_installed: true,
-                status: 'open',
-                public_address: 'relay.example.com:34575',
-            }
-        })
-    const wrapper = await rooms()
-    await wrapper.get('#hongshi-local-port').setValue('25578')
-    await wrapper.findAll('select')[1].setValue('New region')
-    await button(wrapper, 'Create public room').trigger('click')
-    await vi.waitFor(() => expect(wrapper.text()).toContain('not been published'))
-    expect((wrapper.get('#hongshi-local-port').element as HTMLInputElement).value).toBe('25578')
-    expect((wrapper.findAll('select')[1].element as HTMLSelectElement).value).toBe('New region')
-    await button(wrapper, 'Create public room').trigger('click')
-    await vi.waitFor(() => expect(wrapper.text()).toContain('Public address'))
-    expect(fixture.host).toHaveBeenNthCalledWith(2, 25578, 'New region', null)
-})
-
-it('an explicit manual port survives refreshed LAN detection, failure and retry', async () => {
-    fixture.ports = [{ instance_id: 'game', instance_name: 'Detected game', port: 54321 }]
-    fixture.host.mockImplementation(async () => {
-        fixture.state!.hongshi = { ...idle(), status: 'error', error_type: 'build_unavailable' }
-        throw { message: 'not uploaded yet' }
-    })
-    const wrapper = await rooms()
-    expect((wrapper.findAll('select')[0].element as HTMLSelectElement).value).toBe('game')
-    await wrapper.findAll('select')[0].setValue('manual')
-    await wrapper.get('#hongshi-local-port').setValue('25582')
-    await button(wrapper, 'Create public room').trigger('click')
-    await vi.waitFor(() => expect(wrapper.text()).toContain('not been published'))
-    expect((wrapper.get('#hongshi-local-port').element as HTMLInputElement).value).toBe('25582')
-    expect(fixture.host).toHaveBeenCalledExactlyOnceWith(25582, null, null)
-    await button(wrapper, 'Create public room').trigger('click')
-    await vi.waitFor(() => expect(fixture.host).toHaveBeenCalledTimes(2))
-    await flushPromises()
-    expect((wrapper.get('#hongshi-local-port').element as HTMLInputElement).value).toBe('25582')
-    expect(fixture.host).toHaveBeenNthCalledWith(2, 25582, null, null)
+    expect(wrapper.text()).toContain('MC-Trin LAN lobby')
+    expect(wrapper.text()).not.toContain('Terracotta')
+    expect(wrapper.text()).not.toContain('RedStone Online 2')
+    expect(wrapper.findAll('select')).toHaveLength(0)
 })
 
 it('server sharing starts before navigation and preserves its port when the detail page unmounts', async () => {

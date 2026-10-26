@@ -371,6 +371,10 @@ const messages = defineMessages({
 })
 
 const tabIndex = ref(0)
+// The legacy Terracotta and RedStone panels remain available to the runtime for
+// migration compatibility, but the MC-Trin lobby surface only exposes room
+// creation, invitation and joining.
+const legacyProvidersVisible = ref(false)
 const roomCodeTouched = ref(false)
 const {
     activeProvider,
@@ -401,7 +405,7 @@ const {
     switchProvider,
     terracottaUpdate,
     updateTerracotta,
-} = useMultiplayerSession()
+} = useMultiplayerSession({ legacyProviders: false })
 
 const providerStorageKey = 'axolotl-multiplayer-provider'
 const nodeStorageKey = 'axolotl-hongshi-node'
@@ -669,6 +673,12 @@ function submitJoin() {
 
 <template>
     <div class="flex min-h-0 w-full flex-1 flex-col gap-3">
+        <MctierRooms
+            :state="multiplayerState?.mctier"
+            :initial-invite-code="initialMctierInvite"
+        />
+    </div>
+    <div v-if="legacyProvidersVisible" class="flex min-h-0 w-full flex-1 flex-col gap-3">
         <div class="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <PopoutMenu placement="bottom-end">
                 <Button size="md" class="flex min-w-36 items-center gap-2"
