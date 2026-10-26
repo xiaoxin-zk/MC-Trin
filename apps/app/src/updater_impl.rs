@@ -17,8 +17,7 @@ use url::Url;
 
 /// The updater manifest is published as an asset on the latest GitHub release,
 /// so updates need no separately hosted update server.
-const UPDATE_MANIFEST_URL: &str =
-    "https://github.com/xiaoxin-zk/MC-Trin/releases/latest/download/latest.json";
+const UPDATE_MANIFEST_URL: &str = "https://github.com/xiaoxin-zk/MC-Trin/releases/latest/download/latest.json";
 /// Only the apt-managed Linux path needs this: the signed updater manifest
 /// carries AppImage/NSIS artifacts, not the .deb.
 const GITHUB_RELEASE_API: &str =
@@ -107,7 +106,9 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
     let candidates: Vec<GithubReleaseAsset> = release
         .assets
         .into_iter()
-        .filter(|asset| asset.name.ends_with(".deb") && asset.name.contains(arch))
+        .filter(|asset| {
+            asset.name.ends_with(".deb") && asset.name.contains(arch)
+        })
         .collect();
     let asset = candidates
         .iter()
@@ -549,7 +550,9 @@ impl Drop for TempDebFile {
 
 #[cfg(test)]
 mod tests {
-    use super::{UPDATE_MANIFEST_URL, apt_deb_arch, update_channel, update_endpoint};
+    use super::{
+        UPDATE_MANIFEST_URL, apt_deb_arch, update_channel, update_endpoint,
+    };
 
     #[test]
     fn metadata_endpoint_is_the_release_manifest() {
