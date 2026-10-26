@@ -26,8 +26,10 @@ const DOWNLOAD_BASES: [&str; 5] = [
 
 const PER_SOURCE_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(120);
+// Permit all five direct sources and all five proxy-backed sources to reach
+// their per-source timeout, with time left for extraction and verification.
 const DOWNLOAD_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_secs(600);
+    std::time::Duration::from_secs(1500);
 
 pub fn release_for(
     os: &str,
