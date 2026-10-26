@@ -505,11 +505,11 @@ const messages = defineMessages({
     curseforgeApiKeyDescription: {
         id: 'app.settings.resources.curseforge-api-key-description',
         defaultMessage:
-            'Used for CurseForge search, project pages, and installations. A key entered here replaces the one the launcher provides.',
+            'Optional. CurseForge search, project pages and installations use the key bundled with the launcher; a key entered here only overrides it.',
     },
     curseforgeApiKeyField: {
         id: 'app.settings.resources.curseforge-api-key-field',
-        defaultMessage: 'API key',
+        defaultMessage: 'API key (optional)',
     },
     curseforgeApiKeyPlaceholder: {
         id: 'app.settings.resources.curseforge-api-key-placeholder',
@@ -526,7 +526,7 @@ const messages = defineMessages({
     curseforgeApiKeyStatusMissing: {
         id: 'app.settings.resources.curseforge-api-key-status-missing',
         defaultMessage:
-            'No key is available. CurseForge content cannot be searched or installed until one is set here.',
+            'This build does not bundle a CurseForge key. Enter one here to add CurseForge to the content sources; every other source keeps working without it.',
     },
     curseforgeApiKeyStatusUnauthorized: {
         id: 'app.settings.resources.curseforge-api-key-status-unauthorized',

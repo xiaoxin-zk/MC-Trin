@@ -667,7 +667,7 @@ html {
 }
 
 .accent-custom {
-    --color-brand: var(--custom-accent-light, var(--color-pink));
+    --color-brand: var(--custom-accent-light, var(--color-green));
     // A custom accent is not one of the palette tones, so the base is the accent
     // itself rather than a `<tone>-highlight-opaque`.
     --color-brand-highlight-opaque: var(--color-brand);
@@ -676,7 +676,7 @@ html {
 
 .dark-mode.accent-custom,
 .dark.accent-custom {
-    --color-brand: var(--custom-accent-dark, var(--color-pink));
+    --color-brand: var(--custom-accent-dark, var(--color-green));
 }
 
 // The one place `--color-brand-highlight` is defined: it mixes whichever base

@@ -1177,7 +1177,7 @@ export const languageSelectorMessages = defineMessages({
     languageWarning: {
         id: 'settings.language.warning',
         defaultMessage:
-            'Changing the {platform} language may cause some content to appear in English if a translation is not available. The {platform} is not yet fully translated, so some content may remain in English for certain languages.',
+            'Switching the {platform} language applies immediately. Content that has a translation appears in the selected language, and anything without one stays in English.',
     },
     noResults: {
         id: 'settings.language.languages.search.no-results',

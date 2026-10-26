@@ -246,6 +246,10 @@ jobs:
           node --test apps/installer-ui/tests/installer-ui.test.cjs
       - name: Compile Windows application and installer UI without release optimization
         if: runner.os == 'Windows'
+        env:
+          # Compile the CI binary with the bundled CurseForge key so the build
+          # exercises the same content sources a release build offers.
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         run: |
           node scripts/axolotl/build-desktop.mjs --profile ci
           node scripts/axolotl/build-desktop.mjs --profile ci --installer-only

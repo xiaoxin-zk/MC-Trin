@@ -1003,15 +1003,13 @@ impl Settings {
                 .map(|path| path.to_string_lossy().into_owned())
         });
 
-        if let Some(timezone) = timezone {
-            return locale_prefers_mirror(&timezone);
+        // `auto` now prefers mirrors unless the timezone is recognisably not
+        // Chinese-speaking: each download keeps an official fallback route, so
+        // a mirror that is unhealthy or blocked never breaks an install.
+        match timezone {
+            Some(timezone) => locale_prefers_mirror(&timezone),
+            None => true,
         }
-
-        locale_prefers_mirror(&self.locale)
-            || ["LC_ALL", "LC_MESSAGES", "LANG"]
-                .into_iter()
-                .filter_map(|key| std::env::var(key).ok())
-                .any(|value| locale_prefers_mirror(&value))
     }
 
     pub async fn migrate(exec: &Pool<Sqlite>) -> crate::Result<()> {

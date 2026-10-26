@@ -987,7 +987,7 @@ watch(
                         "
                         :disabled="themeStore.systemAccentSupported !== true"
                         :selected="isSystemAccent"
-                        :background="themeStore.systemAccentColor ?? 'var(--color-pink)'"
+                        :background="themeStore.systemAccentColor ?? 'var(--color-green)'"
                         class="basis-[8.25rem]"
                         @click="
                             () => {

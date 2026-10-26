@@ -40,7 +40,7 @@ export const DEFAULT_FEATURE_FLAGS = {
 
 export const THEME_OPTIONS = ['dark', 'light', 'oled', 'system'] as const
 export const ACCENT_COLOR_OPTIONS = ['pink', 'orange', 'green', 'blue', 'purple'] as const
-export const DEFAULT_CUSTOM_ACCENT_COLOR = '#db2777'
+export const DEFAULT_CUSTOM_ACCENT_COLOR = '#00af5c'
 
 export type FeatureFlag = keyof typeof DEFAULT_FEATURE_FLAGS
 export type FeatureFlags = Record<FeatureFlag, boolean>
@@ -264,7 +264,7 @@ export const useTheming = defineStore('themeStore', {
             } else if (this.selectedAccentColor === 'system') {
                 html.style.removeProperty('--custom-accent-light')
                 html.style.removeProperty('--custom-accent-dark')
-                html.classList.add('accent-pink')
+                html.classList.add('accent-green')
             } else {
                 html.style.removeProperty('--custom-accent-light')
                 html.style.removeProperty('--custom-accent-dark')

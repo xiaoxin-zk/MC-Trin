@@ -3507,7 +3507,7 @@
     "defaultMessage": "语言"
   },
   "settings.language.warning": {
-    "defaultMessage": "切换{platform}语言后，若一些内容译文暂缺，将以英文显示。本{platform}本地化工作尚在进行中，因此某些语言的部分内容可能仍显示为英文。"
+    "defaultMessage": "切换{platform}语言后立即生效。已有译文的内容会显示为所选语言，暂无译文的内容仍显示为英文。"
   },
   "settings.pats.title": {
     "defaultMessage": "个人访问令牌"

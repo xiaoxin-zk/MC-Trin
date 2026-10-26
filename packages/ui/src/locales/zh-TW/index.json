@@ -3006,7 +3006,7 @@
     "defaultMessage": "語言"
   },
   "settings.language.warning": {
-    "defaultMessage": "變更{platform}的語言後，若部分內容尚未提供翻譯，則會以英文顯示。{platform}目前尚未完全翻譯，因此，在某些語言下，部分內容仍可能以英文顯示。"
+    "defaultMessage": "切換{platform}語言後立即生效。已有翻譯的內容會顯示為所選語言，尚無翻譯的內容仍顯示為英文。"
   },
   "settings.pats.title": {
     "defaultMessage": "個人存取權杖"
