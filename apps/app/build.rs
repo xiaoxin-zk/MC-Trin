@@ -1124,7 +1124,6 @@ fn main() {
                         "multiplayer_reset",
                         "multiplayer_get_player_name",
                         "multiplayer_open_hongshi_logs",
-                        "multiplayer_open_sakura",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

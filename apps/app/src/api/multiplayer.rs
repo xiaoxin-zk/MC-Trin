@@ -19,50 +19,8 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             multiplayer_reset,
             multiplayer_get_player_name,
             multiplayer_open_hongshi_logs,
-            multiplayer_open_sakura,
         ])
         .build()
-}
-
-#[derive(serde::Serialize)]
-pub struct SakuraClientStatus {
-    pub installed: bool,
-    pub path: Option<String>,
-}
-
-#[tauri::command]
-pub async fn multiplayer_open_sakura() -> Result<SakuraClientStatus> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut candidates = Vec::new();
-        if let Some(program_files) = std::env::var_os("ProgramFiles") {
-            candidates.push(
-                std::path::PathBuf::from(program_files)
-                    .join("SakuraFrpLauncher/SakuraLauncher.exe"),
-            );
-        }
-        if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
-            candidates.push(
-                std::path::PathBuf::from(program_files_x86)
-                    .join("SakuraFrpLauncher/SakuraLauncher.exe"),
-            );
-        }
-        let path = candidates.into_iter().find(|candidate| candidate.is_file());
-        if let Some(path) = path {
-            std::process::Command::new(&path).spawn().map_err(|error| {
-                eyre::eyre!("could not start SakuraFrp: {error}")
-            })?;
-            return Ok(SakuraClientStatus {
-                installed: true,
-                path: Some(path.to_string_lossy().into_owned()),
-            });
-        }
-    }
-
-    Ok(SakuraClientStatus {
-        installed: false,
-        path: None,
-    })
 }
 
 #[tauri::command]
