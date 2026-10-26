@@ -1,0 +1,13 @@
+# Windows has stack overflows when calling from Tauri, so we increase the default stack size used by the compiler
+[target."cfg(windows)"]
+rustflags = ["-C", "link-args=/STACK:16777220"]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+
+# MODRINTH_* service URLs are intentionally NOT set here. They used to live in
+# [env] as public defaults, but Cargo fingerprints those process-env values
+# while app-lib build.rs bakes a different value from packages/app-lib/.env
+# via rustc-env for env!(). That mismatch kept `theseus` permanently dirty.
+# build.rs now owns the single resolution chain: .env → process env → public
+# defaults.

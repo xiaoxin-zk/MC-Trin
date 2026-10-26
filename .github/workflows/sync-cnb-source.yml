@@ -1,0 +1,14 @@
+name: External source sync (disabled)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disabled:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "External source mirroring is disabled for MC-Trin."

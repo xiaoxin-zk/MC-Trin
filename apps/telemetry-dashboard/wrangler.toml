@@ -1,0 +1,23 @@
+name = "axolotl-telemetry-dashboard"
+main = ".output/server/index.mjs"
+compatibility_date = "2025-08-13"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[assets]
+directory = ".output/public"
+binding = "ASSETS"
+
+[vars]
+NUXT_PUBLIC_ADMIN_ORIGIN = "https://telemetry-api.axlmc.org"
+NUXT_PUBLIC_WORKER_HEALTH_URL = "https://telemetry.axlmc.org/health"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "axolotl-telemetry"
+database_id = "8692e2b1-6156-4b0b-94f5-6e7204c05dff"
+remote = true
+
+[observability]
+enabled = true
+head_sampling_rate = 0.01

@@ -1,0 +1,53 @@
+[files]
+extend-exclude = [
+  "**/src/locales/",
+  "patches/",
+  "packages/utils/",
+  "packages/ui/",
+  # Generated recipe data contains texture hashes that look like words.
+  "apps/app-frontend/src/lab/recipe-generator/assets/",
+  # Generated contributor list contains usernames that look like typos.
+  "apps/app-frontend/src/data/about/contributors.json",
+  # Vendored upstream submodule, not checked out by CI.
+  "apps/app/vendor/",
+  # Generated mod search index contains project slugs, names, and compressed data.
+  "packages/app-lib/src/api/content_search/WikiEntries.txt",
+  # Bundled Monaco editor runtime contains upstream generated assets.
+  "apps/app-frontend/public/monaco/",
+]
+
+[default]
+# Historical MultiMC JSON key retained for compatibility with upstream.
+extend-ignore-re = ['"MMC-absulute_url"']
+
+[default.extend-words]
+# Terms Of Use in `tou-link`
+tou = "tou"
+# Google Ad Manager
+gam = "gam"
+# short for "constants"
+consts = "consts"
+# short for "Copy"
+Cpy = "Cpy"
+# AI model provider name
+relace = "relace"
+# Minecraft schematic file extension (Sponge schem format)
+schem = "schem"
+# tasklist.exe CSV output format flag
+FO = "FO"
+# short for "Forge" loader monogram
+Fo = "Fo"
+# Short variable name used by the bundled easter egg game.
+nd = "nd"
+# Vietnamese place name used in the native language label.
+Nam = "Nam"
+# Actually it is PNGs
+PN = "PN"
+# ID for stronghold-straight
+SHS = "SHS"
+
+[default.extend-identifiers]
+# Minecraft locale identifiers containing the ISO 3166-1 code for Bosnia and
+# Herzegovina or the ISO 639-1 code for Bashkir.
+bs_ba = "bs_ba"
+ba_ru = "ba_ru"

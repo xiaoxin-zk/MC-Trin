@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-accent="emerald" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MC-Trin 启动器</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<!-- ===== 图标精灵 ===== -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 4.8-9 4.8-9-4.8L12 3Z"/><path d="m3 12.4 9 4.8 9-4.8"/><path d="m3 17 9 4.8 9-4.8"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18-2.6-2.6-2.6-15.4 0-18Z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3.2"/><path d="M12 3v4M8.5 12.5v1.5M15.5 12.5v1.5M2 12v3M22 12v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 0 1-11 0z"/><path d="M12 16.5V21"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.2v13.6L19 12 8 5.2Z" fill="currentColor" stroke-linejoin="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M16.2 5.2a3.4 3.4 0 0 1 0 6.6M17.5 20a6.4 6.4 0 0 0-1.2-3.6"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2.8" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.2"/></symbol>
+  <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="M9 9V6a3 3 0 0 1 5.8-1.1M15 11v1.5a3 3 0 0 1-4.6 2.6"/><path d="M5.5 11.5a6.5 6.5 0 0 0 9.4 5.8M12 18v3.2M3 3l18 18"/></symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4.5 14.5v-2.3a7.5 7.5 0 0 1 15 0v2.3"/><rect x="2.6" y="13.4" width="4.4" height="7" rx="2"/><rect x="17" y="13.4" width="4.4" height="7" rx="2"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.4 2.6 5.4 5.9.8-4.3 4.2 1.1 5.9-5.3-2.9-5.3 2.9 1.1-5.9L3.5 9.6l5.9-.8L12 3.4Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m5 9 7 7 7-7"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17.5V20a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.4h6.5A1.5 1.5 0 0 1 19 9.9V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 18z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11.5A8 8 0 0 0 6.2 6.2L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 12.5a8 8 0 0 0 13.8 5.3L20 15.5"/><path d="M20 20v-4.5h-4.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 5.6v6.1c0 4.3 2.9 7.5 7 9.3 4.1-1.8 7-5 7-9.3V5.6z"/><path d="m9 12 2.2 2.2L15.4 10"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13.5 2.5 5 13.5h5.5L9.5 21.5 19 10h-5.5z"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M15.5 3.5a5 5 0 0 0-5.9 6.4L3.5 16l4.5 4.5 6.1-6.1a5 5 0 0 0 6.4-5.9l-3.1 3.1-2.6-.4-.4-2.6z"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.9 4.9L19 9.8l-5.1 1.9L12 16.6l-1.9-4.9L5 9.8l5.1-1.9z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H9l-5 4z"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><rect x="10" y="10" width="4" height="4" rx=".6"/><path d="M9.5 2.5v4M14.5 2.5v4M9.5 17.5v4M14.5 17.5v4M2.5 9.5h4M2.5 14.5h4M17.5 9.5h4M17.5 14.5h4"/></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></symbol>
+  <symbol id="i-min" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 4-1.5 5.5-2.5 6.5h17C19.5 14.5 18 13 18 9Z"/><path d="M10 19a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20.5 4 13 20.5l-2.3-6.4z"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M20 11.5 12.2 19.3a5 5 0 0 1-7-7l8.3-8.3a3.3 3.3 0 0 1 4.7 4.7l-8.3 8.3a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7.5 10 2.5 2.5-2.5 2.5M13 15h4"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2s-.7-2-.7-3 .8-1.5 2-1.5H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M13.5 4.5c3.5-1.5 6 0 6 0s1.5 2.5 0 6c-1.3 3-4.2 6-4.2 6l-3.3-1.5-1.5-3.3s3-4.2 6-6Z"/><path d="M9 15l-4.5 4.5M8 11 4 12l2.5 2.5M13 16l-1 4 2.5-2.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5.5H4.5V8A3 3 0 0 0 7 11M17 5.5h2.5V8a3 3 0 0 1-2.5 3"/><path d="M12 14v3.5M8.5 20.5h7"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L13 5v14L7.5 14.5H4z"/><path d="M16.5 9a4.5 4.5 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v8.5A1.5 1.5 0 0 0 5 15h1.5"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M13 4h7v7M20 4l-8.5 8.5"/><path d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V7.5A1.5 1.5 0 0 1 5 6h4.5"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6.5h16M7 12h10M10 17.5h4"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="6.5" rx="2"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"/><path d="M7 7.2h.01M7 16.8h.01"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3 9a13 13 0 0 1 18 0M6.5 12.5a8.5 8.5 0 0 1 11 0M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19.5" r="1.1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-5 4 4 3-2.5 4 3.5"/></symbol>
+  <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M10 4.5a2 2 0 1 1 4 0V6h3a1 1 0 0 1 1 1v3h1.5a2 2 0 1 1 0 4H18v3a1 1 0 0 1-1 1h-3v-1.5a2 2 0 1 0-4 0V19H7a1 1 0 0 1-1-1v-3H4.5a2 2 0 1 1 0-4H6V7a1 1 0 0 1 1-1h3z"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- ===== 标题栏 ===== -->
+  <header class="titlebar" data-tauri-drag-region>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="brand-name">MC-Trin</span>
+      <span class="brand-ver">v0.9.4</span>
+    </div>
+
+    <div class="titlebar-search">
+      <svg class="i"><use href="#i-search"/></svg>
+      <input id="globalSearch" type="text" placeholder="搜索实例、整合包、模组、房间或插件…" />
+      <kbd>Ctrl K</kbd>
+    </div>
+
+    <div class="titlebar-right">
+      <button class="icon-btn" title="通知"><svg class="i"><use href="#i-bell"/></svg><span class="dot"></span></button>
+      <button class="icon-btn" title="主题切换" data-action="toggle-theme"><svg class="i"><use href="#i-palette"/></svg></button>
+      <div class="win-controls">
+        <button class="win-btn" title="最小化"><svg class="i"><use href="#i-min"/></svg></button>
+        <button class="win-btn" title="最大化"><svg class="i"><use href="#i-max"/></svg></button>
+        <button class="win-btn win-close" title="关闭"><svg class="i"><use href="#i-close"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <!-- ===== 侧边栏 ===== -->
+    <aside class="sidebar">
+      <nav class="nav">
+        <p class="nav-label">游戏</p>
+        <button class="nav-item is-active" data-goto="home">
+          <svg class="i"><use href="#i-home"/></svg><span>启动页</span>
+        </button>
+        <button class="nav-item" data-goto="versions">
+          <svg class="i"><use href="#i-layers"/></svg><span>版本与实例</span><b class="badge">6</b>
+        </button>
+        <button class="nav-item" data-goto="download">
+          <svg class="i"><use href="#i-download"/></svg><span>资源下载</span>
+        </button>
+
+        <p class="nav-label">社交</p>
+        <button class="nav-item" data-goto="multiplayer">
+          <svg class="i"><use href="#i-globe"/></svg><span>联机大厅</span><b class="badge badge-live">LIVE</b>
+        </button>
+
+        <p class="nav-label">智能</p>
+        <button class="nav-item" data-goto="ai">
+          <svg class="i"><use href="#i-bot"/></svg><span>AI 助手</span><b class="badge badge-ai">MCP</b>
+        </button>
+
+        <p class="nav-label">扩展</p>
+        <button class="nav-item" data-goto="plugins">
+          <svg class="i"><use href="#i-plug"/></svg><span>插件管理</span><b class="badge badge-new">本地</b>
+        </button>
+        <button class="nav-item" data-goto="settings">
+          <svg class="i"><use href="#i-settings"/></svg><span>设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="side-card">
+          <div class="side-card-title"><svg class="i"><use href="#i-cpu"/></svg>运行状态</div>
+          <div class="meter"><span style="width:38%"></span></div>
+          <div class="side-card-row"><span>内存 8.2 / 16 GB</span><span>CPU 24%</span></div>
+        </div>
+
+        <div class="account">
+          <div class="avatar">林</div>
+          <div class="account-copy">
+            <strong>林间旅人</strong>
+            <span><i class="online"></i>微软正版账号</span>
+          </div>
+          <button class="icon-btn small" title="切换账号"><svg class="i"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== 主内容 ===== -->
+    <main class="main" id="main">
+
+      <!-- ============ 启动页 ============ -->
+      <section class="view is-active" data-view="home">
+        <header class="view-head">
+          <div>
+            <h1>启动页</h1>
+            <p>读取本地实例与账户状态…</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-ghost" data-action="import"><svg class="i"><use href="#i-folder"/></svg>导入整合包</button>
+            <button class="btn btn-primary" data-action="new-instance"><svg class="i"><use href="#i-plus"/></svg>新建实例</button>
+          </div>
+        </header>
+
+        <div class="home-grid">
+          <div class="home-left">
+
+            <article class="hero card">
+              <div class="hero-glow"></div>
+              <div class="hero-main">
+                <div class="hero-tags">
+                  <span class="pill pill-live"><svg class="i"><use href="#i-zap"/></svg>实例就绪</span>
+                  <span class="pill">Fabric 0.15.7</span>
+                  <span class="pill">1.20.4</span>
+                </div>
+                <h2>星穹冒险 · 整合包</h2>
+                <p class="hero-desc">128 个模组 · 云存档已同步 · 上次退出正常</p>
+                <div class="hero-stats">
+                  <div><strong>128</strong><span>模组</span></div>
+                  <div><strong>42.6h</strong><span>游玩时长</span></div>
+                  <div><strong>3</strong><span>存档</span></div>
+                  <div><strong>8 GB</strong><span>内存分配</span></div>
+                </div>
+                <div class="hero-actions">
+                  <button class="btn btn-primary btn-lg" data-action="launch">
+                    <svg class="i"><use href="#i-play"/></svg>启动游戏
+                  </button>
+                  <button class="btn btn-soft" data-action="open-folder">
+                    <svg class="i"><use href="#i-folder"/></svg>打开文件夹
+                  </button>
+                  <button class="btn btn-ghost" data-goto="versions">编辑实例</button>
+                </div>
+              </div>
+              <div class="hero-art" aria-hidden="true">
+                <div class="cube">
+                  <div class="cube-top"></div>
+                  <div class="cube-left"></div>
+                  <div class="cube-right"></div>
+                </div>
+                <div class="cube cube-sm c1"><div class="cube-top"></div><div class="cube-left"></div><div class="cube-right"></div></div>
+                <div class="cube cube-sm c2"><div class="cube-top"></div><div class="cube-left"></div><div class="cube-right"></div></div>
+                <div class="hero-ring"></div>
+              </div>
+            </article>
+
+            <div class="feature-row">
+              <button class="feature-card" data-goto="multiplayer">
+                <span class="feature-icon tone-cyan"><svg class="i"><use href="#i-mic"/></svg></span>
+          <span class="feature-copy"><strong>联机大厅</strong><em>MCTier 公开房间 · 邀请链接</em></span>
+                <svg class="i feature-arrow"><use href="#i-chevron"/></svg>
+              </button>
+              <button class="feature-card" data-goto="ai">
+                <span class="feature-icon tone-violet"><svg class="i"><use href="#i-bot"/></svg></span>
+          <span class="feature-copy"><strong>AI 助手</strong><em>自选 MCP 工具 · 非只读调用逐项确认</em></span>
+                <svg class="i feature-arrow"><use href="#i-chevron"/></svg>
+              </button>
+              <button class="feature-card" data-goto="plugins">
+                <span class="feature-icon tone-amber"><svg class="i"><use href="#i-plug"/></svg></span>
+          <span class="feature-copy"><strong>插件管理</strong><em>本地 manifest · 自定义主题与页面</em></span>
+                <svg class="i feature-arrow"><use href="#i-chevron"/></svg>
+              </button>
+            </div>
+
+            <article class="card block">
+              <div class="block-head">
+                <h3>最近游玩</h3>
+                <button class="link-btn" data-goto="versions">全部实例<svg class="i"><use href="#i-arrow-right"/></svg></button>
+              </div>
+              <ul class="recent-list">
+                <li>
+                  <span class="cover cover-a">星</span>
+                  <div class="recent-copy"><strong>星穹冒险 · 整合包</strong><span>Fabric 1.20.4 · 128 模组</span></div>
+                  <span class="recent-time">2 小时前</span>
+                  <button class="btn btn-soft btn-xs" data-action="launch">启动</button>
+                </li>
+                <li>
+                  <span class="cover cover-b">机</span>
+                  <div class="recent-copy"><strong>机械动力：创世</strong><span>NeoForge 1.21.1 · 86 模组</span></div>
+                  <span class="recent-time">昨天</span>
+                  <button class="btn btn-soft btn-xs" data-action="launch">启动</button>
+                </li>
+                <li>
+                  <span class="cover cover-c">原</span>
+                  <div class="recent-copy"><strong>原版生存 1.21.4</strong><span>Vanilla · 0 模组</span></div>
+                  <span class="recent-time">3 天前</span>
+                  <button class="btn btn-soft btn-xs" data-action="launch">启动</button>
+                </li>
+                <li>
+                  <span class="cover cover-d">空</span>
+                  <div class="recent-copy"><strong>天空工厂 4</strong><span>Forge 1.19.2 · 214 模组</span></div>
+                  <span class="recent-time">上周</span>
+                  <button class="btn btn-soft btn-xs" data-action="launch">启动</button>
+                </li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="home-right">
+            <article class="card block stat-card">
+              <div class="block-head"><h3>本周游玩</h3><span class="tag-soft">本地统计</span></div>
+              <div class="stat-main"><strong>12.5</strong><span>小时</span></div>
+              <div class="bars" aria-hidden="true">
+                <i style="height:38%"></i><i style="height:62%"></i><i style="height:44%"></i><i style="height:78%"></i><i style="height:56%"></i><i style="height:96%"></i><i style="height:70%"></i>
+              </div>
+              <div class="bars-legend"><span>周一</span><span>周日</span></div>
+            </article>
+
+            <article class="card block">
+              <div class="block-head"><h3>已保存服务器</h3><button class="icon-btn small" title="刷新服务器列表"><svg class="i"><use href="#i-refresh"/></svg></button></div>
+              <ul class="server-list">
+                <li><i class="dot-green"></i><div><strong>Hypixel</strong><span>1.8 – 1.21 · 52k 在线</span></div><b class="ping good">24ms</b></li>
+                <li><i class="dot-green"></i><div><strong>2B2T 无政府</strong><span>1.20.4 · 1.2k 在线</span></div><b class="ping mid">86ms</b></li>
+                <li><i class="dot-amber"></i><div><strong>本地联机中继</strong><span>内网穿透 · 3 个房间</span></div><b class="ping good">12ms</b></li>
+              </ul>
+            </article>
+
+            <article class="card block">
+              <div class="block-head"><h3>公告与资讯</h3></div>
+              <ul class="news-list">
+                <li>
+                  <span class="news-tag">版本</span>
+                  <div><strong>Minecraft 1.21.4 正式版已支持</strong><span>启动器已内置该版本，可直接创建实例。</span></div>
+                </li>
+                <li>
+                  <span class="news-tag">插件</span>
+                  <div><strong>支持本地插件 manifest</strong><span>可安装隔离页面与主题扩展。</span></div>
+                </li>
+                <li>
+                  <span class="news-tag">联机</span>
+                  <div><strong>MCTier 联机大厅</strong><span>公开房间查询与邀请跳转由 MCTier 提供。</span></div>
+                </li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 版本与实例 ============ -->
+      <section class="view" data-view="versions">
+        <header class="view-head">
+          <div>
+            <h1>版本与实例</h1>
+            <p>共 6 个实例 · 已用磁盘 68.4 GB · 全部校验通过</p>
+          </div>
+          <div class="view-actions">
+            <div class="seg">
+              <button class="seg-btn is-active" data-viewmode="grid"><svg class="i"><use href="#i-grid"/></svg></button>
+              <button class="seg-btn" data-viewmode="list"><svg class="i"><use href="#i-list"/></svg></button>
+            </div>
+            <button class="btn btn-ghost"><svg class="i"><use href="#i-filter"/></svg>筛选</button>
+            <button class="btn btn-primary" data-action="new-instance"><svg class="i"><use href="#i-plus"/></svg>新建实例</button>
+          </div>
+        </header>
+
+        <div class="chip-row">
+          <button class="chip is-active">全部</button>
+          <button class="chip">原版</button>
+          <button class="chip">Fabric</button>
+          <button class="chip">Forge</button>
+          <button class="chip">NeoForge</button>
+          <button class="chip">整合包</button>
+          <button class="chip">收藏</button>
+        </div>
+
+        <div class="instance-grid" id="instanceGrid">
+
+          <article class="instance-card is-selected" data-instance="星穹冒险">
+            <div class="instance-cover cover-a">
+              <span class="instance-ver">1.20.4</span>
+              <span class="instance-loader">Fabric</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>星穹冒险 · 整合包</h3>
+              <p>128 模组 · 3 存档 · 42.6 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>128</span>
+                <span><svg class="i"><use href="#i-database"/></svg>1.2 GB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>2h 前</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail" title="实例详情"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <article class="instance-card" data-instance="原版生存">
+            <div class="instance-cover cover-b">
+              <span class="instance-ver">1.21.4</span>
+              <span class="instance-loader">Vanilla</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>原版生存 1.21.4</h3>
+              <p>0 模组 · 1 存档 · 18.2 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>0</span>
+                <span><svg class="i"><use href="#i-database"/></svg>420 MB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>3 天前</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <article class="instance-card" data-instance="机械动力">
+            <div class="instance-cover cover-c">
+              <span class="instance-ver">1.21.1</span>
+              <span class="instance-loader">NeoForge</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>机械动力：创世</h3>
+              <p>86 模组 · 2 存档 · 31.4 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>86</span>
+                <span><svg class="i"><use href="#i-database"/></svg>2.8 GB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>昨天</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <article class="instance-card" data-instance="天空工厂">
+            <div class="instance-cover cover-d">
+              <span class="instance-ver">1.19.2</span>
+              <span class="instance-loader">Forge</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>天空工厂 4</h3>
+              <p>214 模组 · 1 存档 · 9.8 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>214</span>
+                <span><svg class="i"><use href="#i-database"/></svg>4.1 GB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>上周</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <article class="instance-card" data-instance="竞技小游戏">
+            <div class="instance-cover cover-e">
+              <span class="instance-ver">1.20.1</span>
+              <span class="instance-loader">Fabric</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>竞技小游戏</h3>
+              <p>24 模组 · 0 存档 · 5.1 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>24</span>
+                <span><svg class="i"><use href="#i-database"/></svg>680 MB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>2 周前</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <article class="instance-card" data-instance="建筑灵感">
+            <div class="instance-cover cover-f">
+              <span class="instance-ver">1.20.6</span>
+              <span class="instance-loader">Vanilla</span>
+              <button class="icon-btn small float-more" data-action="open-detail"><svg class="i"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="instance-body">
+              <h3>建筑灵感服</h3>
+              <p>6 模组 · 4 存档 · 2.4 小时</p>
+              <div class="instance-meta">
+                <span><svg class="i"><use href="#i-puzzle"/></svg>6</span>
+                <span><svg class="i"><use href="#i-database"/></svg>310 MB</span>
+                <span><svg class="i"><use href="#i-clock"/></svg>1 个月前</span>
+              </div>
+            </div>
+            <div class="instance-foot">
+              <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+              <button class="icon-btn small" data-action="open-detail"><svg class="i"><use href="#i-settings"/></svg></button>
+            </div>
+          </article>
+
+          <button class="instance-add" data-action="new-instance">
+            <svg class="i"><use href="#i-plus"/></svg>
+            <strong>新建实例</strong>
+            <span>选择版本、加载器与内存</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ============ 资源下载 ============ -->
+      <section class="view" data-view="download">
+        <header class="view-head">
+          <div>
+            <h1>资源下载</h1>
+            <p>整合包 · 模组 · 光影 · 资源包 · 世界，均来自官方源</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-ghost"><svg class="i"><use href="#i-refresh"/></svg>检查更新</button>
+            <button class="btn btn-primary"><svg class="i"><use href="#i-download"/></svg>全部下载</button>
+          </div>
+        </header>
+
+        <div class="chip-row">
+          <button class="chip is-active">整合包</button>
+          <button class="chip">模组</button>
+          <button class="chip">光影</button>
+          <button class="chip">资源包</button>
+          <button class="chip">地图</button>
+        </div>
+
+        <div class="download-layout">
+          <div class="card block">
+            <div class="block-head"><h3>热门整合包</h3><span class="tag-soft">本周下载 12.8 万</span></div>
+            <ul class="pack-list">
+              <li>
+                <span class="cover cover-a">星</span>
+                <div class="pack-copy"><strong>星穹冒险</strong><span>Fabric 1.20.4 · 128 模组 · 4.9 分</span></div>
+                <span class="pack-size">1.2 GB</span>
+                <button class="btn btn-soft btn-xs" data-action="toast" data-msg="已加入下载队列">安装</button>
+              </li>
+              <li>
+                <span class="cover cover-c">机</span>
+                <div class="pack-copy"><strong>机械动力：创世</strong><span>NeoForge 1.21.1 · 86 模组 · 4.8 分</span></div>
+                <span class="pack-size">2.8 GB</span>
+                <button class="btn btn-soft btn-xs" data-action="toast" data-msg="已加入下载队列">安装</button>
+              </li>
+              <li>
+                <span class="cover cover-d">空</span>
+                <div class="pack-copy"><strong>天空工厂 4</strong><span>Forge 1.19.2 · 214 模组 · 4.7 分</span></div>
+                <span class="pack-size">4.1 GB</span>
+                <button class="btn btn-soft btn-xs" data-action="toast" data-msg="已加入下载队列">安装</button>
+              </li>
+              <li>
+                <span class="cover cover-b">原</span>
+                <div class="pack-copy"><strong>轻量原版+</strong><span>Fabric 1.21.4 · 32 模组 · 4.6 分</span></div>
+                <span class="pack-size">640 MB</span>
+                <button class="btn btn-soft btn-xs" data-action="toast" data-msg="已加入下载队列">安装</button>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card block">
+            <div class="block-head"><h3>下载队列</h3><span class="tag-soft">2 进行中</span></div>
+            <div class="queue">
+              <div class="queue-item">
+                <div class="queue-head"><strong>Complementary Shaders</strong><span>62%</span></div>
+                <div class="progress"><span style="width:62%"></span></div>
+                <div class="queue-meta">12.4 / 20 MB · 3.2 MB/s</div>
+              </div>
+              <div class="queue-item">
+                <div class="queue-head"><strong>Sodium 0.6.5</strong><span>28%</span></div>
+                <div class="progress"><span style="width:28%"></span></div>
+                <div class="queue-meta">1.1 / 4 MB · 2.6 MB/s</div>
+              </div>
+            </div>
+            <div class="queue-tip"><svg class="i"><use href="#i-shield"/></svg>所有文件均通过 SHA-1 校验</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 联机大厅 ============ -->
+      <section class="view" data-view="multiplayer">
+        <header class="view-head">
+          <div>
+            <h1>联机大厅</h1>
+            <p>MCTier 负责房间连接与内网穿透 · 可直接浏览公开房间</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-ghost"><svg class="i"><use href="#i-users"/></svg>公开大厅</button>
+            <button class="btn btn-primary" data-action="create-room"><svg class="i"><use href="#i-plus"/></svg>创建房间</button>
+          </div>
+        </header>
+
+        <div class="mp-layout">
+          <div class="mp-main">
+            <div class="mp-toolbar">
+              <div class="tabs" id="mpTabs">
+                <button class="tab is-active" data-tab="all">推荐房间</button>
+                <button class="tab" data-tab="mine">我的房间</button>
+                <button class="tab" data-tab="friends">好友房间</button>
+              </div>
+              <div class="mp-join">
+                <input type="text" placeholder="输入房间号，如 7F2A-91C" />
+                <button class="btn btn-soft btn-sm" data-action="toast" data-msg="房间不存在或已关闭">加入</button>
+              </div>
+            </div>
+
+            <div class="room-list" id="roomList">
+
+              <article class="room-card">
+                <div class="room-cover cover-a">星</div>
+                <div class="room-main">
+                  <div class="room-title">
+                    <h3>「星穹冒险」周末开荒队</h3>
+                    <span class="tag-voice"><svg class="i"><use href="#i-mic"/></svg>语音</span>
+                  </div>
+                  <p>房主 林间旅人 · Fabric 1.20.4 · 128 模组已同步</p>
+                  <div class="room-meta">
+                    <span><svg class="i"><use href="#i-users"/></svg>5 / 8</span>
+                    <span><svg class="i"><use href="#i-wifi"/></svg>32ms</span>
+                    <span><svg class="i"><use href="#i-clock"/></svg>已开 1h 24m</span>
+                  </div>
+                </div>
+                <div class="room-act">
+                  <button class="btn btn-primary btn-sm" data-action="join-room">加入房间</button>
+                  <span class="room-id">7F2A-91C</span>
+                </div>
+              </article>
+
+              <article class="room-card">
+                <div class="room-cover cover-c">机</div>
+                <div class="room-main">
+                  <div class="room-title">
+                    <h3>机械动力创造服 · 随便造</h3>
+                    <span class="tag-voice"><svg class="i"><use href="#i-mic"/></svg>语音</span>
+                  </div>
+                  <p>房主 红石阿澈 · NeoForge 1.21.1 · 86 模组已同步</p>
+                  <div class="room-meta">
+                    <span><svg class="i"><use href="#i-users"/></svg>3 / 10</span>
+                    <span><svg class="i"><use href="#i-wifi"/></svg>48ms</span>
+                    <span><svg class="i"><use href="#i-clock"/></svg>已开 3h 02m</span>
+                  </div>
+                </div>
+                <div class="room-act">
+                  <button class="btn btn-soft btn-sm" data-action="join-room">加入房间</button>
+                  <span class="room-id">3B7D-02E</span>
+                </div>
+              </article>
+
+              <article class="room-card">
+                <div class="room-cover cover-e">床</div>
+                <div class="room-main">
+                  <div class="room-title">
+                    <h3>起床战争 4v4 · 新人友好</h3>
+                    <span class="tag-voice"><svg class="i"><use href="#i-mic"/></svg>语音</span>
+                  </div>
+                  <p>房主 Pixel_猫 · Vanilla 1.8.9 · 原版对战</p>
+                  <div class="room-meta">
+                    <span><svg class="i"><use href="#i-users"/></svg>12 / 16</span>
+                    <span><svg class="i"><use href="#i-wifi"/></svg>26ms</span>
+                    <span><svg class="i"><use href="#i-clock"/></svg>已开 22m</span>
+                  </div>
+                </div>
+                <div class="room-act">
+                  <button class="btn btn-soft btn-sm" data-action="join-room">加入房间</button>
+                  <span class="room-id">9C41-7AB</span>
+                </div>
+              </article>
+
+              <article class="room-card">
+                <div class="room-cover cover-b">纯</div>
+                <div class="room-main">
+                  <div class="room-title">
+                    <h3>纯净生存 · 无规则长期服</h3>
+                  </div>
+                  <p>房主 沐沐 · Vanilla 1.21.4 · 无模组</p>
+                  <div class="room-meta">
+                    <span><svg class="i"><use href="#i-users"/></svg>6 / 12</span>
+                    <span><svg class="i"><use href="#i-wifi"/></svg>61ms</span>
+                    <span><svg class="i"><use href="#i-clock"/></svg>已开 6h 11m</span>
+                  </div>
+                </div>
+                <div class="room-act">
+                  <button class="btn btn-soft btn-sm" data-action="join-room">加入房间</button>
+                  <span class="room-id">1A55-C30</span>
+                </div>
+              </article>
+
+              <article class="room-card">
+                <div class="room-cover cover-f">建</div>
+                <div class="room-main">
+                  <div class="room-title">
+                    <h3>建筑党交流服 · 一起搭城市</h3>
+                    <span class="tag-voice"><svg class="i"><use href="#i-mic"/></svg>语音</span>
+                  </div>
+                  <p>房主 方块诗人 · Vanilla 1.20.6 · 6 模组</p>
+                  <div class="room-meta">
+                    <span><svg class="i"><use href="#i-users"/></svg>2 / 6</span>
+                    <span><svg class="i"><use href="#i-wifi"/></svg>39ms</span>
+                    <span><svg class="i"><use href="#i-clock"/></svg>已开 48m</span>
+                  </div>
+                </div>
+                <div class="room-act">
+                  <button class="btn btn-soft btn-sm" data-action="join-room">加入房间</button>
+                  <span class="room-id">5E18-D77</span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <aside class="mp-side">
+            <article class="card block voice-card">
+              <div class="block-head">
+                <h3>MCTier 联机</h3>
+                <span class="live-dot">已连接</span>
+              </div>
+              <p class="voice-channel">频道 · 星穹冒险 · 开荒队</p>
+
+              <div class="wave" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+
+              <ul class="voice-users">
+                <li class="speaking">
+                  <span class="avatar sm">林</span>
+                  <div><strong>林间旅人（你）</strong><span>正在说话</span></div>
+                  <svg class="i"><use href="#i-mic"/></svg>
+                </li>
+                <li>
+                  <span class="avatar sm alt-1">澈</span>
+                  <div><strong>红石阿澈</strong><span>已静音</span></div>
+                  <svg class="i muted"><use href="#i-mic-off"/></svg>
+                </li>
+                <li>
+                  <span class="avatar sm alt-2">猫</span>
+                  <div><strong>Pixel_猫</strong><span>在线</span></div>
+                  <svg class="i"><use href="#i-mic"/></svg>
+                </li>
+                <li>
+                  <span class="avatar sm alt-3">沐</span>
+                  <div><strong>沐沐</strong><span>在线</span></div>
+                  <svg class="i"><use href="#i-mic"/></svg>
+                </li>
+              </ul>
+
+              <div class="voice-controls">
+                <button class="vc-btn is-on" data-action="toggle-mic" title="麦克风"><svg class="i"><use href="#i-mic"/></svg></button>
+                <button class="vc-btn is-on" title="耳机"><svg class="i"><use href="#i-headphones"/></svg></button>
+                <button class="vc-btn" title="音量"><svg class="i"><use href="#i-volume"/></svg></button>
+                <button class="vc-btn danger" data-action="toast" data-msg="已退出语音频道" title="挂断"><svg class="i"><use href="#i-x"/></svg></button>
+              </div>
+
+              <div class="voice-note"><svg class="i"><use href="#i-sparkles"/></svg>已启用 AI 降噪与回声消除</div>
+            </article>
+
+            <article class="card block">
+              <div class="block-head"><h3>房间聊天</h3><span class="tag-soft">5 人在线</span></div>
+              <ul class="chat-list">
+                <li><b>红石阿澈</b><span>谁来帮我运一下铁？</span></li>
+                <li><b>Pixel_猫</b><span>我把基座搭好了，可以来刷怪了</span></li>
+                <li><b>沐沐</b><span>存档我刚备份过，放心玩</span></li>
+              </ul>
+              <div class="chat-input">
+                <input type="text" placeholder="发送消息…" />
+                <button class="icon-btn small primary"><svg class="i"><use href="#i-send"/></svg></button>
+              </div>
+            </article>
+
+            <article class="card block tip-card">
+              <div class="block-head"><h3>联机小贴士</h3></div>
+              <p>房间使用内网穿透，房主退出后自动保留 10 分钟；模组不同步时会自动提示下载缺失模组。</p>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ AI 助手 ============ -->
+      <section class="view" data-view="ai">
+        <header class="view-head">
+          <div>
+            <h1>AI 助手 <span class="head-tag">MCP Agent</span></h1>
+            <p>连接 MCP 工具服务；写入或其他非只读操作需要逐项确认</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-ghost"><svg class="i"><use href="#i-clock"/></svg>历史会话</button>
+            <button class="btn btn-primary" data-action="toast" data-msg="已开始新的对话"><svg class="i"><use href="#i-plus"/></svg>新建对话</button>
+          </div>
+        </header>
+
+        <div class="ai-layout">
+          <section class="card ai-chat">
+            <div class="ai-chat-head">
+              <div class="agent-id">
+                <span class="agent-avatar"><svg class="i"><use href="#i-bot"/></svg></span>
+                <div><strong>MC-Trin Agent</strong><span>MCP · 本地工具与已配置服务</span></div>
+              </div>
+              <div class="ai-chat-tools">
+                <span class="pill pill-live"><svg class="i"><use href="#i-shield"/></svg>工具权限受控</span>
+                <button class="icon-btn small"><svg class="i"><use href="#i-more"/></svg></button>
+              </div>
+            </div>
+
+            <div class="ai-thread" id="aiThread">
+
+              <div class="msg msg-user">
+                <div class="msg-body"><p>整合包一启动就崩溃，日志里好像有一堆模组冲突，帮我看看。</p></div>
+                <span class="avatar sm">林</span>
+              </div>
+
+              <div class="msg msg-ai">
+                <span class="agent-avatar sm"><svg class="i"><use href="#i-bot"/></svg></span>
+                <div class="msg-body">
+                  <div class="tool-card">
+                    <div class="tool-head">
+                      <svg class="i"><use href="#i-terminal"/></svg>
+                      <span>读取日志 <code>logs/latest.log</code></span>
+                      <em class="tool-status ok">完成</em>
+                    </div>
+                    <div class="tool-meta">4.2 MB · 41,208 行 · 耗时 0.4s</div>
+                    <pre class="tool-code">java.lang.NoSuchMethodError: net.minecraft.class_2248.&lt;init&gt;
+  at com.simibubi.create.Create.onInitialize(Create.java:214)
+  at net.fabricmc.loader.impl.game.minecraft.Hooks.startServer(Hooks.java:58)</pre>
+                  </div>
+
+                  <div class="tool-card">
+                    <div class="tool-head">
+                      <svg class="i"><use href="#i-wrench"/></svg>
+                      <span>依赖图分析 · 128 个模组</span>
+                      <em class="tool-status ok">完成</em>
+                    </div>
+                    <div class="tool-meta">发现 2 处版本冲突 · 1 个缺失前置</div>
+                  </div>
+
+                  <p>诊断结果：<strong>机械动力 0.5.1</strong> 与 <strong>1.20.4</strong> 不兼容，且缺少前置 <code>Flywheel 0.6.10</code>。这也是崩溃的直接原因。</p>
+
+                  <div class="fix-card">
+                    <div class="fix-head"><svg class="i"><use href="#i-sparkles"/></svg><strong>建议修复方案</strong></div>
+                    <ul class="fix-list">
+                      <li><svg class="i"><use href="#i-check"/></svg>将 Create 升级到 <code>0.5.1-fix2</code>（适配 1.20.4）</li>
+                      <li><svg class="i"><use href="#i-check"/></svg>安装缺失前置 Flywheel 0.6.10</li>
+                      <li><svg class="i"><use href="#i-check"/></svg>关闭重复的 JEI 插件版本 15.2.0.27</li>
+                    </ul>
+                    <div class="fix-actions">
+                      <button class="btn btn-primary btn-sm" data-action="toast" data-msg="已应用修复，正在重新校验依赖…">一键修复</button>
+                      <button class="btn btn-ghost btn-sm" data-action="toast" data-msg="已生成诊断报告 report-2026-10-24.md">生成报告</button>
+                      <button class="btn btn-ghost btn-sm">查看原始日志</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="msg msg-user">
+                <div class="msg-body"><p>那启动器本身打不开是什么原因？点了没反应。</p></div>
+                <span class="avatar sm">林</span>
+              </div>
+
+              <div class="msg msg-ai">
+                <span class="agent-avatar sm"><svg class="i"><use href="#i-bot"/></svg></span>
+                <div class="msg-body">
+                  <div class="tool-card">
+                    <div class="tool-head">
+                      <svg class="i"><use href="#i-cpu"/></svg>
+                      <span>检测 Java 环境</span>
+                      <em class="tool-status ok">完成</em>
+                    </div>
+                    <div class="tool-meta">JAVA_HOME 未设置 · 系统仅检测到 JRE 8（需要 17+）</div>
+                  </div>
+                  <p>最常见的原因是 <strong>Java 版本过低或路径未配置</strong>。启动器已内置 Java 21，只需在「设置 → 启动」中把 Java 路径指向内置运行时，或点击下方按钮自动修复。</p>
+                  <div class="fix-actions">
+                    <button class="btn btn-soft btn-sm" data-action="toast" data-msg="已切换为内置 Java 21 运行时">使用内置 Java 21</button>
+                    <button class="btn btn-ghost btn-sm">查看检测详情</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ai-suggest" id="aiSuggest">
+              <button class="chip">启动器闪退怎么办</button>
+              <button class="chip">整合包内存怎么设置</button>
+              <button class="chip">Forge 与 Fabric 能共存吗</button>
+              <button class="chip">分析最近一次崩溃</button>
+            </div>
+
+            <div class="ai-composer">
+              <button class="icon-btn" title="附加日志文件"><svg class="i"><use href="#i-paperclip"/></svg></button>
+              <textarea id="aiInput" rows="1" placeholder="描述你的问题，或直接拖入日志文件…"></textarea>
+              <span class="composer-model"><svg class="i"><use href="#i-zap"/></svg>Agent 模式</span>
+              <button class="send-btn" data-action="ai-send"><svg class="i"><use href="#i-send"/></svg></button>
+            </div>
+          </section>
+
+          <aside class="ai-side">
+            <article class="card block">
+              <div class="block-head"><h3>MCP 工具</h3><span class="tag-soft">6 / 6 在线</span></div>
+              <ul class="mcp-list">
+                <li><span class="mcp-icon tone-cyan"><svg class="i"><use href="#i-terminal"/></svg></span><div><strong>日志读取器</strong><span>fs.read · 只读</span></div><i class="dot-green"></i></li>
+                <li><span class="mcp-icon tone-violet"><svg class="i"><use href="#i-wrench"/></svg></span><div><strong>崩溃分析器</strong><span>crash.parse</span></div><i class="dot-green"></i></li>
+                <li><span class="mcp-icon tone-amber"><svg class="i"><use href="#i-puzzle"/></svg></span><div><strong>模组依赖解析</strong><span>mods.resolve</span></div><i class="dot-green"></i></li>
+                <li><span class="mcp-icon tone-cyan"><svg class="i"><use href="#i-cpu"/></svg></span><div><strong>Java 环境检测</strong><span>env.java</span></div><i class="dot-green"></i></li>
+                <li><span class="mcp-icon tone-violet"><svg class="i"><use href="#i-download"/></svg></span><div><strong>Modrinth 检索</strong><span>web.modrinth</span></div><i class="dot-green"></i></li>
+                <li><span class="mcp-icon tone-amber"><svg class="i"><use href="#i-folder"/></svg></span><div><strong>实例文件操作</strong><span>fs.write · 需确认</span></div><i class="dot-amber"></i></li>
+              </ul>
+            </article>
+
+            <article class="card block">
+              <div class="block-head"><h3>常用诊断</h3></div>
+              <ul class="quick-list">
+                <li><button class="quick-btn"><svg class="i"><use href="#i-shield"/></svg>检查实例完整性<svg class="i arrow"><use href="#i-chevron"/></svg></button></li>
+                <li><button class="quick-btn"><svg class="i"><use href="#i-zap"/></svg>优化启动参数<svg class="i arrow"><use href="#i-chevron"/></svg></button></li>
+                <li><button class="quick-btn"><svg class="i"><use href="#i-database"/></svg>清理冗余缓存<svg class="i arrow"><use href="#i-chevron"/></svg></button></li>
+                <li><button class="quick-btn"><svg class="i"><use href="#i-wifi"/></svg>排查联机延迟<svg class="i arrow"><use href="#i-chevron"/></svg></button></li>
+              </ul>
+            </article>
+
+            <article class="card block tip-card">
+              <div class="block-head"><h3>权限说明</h3></div>
+            <p>连接你指定的 MCP 服务与模型 API。模型 API key 和 MCP 令牌只保存在当前运行会话。</p>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ 插件市场 ============ -->
+      <section class="view" data-view="plugins">
+        <header class="view-head">
+          <div>
+        <h1>插件管理</h1>
+          <p>本地插件 · 通过 manifest.json 安装与管理</p>
+          </div>
+          <div class="view-actions">
+          <button class="btn btn-ghost" data-trin-action="plugin-docs"><svg class="i"><use href="#i-external"/></svg>开发文档</button>
+            <button class="btn btn-primary" data-action="upload-plugin"><svg class="i"><use href="#i-plus"/></svg>安装 manifest.json</button>
+          </div>
+        </header>
+
+        <article class="promo card">
+          <div class="promo-main">
+            <span class="pill pill-live"><svg class="i"><use href="#i-sparkles"/></svg>编辑推荐</span>
+            <h2>主题引擎 Pro</h2>
+            <p>用一套 CSS 变量重绘整个启动器：圆角、配色、图标包、背景动效都能改，热重载即时预览。</p>
+            <div class="promo-actions">
+              <button class="btn btn-primary btn-sm" data-action="install-theme" data-theme-name="aurora">安装并预览</button>
+              <button class="btn btn-ghost btn-sm" data-action="toast" data-msg="已打开插件详情">查看详情</button>
+            </div>
+          </div>
+          <div class="promo-art">
+            <span class="swatch" style="--c:#35d07f"></span>
+            <span class="swatch" style="--c:#38bdf8"></span>
+            <span class="swatch" style="--c:#9b8cff"></span>
+            <span class="swatch" style="--c:#ffb648"></span>
+            <span class="swatch" style="--c:#ff6b8a"></span>
+          </div>
+        </article>
+
+        <div class="chip-row" id="pluginCats">
+          <button class="chip is-active">全部</button>
+          <button class="chip">主题美化 12</button>
+          <button class="chip">功能扩展 18</button>
+          <button class="chip">性能优化 6</button>
+          <button class="chip">联机增强 4</button>
+          <button class="chip">开发者工具 3</button>
+        </div>
+
+        <div class="plugin-grid">
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-cyan"><svg class="i"><use href="#i-palette"/></svg></span>
+              <div class="plugin-title"><h3>极光主题包</h3><span>Aurora Studio · 主题美化</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>冷色渐变 + 磨砂玻璃，替换全部界面配色与图标风格。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.9</span>
+              <span><svg class="i"><use href="#i-download"/></svg>128k</span>
+              <span class="tag-soft">v2.4.1</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-violet"><svg class="i"><use href="#i-image"/></svg></span>
+              <div class="plugin-title"><h3>玻璃拟态 UI</h3><span>GlassLab · 主题美化</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>半透明层叠卡片与动态模糊背景，支持自定义壁纸。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.7</span>
+              <span><svg class="i"><use href="#i-download"/></svg>64k</span>
+              <span class="tag-soft">v1.9.0</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-amber"><svg class="i"><use href="#i-zap"/></svg></span>
+              <div class="plugin-title"><h3>启动加速器</h3><span>Redstone Labs · 性能优化</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>预加载资源索引，平均缩短 32% 冷启动时间。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.8</span>
+              <span><svg class="i"><use href="#i-download"/></svg>96k</span>
+              <span class="tag-soft">v3.0.2</span>
+            </div>
+          </article>
+
+          <article class="plugin-card is-installed">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-cyan"><svg class="i"><use href="#i-wrench"/></svg></span>
+                <div class="plugin-title"><h3>Mod 冲突扫描</h3><span>MC-Trin 社区 · 功能扩展</span></div>
+              <button class="btn btn-soft btn-xs" data-action="toggle-plugin">已安装</button>
+            </div>
+            <p>启动前扫描模组冲突与缺失前置，给出可执行的修复建议。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.9</span>
+              <span><svg class="i"><use href="#i-download"/></svg>210k</span>
+              <span class="tag-soft">内置</span>
+            </div>
+          </article>
+
+          <article class="plugin-card is-installed">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-violet"><svg class="i"><use href="#i-globe"/></svg></span>
+                <div class="plugin-title"><h3>联机房间发现</h3><span>MC-Trin 社区 · 联机增强</span></div>
+              <button class="btn btn-soft btn-xs" data-action="toggle-plugin">已安装</button>
+            </div>
+            <p>在联机大厅中显示好友正在玩的房间，并支持一键跟随。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.6</span>
+              <span><svg class="i"><use href="#i-download"/></svg>88k</span>
+              <span class="tag-soft">内置</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-amber"><svg class="i"><use href="#i-mic"/></svg></span>
+              <div class="plugin-title"><h3>语音降噪 Pro</h3><span>VoiceKit · 联机增强</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>基于 RNNoise 的实时降噪，机械键盘与风扇声一键消除。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.5</span>
+              <span><svg class="i"><use href="#i-download"/></svg>31k</span>
+              <span class="tag-soft">v1.4.3</span>
+            </div>
+          </article>
+
+          <article class="plugin-card is-installed">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-cyan"><svg class="i"><use href="#i-bot"/></svg></span>
+                <div class="plugin-title"><h3>崩溃分析插件</h3><span>MC-Trin 社区 · 功能扩展</span></div>
+              <button class="btn btn-soft btn-xs" data-action="toggle-plugin">已安装</button>
+            </div>
+            <p>把崩溃堆栈交给 AI 助手，自动定位到具体模组与版本。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>5.0</span>
+              <span><svg class="i"><use href="#i-download"/></svg>174k</span>
+              <span class="tag-soft">内置</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-violet"><svg class="i"><use href="#i-image"/></svg></span>
+              <div class="plugin-title"><h3>截图美化</h3><span>Pixel Studio · 功能扩展</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>自动为游戏截图加水印、坐标与版本信息，一键分享。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.4</span>
+              <span><svg class="i"><use href="#i-download"/></svg>22k</span>
+              <span class="tag-soft">v0.8.1</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-amber"><svg class="i"><use href="#i-database"/></svg></span>
+              <div class="plugin-title"><h3>云端存档同步</h3><span>CloudKit · 功能扩展</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>多设备同步世界存档，冲突时自动生成副本并提示合并。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.6</span>
+              <span><svg class="i"><use href="#i-download"/></svg>57k</span>
+              <span class="tag-soft">v2.1.0</span>
+            </div>
+          </article>
+
+          <article class="plugin-card">
+            <div class="plugin-head">
+              <span class="plugin-icon tone-cyan"><svg class="i"><use href="#i-terminal"/></svg></span>
+              <div class="plugin-title"><h3>开发者工具箱</h3><span>DevKit · 开发者工具</span></div>
+              <button class="btn btn-soft btn-xs" data-action="install-plugin">安装</button>
+            </div>
+            <p>插件热重载、UI 变量调试、Mock 数据注入与打包发布。</p>
+            <div class="plugin-foot">
+              <span><svg class="i"><use href="#i-star"/></svg>4.8</span>
+              <span><svg class="i"><use href="#i-download"/></svg>12k</span>
+              <span class="tag-soft">v1.0.0</span>
+            </div>
+          </article>
+        </div>
+
+        <article class="dev-banner card">
+          <div>
+            <h3>成为插件开发者</h3>
+          <p>插件通过 <code>manifest.json</code> 声明权限，可添加隔离页面或应用内置主题。</p>
+          </div>
+          <div class="dev-actions">
+            <button class="btn btn-soft btn-sm" data-trin-action="plugin-docs">阅读 API 文档</button>
+            <button class="btn btn-primary btn-sm" data-action="upload-plugin">安装 manifest.json</button>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ 设置 ============ -->
+      <section class="view" data-view="settings">
+        <header class="view-head">
+          <div>
+            <h1>设置</h1>
+            <p>所有配置保存在本地，可导出为配置文件</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-ghost"><svg class="i"><use href="#i-copy"/></svg>导出配置</button>
+            <button class="btn btn-primary" data-action="toast" data-msg="设置已保存">保存</button>
+          </div>
+        </header>
+
+        <div class="settings-layout">
+          <nav class="settings-nav" id="settingsNav">
+            <button class="s-nav is-active" data-panel="general"><svg class="i"><use href="#i-settings"/></svg>通用</button>
+            <button class="s-nav" data-panel="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+            <button class="s-nav" data-panel="download"><svg class="i"><use href="#i-download"/></svg>下载</button>
+            <button class="s-nav" data-panel="appearance"><svg class="i"><use href="#i-palette"/></svg>外观</button>
+            <button class="s-nav" data-panel="multiplayer"><svg class="i"><use href="#i-globe"/></svg>联机</button>
+            <button class="s-nav" data-panel="ai"><svg class="i"><use href="#i-bot"/></svg>AI 助手</button>
+            <button class="s-nav" data-panel="about"><svg class="i"><use href="#i-shield"/></svg>关于</button>
+          </nav>
+
+          <div class="settings-panels">
+
+            <div class="settings-panel is-active" data-panel="general">
+              <article class="card block">
+                <div class="block-head"><h3>基础</h3></div>
+                <div class="setting-row">
+                  <div><strong>启动器语言</strong><span>界面与提示的显示语言</span></div>
+                  <select class="select"><option>简体中文</option><option>English</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>关闭时行为</strong><span>点击关闭按钮后的动作</span></div>
+                  <select class="select"><option>最小化到托盘</option><option>直接退出</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>开机自启</strong><span>随系统启动并静默更新</span></div>
+                  <label class="switch"><input type="checkbox" /><i></i></label>
+                </div>
+                <div class="setting-row">
+                  <div><strong>自动检查更新</strong><span>启动器与插件每周检查一次</span></div>
+                  <label class="switch"><input type="checkbox" checked /><i></i></label>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="launch">
+              <article class="card block">
+                <div class="block-head"><h3>Java 与内存</h3></div>
+                <div class="setting-row">
+                  <div><strong>Java 运行时</strong><span>当前使用内置 Java 21.0.4</span></div>
+                  <select class="select"><option>内置 Java 21.0.4</option><option>系统 Java 17</option><option>手动指定路径…</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>内存分配</strong><span>建议 4 – 8 GB，视整合包而定</span></div>
+                  <input class="range" type="range" min="2" max="32" value="8" id="memRange" />
+                  <b class="range-val" id="memVal">8 GB</b>
+                </div>
+                <div class="setting-row">
+                  <div><strong>JVM 参数</strong><span>高级用户可自定义</span></div>
+                  <input class="input" value="-XX:+UseG1GC -XX:MaxGCPauseMillis=50" />
+                </div>
+                <div class="setting-row">
+                  <div><strong>游戏窗口</strong><span>启动时的默认分辨率</span></div>
+                  <select class="select"><option>1920 × 1080</option><option>2560 × 1440</option><option>1280 × 720</option></select>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="download">
+              <article class="card block">
+                <div class="block-head"><h3>下载源与并发</h3></div>
+                <div class="setting-row">
+                  <div><strong>下载源</strong><span>自动测速选择最快镜像</span></div>
+                  <select class="select"><option>自动（推荐）</option><option>官方源</option><option>国内镜像</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>并发线程</strong><span>过高可能触发限流</span></div>
+                  <input class="range" type="range" min="1" max="16" value="8" />
+                  <b class="range-val">8</b>
+                </div>
+                <div class="setting-row">
+                  <div><strong>下载后自动校验</strong><span>SHA-1 完整性检查</span></div>
+                  <label class="switch"><input type="checkbox" checked /><i></i></label>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="appearance">
+              <article class="card block">
+                <div class="block-head"><h3>外观</h3><span class="tag-soft">由主题引擎接管</span></div>
+                <div class="setting-row">
+                  <div><strong>主题模式</strong><span>深色 / 浅色 / 跟随系统</span></div>
+                  <div class="seg">
+                    <button class="seg-btn is-active" data-theme-mode="dark">深色</button>
+                    <button class="seg-btn" data-theme-mode="light">浅色</button>
+                    <button class="seg-btn" data-theme-mode="auto">跟随</button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div><strong>强调色</strong><span>影响按钮、选中态与高亮</span></div>
+                  <div class="accent-row">
+                    <button class="accent-dot" data-accent="emerald" style="--c:#35d07f"></button>
+                    <button class="accent-dot" data-accent="ocean" style="--c:#38bdf8"></button>
+                    <button class="accent-dot" data-accent="violet" style="--c:#9b8cff"></button>
+                    <button class="accent-dot" data-accent="amber" style="--c:#ffb648"></button>
+                    <button class="accent-dot" data-accent="rose" style="--c:#ff6b8a"></button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div><strong>界面动效</strong><span>过渡与背景动画</span></div>
+                  <label class="switch"><input type="checkbox" checked /><i></i></label>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="multiplayer">
+              <article class="card block">
+                <div class="block-head"><h3>联机与语音</h3></div>
+                <div class="setting-row">
+                  <div><strong>内网穿透节点</strong><span>延迟 12ms · 上海</span></div>
+                  <select class="select"><option>自动（上海）</option><option>北京</option><option>广州</option><option>香港</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>自动同步模组</strong><span>进房时补齐缺失模组</span></div>
+                  <label class="switch"><input type="checkbox" checked /><i></i></label>
+                </div>
+                <div class="setting-row">
+                  <div><strong>语音输入设备</strong><span>默认麦克风</span></div>
+                  <select class="select"><option>麦克风（Realtek）</option><option>耳机麦克风</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>按键说话</strong><span>默认关闭，使用自由发言</span></div>
+                  <label class="switch"><input type="checkbox" /><i></i></label>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="ai">
+              <article class="card block">
+                <div class="block-head"><h3>AI 助手</h3></div>
+                <div class="setting-row">
+                  <div><strong>模型服务</strong><span>在 AI 助手页面配置兼容 OpenAI 的服务地址与密钥</span></div>
+                  <select class="select"><option>MCP Agent（需配置模型）</option><option>快速模式</option></select>
+                </div>
+                <div class="setting-row">
+                  <div><strong>MCP 工具服务</strong><span>在 AI 助手页面配置服务地址并连接</span></div>
+                </div>
+                <div class="setting-row">
+                  <div><strong>操作确认</strong><span>每个非只读 MCP 工具调用都需要单独确认</span></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="settings-panel" data-panel="about">
+              <article class="card block about-card">
+                <div class="brand big">
+                  <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                  <div><strong>MC-Trin</strong><span>Minecraft 第三方启动器</span></div>
+                </div>
+                <p>由 MC-Trin 社区驱动的 Minecraft 启动器。</p>
+                <div class="about-grid">
+                  <div><strong>6</strong><span>实例</span></div>
+                  <div><strong>43</strong><span>可用插件</span></div>
+                  <div><strong>6</strong><span>MCP 工具</span></div>
+                  <div><strong>12</strong><span>好友</span></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===== 通用弹窗 ===== -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal" id="modalBox">
+    <header class="modal-head">
+      <h2 id="modalTitle">新建实例</h2>
+      <button class="icon-btn small" data-action="close-modal"><svg class="i"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="modal-body" id="modalBody"></div>
+    <footer class="modal-foot" id="modalFoot">
+      <button class="btn btn-ghost" data-action="close-modal">取消</button>
+      <button class="btn btn-primary" data-action="confirm-modal">确定</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ===== 实例详情抽屉 ===== -->
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer">
+  <header class="drawer-head">
+    <div class="drawer-title">
+      <span class="cover cover-a" id="drawerCover">星</span>
+      <div><h2 id="drawerName">星穹冒险 · 整合包</h2><p id="drawerMeta">Fabric 1.20.4 · 128 模组</p></div>
+    </div>
+    <button class="icon-btn small" data-action="close-drawer"><svg class="i"><use href="#i-x"/></svg></button>
+  </header>
+
+  <div class="drawer-tabs" id="drawerTabs">
+    <button class="tab is-active" data-dtab="overview">概览</button>
+    <button class="tab" data-dtab="mods">模组</button>
+    <button class="tab" data-dtab="saves">存档</button>
+    <button class="tab" data-dtab="logs">日志</button>
+  </div>
+
+  <div class="drawer-body">
+    <div class="dpanel is-active" data-dpanel="overview">
+      <div class="kv-grid">
+        <div><span>游戏版本</span><strong>1.20.4</strong></div>
+        <div><span>加载器</span><strong>Fabric 0.15.7</strong></div>
+        <div><span>内存分配</span><strong>8 GB</strong></div>
+        <div><span>占用空间</span><strong>1.2 GB</strong></div>
+        <div><span>游玩时长</span><strong>42.6 小时</strong></div>
+        <div><span>最后启动</span><strong>2 小时前</strong></div>
+      </div>
+      <div class="drawer-actions">
+        <button class="btn btn-primary btn-sm" data-action="launch"><svg class="i"><use href="#i-play"/></svg>启动</button>
+        <button class="btn btn-soft btn-sm"><svg class="i"><use href="#i-copy"/></svg>复制实例</button>
+        <button class="btn btn-soft btn-sm"><svg class="i"><use href="#i-download"/></svg>导出整合包</button>
+        <button class="btn btn-soft btn-sm danger-text"><svg class="i"><use href="#i-x"/></svg>删除</button>
+      </div>
+    </div>
+
+    <div class="dpanel" data-dpanel="mods">
+      <ul class="mod-list">
+        <li><span class="mod-icon"></span><div><strong>Sodium</strong><span>0.6.5 · 渲染优化</span></div><em class="ok-text">已启用</em></li>
+        <li><span class="mod-icon"></span><div><strong>Create</strong><span>0.5.1-fix2 · 机械动力</span></div><em class="ok-text">已启用</em></li>
+        <li><span class="mod-icon"></span><div><strong>JEI</strong><span>15.2.0.27 · 物品查询</span></div><em class="warn-text">重复安装</em></li>
+        <li><span class="mod-icon"></span><div><strong>Iris Shaders</strong><span>1.7.0 · 光影支持</span></div><em class="ok-text">已启用</em></li>
+        <li><span class="mod-icon"></span><div><strong>Xaero's Minimap</strong><span>24.2.0 · 小地图</span></div><em class="ok-text">已启用</em></li>
+      </ul>
+      <button class="btn btn-soft btn-sm full"><svg class="i"><use href="#i-plus"/></svg>添加模组</button>
+    </div>
+
+    <div class="dpanel" data-dpanel="saves">
+      <ul class="mod-list">
+        <li><span class="mod-icon alt"></span><div><strong>星穹群岛</strong><span>生存 · 已游玩 26 小时</span></div><em class="ok-text">1.4 GB</em></li>
+        <li><span class="mod-icon alt"></span><div><strong>空岛挑战</strong><span>创造 · 已游玩 9 小时</span></div><em class="ok-text">380 MB</em></li>
+        <li><span class="mod-icon alt"></span><div><strong>测试世界</strong><span>创造 · 已游玩 1 小时</span></div><em class="ok-text">96 MB</em></li>
+      </ul>
+    </div>
+
+    <div class="dpanel" data-dpanel="logs">
+      <pre class="log-box">[16:02:11] [main/INFO] Fabric Loader 0.15.7
+[16:02:12] [main/INFO] Loading 128 mods
+[16:02:14] [main/WARN] Duplicate mod id: jei
+[16:02:19] [main/INFO] Sound engine started
+[16:02:21] [Render thread/INFO] OpenGL 4.6 · NVIDIA RTX 3060
+[16:02:22] [main/INFO] Done (11.284s)!</pre>
+      <div class="drawer-actions">
+        <button class="btn btn-soft btn-sm" data-action="toast" data-msg="已复制日志">复制</button>
+        <button class="btn btn-soft btn-sm" data-goto="ai">交给 AI 分析</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ===== 启动进度浮层 ===== -->
+<div class="launch-mask" id="launchMask">
+  <div class="launch-box">
+    <div class="launch-logo"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
+    <h2 id="launchTitle">正在启动 星穹冒险</h2>
+    <p id="launchStep">校验实例文件…</p>
+    <div class="progress lg"><span id="launchBar" style="width:0%"></span></div>
+    <div class="launch-meta"><span id="launchPct">0%</span><span>Fabric 1.20.4 · Java 21</span></div>
+    <button class="btn btn-ghost btn-sm" data-action="close-launch">取消启动</button>
+  </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast-stack" id="toastStack"></div>
+
+<script type="module" src="/app.js"></script>
+<script type="module" src="/mctrin.js"></script>
+</body>
+</html>

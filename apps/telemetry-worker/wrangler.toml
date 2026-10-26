@@ -1,0 +1,23 @@
+name = "axolotl-telemetry"
+main = "src/index.ts"
+compatibility_date = "2025-08-13"
+workers_dev = false
+routes = [{ pattern = "telemetry.axlmc.org", custom_domain = true }]
+
+[vars]
+INGEST_ENABLED = "true"
+MAX_BATCHES_PER_INSTALLATION_PER_DAY = "25"
+MAX_ACCEPTED_BATCHES_PER_DAY = "100000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "axolotl-telemetry"
+database_id = "8692e2b1-6156-4b0b-94f5-6e7204c05dff"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["17 0 * * *"]
+
+[observability]
+enabled = true
+head_sampling_rate = 0.01

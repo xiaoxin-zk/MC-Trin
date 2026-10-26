@@ -1,0 +1,30 @@
+mod command_history;
+mod files;
+pub(crate) mod game_options;
+mod hotbars;
+mod orchestration;
+pub(in crate::api::instance) mod pending;
+
+const COMMAND_HISTORY_FILE: &str = "command_history.txt";
+const HOTBAR_FILE: &str = "hotbar.nbt";
+
+pub use self::command_history::{get_command_history, set_command_history};
+pub(super) use self::files::{
+    CheckpointStatus, begin_checkpoint, checkpoint, ensure_link,
+    finish_checkpoint, finish_plain_checkpoint, instance_game_dir,
+    instance_is_running, instance_option_enabled, nbt_from_bytes, nbt_to_bytes,
+    safe_instance_id, sha1_bytes, sync_files_are_protected,
+};
+pub(super) use self::orchestration::instance_option_supported;
+pub use self::orchestration::{
+    GlobalSyncedOptions, SyncedOptionCapability, SyncedOptionJoinAction,
+    SyncedOptionJoinPreview, SyncedOptionJoinResolution, SyncedOptionsOverview,
+    get_capabilities, get_global_options, get_initialized_options,
+    get_instance_option_join_preview, get_overview, reconcile_changed_file,
+    reconcile_instance, set_global_option, set_instance_option,
+    synced_options_path,
+};
+pub(crate) use self::orchestration::{
+    reconcile_instance_after_pack_update_with_state,
+    remove_generated_instance_files,
+};

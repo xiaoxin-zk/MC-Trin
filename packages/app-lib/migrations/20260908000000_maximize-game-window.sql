@@ -1,0 +1,1 @@
+ALTER TABLE settings ADD COLUMN mc_maximize_window INTEGER NOT NULL DEFAULT FALSE;
