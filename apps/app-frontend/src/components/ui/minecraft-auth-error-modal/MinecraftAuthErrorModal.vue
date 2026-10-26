@@ -19,7 +19,7 @@ import {
 } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
-import { AxolotlBrandConfig } from '@/config'
+import { MCTrinBrandConfig } from '@/config'
 import { login as login_flow, set_default_user } from '@/helpers/auth.js'
 import i18n from '@/i18n.config'
 import { handleSevereError } from '@/store/error.js'
@@ -315,7 +315,7 @@ async function copyToClipboard(text: string) {
         </div>
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
-                <ButtonLink :href="AxolotlBrandConfig.supportUrl" @click="modal?.hide()">
+                <ButtonLink :href="MCTrinBrandConfig.supportUrl" @click="modal?.hide()">
                     <MessagesSquareIcon /> {{ formatMessage(messages.contactSupport) }}
                 </ButtonLink>
                 <Button type="colored" color="brand" :disabled="loadingSignIn" @click="signInAgain">

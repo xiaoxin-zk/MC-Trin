@@ -5,7 +5,7 @@ export const MCTrinBrandConfig = Object.freeze({
     shortProductName: 'MC-Trin',
     website: '',
     repositoryUrl: '',
-    supportUrl: '',
+    supportUrl: 'https://github.com/xiaoxin-zk/MC-Trin/issues',
     qqGroupNumber: '',
     qqChannelUrl: '',
     sponsorUrl: '',

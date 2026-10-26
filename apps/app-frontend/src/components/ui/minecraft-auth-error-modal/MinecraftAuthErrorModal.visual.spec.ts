@@ -117,9 +117,10 @@ it('keeps both sign-in recovery actions compact and inside the modal at normal a
     })
     await waitFor(() => !!document.querySelector('.modal-container.shown'))
     await waitFor(() => getComputedStyle(document.querySelector('.modal-body')!).opacity === '1')
-    const body = document.querySelector<HTMLElement>('.modal-body')!
-    const support = body.querySelector<HTMLElement>('a[href*="/issues"]')!
-    const retry = [...body.querySelectorAll<HTMLElement>('button')].find((button) =>
+    const modal = document.querySelector<HTMLElement>('.modal-container.shown')!
+    const body = modal.querySelector<HTMLElement>('.modal-body')!
+    const support = modal.querySelector<HTMLElement>('a[href*="/issues"]')!
+    const retry = [...modal.querySelectorAll<HTMLElement>('button')].find((button) =>
         button.textContent?.includes('Sign in again'),
     )!
     expect(support.textContent).toContain('Contact support')

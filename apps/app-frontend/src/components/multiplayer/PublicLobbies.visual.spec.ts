@@ -93,7 +93,7 @@ it('loads public rooms, opens a real join flow, and refreshes the listing', asyn
         .mockResolvedValueOnce([])
     const wrapper = mountPage()
     await nextTick()
-    expect(wrapper.text()).toContain('Loading public lobbies...')
+    expect(wrapper.text()).toContain('Loading public lobbies…')
     resolveListing([sampleLobby])
     await flushPromises()
 

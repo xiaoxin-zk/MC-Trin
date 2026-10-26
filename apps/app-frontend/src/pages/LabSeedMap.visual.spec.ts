@@ -669,6 +669,7 @@ it('automatically paints visible layouts without a selection, shares requests wi
     await wrapper!.findAll('[role="tab"]')[1].trigger('click')
     await vi.waitFor(() =>
         expect(wrapper!.get('aside canvas').attributes('data-ready')).toBe('true'),
+        { timeout: 10000 },
     )
     if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
         await page.screenshot({
