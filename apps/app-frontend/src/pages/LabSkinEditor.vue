@@ -63,9 +63,12 @@ function clearLoadTimeout() {
 function beginEditorLoad() {
     clearLoadTimeout()
     editorState.value = 'loading'
+    // The embedded editor decompresses an ~8 MB bundle from the resource
+    // protocol before it can announce itself, and a cold start on a slow disk
+    // (or a first-run antivirus scan) routinely needs more than 15 seconds.
     loadTimeout = window.setTimeout(() => {
         editorState.value = 'error'
-    }, 15_000)
+    }, 45_000)
 }
 
 function markEditorReady() {
