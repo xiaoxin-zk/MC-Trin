@@ -2,8 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
 
-import { DEFAULT_AI_AGENT_PROFILE } from '@/helpers/ai-agent-profiles'
 import type { useLogAgent } from '@/composables/useLogAgent'
+import { DEFAULT_AI_AGENT_PROFILE } from '@/helpers/ai-agent-profiles'
 
 import AIAgent from './AIAgent.vue'
 
