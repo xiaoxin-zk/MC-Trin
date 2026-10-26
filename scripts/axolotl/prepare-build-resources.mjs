@@ -61,11 +61,14 @@ function verify() {
     const actualFiles = ['java', 'blockbench']
         .flatMap((name) => files(path.join(directory, name)))
         .map((file) => path.relative(directory, file).replaceAll('\\', '/'))
-    if (
-        actualFiles.length !== Object.keys(manifest.files).length ||
-        actualFiles.some((file) => !Object.hasOwn(manifest.files, file))
-    ) {
-        throw new Error('Prepared resources contain unexpected files')
+    const unexpected = actualFiles.filter((file) => !Object.hasOwn(manifest.files, file))
+    const missing = Object.keys(manifest.files).filter((file) => !actualFiles.includes(file))
+    if (unexpected.length > 0 || missing.length > 0) {
+        throw new Error(
+            'Prepared resources contain unexpected files' +
+                `\nunexpected: ${unexpected.join(', ') || '(none)'}` +
+                `\nmissing: ${missing.join(', ') || '(none)'}`,
+        )
     }
     for (const required of [
         'java/theseus.jar',
