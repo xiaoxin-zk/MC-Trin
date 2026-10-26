@@ -315,15 +315,12 @@ console.log('keeping the migration mapping honest')
 	const unknown = registered.filter((version) => !versions.includes(version))
 	check('every mapped migration exists', unknown.length === 0, unknown.join(', '))
 
-	// The script refuses any applied migration it has no mapping for, so a
-	// column added without one turns the documented recovery into a refusal.
+	// The script refuses any applied migration it has no mapping for. Every
+	// migration in the supported downgrade range needs an explicit schema entry,
+	// including data-only migrations whose entry is an empty object.
 	const oldest = Math.min(...registered)
-	const addingColumns = files
-		.filter((name) => /ADD COLUMN/i.test(fs.readFileSync(path.join(migrationsDir, name), 'utf8')))
-		.map((name) => Number(name.slice(0, 14)))
-		.filter((version) => version >= oldest)
-	const unmapped = addingColumns.filter((version) => !registered.includes(version))
-	check('every migration that adds a column is mapped', unmapped.length === 0, unmapped.join(', '))
+	const unmapped = versions.filter((version) => version >= oldest && !registered.includes(version))
+	check('every migration in the revertible range is mapped', unmapped.length === 0, unmapped.join(', '))
 }
 
 // --- refusing a database a running launcher holds open ------------------------
