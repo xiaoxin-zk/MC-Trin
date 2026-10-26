@@ -19,10 +19,6 @@ export const MCTrinBrandConfig = Object.freeze({
     }),
 })
 
-// Keep the old export for modules that still carry upstream compatibility code.
-// User-facing surfaces should import MCTrinBrandConfig directly.
-export const AxolotlBrandConfig = MCTrinBrandConfig
-
 const siteUrl = trimTrailingSlash(import.meta.env.MODRINTH_URL || 'https://modrinth.com')
 const officialLabrinthBaseUrl = trimTrailingSlash(
     import.meta.env.MODRINTH_API_BASE_URL || 'https://api.modrinth.com',

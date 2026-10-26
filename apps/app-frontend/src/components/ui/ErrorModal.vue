@@ -23,7 +23,7 @@ import {
 import { computed, ref } from 'vue'
 
 import { ChatIcon } from '@/assets/icons'
-import { AxolotlBrandConfig } from '@/config'
+import { MCTrinBrandConfig } from '@/config'
 import { trackEvent } from '@/helpers/analytics'
 import { login as login_flow, set_default_user } from '@/helpers/auth.js'
 import { install_existing_instance } from '@/helpers/install'
@@ -203,7 +203,7 @@ const errorCollapsed = ref(false)
 
 const title = ref(formatMessage(messages.genericTitle))
 const errorType = ref('unknown')
-const supportLink = ref(AxolotlBrandConfig.supportUrl)
+const supportLink = ref(MCTrinBrandConfig.supportUrl)
 const metadata = ref({})
 
 defineExpose({
@@ -214,7 +214,7 @@ defineExpose({
         if (errorVal.message && errorVal.message.includes('Minecraft authentication error:')) {
             title.value = formatMessage(messages.minecraftAuthTitle)
             errorType.value = 'minecraft_auth'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
 
             if (
                 errorVal.message.includes('existing connection was forcibly closed') ||
@@ -228,11 +228,11 @@ defineExpose({
         } else if (errorVal.message && errorVal.message.includes('User is not logged in')) {
             title.value = formatMessage(messages.minecraftSignInTitle)
             errorType.value = 'minecraft_sign_in'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
         } else if (errorVal.message && errorVal.message.includes('Move directory error:')) {
             title.value = formatMessage(messages.directoryTitle)
             errorType.value = 'directory_move'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
 
             if (errorVal.message.includes('directory is not writable')) {
                 metadata.value.readOnly = true
@@ -247,7 +247,7 @@ defineExpose({
         ) {
             title.value = formatMessage(messages.loaderTitle)
             errorType.value = 'no_loader_version'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
             metadata.value.instanceId = context.instanceId
         } else if (
             errorVal.message &&
@@ -255,15 +255,15 @@ defineExpose({
         ) {
             title.value = formatMessage(messages.stateTitle)
             errorType.value = 'state_db_newer'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
         } else if (source === 'state_init') {
             title.value = formatMessage(messages.stateTitle)
             errorType.value = 'state_init'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
         } else {
             title.value = formatMessage(messages.genericTitle)
             errorType.value = 'unknown'
-            supportLink.value = AxolotlBrandConfig.supportUrl
+            supportLink.value = MCTrinBrandConfig.supportUrl
             metadata.value = {}
         }
 
@@ -366,7 +366,7 @@ async function exportLogs() {
                         <h3>{{ formatMessage(messages.networkIssues) }}</h3>
                         <p>
                             {{ formatMessage(messages.networkDescription) }}
-                            <a :href="AxolotlBrandConfig.supportUrl">
+                            <a :href="MCTrinBrandConfig.supportUrl">
                                 {{ formatMessage(messages.supportArticle) }}
                             </a>
                         </p>
@@ -375,7 +375,7 @@ async function exportLogs() {
                         <h3>{{ formatMessage(messages.networkIssues) }}</h3>
                         <p>
                             {{ formatMessage(messages.hostsDescription) }}
-                            <a :href="AxolotlBrandConfig.supportUrl">
+                            <a :href="MCTrinBrandConfig.supportUrl">
                                 {{ formatMessage(messages.supportArticle) }}
                             </a>
                         </p>

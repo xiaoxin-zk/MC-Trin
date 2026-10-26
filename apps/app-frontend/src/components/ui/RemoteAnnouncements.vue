@@ -47,7 +47,7 @@ const messages = defineMessages({
     previewContent: {
         id: 'app.remote-announcements.preview-content',
         defaultMessage:
-            '## Announcement preview\n\nThis is **sample content**, not a published announcement.\n\n- Supports headings, lists, and links\n- Close buttons are always available\n\n> Previewing does not change real announcement read status.\n\n| Type | Display |\n| --- | --- |\n| Modal | Full Markdown content |\n| Popup | Summary, then full content |\n\n[Visit the website](https://axlmc.org)',
+            '## Announcement preview\n\nThis is **sample content**, not a published announcement.\n\n- Supports headings, lists, and links\n- Close buttons are always available\n\n> Previewing does not change real announcement read status.\n\n| Type | Display |\n| --- | --- |\n| Modal | Full Markdown content |\n| Popup | Summary, then full content |\n\n[Visit the project](https://github.com/xiaoxin-zk/MC-Trin)',
     },
     previewAction: {
         id: 'app.remote-announcements.preview-action',
@@ -60,7 +60,7 @@ const active = ref(false)
 const centerOpen = ref(false)
 const startupNotice = ref<RemoteAnnouncement | null>(null)
 const html = computed(() => renderString(selected.value?.content ?? ''))
-const stateKey = 'axolotl-remote-announcements-v2'
+const stateKey = 'mctrin-remote-announcements-v1'
 const read = reactive(new Set<string>())
 const queuedThisSession = new Set<string>()
 const startupNotified = new Set<string>()
@@ -227,7 +227,7 @@ async function refresh() {
             const [version, channel] = await Promise.all([getVersion(), getUpdateChannel()])
             endpoint = new URL(
                 import.meta.env.VITE_AXO_ANNOUNCEMENTS_URL ||
-                    'https://admin.axlmc.org/api/public/announcements',
+                    'https://github.com/xiaoxin-zk/MC-Trin',
             )
             endpoint.searchParams.set('version', version)
             endpoint.searchParams.set('channel', channel === 'release' ? 'stable' : 'beta')
@@ -286,7 +286,7 @@ function preview(type: RemoteAnnouncement['type'], withAction = false) {
         ends_at: null,
         published_at: now,
         action_label: withAction ? formatMessage(messages.previewAction) : null,
-        action_url: withAction ? 'https://axlmc.org' : null,
+        action_url: withAction ? 'https://github.com/xiaoxin-zk/MC-Trin' : null,
     }
     read.clear()
     queuedThisSession.clear()

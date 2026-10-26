@@ -22,8 +22,6 @@ const SETTINGS_TABS = new Set([
     'content-downloads',
     'network-multiplayer',
     'storage-backups',
-    'privacy-data',
-    'updates',
     'about',
     'logs',
 ])

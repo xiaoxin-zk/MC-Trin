@@ -13,8 +13,6 @@ export type SettingsCategoryId =
     | 'network-multiplayer'
     | 'network-connection'
     | 'storage-backups'
-    | 'privacy-data'
-    | 'updates'
     | 'about'
     | 'logs'
     | 'feature-flags'
@@ -34,8 +32,8 @@ export interface SettingsCategoryDefinition {
  * Ordered by daily-use priority within each group:
  * - launcher: how the shell looks and is operated, then optional AI
  * - game: how Minecraft launches and gets content
- * - data-privacy: disk footprint and what leaves the machine
- * - support: update, identity, then diagnostics
+ * - data-privacy: disk footprint
+ * - support: identity and diagnostics
  * - developer: hidden unless developer mode
  */
 export const settingsCategoryDefinitions: SettingsCategoryDefinition[] = [
@@ -138,24 +136,6 @@ export const settingsCategoryDefinitions: SettingsCategoryDefinition[] = [
         }),
         group: 'data-privacy',
         onboardingId: 'settings-tab-storage-backups',
-    },
-    {
-        id: 'privacy-data',
-        name: defineMessage({
-            id: 'app.settings.tabs.privacy-data',
-            defaultMessage: 'Privacy & data sharing',
-        }),
-        group: 'data-privacy',
-        onboardingId: 'settings-tab-privacy-data',
-    },
-    {
-        id: 'updates',
-        name: defineMessage({
-            id: 'app.settings.tabs.updates',
-            defaultMessage: 'Updates',
-        }),
-        group: 'support',
-        onboardingId: 'settings-tab-updates',
     },
     {
         id: 'about',

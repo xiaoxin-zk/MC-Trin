@@ -68,12 +68,12 @@ function validSignalingServer(value: string): boolean {
 }
 
 export function parseMctierInviteCode(value: string): MctierInvite | null {
-    const link = value.trim().match(/mctier:\/\/join\/?\?([^\s]+)/i)?.[0]
+    const link = value.trim().match(/(?:mctrin|mctier):\/\/join\/?\?([^\s]+)/i)?.[0]
     if (!link) return null
 
     let params: URLSearchParams
     try {
-        const query = link.match(/^mctier:\/\/join\/?\?([^\s]+)$/i)?.[1]
+        const query = link.match(/^(?:mctrin|mctier):\/\/join\/?\?([^\s]+)$/i)?.[1]
         if (!query) return null
         params = new URLSearchParams(query)
     } catch {

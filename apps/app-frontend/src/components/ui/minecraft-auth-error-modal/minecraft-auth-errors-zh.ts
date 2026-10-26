@@ -39,7 +39,7 @@ const translations: Record<string, string> = {
         '通过官方启动器至少启动一次 Minecraft：Java 版',
     'Wait up to an hour if the purchase or profile setup was recent':
         '如果刚购买游戏或刚设置档案，请等待最多一小时',
-    'Make sure you are using the Microsoft account that owns Minecraft. Visit <a href="https://github.com/Mystic-Stars/Axolotl/issues">Axolotl support</a> for help':
+    'Make sure you are using the Microsoft account that owns Minecraft. Visit <a href="https://github.com/xiaoxin-zk/MC-Trin/issues">MC-Trin support</a> for help':
         '确认当前使用的是拥有 Minecraft 的 Microsoft 账号。如需帮助，请访问 <a href="https://github.com/Mystic-Stars/MC-Trin/issues">MC-Trin 支持</a>',
     'Try signing in to MC-Trin again': '再次尝试登录 MC-Trin',
     'MC-Trin could not connect to a Microsoft, Xbox, or Minecraft service needed for sign-in. This is usually caused by a local network, DNS, proxy, firewall, hosts file, VPN, or antivirus issue.':

@@ -20,8 +20,8 @@
       "layers": [
         {
           "glass": false,
-          "image-name": "AXL(fixed).svg",
-          "name": "AXL(fixed)",
+          "image-name": "M(fixed).svg",
+          "name": "M(fixed)",
           "position": {
             "scale": 1.6,
             "translation-in-points": [0, -21]

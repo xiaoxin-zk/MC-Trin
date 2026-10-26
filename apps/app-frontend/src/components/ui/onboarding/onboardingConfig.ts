@@ -278,20 +278,6 @@ export const onboardingMessages = defineMessages({
         defaultMessage:
             'Choose how content downloads and installs, including your preferred resource source. Modrinth is the default; changing the description source only changes what you read.',
     },
-    privacyTitle: {
-        id: 'app.onboarding.privacy.title',
-        defaultMessage: 'Your data, your call',
-    },
-    privacyDescription: {
-        id: 'app.onboarding.privacy.description',
-        defaultMessage:
-            'Manage anonymous telemetry, Discord Rich Presence, and the Minecraft log analysis service whenever you need to.',
-    },
-    updatesTitle: { id: 'app.onboarding.updates.title', defaultMessage: 'Stay in the loop' },
-    updatesDescription: {
-        id: 'app.onboarding.updates.description',
-        defaultMessage: 'Choose whether the launcher checks for updates and installs them for you.',
-    },
     clickTab: {
         id: 'app.onboarding.action.click-tab',
         defaultMessage: 'Click this tab to continue',

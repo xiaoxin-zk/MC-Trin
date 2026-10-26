@@ -144,7 +144,6 @@
                 {{ formatMessage(messages.offline) }}
             </span>
         </div>
-        <AppUpdateButton />
         <div
             class="grid border-solid border-surface-5 text-sm items-center gap-2 py-1.5 px-3 rounded-xl border"
             :class="
@@ -295,7 +294,6 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import AppUpdateButton from '@/components/ui/app-update-button/index.vue'
 import DownloadCenterButton from '@/components/ui/DownloadCenterButton.vue'
 import { useInstallJobNotifications } from '@/composables/browse/install-job-notifications'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'

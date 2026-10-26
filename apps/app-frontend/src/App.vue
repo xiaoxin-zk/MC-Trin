@@ -565,30 +565,10 @@ const {
 let delayedUpdatePopupTimeout: ReturnType<Window['setTimeout']> | undefined
 
 async function checkUpdates() {
-    if (!(await areUpdatesEnabled())) {
-        console.log('Skipping update check as updates are disabled in this build or environment')
-        updatesEnabled.value = false
-
-        return
-    }
-
-    updatesEnabled.value = true
-    updatesPaused.value = (await getUpdatePreferences()).updatesPaused
-    if (updatesPaused.value) {
-        setTimeout(checkUpdates, 5 * 60 * 1000)
-        return
-    }
-    if (!offline.value) {
-        await performUpdateCheck().catch((error) => {
-            console.warn('Failed to check for launcher updates', error)
-        })
-    }
-    setTimeout(
-        () => {
-            checkUpdates()
-        },
-        5 /* min */ * 60 /* sec */ * 1000 /* ms */,
-    )
+    // MC-Trin currently distributes builds through GitHub Actions/releases;
+    // do not query or display the inherited Axolotl update service.
+    updatesEnabled.value = false
+    updatesPaused.value = true
 }
 
 /**
@@ -829,7 +809,6 @@ onMounted(async () => {
     runWhenIdle(() => {
         if (appUnmounted) return
         startStartupJavaScan()
-        void checkUpdates()
         void warnIfRunningElevated()
         startDirectLinkSync()
     })

@@ -488,38 +488,6 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         label: message('app.log-share.shared-logs.title', 'Shared logs'),
         keywords: [message('app.log-share.settings.title', 'Log sharing & AI analysis')],
     },
-    {
-        id: 'privacy-section',
-        categoryId: 'privacy-data',
-        targetId: 'settings-target-privacy',
-        label: message('app.settings.privacy.section-title', 'Privacy & data sharing'),
-    },
-    {
-        id: 'privacy-discord-rpc',
-        categoryId: 'privacy-data',
-        targetId: 'settings-target-privacy-discord-rpc',
-        label: message('app.settings.privacy.discord-rpc', 'Discord rich presence'),
-    },
-    {
-        id: 'privacy-external-scheme',
-        categoryId: 'privacy-data',
-        targetId: 'settings-target-privacy-external-scheme',
-        label: message('app.settings.privacy.external-scheme', 'Allow external links'),
-        description: message(
-            'app.settings.privacy.external-scheme-description',
-            'Respond to mctrin:// links from browsers and other apps.',
-        ),
-    },
-    {
-        id: 'privacy-privileged-scheme',
-        categoryId: 'privacy-data',
-        targetId: 'settings-target-privacy-privileged-scheme',
-        label: message('app.settings.privacy.privileged-scheme', 'Allow privileged link actions'),
-        description: message(
-            'app.settings.privacy.privileged-scheme-description',
-            'Let mctrin:// links change settings and stop game processes.',
-        ),
-    },
     // The instance-sync category had no entries at all, so none of its rows
     // could be found by search even though the category is registered.
     {
@@ -767,18 +735,6 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
             'app.settings.storage.analysisDescription',
             'Inspect launcher and game storage, then analyze unused metadata for cleanup.',
         ),
-    },
-    {
-        id: 'about-product',
-        categoryId: 'about',
-        targetId: 'settings-target-about-product',
-        label: message('app.settings.tabs.about', 'About'),
-    },
-    {
-        id: 'about-replay-tour',
-        categoryId: 'about',
-        targetId: 'settings-target-about-replay-tour',
-        label: message('app.settings.about.replay-onboarding', 'Replay tour'),
     },
     {
         id: 'feature-flags',

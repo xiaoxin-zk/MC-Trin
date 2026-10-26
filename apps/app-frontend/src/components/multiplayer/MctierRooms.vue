@@ -14,7 +14,7 @@ import {
 } from '@/helpers/mctier'
 import { multiplayer, multiplayerErrorText, validLocalPort } from '@/helpers/multiplayer'
 
-const props = defineProps<{ state?: MctierState }>()
+const props = defineProps<{ state?: MctierState; initialInviteCode?: string }>()
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
     title: { id: 'app.multiplayer.mctier.title', defaultMessage: 'MC-Trin LAN lobby' },
@@ -251,6 +251,7 @@ watch(
 watch(() => props.state, voice.syncRoom, { deep: true })
 
 onMounted(() => {
+    prefillInviteFromDeepLink()
     void listen<unknown>('mctier-voice-signal', (event) => {
         void voice.receiveSignal(event.payload)
     })
@@ -279,6 +280,10 @@ async function stop() {
     } finally {
         stopping.value = false
     }
+}
+
+function prefillInviteFromDeepLink() {
+    if (props.initialInviteCode?.trim()) inviteCodeInput.value = props.initialInviteCode.trim()
 }
 </script>
 

@@ -337,6 +337,15 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
                 (!query_part.is_empty()).then_some(query_part),
             );
         }
+        "join" if first.is_empty() && !extra => {
+            // MCTier invites use the launcher deep-link scheme so clicking a
+            // generated invite opens the rooms page. The rooms UI keeps the
+            // query intact and presents it as an explicit join action.
+            return open_route(
+                "/multiplayer/rooms".to_string(),
+                (!query_part.is_empty()).then_some(query_part),
+            );
+        }
         "lab"
             if (first.is_empty()
                 || first == "seed-map"
@@ -705,6 +714,11 @@ mod tests {
         assert!(matches!(
             parse_command("axolotl://install?version=abc123").await.unwrap(),
             CommandPayload::InstallVersion { id } if id == "abc123"
+        ));
+        assert!(matches!(
+            parse_command("mctrin://join?v=3&name=TestRoom&secret=mctier-invite-v3%3Aabc").await.unwrap(),
+            CommandPayload::OpenRoute { path, query: Some(query) }
+                if path == "/multiplayer/rooms" && query.contains("name=TestRoom")
         ));
     }
 }

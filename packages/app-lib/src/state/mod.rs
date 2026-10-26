@@ -688,8 +688,6 @@ impl State {
         });
         state.background_tasks.lock().push(concurrency_task);
 
-        crate::telemetry::start(Arc::clone(state));
-
         let preload_task = tokio::spawn(async move {
             crate::google_ip::preload().await;
         });

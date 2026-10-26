@@ -414,6 +414,14 @@ const selectedProvider = ref<MultiplayerProvider>(storedMultiplayerProvider(stor
 const selectedNodeName = ref(localStorage.getItem(nodeStorageKey) ?? 'auto')
 const selectedInstanceId = ref('manual')
 const initialPort = typeof route.query.port === 'string' ? route.query.port : ''
+const initialMctierInvite = computed(() => {
+    const query = new URLSearchParams()
+    for (const key of ['v', 'name', 'secret', 'pwd', 'node', 'signal']) {
+        const value = route.query[key]
+        if (typeof value === 'string' && value) query.set(key, value)
+    }
+    return query.get('name') ? `mctrin://join?${query.toString()}` : ''
+})
 const manualPort = ref(validLocalPort(initialPort) ? initialPort : '25565')
 const portSelectionTouched = ref(!!validLocalPort(initialPort))
 const hongshiFailure = computed(() =>
@@ -1130,7 +1138,11 @@ function submitJoin() {
             </div>
         </template>
 
-        <MctierRooms v-else-if="selectedProvider === 'mctier'" :state="multiplayerState?.mctier" />
+        <MctierRooms
+            v-else-if="selectedProvider === 'mctier'"
+            :state="multiplayerState?.mctier"
+            :initial-invite-code="initialMctierInvite"
+        />
         <template v-else>
             <Card v-if="!hongshiState" class="!m-0">
                 <div class="flex items-center gap-3">

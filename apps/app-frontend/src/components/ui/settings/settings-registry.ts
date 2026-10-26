@@ -88,14 +88,6 @@ const categoryContent: Record<SettingsCategoryId, Pick<SettingsCategory, 'icon' 
         icon: ArchiveIcon,
         content: defineAsyncComponent(() => import('./StorageBackupSettings.vue')),
     },
-    'privacy-data': {
-        icon: ShieldIcon,
-        content: defineAsyncComponent(() => import('./PrivacySettings.vue')),
-    },
-    updates: {
-        icon: RefreshCwIcon,
-        content: defineAsyncComponent(() => import('./UpdateSettings.vue')),
-    },
     logs: {
         icon: FileTextIcon,
         content: defineAsyncComponent(() => import('./LogsSettings.vue')),

@@ -358,10 +358,6 @@ export async function savePrivacySettings(privacy: PrivacySettings): Promise<Pri
     return await invoke('plugin:settings|privacy_set', { privacy })
 }
 
-export async function setTelemetryEnabled(enabled: boolean): Promise<PrivacySettings> {
-    return await invoke('plugin:settings|telemetry_set', { enabled })
-}
-
 export async function setDiscordRpcEnabled(enabled: boolean): Promise<PrivacySettings> {
     return await invoke('plugin:settings|discord_rpc_set', { enabled })
 }

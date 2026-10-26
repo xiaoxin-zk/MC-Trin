@@ -16,6 +16,15 @@ test('parses a MCTier v3 invite and keeps the encrypted password envelope', () =
     })
 })
 
+test('parses invites generated with the registered MC-Trin deep-link scheme', () => {
+    const invite = parseMctierInviteCode(
+        'mctrin://join?v=3&name=TestRoom&secret=mctier-invite-v3%3Aabc_DEF-123',
+    )
+
+    assert.equal(invite?.lobby_name, 'TestRoom')
+    assert.equal(invite?.password, 'mctier-invite-v3:abc_DEF-123')
+})
+
 test('rejects malformed invite codes and unsafe connection endpoints', () => {
     assert.equal(parseMctierInviteCode('mctier://join?v=9&name=TestRoom'), null)
     assert.equal(parseMctierInviteCode('mctier://join?v=3&name=TestRoom&secret=plaintext'), null)

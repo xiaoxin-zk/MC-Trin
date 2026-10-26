@@ -80,5 +80,5 @@ export function announcementKey(item: RemoteAnnouncement) {
     return item.id + ':' + item.published_at
 }
 
-export const REMOTE_ANNOUNCEMENTS_UPDATED_EVENT = 'axolotl:remote-announcements-updated'
-export const OPEN_REMOTE_ANNOUNCEMENT_CENTER_EVENT = 'axolotl:open-remote-announcement-center'
+export const REMOTE_ANNOUNCEMENTS_UPDATED_EVENT = 'mctrin:remote-announcements-updated'
+export const OPEN_REMOTE_ANNOUNCEMENT_CENTER_EVENT = 'mctrin:open-remote-announcement-center'

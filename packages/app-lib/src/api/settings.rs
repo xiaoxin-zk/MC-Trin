@@ -173,33 +173,8 @@ pub async fn set_privacy(
         .await?;
     transaction.commit().await?;
 
-    if let Err(error) =
-        crate::telemetry::set_enabled(&state, privacy.telemetry).await
-    {
-        tracing::debug!(target: "theseus::telemetry", %error, "Failed to apply telemetry state");
-    }
     if let Err(error) = state.discord_rpc.clear_to_default(true).await {
-        tracing::debug!(target: "theseus::telemetry", %error, "Failed to apply Discord RPC state");
-    }
-    get_privacy().await
-}
-
-#[tracing::instrument]
-pub async fn set_telemetry(_enabled: bool) -> crate::Result<PrivacySettings> {
-    let _guard = SETTINGS_WRITE.lock().await;
-    let state = State::get().await?;
-    let mut transaction = state.pool.begin().await?;
-    sqlx::query(
-        "UPDATE settings SET telemetry = FALSE, telemetry_consent_version = 0 WHERE id = 0",
-    )
-        .execute(&mut *transaction)
-        .await?;
-    sqlx::query("DELETE FROM telemetry_outbox")
-        .execute(&mut *transaction)
-        .await?;
-    transaction.commit().await?;
-    if let Err(error) = crate::telemetry::set_enabled(&state, false).await {
-        tracing::debug!(target: "theseus::telemetry", %error, "Failed to apply telemetry state");
+        tracing::debug!(target: "theseus::privacy", %error, "Failed to apply Discord RPC state");
     }
     get_privacy().await
 }
@@ -213,7 +188,7 @@ pub async fn set_discord_rpc(enabled: bool) -> crate::Result<PrivacySettings> {
         .execute(&state.pool)
         .await?;
     if let Err(error) = state.discord_rpc.clear_to_default(true).await {
-        tracing::debug!(target: "theseus::telemetry", %error, "Failed to apply Discord RPC state");
+        tracing::debug!(target: "theseus::privacy", %error, "Failed to apply Discord RPC state");
     }
     get_privacy().await
 }

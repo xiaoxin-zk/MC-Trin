@@ -413,7 +413,9 @@ pub async fn create_invite() -> eyre::Result<String> {
         .append_pair("node", &context.server_node)
         .append_pair("signal", &context.signaling_server);
     let query = serializer.finish();
-    Ok(format!("mctier://join?{query}"))
+    // `mctrin` is the scheme registered by the desktop bundle. Keep parsing
+    // legacy `mctier://` links in the frontend for invites shared earlier.
+    Ok(format!("mctrin://join?{query}"))
 }
 
 pub async fn stop() -> eyre::Result<()> {

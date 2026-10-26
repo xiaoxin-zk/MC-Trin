@@ -10,7 +10,6 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             settings_patch,
             privacy_get,
             privacy_set,
-            telemetry_set,
             discord_rpc_set,
             cancel_directory_change,
             proxy_get,
@@ -125,11 +124,6 @@ pub async fn privacy_get() -> Result<PrivacySettings> {
 #[tauri::command]
 pub async fn privacy_set(privacy: PrivacySettings) -> Result<PrivacySettings> {
     Ok(settings::set_privacy(privacy).await?)
-}
-
-#[tauri::command]
-pub async fn telemetry_set(enabled: bool) -> Result<PrivacySettings> {
-    Ok(settings::set_telemetry(enabled).await?)
 }
 
 #[tauri::command]

@@ -113,7 +113,7 @@ export async function exportLauncherLogs({
 
 export async function createInstanceShortcut(instanceName, instanceId, options = {}) {
     const outputPath = await save({
-        defaultPath: `Axolotl - ${instanceName}`,
+        defaultPath: `MC-Trin - ${instanceName}`,
     })
 
     if (!outputPath) return null

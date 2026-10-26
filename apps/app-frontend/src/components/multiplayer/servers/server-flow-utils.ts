@@ -78,9 +78,9 @@ let userAgentPromise: Promise<string> | null = null
  */
 function launcherUserAgent(): Promise<string> {
     userAgentPromise ??= Promise.all([getVersion(), osType()]).then(
-        ([version, platform]) => `Axolotl-Launcher/${version} (${platform})`,
+        ([version, platform]) => `MC-Trin/${version} (${platform})`,
     )
-    userAgentPromise = userAgentPromise.catch(() => 'Axolotl-Launcher/unknown (unknown)')
+    userAgentPromise = userAgentPromise.catch(() => 'MC-Trin/unknown (unknown)')
     return userAgentPromise
 }
 
