@@ -108,7 +108,7 @@ mod tests {
         let global = FetchSemaphore(Semaphore::new(2));
         let mut held = Vec::new();
         for _ in 0..MAX_H2_STREAMS_PER_AUTHORITY {
-            held.push(acquire(&busy).await.unwrap());
+            held.push(acquire_for(&busy, false).await.unwrap());
         }
         let pending = acquire_download(&busy, Some(&global), false);
         tokio::pin!(pending);

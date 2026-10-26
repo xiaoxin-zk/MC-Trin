@@ -680,6 +680,7 @@ pub(crate) const MODRINTH_CDN_REPLACING_A_VALIDATED_HOSTNAME_PRESERVES_URL_VALID
 pub(crate) const MODRINTH_REDIRECT_HTTPS: &str = "https://";
 pub(crate) const NATIVE_AUTHORITY_IS_TEMPORARILY_USING_HTTP_1_1: &str =
     "authority is temporarily using HTTP/1.1";
+#[cfg(windows)]
 pub(crate) const NATIVE_AUTOCONFIGURL: &str = "AutoConfigURL";
 pub(crate) const NATIVE_BUDGET_AUTHORITY_BATCH_CONTAINS_ENOUGH_PERMITS: &str =
     "authority batch contains enough permits";
@@ -693,11 +694,13 @@ pub(crate) const NATIVE_CONFIGURED_PROXY_REQUIRES_THE_REQWEST_TRANSPORT: &str =
     "configured proxy requires the reqwest transport";
 pub(crate) const NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED: &str =
     "download source has been retired";
+#[cfg(windows)]
 pub(crate) const NATIVE_PROXYENABLE: &str = "ProxyEnable";
 pub(crate) const NATIVE_REPUTATION_FILE_NAME: &str =
     "native-download-reputation.json";
 pub(crate) const NATIVE_REPUTATION_TMP: &str = ".tmp";
 pub(crate) const NATIVE_REQUEST_TIMED_OUT_WAITING_FOR_CDN_RESPONSE_CONNECTION_BUDGET: &str = "timed out waiting for CDN response connection budget";
+#[cfg(windows)]
 pub(crate) const NATIVE_SOFTWARE_MICROSOFT_WINDOWS_CURRENTVERSION_INTERNET_SETTINGS: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 pub(crate) const NATIVE_SYSTEM_PROXY_REQUIRES_THE_REQWEST_TRANSPORT: &str =
     "system proxy requires the reqwest transport";

@@ -1163,14 +1163,24 @@ async function openAIAnalysis(): Promise<void> {
     const ticket = source === 'logshare' ? (uploadTicketPromise ?? uploadTicket.value) : null
     const enabledTools = enabledAgentTools('logs')
     if (version !== analysisVersion || source !== selectedSource.value) return
-    await agent.start(instanceId, source, ticket, (ticket) => {
-        if (version === analysisVersion) {
-            if (uploadTicket.value?.id !== ticket.id)
-                void recordShared({ ...ticket, provider: 'logshare', truncated: false })
-            uploadTicket.value = ticket
-        }
-    }, '', undefined, undefined, '', undefined,
-    enabledTools.has('read_log_file') || enabledTools.has('grep_log_file'))
+    await agent.start(
+        instanceId,
+        source,
+        ticket,
+        (ticket) => {
+            if (version === analysisVersion) {
+                if (uploadTicket.value?.id !== ticket.id)
+                    void recordShared({ ...ticket, provider: 'logshare', truncated: false })
+                uploadTicket.value = ticket
+            }
+        },
+        '',
+        undefined,
+        undefined,
+        '',
+        undefined,
+        enabledTools.has('read_log_file') || enabledTools.has('grep_log_file'),
+    )
 }
 
 async function refreshAIAvailability(): Promise<void> {

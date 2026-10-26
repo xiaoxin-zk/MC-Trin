@@ -144,14 +144,7 @@ export function useLogAgent(deps: Dependencies = dependencies) {
                       modelSelection.modelId,
                       source === 'assistant' && includeLogs,
                   )
-                : await deps.prepare(
-                      instanceId,
-                      run.id,
-                      source,
-                      undefined,
-                      undefined,
-                      includeLogs,
-                  )
+                : await deps.prepare(instanceId, run.id, source, undefined, undefined, includeLogs)
             if (!current()) return
             model.value =
                 source === 'logshare' ? '' : `${session.provider_id} / ${session.model_id}`

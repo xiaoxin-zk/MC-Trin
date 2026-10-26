@@ -372,11 +372,7 @@ const voiceRoomKey = computed(() => {
     return `${state.status}:${state.local_player_id ?? ''}:${players}`
 })
 
-watch(
-    voiceRoomKey,
-    () => voice.syncRoom(props.state),
-    { immediate: true },
-)
+watch(voiceRoomKey, () => voice.syncRoom(props.state), { immediate: true })
 
 onMounted(() => {
     prefillInviteFromDeepLink()

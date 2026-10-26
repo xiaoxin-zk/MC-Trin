@@ -620,7 +620,7 @@ mod tests {
         tokio::{accept_async, connect_async},
         tungstenite::Message,
     };
-    use futures::{SinkExt, StreamExt};
+    use futures::StreamExt;
     use serde_json::Value;
     use tokio::{net::TcpListener, sync::oneshot};
 

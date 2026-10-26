@@ -1,8 +1,4 @@
-import {
-    find_filtered_jres,
-    get_java_default_versions,
-    set_java_default_version,
-} from './jre.js'
+import { find_filtered_jres, get_java_default_versions, set_java_default_version } from './jre.js'
 
 type JavaScan = () => Promise<unknown>
 type JavaInstallation = {
@@ -15,8 +11,8 @@ const SUPPORTED_JAVA_VERSIONS = [25, 21, 17, 8]
 async function syncMissingJavaDefaults(result: unknown): Promise<void> {
     if (!Array.isArray(result)) return
 
-    const installations = result.filter(
-        (value): value is JavaInstallation => Boolean(value && typeof value === 'object'),
+    const installations = result.filter((value): value is JavaInstallation =>
+        Boolean(value && typeof value === 'object'),
     )
     if (!installations.length) return
 

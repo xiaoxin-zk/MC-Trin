@@ -1,8 +1,10 @@
+use content_management::resources::ipc::{
+    ResourceSearchQuery, ResourceSearchSort, ResourceTarget,
+};
 use content_management::resources::{
     InstallScope, ReleaseSelection, ResourceOperationIntent, ResourceRef,
-    ResourceSearchQuery, ResourceSearchSort, ResourceSelection, ResourceTarget,
-    ResourceType, SelectionId, SourceId, SourceProjectId, SourceProjectRef,
-    SourceReleaseId, SourceReleaseRef,
+    ResourceSelection, ResourceType, SelectionId, SourceId, SourceProjectId,
+    SourceProjectRef, SourceReleaseId, SourceReleaseRef,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

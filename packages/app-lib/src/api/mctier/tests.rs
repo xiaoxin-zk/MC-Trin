@@ -1,7 +1,7 @@
 use super::*;
 use async_tungstenite::{tokio::accept_async, tungstenite::Message};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use p256::{
     ecdsa::{Signature, VerifyingKey, signature::Verifier},
     pkcs8::DecodePublicKey,

@@ -63,7 +63,7 @@ const messages = defineMessages({
     generalPrivacy: {
         id: 'app.assistant.general-privacy',
         defaultMessage:
-            "Your question, sanitized crash logs when log tools are enabled, and any requested launcher details are sent to your configured AI provider. The assistant only performs limited local writes after your approval.",
+            'Your question, sanitized crash logs when log tools are enabled, and any requested launcher details are sent to your configured AI provider. The assistant only performs limited local writes after your approval.',
     },
     settings: { id: 'app.assistant.settings', defaultMessage: 'AI settings' },
     loading: {
@@ -185,7 +185,8 @@ const messages = defineMessages({
     },
     toolContentDescription: {
         id: 'app.assistant.tools.content.description',
-        defaultMessage: 'Inspect installed mods, resource packs, shaders, updates, and compatibility warnings.',
+        defaultMessage:
+            'Inspect installed mods, resource packs, shaders, updates, and compatibility warnings.',
     },
     toolCheckUpdatesName: {
         id: 'app.assistant.tools.check-updates.name',

@@ -783,13 +783,6 @@ fn assistant_request_shape_valid(request: &ToolRequest) -> bool {
                 && request.enabled.is_none()
                 && request.install_dependencies.is_none()
         }
-        "list_log_files" => {
-            request.file_id.is_empty()
-                && request.start_line.is_none()
-                && request.end_line.is_none()
-                && request.query.is_none()
-                && request.context.is_none()
-        }
         "read_log_file" => {
             no_assistant_extra_fields(request)
                 && !request.file_id.is_empty()

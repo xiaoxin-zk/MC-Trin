@@ -3678,6 +3678,7 @@ async fn create_recorded_symlink(
     tokio::task::spawn_blocking(move || {
         #[cfg(unix)]
         {
+            let _ = is_directory;
             std::os::unix::fs::symlink(target, link)
         }
         #[cfg(windows)]

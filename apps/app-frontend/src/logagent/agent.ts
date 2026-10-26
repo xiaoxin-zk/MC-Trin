@@ -200,81 +200,33 @@ export async function runLocalAgent(
                           'List Java vendors currently available for this platform from the launcher feed.',
                       schema: z.object({}),
                   }),
-                  tool(
-                      (request) => invokeTool('inspect_instance_content', request),
-                      {
-                          name: 'inspect_instance_content',
-                          description:
-                              'Inspect an instance content snapshot for installed mods, resource packs, shaders, versions, missing content, updates, and compatibility warnings. Paths remain relative.',
-                          schema: z.object({
-                              instance_id: z.string().min(1).max(128),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('check_content_updates', request),
-                      {
-                          name: 'check_content_updates',
-                          description:
-                              'Check whether installed content has compatible updates available, without applying them.',
-                          schema: z.object({
-                              instance_id: z.string().min(1).max(128),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('search_resources', request),
-                      {
-                          name: 'search_resources',
-                          description:
-                              'Search the configured Modrinth, CurseForge, MCArchive, and Planet Minecraft resource sources for mods, resource packs, shaders, datapacks, worlds, or modpacks.',
-                          schema: z.object({
-                              query: z.string().min(1).max(200),
-                              source: z
-                                  .enum(['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft'])
-                                  .optional(),
-                              resource_type: z
-                                  .enum([
-                                      'mod',
-                                      'plugin',
-                                      'data_pack',
-                                      'resource_pack',
-                                      'shader',
-                                      'mod_pack',
-                                      'world',
-                                  ])
-                                  .optional(),
-                              game_version: z.string().max(32).optional(),
-                              loader: z.string().max(32).optional(),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('get_resource_releases', request),
-                      {
-                          name: 'get_resource_releases',
-                          description:
-                              'List compatible releases for one resource project before preparing an install.',
-                          schema: z.object({
-                              source: z.enum(['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft']),
-                              project_id: z.string().min(1).max(160),
-                              game_version: z.string().max(32).optional(),
-                              loader: z.string().max(32).optional(),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('prepare_resource_install', request),
-                      {
-                          name: 'prepare_resource_install',
-                          description:
-                              'Create a dependency-resolved resource installation plan without downloading or changing game files. Use the plan summary to explain the proposed fix.',
-                          schema: z.object({
-                              instance_id: z.string().min(1).max(128),
-                              source: z.enum(['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft']),
-                              project_id: z.string().min(1).max(160),
-                              version_id: z.string().max(160).optional(),
-                              resource_type: z.enum([
+                  tool((request) => invokeTool('inspect_instance_content', request), {
+                      name: 'inspect_instance_content',
+                      description:
+                          'Inspect an instance content snapshot for installed mods, resource packs, shaders, versions, missing content, updates, and compatibility warnings. Paths remain relative.',
+                      schema: z.object({
+                          instance_id: z.string().min(1).max(128),
+                      }),
+                  }),
+                  tool((request) => invokeTool('check_content_updates', request), {
+                      name: 'check_content_updates',
+                      description:
+                          'Check whether installed content has compatible updates available, without applying them.',
+                      schema: z.object({
+                          instance_id: z.string().min(1).max(128),
+                      }),
+                  }),
+                  tool((request) => invokeTool('search_resources', request), {
+                      name: 'search_resources',
+                      description:
+                          'Search the configured Modrinth, CurseForge, MCArchive, and Planet Minecraft resource sources for mods, resource packs, shaders, datapacks, worlds, or modpacks.',
+                      schema: z.object({
+                          query: z.string().min(1).max(200),
+                          source: z
+                              .enum(['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft'])
+                              .optional(),
+                          resource_type: z
+                              .enum([
                                   'mod',
                                   'plugin',
                                   'data_pack',
@@ -282,40 +234,79 @@ export async function runLocalAgent(
                                   'shader',
                                   'mod_pack',
                                   'world',
-                              ]),
-                              install_dependencies: z.boolean().optional(),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('prepare_resource_update', request),
-                      {
-                          name: 'prepare_resource_update',
-                          description:
-                              'Prepare a dependency-resolved update plan for one installed content entry without downloading or changing files.',
-                          schema: z.object({
-                              instance_id: z.string().min(1).max(128),
-                              content_id: z.string().min(1).max(160),
-                          }),
-                      },
-                  ),
-                  tool(
-                      (request) => invokeTool('get_install_job', request),
-                      {
-                          name: 'get_install_job',
-                          description:
-                              'Read the status, phase, progress, and error of a launcher download or installation job.',
-                          schema: z.object({ job_id: z.string().min(1).max(80) }),
-                      },
-                  ),
+                              ])
+                              .optional(),
+                          game_version: z.string().max(32).optional(),
+                          loader: z.string().max(32).optional(),
+                      }),
+                  }),
+                  tool((request) => invokeTool('get_resource_releases', request), {
+                      name: 'get_resource_releases',
+                      description:
+                          'List compatible releases for one resource project before preparing an install.',
+                      schema: z.object({
+                          source: z.enum([
+                              'modrinth',
+                              'curseforge',
+                              'mcarchive',
+                              'planet_minecraft',
+                          ]),
+                          project_id: z.string().min(1).max(160),
+                          game_version: z.string().max(32).optional(),
+                          loader: z.string().max(32).optional(),
+                      }),
+                  }),
+                  tool((request) => invokeTool('prepare_resource_install', request), {
+                      name: 'prepare_resource_install',
+                      description:
+                          'Create a dependency-resolved resource installation plan without downloading or changing game files. Use the plan summary to explain the proposed fix.',
+                      schema: z.object({
+                          instance_id: z.string().min(1).max(128),
+                          source: z.enum([
+                              'modrinth',
+                              'curseforge',
+                              'mcarchive',
+                              'planet_minecraft',
+                          ]),
+                          project_id: z.string().min(1).max(160),
+                          version_id: z.string().max(160).optional(),
+                          resource_type: z.enum([
+                              'mod',
+                              'plugin',
+                              'data_pack',
+                              'resource_pack',
+                              'shader',
+                              'mod_pack',
+                              'world',
+                          ]),
+                          install_dependencies: z.boolean().optional(),
+                      }),
+                  }),
+                  tool((request) => invokeTool('prepare_resource_update', request), {
+                      name: 'prepare_resource_update',
+                      description:
+                          'Prepare a dependency-resolved update plan for one installed content entry without downloading or changing files.',
+                      schema: z.object({
+                          instance_id: z.string().min(1).max(128),
+                          content_id: z.string().min(1).max(160),
+                      }),
+                  }),
+                  tool((request) => invokeTool('get_install_job', request), {
+                      name: 'get_install_job',
+                      description:
+                          'Read the status, phase, progress, and error of a launcher download or installation job.',
+                      schema: z.object({ job_id: z.string().min(1).max(80) }),
+                  }),
                   tool(() => invokeTool('list_log_files', {}), {
                       name: 'list_log_files',
-                      description: 'List the selected instance crash snapshot IDs, names, and original line ranges.',
+                      description:
+                          'List the selected instance crash snapshot IDs, names, and original line ranges.',
                       schema: z.object({}),
                   }),
                   tool((request) => invokeTool('read_log_file', request), {
                       name: 'read_log_file',
-                      description: 'Read a bounded range from the selected instance crash snapshot.',
+                      description:
+                          'Read a bounded range from the selected instance crash snapshot.',
                       schema: z.object({
                           file_id: z.string(),
                           start_line: z.number().int().positive().optional(),
@@ -324,7 +315,8 @@ export async function runLocalAgent(
                   }),
                   tool((request) => invokeTool('grep_log_file', request), {
                       name: 'grep_log_file',
-                      description: 'Search the selected instance crash snapshot using a literal query and surrounding context.',
+                      description:
+                          'Search the selected instance crash snapshot using a literal query and surrounding context.',
                       schema: z.object({
                           file_id: z.string(),
                           query: z.string().min(1).max(256),
@@ -669,8 +661,7 @@ export async function runLocalAgent(
                                 tool_call_id: call.id ?? '',
                                 name: call.name,
                                 status: 'error',
-                                content:
-                                    `This tool batch was not executed: ${names} is not available. Use only these currently enabled tools: ${Array.from(availableTools).join(', ') || 'none'}. Remote MCP tools still require approval.`,
+                                content: `This tool batch was not executed: ${names} is not available. Use only these currently enabled tools: ${Array.from(availableTools).join(', ') || 'none'}. Remote MCP tools still require approval.`,
                             }),
                     ),
                     jumpTo: 'model' as const,
