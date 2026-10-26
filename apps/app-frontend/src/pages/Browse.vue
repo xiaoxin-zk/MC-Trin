@@ -2749,7 +2749,7 @@ provideBrowseManager({
                             </Button>
                             <p
                                 v-if="!curseForgeCapability.configured"
-                                class="m-0 max-w-64 px-2 py-1 text-xs text-[var(--color-text-secondary)]"
+                                class="m-0 max-w-64 px-2 py-1 text-xs text-[var(--color-text-tertiary)]"
                             >
                                 {{ formatMessage(messages.curseForgeNotConfigured) }}
                             </p>
