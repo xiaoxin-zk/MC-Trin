@@ -244,10 +244,14 @@ jobs:
       - name: Test provider-neutral resource layer
         if: runner.os == 'Linux'
         run: cargo test --package theseus resources
-      - name: Test synchronized instance features
+      - name: Test HTTP/2 range recovery and resume
         if: runner.os == 'Linux'
-        timeout-minutes: 20
-        run: cargo test --package theseus synced_ -- --test-threads=1 --nocapture
+        timeout-minutes: 10
+        run: cargo test --package theseus h2_range -- --test-threads=1 --nocapture
+      - name: Test existing modpack rollback after download and database failures
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        run: cargo test --package theseus b10_restores_existing_pack_state_after_download_and_database_failures -- --test-threads=1 --nocapture
       - name: Test modpack game settings source detection
         if: runner.os == 'Linux'
         run: cargo test --package theseus pack_options_source
@@ -255,6 +259,10 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test --package theseus curseforge_game_options_source
       - run: cargo check --package theseus_gui --features updater
+      - name: Test synchronized instance features
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: cargo test --package theseus synced_ -- --test-threads=1 --nocapture
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'
         run: |
