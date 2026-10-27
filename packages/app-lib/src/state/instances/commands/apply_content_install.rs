@@ -154,7 +154,7 @@ fn resolve_provider_error(error: crate::Error) -> ResolveError {
 }
 
 async fn cached_modrinth_version(
-    version_id: &ModrinthVersionId,
+    version_id: ModrinthVersionId,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Option<Version>> {
     let values = CachedEntry::get_resource_values(
@@ -538,7 +538,7 @@ async fn resolved_content_file_size(
     content: &ResolvedContent,
 ) -> crate::Result<u64> {
     let version = cached_modrinth_version(
-        &ModrinthVersionId::new(content.version_id.clone())?,
+        ModrinthVersionId::new(content.version_id.clone())?,
         None,
     )
     .await?
@@ -565,7 +565,7 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
     state: &State,
 ) -> crate::Result<String> {
     let version = cached_modrinth_version(
-        &ModrinthVersionId::new(version_id.to_string())?,
+        ModrinthVersionId::new(version_id.to_string())?,
         Some(CacheBehaviour::MustRevalidate),
     )
     .await?
@@ -593,7 +593,7 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
     let new_provider_file_name = primary_version_file_name(&version)?;
     let old_provider_file_name = match current_version_id {
         Some(current_version_id) => cached_modrinth_version(
-            &ModrinthVersionId::new(current_version_id.to_string())?,
+            ModrinthVersionId::new(current_version_id.to_string())?,
             Some(CacheBehaviour::MustRevalidate),
         )
         .await?
@@ -707,7 +707,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
 ) -> crate::Result<()> {
     let pool = state.pool.clone();
     let version = cached_modrinth_version(
-        &ModrinthVersionId::new(action.target_release_id.clone())?,
+        ModrinthVersionId::new(action.target_release_id.clone())?,
         None,
     )
     .await?
@@ -739,7 +739,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     let current_provider_file_name = match action.expected_release_id.as_deref()
     {
         Some(version_id) => cached_modrinth_version(
-            &ModrinthVersionId::new(version_id.to_string())?,
+            ModrinthVersionId::new(version_id.to_string())?,
             None,
         )
         .await?
@@ -1573,7 +1573,7 @@ pub(crate) async fn prepare_version_download(
         ))
     })?;
     let version = cached_modrinth_version(
-        &ModrinthVersionId::new(version_id.clone())?,
+        ModrinthVersionId::new(version_id.clone())?,
         None,
     )
     .await?
