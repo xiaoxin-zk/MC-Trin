@@ -240,6 +240,15 @@ jobs:
       - name: Test provider-neutral resource layer
         if: runner.os == 'Linux'
         run: cargo test --package theseus resources
+      - name: Test synchronized instance features
+        if: runner.os == 'Linux'
+        run: cargo test --package theseus synced_
+      - name: Test modpack game settings source detection
+        if: runner.os == 'Linux'
+        run: cargo test --package theseus pack_options_source
+      - name: Test CurseForge game settings archive detection
+        if: runner.os == 'Linux'
+        run: cargo test --package theseus curseforge_game_options_source
       - run: cargo check --package theseus_gui --features updater
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'

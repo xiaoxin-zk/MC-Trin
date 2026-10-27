@@ -14,12 +14,55 @@ use std::path::Path;
 
 const YOSBR_OPTIONS_PATH: &str = "config/yosbr/options.txt";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum GameOptionsPackSource {
     ClientOverrides,
     Overrides,
     ClientOverridesYosbr,
     OverridesYosbr,
+}
+
+pub(crate) fn detect_game_options_pack_source<'a>(
+    entries: impl IntoIterator<Item = (bool, &'a str)>,
+) -> Option<GameOptionsPackSource> {
+    let mut options_source = None;
+    let mut yosbr_source = None;
+    for (client_overrides, path) in entries {
+        let source = match (client_overrides, path) {
+            (true, "options.txt") => {
+                Some(GameOptionsPackSource::ClientOverrides)
+            }
+            (false, "options.txt") => Some(GameOptionsPackSource::Overrides),
+            (true, "config/yosbr/options.txt") => {
+                Some(GameOptionsPackSource::ClientOverridesYosbr)
+            }
+            (false, "config/yosbr/options.txt") => {
+                Some(GameOptionsPackSource::OverridesYosbr)
+            }
+            _ => None,
+        };
+        match path {
+            "options.txt" => {
+                if source == Some(GameOptionsPackSource::ClientOverrides)
+                    || options_source.is_none()
+                {
+                    options_source = source;
+                }
+            }
+            "config/yosbr/options.txt" => {
+                if source == Some(GameOptionsPackSource::ClientOverridesYosbr)
+                    || yosbr_source.is_none()
+                {
+                    yosbr_source = source;
+                }
+            }
+            _ => {}
+        }
+    }
+    yosbr_source.or(options_source)
 }
 
 impl GameOptionsPackSource {
@@ -149,12 +192,19 @@ pub(in crate::api::instance) async fn prepare_instance_update_with_state(
     metadata: &InstanceMetadata,
     state: &State,
 ) -> crate::Result<()> {
-    sqlx::query!(
-        "DELETE FROM instance_game_option_update_state WHERE instance_id = ?",
+    let pending = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM instance_game_option_update_state WHERE instance_id = ?
+        ) AS "pending!: bool"
+        "#,
         metadata.instance.id,
     )
-    .execute(&state.pool)
+    .fetch_one(&state.pool)
     .await?;
+    if pending {
+        return Ok(());
+    }
     if sync_is_active_for_instance(metadata, state).await? {
         let _ = capture_instance_options(metadata, state, true).await?;
     }
@@ -197,9 +247,46 @@ pub(in crate::api::instance) async fn prepare_instance_update_with_state(
     Ok(())
 }
 
+pub(crate) async fn abort_pack_update(instance_id: &str) -> crate::Result<()> {
+    let state = State::get().await?;
+    let _guard = state.lock_synced_options().await;
+    let metadata = crate::state::get_instance(instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| input_error("Unknown instance"))?;
+    let pending = sqlx::query!(
+        r#"
+        SELECT had_file AS "had_file!: bool", document
+        FROM instance_game_option_update_state
+        WHERE instance_id = ?
+        "#,
+        instance_id,
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+    if let Some(pending) = pending {
+        let path = options_path(&metadata, &state)?;
+        if pending.had_file {
+            let document = pending.document.ok_or_else(|| {
+                input_error("The saved options.txt backup is missing")
+            })?;
+            let _ = options_target_exists(&path).await?;
+            io::write(&path, document).await?;
+        } else if options_target_exists(&path).await? {
+            io::remove_file(&path).await?;
+        }
+        sqlx::query!(
+            "DELETE FROM instance_game_option_update_state WHERE instance_id = ?",
+            instance_id,
+        )
+        .execute(&state.pool)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Keeps the new modpack's `options.txt` as its default, then reapplies the user's
 /// shared settings.
-pub async fn capture_pack_base(
+pub(crate) async fn capture_pack_base(
     instance_id: &str,
     source: Option<GameOptionsPackSource>,
 ) -> crate::Result<()> {
@@ -234,10 +321,12 @@ pub async fn capture_pack_base(
         .await?;
         if let Some(pending) = pending {
             if pending.had_file {
-                if let Some(document) = pending.document {
-                    io::write(&path, document).await?;
-                }
-            } else if path.exists() {
+                let document = pending.document.ok_or_else(|| {
+                    input_error("The saved options.txt backup is missing")
+                })?;
+                let _ = options_target_exists(&path).await?;
+                io::write(&path, document).await?;
+            } else if options_target_exists(&path).await? {
                 io::remove_file(&path).await?;
             }
         }
@@ -270,6 +359,10 @@ pub async fn capture_pack_base(
     let source_name =
         source.map(GameOptionsPackSource::as_str).unwrap_or("none");
     let version_id = pack_version_id(&metadata);
+    if sync_is_active_for_instance(&metadata, &state).await? {
+        apply_shared_settings_to_instance(&metadata, &state, true).await?;
+    }
+    let mut transaction = state.pool.begin().await?;
     sqlx::query!(
         "
 		INSERT INTO instance_game_option_pack_bases
@@ -287,23 +380,69 @@ pub async fn capture_pack_base(
         encoding,
         document_bytes,
     )
-    .execute(&state.pool)
+    .execute(&mut *transaction)
     .await?;
     sqlx::query!(
         "DELETE FROM instance_game_option_update_state WHERE instance_id = ?",
         instance_id,
     )
-    .execute(&state.pool)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
+    Ok(())
+}
 
-    if sync_is_active_for_instance(&metadata, &state).await?
-        && let Err(error) =
-            apply_shared_settings_to_instance(&metadata, &state, true).await
-    {
-        tracing::warn!(
-            "Captured the modpack options.txt for {}, but shared settings could not be overlaid yet: {error}",
-            metadata.instance.id
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pack_options_source_tracks_override_origin_and_prefers_yosbr() {
+        assert_eq!(
+            detect_game_options_pack_source([(false, "options.txt")]),
+            Some(GameOptionsPackSource::Overrides)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([
+                (false, "options.txt"),
+                (true, "options.txt"),
+            ]),
+            Some(GameOptionsPackSource::ClientOverrides)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([
+                (true, "options.txt"),
+                (false, "options.txt"),
+            ]),
+            Some(GameOptionsPackSource::ClientOverrides)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([
+                (false, "config/yosbr/options.txt"),
+                (true, "config/yosbr/options.txt"),
+            ]),
+            Some(GameOptionsPackSource::ClientOverridesYosbr)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([
+                (true, "options.txt"),
+                (false, "config/yosbr/options.txt"),
+            ]),
+            Some(GameOptionsPackSource::OverridesYosbr)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([(
+                false,
+                "config/yosbr/options.txt"
+            )]),
+            Some(GameOptionsPackSource::OverridesYosbr)
+        );
+        assert_eq!(
+            detect_game_options_pack_source([(
+                false,
+                "config/other/options.txt"
+            )]),
+            None
         );
     }
-    Ok(())
 }

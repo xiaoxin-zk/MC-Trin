@@ -48,6 +48,14 @@ const messages = defineMessages({
         id: 'instance.settings.sync.resource-packs',
         defaultMessage: 'Resource packs',
     },
+    dataPacks: {
+        id: 'instance.settings.sync.data-packs',
+        defaultMessage: 'Data packs',
+    },
+    screenshots: {
+        id: 'instance.settings.sync.screenshots',
+        defaultMessage: 'Include in global screenshot gallery',
+    },
 })
 
 const options: Array<{ key: SyncedOption; label: keyof typeof messages }> = [
@@ -56,6 +64,8 @@ const options: Array<{ key: SyncedOption; label: keyof typeof messages }> = [
     { key: 'multiplayer_servers', label: 'multiplayerServers' },
     { key: 'creative_hotbars', label: 'creativeHotbars' },
     { key: 'resource_packs', label: 'resourcePacks' },
+    { key: 'data_packs', label: 'dataPacks' },
+    { key: 'screenshots', label: 'screenshots' },
 ]
 
 const overviewQuery = useQuery({

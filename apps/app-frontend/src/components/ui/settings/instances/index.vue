@@ -110,6 +110,14 @@ const messages = defineMessages({
         id: 'app.settings.synced-options.creative-hotbars.description',
         defaultMessage: 'Use the same saved creative hotbars across your instances.',
     },
+    screenshots: {
+        id: 'app.settings.synced-options.screenshots',
+        defaultMessage: 'Include screenshots in the global gallery',
+    },
+    screenshotsDescription: {
+        id: 'app.settings.synced-options.screenshots.description',
+        defaultMessage: 'Choose which instances appear in the global screenshot gallery.',
+    },
     gameSettingsSyncSourceTitle: {
         id: 'app.settings.synced-options.choose-sync-source.game-settings-title',
         defaultMessage: 'Choose game settings source',
@@ -226,6 +234,11 @@ const globalRows: Array<{
         option: 'creative_hotbars',
         title: 'creativeHotbars',
         description: 'creativeHotbarsDescription',
+    },
+    {
+        option: 'screenshots',
+        title: 'screenshots',
+        description: 'screenshotsDescription',
     },
 ]
 

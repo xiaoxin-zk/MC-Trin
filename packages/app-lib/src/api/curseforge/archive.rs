@@ -296,6 +296,36 @@ pub(crate) fn read_modpack_manifest<R: Read + Seek>(
     Ok(serde_json::from_str::<CurseForgeModpackManifest>(&json)?)
 }
 
+pub(crate) fn game_options_pack_source<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+) -> crate::Result<Option<crate::api::instance::GameOptionsPackSource>> {
+    let prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+    let mut entries = Vec::new();
+    for index in 0..archive.len() {
+        let entry = archive.by_index(index).map_err(modpack_zip_error)?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = crate::pack::detect::decode_zip_entry_name(entry.name_raw());
+        let Some(relative) = name.strip_prefix(&prefix) else {
+            continue;
+        };
+        let relative = safe_archive_relative_path(relative)?;
+        if matches!(
+            relative.as_str(),
+            "options.txt" | "config/yosbr/options.txt"
+        ) {
+            entries.push((false, relative));
+        }
+    }
+    Ok(crate::api::instance::detect_game_options_pack_source(
+        entries
+            .iter()
+            .map(|(is_client, path)| (*is_client, path.as_str())),
+    ))
+}
+
 pub(crate) fn modpack_target(
     manifest: &CurseForgeModpackManifest,
 ) -> crate::Result<CurseForgeModpackTarget> {

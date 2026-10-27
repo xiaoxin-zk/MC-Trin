@@ -51,6 +51,10 @@ pub(in crate::api::instance) use resource_pack_options::{
     merge_resource_pack_entries, read_resource_pack_entries,
 };
 
+pub(crate) use pack_updates::{
+    GameOptionsPackSource, abort_pack_update, capture_pack_base,
+    detect_game_options_pack_source,
+};
 pub(in crate::api::instance) use pack_updates::{
     detach_instance, prepare_instance_update_with_state,
 };

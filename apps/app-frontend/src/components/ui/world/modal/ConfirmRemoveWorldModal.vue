@@ -6,11 +6,12 @@ import {
     commonMessages,
     defineMessages,
     NewModal,
+    RadioButtons,
     useVIntl,
 } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
-import type { World } from '@/helpers/worlds.ts'
+import type { DesyncServerMode, World } from '@/helpers/worlds.ts'
 
 const { formatMessage } = useVIntl()
 
@@ -20,7 +21,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    confirm: [world: World]
+    confirm: [world: World, desyncMode?: DesyncServerMode]
 }>()
 
 const messages = defineMessages({
@@ -54,6 +55,31 @@ const messages = defineMessages({
         id: 'app.instance.worlds.remove-server-modal.remove-button',
         defaultMessage: 'Remove server',
     },
+    desyncCurrentOnly: {
+        id: 'app.instance.worlds.remove-server-modal.current-only',
+        defaultMessage: 'Only from this instance',
+    },
+    desyncEverywhere: {
+        id: 'app.instance.worlds.remove-server-modal.everywhere',
+        defaultMessage: 'From all instances',
+    },
+    desyncCurrentWarning: {
+        id: 'app.instance.worlds.remove-server-modal.current-warning',
+        defaultMessage:
+            'This server will stay synced elsewhere and remain in this instance as a local server.',
+    },
+    desyncEverywhereWarning: {
+        id: 'app.instance.worlds.remove-server-modal.everywhere-warning',
+        defaultMessage: 'This server will be removed from every instance that syncs servers.',
+    },
+    desyncCurrentButton: {
+        id: 'app.instance.worlds.remove-server-modal.current-button',
+        defaultMessage: 'Only from this instance',
+    },
+    desyncEverywhereButton: {
+        id: 'app.instance.worlds.remove-server-modal.everywhere-button',
+        defaultMessage: 'Remove from all instances',
+    },
     deleteWorldButton: {
         id: 'app.instance.worlds.delete-world-modal.delete-button',
         defaultMessage: 'Delete world',
@@ -70,6 +96,11 @@ const messages = defineMessages({
 })
 
 const modal = ref<InstanceType<typeof NewModal>>()
+const desyncMode = ref<DesyncServerMode>('keep_in_other_instances')
+const isSyncedServer = computed(
+    () => props.world?.type === 'server' && !!props.world.synced_server_id,
+)
+const desyncModes: DesyncServerMode[] = ['keep_in_other_instances', 'remove_from_other_instances']
 
 const isServer = computed(() => props.world?.type === 'server')
 const isSingleplayer = computed(() => props.world?.type === 'singleplayer')
@@ -87,6 +118,7 @@ const warningBodyMessage = computed(() =>
 )
 
 function show() {
+    desyncMode.value = 'keep_in_other_instances'
     modal.value?.show()
 }
 
@@ -96,7 +128,13 @@ function hide() {
 
 function confirm() {
     if (!props.world) return
-    emit('confirm', props.world)
+    emit(
+        'confirm',
+        props.world,
+        props.world.type === 'server' && props.world.synced_server_id
+            ? desyncMode.value
+            : undefined,
+    )
     hide()
 }
 
@@ -114,6 +152,33 @@ defineExpose({ show, hide })
                 {{ formatMessage(messages.symlinkWarningBody, { path: symlinkTarget }) }}
             </Admonition>
             <Admonition
+                v-if="isSyncedServer"
+                :type="desyncMode === 'remove_from_other_instances' ? 'critical' : 'warning'"
+                :header="formatMessage(messages.removeServerWarningHeader, { name: world?.name })"
+            >
+                <RadioButtons v-model="desyncMode" :items="desyncModes" force-selection>
+                    <template #default="{ item }">
+                        {{
+                            formatMessage(
+                                item === 'keep_in_other_instances'
+                                    ? messages.desyncCurrentOnly
+                                    : messages.desyncEverywhere,
+                            )
+                        }}
+                    </template>
+                </RadioButtons>
+                <p class="mb-0 mt-3">
+                    {{
+                        formatMessage(
+                            desyncMode === 'keep_in_other_instances'
+                                ? messages.desyncCurrentWarning
+                                : messages.desyncEverywhereWarning,
+                        )
+                    }}
+                </p>
+            </Admonition>
+            <Admonition
+                v-else
                 type="critical"
                 :header="formatMessage(warningHeaderMessage, { name: world?.name })"
             >
@@ -133,7 +198,15 @@ defineExpose({ show, hide })
                     :disabled="!isServer && !isSingleplayer"
                     @click="confirm"
                     ><TrashIcon />
-                    {{ formatMessage(actionMessage) }}
+                    {{
+                        formatMessage(
+                            isSyncedServer
+                                ? desyncMode === 'keep_in_other_instances'
+                                    ? messages.desyncCurrentButton
+                                    : messages.desyncEverywhereButton
+                                : actionMessage,
+                        )
+                    }}
                 </Button>
             </div>
         </template>

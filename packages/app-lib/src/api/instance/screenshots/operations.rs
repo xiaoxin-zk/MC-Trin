@@ -73,7 +73,15 @@ pub async fn list_screenshots(
 
 pub async fn list_synced_screenshots() -> crate::Result<Vec<InstanceScreenshot>>
 {
-    list_all_screenshots().await
+    Ok(list_synced_screenshots_with_warnings().await?.screenshots)
+}
+
+pub async fn list_synced_screenshots_with_warnings()
+-> crate::Result<ScreenshotScanResult> {
+    let state = State::get().await?;
+    let sources =
+        instance_rows::list_synced_screenshot_sources(&state.pool).await?;
+    list_source_screenshot_sets(&state, sources).await
 }
 
 pub async fn list_all_screenshots() -> crate::Result<Vec<InstanceScreenshot>> {

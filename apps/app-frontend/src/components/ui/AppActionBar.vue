@@ -303,6 +303,8 @@ import { get_many as getInstances } from '@/helpers/instance'
 import {
     type BackupOperation,
     type BackupProgressEvent,
+    backupProgressState,
+    isBackupActivityOperation,
     listBackupOperations,
     listenBackupProgress,
 } from '@/helpers/instance-backup'
@@ -533,6 +535,10 @@ const messages = defineMessages({
         id: 'app.action-bar.restore-preview',
         defaultMessage: 'Analyzing restore',
     },
+    deleteBackup: {
+        id: 'app.action-bar.delete-backup',
+        defaultMessage: 'Deleting backup',
+    },
     repositoryMove: {
         id: 'app.action-bar.repository-move',
         defaultMessage: 'Moving backup repository',
@@ -546,6 +552,10 @@ const messages = defineMessages({
     restorePreviewTask: {
         id: 'app.action-bar.backup-task.restore-preview',
         defaultMessage: 'Restore analysis',
+    },
+    deleteBackupTask: {
+        id: 'app.action-bar.backup-task.delete',
+        defaultMessage: 'Backup deletion',
     },
     repositoryMoveTask: {
         id: 'app.action-bar.backup-task.repository-move',
@@ -583,6 +593,10 @@ const messages = defineMessages({
         defaultMessage: 'Applying files',
     },
     stageApplying: { id: 'app.action-bar.backup-stage.applying', defaultMessage: 'Applying files' },
+    stageDeleting: {
+        id: 'app.action-bar.backup-stage.deleting',
+        defaultMessage: 'Deleting backup',
+    },
     exportingModpack: {
         id: 'app.action-bar.exporting-modpack',
         defaultMessage: 'Exporting modpack',
@@ -603,6 +617,8 @@ function backupOperationMessage(operationType: BackupOperation['operation_type']
             return messages.restore
         case 'restore_preview':
             return messages.restorePreview
+        case 'delete':
+            return messages.deleteBackup
         case 'repository_move':
             return messages.repositoryMove
         default:
@@ -616,6 +632,8 @@ function backupResultOperationMessage(operationType: BackupOperation['operation_
             return messages.restoreTask
         case 'restore_preview':
             return messages.restorePreviewTask
+        case 'delete':
+            return messages.deleteBackupTask
         case 'repository_move':
             return messages.repositoryMoveTask
         default:
@@ -633,7 +651,7 @@ function backupOperationTitle(operation: BackupOperation): string {
 }
 
 function backupOperationProgress(operation: BackupOperation): string {
-    if (!operation.total_bytes) {
+    if (!operation.total_bytes || operation.operation_type === 'delete') {
         const stageMessage =
             {
                 queued: messages.stageQueued,
@@ -643,6 +661,7 @@ function backupOperationProgress(operation: BackupOperation): string {
                 validating: messages.stageValidating,
                 materializing: messages.stageMaterializing,
                 applying: messages.stageApplying,
+                deleting: messages.stageDeleting,
             }[operation.state] ?? messages.backupStage
         return formatMessage(
             stageMessage,
@@ -669,9 +688,7 @@ async function refreshBackupOperations() {
     })
     if (generation !== backupRefreshGeneration) return
     const listedOperations = operations.filter((operation) =>
-        ['create', 'restore', 'restore_preview', 'repository_move'].includes(
-            operation.operation_type,
-        ),
+        isBackupActivityOperation(operation.operation_type),
     )
     const eventOperations = activeBackupOperations.value.filter(
         (operation) =>
@@ -730,8 +747,7 @@ async function notifyBackupResult(event: BackupProgressEvent) {
 }
 
 function applyBackupProgress(event: BackupProgressEvent) {
-    if (!['create', 'restore', 'restore_preview', 'repository_move'].includes(event.operationType))
-        return
+    if (!isBackupActivityOperation(event.operationType)) return
     if (event.finalState || ['completed', 'cancelled', 'failed'].includes(event.stage)) {
         eventActiveBackupOperations.delete(event.operationId)
         activeBackupOperations.value = activeBackupOperations.value.filter(
@@ -741,13 +757,14 @@ function applyBackupProgress(event: BackupProgressEvent) {
         void refreshBackupOperations()
         return
     }
-    const state: BackupOperation['state'] =
-        event.stage === 'copying' || event.stage === 'restoring' ? 'materializing' : event.stage
+    const state = backupProgressState(event.stage)
     eventActiveBackupOperations.add(event.operationId)
     const existing = activeBackupOperations.value.find(
         (operation) => operation.id === event.operationId,
     )
     if (existing) {
+        if (event.instanceId) existing.instance_id = event.instanceId
+        if (event.snapshotId) existing.snapshot_id = event.snapshotId
         existing.state = state
         existing.processed_bytes = event.processedBytes
         existing.total_bytes = event.totalBytes

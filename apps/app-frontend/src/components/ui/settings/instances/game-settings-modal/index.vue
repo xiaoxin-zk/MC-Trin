@@ -31,6 +31,7 @@ import { computed, inject, ref, watch } from 'vue'
 import { type RouteLocationRaw, useRouter } from 'vue-router'
 
 import type { EditableGameSetting, GameSettingCategory } from '@/helpers/game-options'
+import { hasIncompleteGameSettingsSave } from '@/helpers/game-settings-result'
 import { injectInstanceSettings } from '@/pages/instance/components/settings-modal/instance-settings-context'
 import { appSettingsModalContextKey } from '@/providers/app-settings-modal'
 
@@ -118,6 +119,15 @@ const messages = defineMessages({
         id: 'app.settings.synced-options.game-settings.unsaved-changes',
         defaultMessage: 'You have unsaved changes.',
     },
+    partialSaveTitle: {
+        id: 'app.settings.synced-options.game-settings.partial-save-title',
+        defaultMessage: 'Some instance settings need attention',
+    },
+    partialSaveText: {
+        id: 'app.settings.synced-options.game-settings.partial-save-text',
+        defaultMessage:
+            'Applied to {applied} instances, migrated {migrated}, deferred {deferred}, unsupported {unsupported}, failed {failed}.',
+    },
 })
 
 const modal = ref<InstanceType<typeof TabbedModal> | null>(null)
@@ -133,6 +143,8 @@ const {
     hasBlockingDraft,
     loading,
     loadError,
+    previewError,
+    saveResult,
     saving,
     load,
     reset: resetEditor,
@@ -141,9 +153,14 @@ const {
     setCanonicalValue,
     save,
     saveAndWait,
+    retryPreview,
 } = useGameSettingsEditor(
     () => props.instanceId,
     () => emit('saved'),
+)
+
+const incompleteSave = computed(
+    () => !!saveResult.value && hasIncompleteGameSettingsSave(saveResult.value),
 )
 
 const categoryIcons: Record<string, Component> = {
@@ -384,6 +401,40 @@ defineExpose({ show, hide })
         <template #content>
             <div class="flex min-h-full min-w-0 flex-col">
                 <div
+                    v-if="previewError"
+                    class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-solid border-red p-3 text-sm text-red"
+                    role="alert"
+                >
+                    <span>{{ previewError }}</span>
+                    <Button type="outlined" @click="retryPreview">
+                        <RefreshCwIcon aria-hidden="true" />
+                        {{ formatMessage(commonMessages.retryButton) }}
+                    </Button>
+                </div>
+                <div
+                    v-if="incompleteSave && saveResult"
+                    class="mb-4 rounded-md border border-solid p-3 text-sm text-[var(--color-text-primary)]"
+                    :class="
+                        saveResult.failed > 0
+                            ? 'border-red bg-highlight-red'
+                            : 'border-orange bg-highlight-orange'
+                    "
+                    :role="saveResult.failed > 0 ? 'alert' : 'status'"
+                >
+                    <p class="m-0 font-semibold">{{ formatMessage(messages.partialSaveTitle) }}</p>
+                    <p class="m-0 mt-1">
+                        {{
+                            formatMessage(messages.partialSaveText, {
+                                applied: saveResult.applied,
+                                migrated: saveResult.migrated,
+                                deferred: saveResult.deferred,
+                                unsupported: saveResult.unsupported,
+                                failed: saveResult.failed,
+                            })
+                        }}
+                    </p>
+                </div>
+                <div
                     v-if="!isLocalEditor && (loading || loadError || categorySettings.length > 0)"
                     class="mb-4 flex shrink-0 flex-wrap items-start justify-between gap-4 border-0 border-b border-solid border-surface-4 pb-4"
                 >
@@ -478,7 +529,9 @@ defineExpose({ show, hide })
                     <Button
                         type="colored"
                         color="brand"
-                        :disabled="!isDirty || loading || saving || hasBlockingDraft"
+                        :disabled="
+                            !isDirty || loading || saving || hasBlockingDraft || !!previewError
+                        "
                         :loading="saving"
                         @click="save"
                     >

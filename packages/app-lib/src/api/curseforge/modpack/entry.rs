@@ -2,9 +2,9 @@
 
 use super::*;
 use crate::api::curseforge::archive::{
-    cache_instance_icon_from_url, loader_type, materialize_modpack_overrides,
-    modpack_target, modpack_zip_error, read_modpack_manifest,
-    settle_materialized_modpack_overrides,
+    cache_instance_icon_from_url, game_options_pack_source, loader_type,
+    materialize_modpack_overrides, modpack_target, modpack_zip_error,
+    read_modpack_manifest, settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::catalog::{
     get_file, get_modpack_files, get_modpack_projects, get_project,
@@ -121,7 +121,11 @@ pub(super) async fn download_modpack_archive_with_reporter(
     download_url: &str,
     pack_details: InstallPhaseDetails,
     reporter: Option<InstallProgressReporter>,
-) -> crate::Result<(PathBuf, CurseForgeModpackManifest)> {
+) -> crate::Result<(
+    PathBuf,
+    CurseForgeModpackManifest,
+    Option<crate::api::instance::GameOptionsPackSource>,
+)> {
     if let Some(reporter) = reporter.as_ref() {
         let state = State::get().await?;
         let item_path = state
@@ -229,14 +233,18 @@ pub(super) async fn download_modpack_archive_with_reporter(
             .await?;
     }
     let pack_path_for_manifest = pack_path.clone();
-    let manifest = tokio::task::spawn_blocking(move || {
-        let file = std::fs::File::open(&pack_path_for_manifest)?;
-        let mut archive =
-            zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
-        read_modpack_manifest(&mut archive)
-    })
-    .await??;
-    Ok((pack_path, manifest))
+    let (manifest, game_options_source) =
+        tokio::task::spawn_blocking(move || {
+            let file = std::fs::File::open(&pack_path_for_manifest)?;
+            let mut archive =
+                zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
+            let manifest = read_modpack_manifest(&mut archive)?;
+            let game_options_source =
+                game_options_pack_source(&mut archive, &manifest)?;
+            Ok::<_, crate::Error>((manifest, game_options_source))
+        })
+        .await??;
+    Ok((pack_path, manifest, game_options_source))
 }
 
 pub async fn install_modpack_with_reporter(
@@ -319,15 +327,16 @@ pub async fn install_modpack_with_reporter(
         version_id: Some(request.file_id.to_string()),
         title: Some(project.name.clone()),
     };
-    let (pack_path, manifest) = download_modpack_archive_with_reporter(
-        request.project_id,
-        request.file_id,
-        &pack_file,
-        &download_url,
-        pack_details.clone(),
-        reporter.clone(),
-    )
-    .await?;
+    let (pack_path, manifest, game_options_source) =
+        download_modpack_archive_with_reporter(
+            request.project_id,
+            request.file_id,
+            &pack_file,
+            &download_url,
+            pack_details.clone(),
+            reporter.clone(),
+        )
+        .await?;
 
     let state = State::get().await?;
     use sqlx::Row;
@@ -670,5 +679,6 @@ pub async fn install_modpack_with_reporter(
         overrides_written,
         minecraft_version: manifest.minecraft.version,
         loader,
+        game_options_source,
     })
 }

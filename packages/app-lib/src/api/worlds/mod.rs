@@ -60,6 +60,8 @@ pub struct World {
     )]
     pub icon: Option<Either<PathBuf, Url>>,
     pub display_status: DisplayStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synced_server_id: Option<String>,
     #[serde(flatten)]
     pub details: WorldDetails,
 }
@@ -474,6 +476,7 @@ async fn read_singleplayer_world_maybe_locked(
         last_played: Utc.timestamp_millis_opt(last_played).single(),
         icon,
         display_status: DisplayStatus::Normal,
+        synced_server_id: None,
         details: WorldDetails::Singleplayer {
             path: world_path
                 .file_name()
@@ -556,6 +559,25 @@ async fn get_server_worlds_in_instance(
         .await
         .ok();
 
+    let metadata = crate::state::get_instance(instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
+    let sync_rows = servers
+        .iter()
+        .map(|server| {
+            (
+                server.name.clone(),
+                server.ip.clone(),
+                server.accept_textures,
+                server.hidden,
+            )
+        })
+        .collect::<Vec<_>>();
+    let sync_ids = crate::api::instance::synced_servers::world_server_sync_ids(
+        &metadata, &sync_rows, &state,
+    )
+    .await?;
+
     for (index, server) in servers.into_iter().enumerate() {
         if server.hidden {
             // TODO: Figure out whether we want to hide or show direct connect servers
@@ -577,6 +599,7 @@ async fn get_server_worlds_in_instance(
                 })
                 .map(Either::Right),
             display_status: DisplayStatus::Normal,
+            synced_server_id: sync_ids.get(index).cloned().flatten(),
             details: WorldDetails::Server {
                 index,
                 address: server.ip,

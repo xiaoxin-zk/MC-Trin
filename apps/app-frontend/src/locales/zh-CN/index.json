@@ -647,6 +647,9 @@
   "app.action-bar.restore-preview": {
     "message": "正在分析恢复变更"
   },
+  "app.action-bar.delete-backup": {
+    "message": "正在删除备份"
+  },
   "app.action-bar.repository-move": {
     "message": "正在移动备份仓库"
   },
@@ -665,6 +668,9 @@
   "app.action-bar.backup-task.restore-preview": {
     "message": "恢复分析"
   },
+  "app.action-bar.backup-task.delete": {
+    "message": "备份删除"
+  },
   "app.action-bar.backup-task.repository-move": {
     "message": "备份仓库移动"
   },
@@ -682,6 +688,9 @@
   },
   "app.action-bar.backup-stage.scanning": {
     "message": "正在扫描文件"
+  },
+  "app.action-bar.backup-stage.deleting": {
+    "message": "正在删除备份"
   },
   "app.action-bar.backup-stage.hashing": {
     "message": "正在计算哈希"
@@ -3982,6 +3991,24 @@
   },
   "app.instance.worlds.remove-server-modal.remove-button": {
     "message": "删除服务器"
+  },
+  "app.instance.worlds.remove-server-modal.current-button": {
+    "message": "仅从此实例取消同步"
+  },
+  "app.instance.worlds.remove-server-modal.current-only": {
+    "message": "仅从此实例取消同步"
+  },
+  "app.instance.worlds.remove-server-modal.current-warning": {
+    "message": "此服务器会继续在其他实例中同步，并作为本地服务器保留在当前实例。"
+  },
+  "app.instance.worlds.remove-server-modal.everywhere": {
+    "message": "从所有实例移除"
+  },
+  "app.instance.worlds.remove-server-modal.everywhere-button": {
+    "message": "从所有实例移除"
+  },
+  "app.instance.worlds.remove-server-modal.everywhere-warning": {
+    "message": "此服务器将从所有启用服务器同步的实例中移除。"
   },
   "app.instance.worlds.remove-server-modal.title": {
     "message": "删除服务器"
@@ -13697,6 +13724,12 @@
   "app.settings.synced-options.creative-hotbars.description": {
     "message": "在不同的实例之间同步创造模式物品栏。"
   },
+  "app.settings.synced-options.screenshots": {
+    "message": "纳入全局截图库"
+  },
+  "app.settings.synced-options.screenshots.description": {
+    "message": "选择哪些实例的截图出现在全局截图库中。"
+  },
   "app.settings.synced-options.data-packs": {
     "message": "同步数据包"
   },
@@ -13753,6 +13786,15 @@
   },
   "app.settings.synced-options.game-settings.not-being-synced": {
     "message": "未同步"
+  },
+  "app.settings.synced-options.game-settings.partial-save-text": {
+    "message": "已应用到 {applied} 个实例，迁移 {migrated} 个，延后 {deferred} 个，不支持 {unsupported} 个，失败 {failed} 个。"
+  },
+  "app.settings.synced-options.game-settings.partial-save-title": {
+    "message": "部分实例设置需要处理"
+  },
+  "app.settings.synced-options.game-settings.preview-failed": {
+    "message": "无法检查这些更改。请重试后再保存。"
   },
   "app.settings.synced-options.game-settings.retry": {
     "message": "重试"
@@ -13816,6 +13858,12 @@
   },
   "app.settings.synced-options.multiplayer-servers.empty": {
     "message": "当前未同步任何用户添加的服务器。"
+  },
+  "app.settings.synced-options.multiplayer-servers.check-failed": {
+    "message": "无法检查"
+  },
+  "app.settings.synced-options.multiplayer-servers.filter-check-failed": {
+    "message": "检查失败"
   },
   "app.settings.synced-options.multiplayer-servers.filter-offline": {
     "message": "离线"
@@ -15293,6 +15341,9 @@
   "instance.backups.exclusions.remove": {
     "message": "从排除项中移除 {path}"
   },
+  "instance.backups.load-failed": {
+    "message": "无法加载备份设置。"
+  },
   "instance.backups.loading": {
     "message": "正在加载备份设置……"
   },
@@ -15316,6 +15367,9 @@
   },
   "instance.backups.snapshots": {
     "message": "快照"
+  },
+  "instance.backups.stage.deleting": {
+    "message": "正在删除备份"
   },
   "instance.backups.stage.failed": {
     "message": "备份失败"
@@ -15529,6 +15583,12 @@
   },
   "instance.settings.sync.resource-packs": {
     "message": "资源包"
+  },
+  "instance.settings.sync.data-packs": {
+    "message": "数据包"
+  },
+  "instance.settings.sync.screenshots": {
+    "message": "纳入全局截图库"
   },
   "instance.settings.sync.title": {
     "message": "设置同步"

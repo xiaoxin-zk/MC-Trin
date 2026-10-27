@@ -95,6 +95,7 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
         "instance_discard_upgrade_plan",
         "instance_get_post_upgrade_notice",
         "instance_dismiss_post_upgrade_notice",
+        "instance_desync_server",
     ] {
         assert!(
             runtime.contains(command),
@@ -105,6 +106,23 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
             "build.rs manifest missing {command}"
         );
     }
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|window| window == "main")
+    );
+    assert!(
+        capabilities["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "instance:default")
+    );
 }
 
 #[test]

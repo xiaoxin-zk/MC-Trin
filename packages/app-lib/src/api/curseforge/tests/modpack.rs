@@ -6,8 +6,9 @@ use super::fixtures::{
 };
 use crate::api::curseforge::archive::{
     collect_modpack_override_tasks, curseforge_override_content,
-    extract_modpack_overrides, materialize_modpack_overrides,
-    read_modpack_manifest, safe_archive_relative_path,
+    extract_modpack_overrides, game_options_pack_source,
+    materialize_modpack_overrides, read_modpack_manifest,
+    safe_archive_relative_path,
 };
 use crate::api::curseforge::catalog::unique_metadata_chunks;
 use crate::api::curseforge::dto::{
@@ -388,6 +389,42 @@ fn archive_paths_stay_inside_the_instance() {
     );
     assert!(safe_archive_relative_path("../options.txt").is_err());
     assert!(safe_archive_relative_path("/options.txt").is_err());
+}
+
+#[test]
+fn curseforge_game_options_source_uses_manifest_override_root() {
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    writer
+        .start_file("manifest.json", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer
+        .write_all(
+            br#"{"minecraft":{"version":"1.20.1"},"overrides":"pack-files"}"#,
+        )
+        .unwrap();
+    writer
+        .start_file(
+            "pack-files/options.txt",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    writer.write_all(b"version: 3465\n").unwrap();
+    writer
+        .start_file(
+            "pack-files/config/yosbr/options.txt",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    writer.write_all(b"version: 3465\n").unwrap();
+    let bytes = writer.finish().unwrap().into_inner();
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let manifest = read_modpack_manifest(&mut archive).unwrap();
+
+    assert_eq!(
+        game_options_pack_source(&mut archive, &manifest).unwrap(),
+        Some(crate::api::instance::GameOptionsPackSource::OverridesYosbr)
+    );
 }
 
 #[test]

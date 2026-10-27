@@ -19,6 +19,7 @@ import {
     type BackupOperation,
     type BackupOperationState,
     type BackupProgressStage,
+    backupProgressState,
     type BackupRestorePreview,
     type BackupSnapshot,
     cancelBackup,
@@ -53,6 +54,10 @@ const messages = defineMessages({
         defaultMessage: 'Create deduplicated snapshots of the whole instance while it is closed.',
     },
     loading: { id: 'instance.backups.loading', defaultMessage: 'Loading backup settings...' },
+    loadFailed: {
+        id: 'instance.backups.load-failed',
+        defaultMessage: 'Could not load backup settings.',
+    },
     unavailable: { id: 'instance.backups.unavailable', defaultMessage: 'Backups are unavailable' },
     notInstalled: {
         id: 'instance.backups.unavailable.not-installed',
@@ -105,6 +110,7 @@ const messages = defineMessages({
     },
     stageHashing: { id: 'instance.backups.stage.hashing', defaultMessage: 'Hashing files' },
     stageSaving: { id: 'instance.backups.stage.saving', defaultMessage: 'Saving snapshot index' },
+    stageDeleting: { id: 'instance.backups.stage.deleting', defaultMessage: 'Deleting backup' },
     stageQueued: { id: 'instance.backups.stage.queued', defaultMessage: 'Waiting to start' },
     stageValidating: {
         id: 'instance.backups.stage.validating',
@@ -163,6 +169,7 @@ const config = ref<InstanceBackupConfig | null>(null)
 const snapshots = ref<BackupSnapshot[]>([])
 const instanceRoot = ref('')
 const loading = ref(true)
+const loadError = ref(false)
 const editingExclusions = ref(false)
 const excludedPaths = ref<BackupExclusion[]>([])
 const action = ref<string | null>(null)
@@ -196,6 +203,8 @@ const operationLabel = computed(() => {
             return formatMessage(messages.stageMaterializing)
         case 'applying':
             return formatMessage(messages.stageApplying)
+        case 'deleting':
+            return formatMessage(messages.stageDeleting)
         default:
             return formatMessage(messages.stageScanning)
     }
@@ -212,12 +221,7 @@ function operationFromEvent(event: {
     message?: string
 }): BackupOperation {
     const now = Date.now()
-    const state: BackupOperationState =
-        event.stage === 'restoring' || event.stage === 'copying'
-            ? 'materializing'
-            : event.stage === 'deleting'
-              ? 'queued'
-              : event.stage
+    const state = backupProgressState(event.stage)
     return {
         id: event.operationId,
         operation_type: event.operationType,
@@ -272,6 +276,7 @@ const unavailableReason = computed(() => {
 
 async function refresh() {
     loading.value = true
+    loadError.value = false
     try {
         const nextConfig = await getBackupConfig(instance.value.id)
         config.value = nextConfig
@@ -284,6 +289,7 @@ async function refresh() {
         snapshots.value = nextSnapshots
         await refreshOperation()
     } catch (error) {
+        loadError.value = true
         handleError(error)
     } finally {
         loading.value = false
@@ -418,26 +424,38 @@ function disable() {
 
 onMounted(async () => {
     unlisten = await listenBackupProgress(async (event) => {
+        let restorePreviewLookupFailed = false
         if (
-            !['create', 'restore', 'restore_preview'].includes(event.operationType) ||
+            !['create', 'restore', 'restore_preview', 'delete'].includes(event.operationType) ||
             event.instanceId !== instance.value.id
         )
             return
         operation.value = operationFromEvent(event)
         if (event.operationType === 'restore_preview' && event.stage === 'completed') {
-            const completed = (await listBackupOperations(instance.value.id)).find(
-                (candidate) => candidate.id === event.operationId,
-            )
-            const snapshot = snapshots.value.find((candidate) => candidate.id === event.snapshotId)
-            if (completed?.restore_preview && snapshot) {
-                selectedSnapshot.value = snapshot
-                restorePreview.value = completed.restore_preview
+            try {
+                const completed = (await listBackupOperations(instance.value.id)).find(
+                    (candidate) => candidate.id === event.operationId,
+                )
+                const snapshot = snapshots.value.find(
+                    (candidate) => candidate.id === event.snapshotId,
+                )
+                if (completed?.restore_preview && snapshot) {
+                    selectedSnapshot.value = snapshot
+                    restorePreview.value = completed.restore_preview
+                    operation.value = null
+                    restoreModal.value?.show()
+                    return
+                }
+            } catch (error) {
+                restorePreviewLookupFailed = true
                 operation.value = null
-                restoreModal.value?.show()
-                return
+                handleError(error)
             }
         }
-        if (['completed', 'cancelled', 'failed'].includes(event.stage)) {
+        if (
+            !restorePreviewLookupFailed &&
+            ['completed', 'cancelled', 'failed'].includes(event.stage)
+        ) {
             void refresh()
         }
     })
@@ -465,6 +483,16 @@ watch(
         <p v-if="loading" class="m-0 text-[var(--color-text-tertiary)]">
             {{ formatMessage(messages.loading) }}
         </p>
+        <div
+            v-else-if="loadError"
+            class="flex flex-col items-start gap-3 text-[var(--color-text-tertiary)]"
+            role="alert"
+        >
+            <p class="m-0">{{ formatMessage(messages.loadFailed) }}</p>
+            <Button type="outlined" @click="refresh">
+                {{ formatMessage(commonMessages.retryButton) }}
+            </Button>
+        </div>
         <Admonition
             v-else-if="!eligible"
             type="warning"
@@ -546,7 +574,10 @@ watch(
                     >
                         {{ operationLabel }}
                         <span
-                            v-if="(operation?.total_bytes ?? 0) > 0"
+                            v-if="
+                                (operation?.total_bytes ?? 0) > 0 &&
+                                operation?.operation_type !== 'delete'
+                            "
                             class="ml-2 text-[var(--color-text-tertiary)]"
                         >
                             {{

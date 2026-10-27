@@ -160,6 +160,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         &metadata, &members, &entries, &files, &state,
     )
     .await?;
+    crate::api::instance::prepare_pack_game_options_update(instance_id).await?;
     let result = match install_modpack_with_reporter(
         CurseForgeModpackInstallRequest {
             instance_id: instance_id.to_string(),
@@ -174,7 +175,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     {
         Ok(result) => result,
         Err(error) => {
-            rollback_curseforge_update(
+            let rollback = rollback_curseforge_update(
                 instance_id,
                 &metadata,
                 &members,
@@ -182,14 +183,40 @@ pub(crate) async fn update_managed_modpack_with_reporter(
                 &[],
                 &state,
             )
-            .await?;
+            .await;
+            let restore_options =
+                crate::api::instance::abort_pack_game_options_update(
+                    instance_id,
+                )
+                .await;
+            let restore_metadata =
+                restore_managed_curseforge_metadata(instance_id, &metadata)
+                    .await;
+            if let Err(rollback_error) = rollback {
+                return Err(ErrorKind::OtherError(format!(
+                    "{error}; failed to roll back the CurseForge update: {rollback_error}"
+                ))
+                .into());
+            }
+            if let Err(restore_error) = restore_options {
+                return Err(ErrorKind::OtherError(format!(
+                    "{error}; failed to restore game options after update failure: {restore_error}"
+                ))
+                .into());
+            }
+            if let Err(restore_error) = restore_metadata {
+                return Err(ErrorKind::OtherError(format!(
+                    "{error}; failed to restore instance metadata after update failure: {restore_error}"
+                ))
+                .into());
+            }
             return Err(error);
         }
     };
     if !result.content.manual_downloads.is_empty()
         || !result.content.failed_downloads.is_empty()
     {
-        rollback_curseforge_update(
+        let rollback = rollback_curseforge_update(
             instance_id,
             &metadata,
             &members,
@@ -197,16 +224,37 @@ pub(crate) async fn update_managed_modpack_with_reporter(
             &result.content.installed,
             &state,
         )
-        .await?;
+        .await;
+        let restore_options =
+            crate::api::instance::abort_pack_game_options_update(instance_id)
+                .await;
+        let restore_metadata =
+            restore_managed_curseforge_metadata(instance_id, &metadata).await;
+        if let Err(rollback_error) = rollback {
+            return Err(ErrorKind::OtherError(format!(
+                "The CurseForge update could not complete and rollback failed: {rollback_error}"
+            ))
+            .into());
+        }
+        if let Err(restore_error) = restore_options {
+            return Err(ErrorKind::OtherError(format!(
+                "The CurseForge update could not complete and game options could not be restored: {restore_error}"
+            ))
+            .into());
+        }
+        if let Err(restore_error) = restore_metadata {
+            return Err(ErrorKind::OtherError(format!(
+                "The CurseForge update could not complete and instance metadata could not be restored: {restore_error}"
+            ))
+            .into());
+        }
         return Ok(result);
     }
 
-    // `install_modpack_with_reporter` resolves the target manifest and writes
-    // the resulting Minecraft/loader metadata before returning. Read that
-    // committed content set so the reconciliation edit cannot overwrite a
-    // newly selected loader version with the pre-update instance metadata.
-    let updated_content_set =
-        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+    let post_update: crate::Result<()> = async {
+        // `install_modpack_with_reporter` resolves the target manifest and
+        // writes the target Minecraft/loader metadata before returning.
+        let updated_content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
             instance_id,
             &state.pool,
         )
@@ -218,72 +266,150 @@ pub(crate) async fn update_managed_modpack_with_reporter(
             )
         })?;
 
-    let expected_keys = expected
-        .members
-        .iter()
-        .map(|member| {
-            format!(
-                "curseforge:{}:{}",
-                member.project_id,
-                member.project_type.get_name()
+        let expected_keys = expected
+            .members
+            .iter()
+            .map(|member| {
+                format!(
+                    "curseforge:{}:{}",
+                    member.project_id,
+                    member.project_type.get_name()
+                )
+            })
+            .collect::<HashSet<_>>();
+        for member in &members {
+            if expected_keys.contains(&member.member_key)
+                || member.override_kind
+                    == crate::state::instances::PackMemberOverrideKind::Version
+            {
+                continue;
+            }
+            let Some(entry_id) = member.content_entry_id.as_ref() else {
+                continue;
+            };
+            let Some(file_id) = entries.get(entry_id) else {
+                continue;
+            };
+            let Some(relative_path) = files.get(file_id) else {
+                continue;
+            };
+            crate::state::instances::commands::remove_project(
+                instance_id,
+                relative_path,
+                &state,
             )
-        })
-        .collect::<HashSet<_>>();
-    for member in &members {
-        if expected_keys.contains(&member.member_key)
-            || member.override_kind
-                == crate::state::instances::PackMemberOverrideKind::Version
-        {
-            continue;
+            .await?;
         }
-        let Some(entry_id) = member.content_entry_id.as_ref() else {
-            continue;
-        };
-        let Some(file_id) = entries.get(entry_id) else {
-            continue;
-        };
-        let Some(relative_path) = files.get(file_id) else {
-            continue;
-        };
-        crate::state::instances::commands::remove_project(
+        crate::state::sync_content_files(instance_id, &state).await?;
+        crate::state::instances::commands::reconcile_curseforge_members(
             instance_id,
-            relative_path,
+            &metadata.applied_content_set.id,
+            &expected,
             &state,
         )
         .await?;
+        crate::api::instance::edit(
+            instance_id,
+            EditInstance {
+                link: Some(InstanceLink::CurseForgeModpack {
+                    project_id: project_id.to_string(),
+                    version_id: file_id.to_string(),
+                }),
+                content_set_patch: Some(crate::state::AppliedContentSetPatch {
+                    source_kind: Some(ContentSourceKind::CurseForge),
+                    game_version: Some(updated_content_set.game_version),
+                    protocol_version: Some(None),
+                    loader: Some(updated_content_set.loader),
+                    loader_version: Some(updated_content_set.loader_version),
+                }),
+                ..EditInstance::default()
+            },
+        )
+        .await?;
+
+        // Capture after the update is fully reconciled so the base is tagged
+        // with the selected release and cannot be committed for a rolled-back
+        // partial update.
+        crate::api::instance::capture_pack_game_options_base(
+            instance_id,
+            result.game_options_source,
+        )
+        .await?;
+        Ok(())
     }
-    crate::state::sync_content_files(instance_id, &state).await?;
-    crate::state::instances::commands::reconcile_curseforge_members(
-        instance_id,
-        &metadata.applied_content_set.id,
-        &expected,
-        &state,
-    )
-    .await?;
+    .await;
+    if let Err(error) = post_update {
+        let rollback = rollback_curseforge_update(
+            instance_id,
+            &metadata,
+            &members,
+            &backup,
+            &result.content.installed,
+            &state,
+        )
+        .await;
+        let restore_options =
+            crate::api::instance::abort_pack_game_options_update(instance_id)
+                .await;
+        let restore_metadata =
+            restore_managed_curseforge_metadata(instance_id, &metadata).await;
+        if let Err(rollback_error) = rollback {
+            return Err(ErrorKind::OtherError(format!(
+                "{error}; failed to roll back the CurseForge update: {rollback_error}"
+            ))
+            .into());
+        }
+        if let Err(restore_error) = restore_options {
+            return Err(ErrorKind::OtherError(format!(
+                "{error}; failed to restore game options after update failure: {restore_error}"
+            ))
+            .into());
+        }
+        if let Err(restore_error) = restore_metadata {
+            return Err(ErrorKind::OtherError(format!(
+                "{error}; failed to restore instance metadata after update failure: {restore_error}"
+            ))
+            .into());
+        }
+        return Err(error);
+    }
+    Ok(result)
+}
+
+async fn restore_managed_curseforge_metadata(
+    instance_id: &str,
+    metadata: &crate::state::InstanceMetadata,
+) -> crate::Result<()> {
     crate::api::instance::edit(
         instance_id,
         EditInstance {
-            link: Some(InstanceLink::CurseForgeModpack {
-                project_id: project_id.to_string(),
-                version_id: file_id.to_string(),
-            }),
+            name: Some(metadata.instance.name.clone()),
+            icon_path: Some(metadata.instance.icon_path.clone()),
+            link: Some(metadata.link.clone()),
             content_set_patch: Some(crate::state::AppliedContentSetPatch {
-                source_kind: Some(ContentSourceKind::CurseForge),
-                game_version: Some(updated_content_set.game_version),
-                protocol_version: Some(None),
-                loader: Some(updated_content_set.loader),
-                loader_version: Some(updated_content_set.loader_version),
+                source_kind: Some(metadata.applied_content_set.source_kind),
+                game_version: Some(
+                    metadata.applied_content_set.game_version.clone(),
+                ),
+                protocol_version: Some(
+                    metadata.applied_content_set.protocol_version.clone(),
+                ),
+                loader: Some(metadata.applied_content_set.loader),
+                loader_version: Some(
+                    metadata.applied_content_set.loader_version.clone(),
+                ),
             }),
             ..EditInstance::default()
         },
     )
     .await?;
-    Ok(result)
+    Ok(())
 }
 
 pub(crate) struct CurseForgeUpdateBackup {
     pub(super) _directory: tempfile::TempDir,
     pub(super) files: Vec<(String, String, std::path::PathBuf)>,
+    game_options_files: Vec<(String, Option<std::path::PathBuf>)>,
 }
 
 pub(super) async fn create_curseforge_update_backup(
@@ -323,9 +449,44 @@ pub(super) async fn create_curseforge_update_backup(
             backup_path,
         ));
     }
+    let mut game_options_files = Vec::new();
+    for relative_path in ["options.txt", "config/yosbr/options.txt"] {
+        let source = instance_path.join(relative_path);
+        let backup_path = match tokio::fs::symlink_metadata(&source).await {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ErrorKind::InputError(format!(
+                    "Refusing to update a modpack with symlinked {relative_path}"
+                ))
+                .into());
+            }
+            Ok(metadata) if metadata.is_file() => {
+                let backup_path = directory.path().join(format!(
+                    "game-options-{}.backup",
+                    uuid::Uuid::new_v4()
+                ));
+                tokio::fs::copy(&source, &backup_path).await?;
+                Some(backup_path)
+            }
+            Ok(_) => {
+                return Err(ErrorKind::InputError(format!(
+                    "Cannot safely back up modpack game options at {relative_path}"
+                ))
+                .into());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(crate::util::io::IOError::with_path(
+                    error, &source,
+                )
+                .into());
+            }
+        };
+        game_options_files.push((relative_path.to_string(), backup_path));
+    }
     Ok(CurseForgeUpdateBackup {
         _directory: directory,
         files: backups,
+        game_options_files,
     })
 }
 
@@ -450,5 +611,43 @@ pub(super) async fn rollback_curseforge_update(
     )
     .await?;
     tx.commit().await?;
+    for (relative_path, backup_path) in &backup.game_options_files {
+        let destination = instance_path.join(relative_path);
+        match tokio::fs::symlink_metadata(&destination).await {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ErrorKind::InputError(format!(
+                    "Refusing to restore symlinked modpack game options at {relative_path}"
+                ))
+                .into());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(crate::util::io::IOError::with_path(
+                    error,
+                    &destination,
+                )
+                .into());
+            }
+        }
+        if let Some(backup_path) = backup_path {
+            if let Some(parent) = destination.parent() {
+                crate::util::io::create_dir_all(parent).await?;
+            }
+            tokio::fs::copy(backup_path, &destination).await?;
+        } else {
+            match tokio::fs::symlink_metadata(&destination).await {
+                Ok(_) => tokio::fs::remove_file(&destination).await?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(crate::util::io::IOError::with_path(
+                        error,
+                        &destination,
+                    )
+                    .into());
+                }
+            }
+        }
+    }
     Ok(())
 }

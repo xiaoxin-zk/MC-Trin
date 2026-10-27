@@ -227,6 +227,8 @@ import type { GameInstance } from '@/helpers/types'
 import { ensureManagedServerWorldExists, getServerAddress } from '@/helpers/worlds'
 import {
     delete_world,
+    desync_server,
+    type DesyncServerMode,
     get_instance_protocol_version,
     getServerDomainKey,
     getWorldIdentifier,
@@ -787,9 +789,16 @@ function promptToRemoveWorld(world: World): boolean {
     return !!removeWorldModal.value
 }
 
-async function proceedRemoveWorld(world: World) {
+async function proceedRemoveWorld(world: World, desyncMode?: DesyncServerMode) {
     if (world.type === 'server') {
-        await removeServer(world)
+        if (world.synced_server_id && desyncMode) {
+            await desync_server(instance.value.id, world.synced_server_id, desyncMode).catch(
+                handleError,
+            )
+            await refreshAllWorlds()
+        } else {
+            await removeServer(world)
+        }
     } else {
         await deleteWorld(world)
     }

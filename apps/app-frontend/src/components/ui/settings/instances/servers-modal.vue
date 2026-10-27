@@ -30,6 +30,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, nextTick, ref } from 'vue'
 
 import { remove_synced_server, type SyncedServer, update_synced_server } from '@/helpers/instance'
+import { pruneServerData, serverProbeState } from '@/helpers/server-probe'
 import { syncedOptionsKeys, syncedServersQueryOptions } from '@/helpers/synced-options'
 import { copyToClipboard } from '@/helpers/utils'
 import {
@@ -85,6 +86,14 @@ const messages = defineMessages({
         id: 'app.settings.synced-options.multiplayer-servers.filter-offline',
         defaultMessage: 'Offline',
     },
+    filterCheckFailed: {
+        id: 'app.settings.synced-options.multiplayer-servers.filter-check-failed',
+        defaultMessage: 'Check failed',
+    },
+    checkFailed: {
+        id: 'app.settings.synced-options.multiplayer-servers.check-failed',
+        defaultMessage: 'Could not check',
+    },
     playersOnline: {
         id: 'app.settings.synced-options.multiplayer-servers.players-online',
         defaultMessage: '{count, number} online',
@@ -131,7 +140,7 @@ const serverWorlds = computed<ServerWorld[]>(() =>
 type SyncedServerTableColumn = 'server' | 'status' | 'version' | 'actions'
 type SyncedServerTableRow = SyncedServer & {
     server: string
-    status: 'online' | 'offline'
+    status: 'checking' | 'online' | 'offline' | 'error'
     version: string
     actions: null
 }
@@ -167,13 +176,14 @@ const syncedServerColumns = computed<TableColumn<SyncedServerTableColumn>[]>(() 
 const syncedServerFilterOptions = computed(() => [
     { id: 'online', label: formatMessage(messages.onlineFilter) },
     { id: 'offline', label: formatMessage(messages.offlineFilter) },
+    { id: 'error', label: formatMessage(messages.filterCheckFailed) },
 ])
 
 const syncedServerRows = computed<SyncedServerTableRow[]>(() =>
     syncedServers.value.map((server) => ({
         ...server,
         server: server.name,
-        status: serverData.value[server.address]?.status ? 'online' : 'offline',
+        status: serverProbeState(serverData.value[server.address]),
         version: serverData.value[server.address]?.status?.version?.name ?? '',
         actions: null,
     })),
@@ -208,6 +218,7 @@ const saveMutation = useMutation({
             servers?.map((current) => (current.id === server.id ? { ...server } : current)),
         )
         await queryClient.invalidateQueries({ queryKey: ['worlds'] })
+        pruneServerData(serverData.value, serverWorlds.value)
         void refreshSyncedServer(server.address).catch(handleError)
     },
     onError: handleError,
@@ -219,6 +230,7 @@ const removeMutation = useMutation({
             servers?.filter((server) => server.id !== serverId),
         )
         await queryClient.invalidateQueries({ queryKey: ['worlds'] })
+        pruneServerData(serverData.value, serverWorlds.value)
     },
     onError: handleError,
 })
@@ -416,6 +428,9 @@ defineExpose({ show })
                                                 0,
                                         })
                                     }}
+                                </template>
+                                <template v-else-if="row.status === 'error'">
+                                    {{ formatMessage(messages.checkFailed) }}
                                 </template>
                                 <template v-else>{{
                                     formatMessage(messages.offlineFilter)

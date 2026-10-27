@@ -109,6 +109,11 @@ pub use self::screenshots::{
 pub(crate) use self::screenshots::{
     reconcile_screenshots, reconcile_screenshots_with_state,
 };
+pub(crate) use self::synced_options::game_options::{
+    GameOptionsPackSource, abort_pack_update as abort_pack_game_options_update,
+    capture_pack_base as capture_pack_game_options_base,
+    detect_game_options_pack_source,
+};
 pub use self::synced_options::game_options::{
     GameOptionsSourceCandidate, GameSettingLocaleLabels,
     GameSettingsEditorState, SaveGameSettingsResult, UpdateGameSettingsRequest,
@@ -139,6 +144,7 @@ pub use self::synced_options::{
     set_instance_option as set_instance_synced_option,
 };
 pub(crate) use self::synced_options::{
+    prepare_instance_update as prepare_pack_game_options_update,
     reconcile_changed_file as reconcile_synced_option_file,
     remove_generated_instance_files,
 };

@@ -291,6 +291,43 @@ pub(crate) async fn list_server_records(
     list_local_server_records(metadata, state).await
 }
 
+pub(crate) async fn world_server_sync_ids(
+    metadata: &InstanceMetadata,
+    servers: &[(String, String, Option<bool>, bool)],
+    state: &State,
+) -> crate::Result<Vec<Option<String>>> {
+    let records = list_server_records(metadata, state).await?;
+    Ok(servers
+        .iter()
+        .enumerate()
+        .map(|(index, (name, address, accept_textures, hidden))| {
+            world_server_sync_id(
+                records.get(index),
+                name,
+                address,
+                *accept_textures,
+                *hidden,
+            )
+        })
+        .collect())
+}
+
+fn world_server_sync_id(
+    record: Option<&ServerRecord>,
+    name: &str,
+    address: &str,
+    accept_textures: Option<bool>,
+    hidden: bool,
+) -> Option<String> {
+    let record = record?;
+    (record.source == ServerSource::UserSynced
+        && record.name() == name
+        && record.address() == address
+        && record.accept_textures() == accept_textures
+        && record.hidden() == hidden)
+        .then(|| record.id.clone())
+}
+
 async fn list_server_records_locked(
     metadata: &InstanceMetadata,
     state: &State,
@@ -904,6 +941,48 @@ mod tests {
                 ("local", ServerSource::Modpack),
                 ("desynced-b", ServerSource::LocalDesynced),
             ]
+        );
+    }
+
+    #[test]
+    fn world_server_id_requires_an_unchanged_user_synced_record() {
+        let record = ServerRecord {
+            id: "synced-id".to_string(),
+            source: ServerSource::UserSynced,
+            data: server("Lobby", "play.example.test"),
+        };
+        assert_eq!(
+            world_server_sync_id(
+                Some(&record),
+                "Lobby",
+                "play.example.test",
+                None,
+                false,
+            ),
+            Some("synced-id".to_string())
+        );
+        assert_eq!(
+            world_server_sync_id(
+                Some(&record),
+                "Renamed locally",
+                "play.example.test",
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            world_server_sync_id(
+                Some(&ServerRecord {
+                    source: ServerSource::LocalDesynced,
+                    ..record
+                }),
+                "Lobby",
+                "play.example.test",
+                None,
+                false,
+            ),
+            None
         );
     }
 

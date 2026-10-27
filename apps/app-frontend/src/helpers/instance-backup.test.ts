@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { canonicalizeBackupExclusions, formatBackupExclusionPath } from './instance-backup.ts'
+import {
+    backupProgressState,
+    canonicalizeBackupExclusions,
+    formatBackupExclusionPath,
+    isBackupActivityOperation,
+} from './instance-backup.ts'
 
 test('directory exclusions display with a trailing slash', () => {
     assert.equal(formatBackupExclusionPath({ path: 'caches', kind: 'directory' }), 'caches/')
@@ -35,4 +40,10 @@ test('directory wins when the same exclusion is selected as both kinds', () => {
         ]),
         [{ path: 'cache', kind: 'directory' }],
     )
+})
+
+test('backup activity includes deletion and maps its progress stage', () => {
+    assert.equal(isBackupActivityOperation('delete'), true)
+    assert.equal(backupProgressState('deleting'), 'deleting')
+    assert.equal(backupProgressState('copying'), 'materializing')
 })

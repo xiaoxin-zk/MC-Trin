@@ -15,8 +15,10 @@ import {
     preview_synced_game_option_changes,
     save_local_game_option_changes,
     save_synced_game_option_changes,
+    type SaveGameSettingsResult,
     type UpdateGameSettingsRequest,
 } from '@/helpers/game-options'
+import { hasIncompleteGameSettingsSave } from '@/helpers/game-settings-result'
 
 import { canonicalValuesEqual, cloneGameSettingsState, gameSettingChanges } from './editors'
 
@@ -36,11 +38,17 @@ export function useGameSettingsEditor(
             id: 'app.settings.synced-options.game-settings.conflict-text',
             defaultMessage: 'We loaded the latest settings. Check your changes, then save again.',
         },
+        previewFailed: {
+            id: 'app.settings.synced-options.game-settings.preview-failed',
+            defaultMessage: 'Could not check these changes. Retry before saving.',
+        },
     })
 
     const baseState = ref<GameSettingsEditorState | null>(null)
     const draftState = ref<GameSettingsEditorState | null>(null)
     const touchedValueOptionIds = ref<Set<string>>(new Set())
+    const previewError = ref('')
+    const saveResult = ref<SaveGameSettingsResult | null>(null)
     let previewTimer: ReturnType<typeof setTimeout> | null = null
     let previewGeneration = 0
     let loadGeneration = 0
@@ -108,6 +116,8 @@ export function useGameSettingsEditor(
     async function load() {
         const generation = ++loadGeneration
         cancelPreview()
+        previewError.value = ''
+        saveResult.value = null
         editorInstanceId.value = toValue(instanceId)
         const options = gameSettingsQueryOptions(editorInstanceId.value)
         const cached = !editorInstanceId.value && queryClient.getQueryData(options.queryKey)
@@ -154,6 +164,8 @@ export function useGameSettingsEditor(
         baseState.value = null
         draftState.value = null
         touchedValueOptionIds.value = new Set()
+        previewError.value = ''
+        saveResult.value = null
         saveMutation.reset()
     }
 
@@ -162,10 +174,13 @@ export function useGameSettingsEditor(
         cancelPreview()
         draftState.value = cloneGameSettingsState(baseState.value)
         touchedValueOptionIds.value = new Set()
+        previewError.value = ''
+        saveResult.value = null
     }
 
     function setSyncEnabled(optionIds: readonly string[], enabled: boolean) {
         if (!draftState.value) return
+        saveResult.value = null
         const ids = new Set(optionIds)
         draftState.value.settings = draftState.value.settings.map((setting) =>
             ids.has(setting.option_id)
@@ -177,6 +192,7 @@ export function useGameSettingsEditor(
 
     function schedulePreview() {
         cancelPreview()
+        previewError.value = ''
         previewTimer = setTimeout(() => void preview(), 350)
     }
 
@@ -184,6 +200,7 @@ export function useGameSettingsEditor(
         if (
             saveMutation.isPending.value ||
             loading.value ||
+            previewError.value ||
             hasBlockingDraft.value ||
             !isDirty.value
         )
@@ -192,6 +209,7 @@ export function useGameSettingsEditor(
     }
 
     async function saveAndWait(): Promise<boolean> {
+        if (previewError.value) return false
         if (loading.value || hasBlockingDraft.value || !isDirty.value)
             return !hasBlockingDraft.value
         try {
@@ -214,6 +232,7 @@ export function useGameSettingsEditor(
 
     function setCanonicalValue(optionId: string, value: GameOptionCanonicalValue | null) {
         if (!draftState.value) return
+        saveResult.value = null
         const currentSetting = draftState.value.settings.find(
             (setting) => setting.option_id === optionId,
         )
@@ -292,11 +311,13 @@ export function useGameSettingsEditor(
         const request = editorRequest()
         if (!request || request.changes.length === 0) {
             previewGeneration++
+            previewError.value = ''
             if (baseState.value) draftState.value = cloneGameSettingsState(baseState.value)
             return
         }
 
         const generation = ++previewGeneration
+        previewError.value = ''
         try {
             const previewState = await previewMutation.mutateAsync({
                 instanceId: editorInstanceId.value,
@@ -305,8 +326,15 @@ export function useGameSettingsEditor(
             if (generation !== previewGeneration) return
             mergePreview(previewState)
         } catch {
-            return
+            if (generation === previewGeneration) {
+                previewError.value = formatMessage(messages.previewFailed)
+            }
         }
+    }
+
+    function retryPreview() {
+        cancelPreview()
+        void preview()
     }
 
     function applyChangesToRefreshedState(
@@ -360,6 +388,7 @@ export function useGameSettingsEditor(
         cancelPreview()
         const targetInstanceId = editorInstanceId.value
         const generation = ++saveGeneration
+        saveResult.value = null
         const previousBase = cloneGameSettingsState(baseState.value)
         const optimisticState = cloneGameSettingsState(draftState.value)
         const previouslyTouchedOptionIds = new Set(touchedValueOptionIds.value)
@@ -372,6 +401,7 @@ export function useGameSettingsEditor(
             const result = targetInstanceId
                 ? await save_local_game_option_changes(targetInstanceId, request)
                 : await save_synced_game_option_changes(request)
+            saveResult.value = result
             const refreshed =
                 result.state ??
                 (targetInstanceId
@@ -430,6 +460,7 @@ export function useGameSettingsEditor(
             applyChangesToRefreshedState(refreshed, stagedDraft, changesSinceSave, touchedSinceSave)
             if (changesSinceSave.length > 0) schedulePreview()
             onSaved()
+            if (hasIncompleteGameSettingsSave(result)) return
         } catch (error) {
             if (generation === saveGeneration && draftState.value) {
                 previewGeneration++
@@ -453,12 +484,15 @@ export function useGameSettingsEditor(
         hasBlockingDraft,
         loading,
         loadError,
+        previewError,
+        saveResult,
         saving: saveMutation.isPending,
         load,
         reset,
         cancelChanges,
         setSyncEnabled,
         setCanonicalValue,
+        retryPreview,
         save,
         saveAndWait,
     }

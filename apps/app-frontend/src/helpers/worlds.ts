@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 
 import { isOfflineMode } from '@/composables/useNetworkStatus'
 import { get_full_path, resolveGcLaunchIntent } from '@/helpers/instance'
+import { classifyServerProbeError, pruneServerData } from '@/helpers/server-probe'
 import { openPath } from '@/helpers/utils'
 
 type BaseWorld = {
@@ -17,6 +18,7 @@ type BaseWorld = {
 
 export type WorldType = 'singleplayer' | 'server'
 export type DisplayStatus = 'normal' | 'hidden' | 'favorite'
+export type DesyncServerMode = 'keep_in_other_instances' | 'remove_from_other_instances'
 
 export type SingleplayerWorld = BaseWorld & {
     type: 'singleplayer'
@@ -31,6 +33,7 @@ export type ServerWorld = BaseWorld & {
     index: number
     address: string
     pack_status: ServerPackStatus
+    synced_server_id?: string
     project_id?: string
     content_kind?: string
 }
@@ -108,6 +111,7 @@ export interface Chat {
 export type ServerData = {
     refreshing: boolean
     lastSuccessfulRefresh?: number
+    probeState?: 'offline' | 'error'
     status?: ServerStatus
     rawMotd?: string | Chat
     renderedMotd?: string
@@ -228,6 +232,18 @@ export async function remove_server_from_instance(
     index: number,
 ): Promise<void> {
     return await invoke('plugin:worlds|remove_server_from_instance', { instanceId, index })
+}
+
+export async function desync_server(
+    instanceId: string,
+    serverId: string,
+    mode: DesyncServerMode,
+): Promise<void> {
+    return await invoke('plugin:instance|instance_desync_server', {
+        instanceId,
+        serverId,
+        mode,
+    })
 }
 
 export async function get_instance_protocol_version(
@@ -478,6 +494,7 @@ export async function refreshServerData(
             return
         }
         serverData.lastSuccessfulRefresh = Date.now()
+        delete serverData.probeState
         serverData.status = status
         if (status.description) {
             serverData.rawMotd = status.description
@@ -493,6 +510,7 @@ export async function refreshServerData(
             return
         }
         if (!serverData.lastSuccessfulRefresh || serverData.lastSuccessfulRefresh <= refreshTime) {
+            serverData.probeState = classifyServerProbeError(err)
             delete serverData.status
             delete serverData.rawMotd
             delete serverData.renderedMotd
@@ -509,6 +527,7 @@ export async function refreshServers(
     ping = true,
 ): Promise<void> {
     const servers = worlds.filter(isServerWorld)
+    pruneServerData(serverData, worlds)
     servers.forEach((server) => {
         if (!serverData[server.address]) {
             serverData[server.address] = {

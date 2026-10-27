@@ -72,6 +72,7 @@ export type BackupOperationState =
     | 'validating'
     | 'materializing'
     | 'applying'
+    | 'deleting'
     | 'completed'
     | 'cancelled'
     | 'failed'
@@ -118,6 +119,15 @@ export interface BackupProgressEvent {
     finalState?: BackupOperationFinalState
     snapshotId?: string
     message?: string
+}
+
+export function backupProgressState(stage: BackupProgressStage): BackupOperationState {
+    if (stage === 'copying' || stage === 'restoring') return 'materializing'
+    return stage
+}
+
+export function isBackupActivityOperation(type: BackupOperationType): boolean {
+    return ['create', 'restore', 'restore_preview', 'repository_move', 'delete'].includes(type)
 }
 
 export function canonicalizeBackupExclusions(values: BackupExclusion[]): BackupExclusion[] {

@@ -818,6 +818,7 @@ fn main() {
                         "instance_list_synced_servers",
                         "instance_update_synced_server",
                         "instance_remove_synced_server",
+                        "instance_desync_server",
                         "instance_get_synced_game_options_config",
                         "instance_preview_synced_game_option_changes",
                         "instance_save_synced_game_option_changes",

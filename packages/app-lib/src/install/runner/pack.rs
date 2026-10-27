@@ -6,6 +6,7 @@ pub(super) async fn install_pack(
     location: CreatePackLocation,
     instance_id: String,
     reason: DownloadReason,
+    capture_game_options: bool,
 ) -> crate::Result<InstallExecutionOutcome<()>> {
     let reporter = InstallProgressReporter::new(job_id, job_state.clone());
     reporter
@@ -62,6 +63,7 @@ pub(super) async fn install_pack(
                             path,
                             instance_id,
                             reporter,
+                            capture_game_options,
                         )
                         .await;
                     }
@@ -81,6 +83,7 @@ pub(super) async fn install_pack(
                         reporter,
                         0,
                         3,
+                        capture_game_options,
                     )
                     .await;
                 }
@@ -93,6 +96,7 @@ pub(super) async fn install_pack(
         false,
         reason,
         reporter,
+        capture_game_options,
     )
     .await?;
     Ok(match outcome {
@@ -113,14 +117,21 @@ async fn install_local_pack_file_recursive(
     reporter: InstallProgressReporter,
     current_depth: usize,
     max_depth: usize,
+    capture_game_options: bool,
 ) -> crate::Result<InstallExecutionOutcome<()>> {
     // First try standard detection - this will already include our InstanceFolder fallback
     if let Ok(detected) =
         crate::api::pack::detect::detect_local_pack(&path).await
     {
         // If it's a standard format (including InstanceFolder), just install it
-        return install_local_pack_file(detected, path, instance_id, reporter)
-            .await;
+        return install_local_pack_file(
+            detected,
+            path,
+            instance_id,
+            reporter,
+            capture_game_options,
+        )
+        .await;
     }
 
     // If standard detection failed and we're not at max depth, try to look for
@@ -219,6 +230,7 @@ async fn install_local_pack_file_recursive(
                 reporter.clone(),
                 current_depth + 1,
                 max_depth,
+                capture_game_options,
             )
             .await;
 
@@ -248,6 +260,7 @@ async fn install_local_pack_file(
     path: PathBuf,
     instance_id: String,
     reporter: InstallProgressReporter,
+    capture_game_options: bool,
 ) -> crate::Result<InstallExecutionOutcome<()>> {
     use crate::api::pack::detect::LocalPackFormat;
 
@@ -264,6 +277,7 @@ async fn install_local_pack_file(
                     false,
                     DownloadReason::Modpack,
                     reporter,
+                    capture_game_options,
                 )
                 .await?
                 {
@@ -282,7 +296,7 @@ async fn install_local_pack_file(
                 .await?
                 .skipped_missing_content_paths;
             let result = crate::api::curseforge::install_modpack_from_local_archive_with_reporter(
-                instance_id,
+                instance_id.clone(),
                 path,
                 detected.base_folder,
                 source_filename,
@@ -296,6 +310,13 @@ async fn install_local_pack_file(
                 &skipped_missing_content_paths,
             ) {
                 return Ok(InstallExecutionOutcome::WaitingForUser(reason));
+            }
+            if capture_game_options {
+                crate::api::instance::capture_pack_game_options_base(
+                    &instance_id,
+                    result.game_options_source,
+                )
+                .await?;
             }
         }
         LocalPackFormat::Mcbbs => {
@@ -361,6 +382,7 @@ async fn install_local_pack_file(
                 reporter,
                 1, // already one level deep
                 3,
+                capture_game_options,
             )
             .await;
 

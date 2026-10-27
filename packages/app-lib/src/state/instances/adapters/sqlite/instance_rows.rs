@@ -43,6 +43,25 @@ pub(crate) async fn list_screenshot_sources(
     .await?)
 }
 
+pub(crate) async fn list_synced_screenshot_sources(
+    pool: &SqlitePool,
+) -> crate::Result<Vec<InstanceScreenshotSource>> {
+    Ok(sqlx::query_as::<_, InstanceScreenshotSource>(
+        "SELECT instances.id, instances.name, instances.path
+         FROM instances
+         JOIN instance_sync_preferences
+           ON instance_sync_preferences.instance_id = instances.id
+          AND instance_sync_preferences.feature = 'screenshots'
+          AND instance_sync_preferences.enabled = 1
+         JOIN sync_feature_settings
+           ON sync_feature_settings.feature = instance_sync_preferences.feature
+          AND sync_feature_settings.globally_enabled = 1
+         ORDER BY instances.name, instances.id",
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
 #[derive(Debug, sqlx::FromRow)]
 pub(crate) struct InstanceRow {
     pub id: String,
@@ -1782,6 +1801,57 @@ fn unsigned(value: i64, column: &str) -> crate::Result<u64> {
 mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn synced_screenshot_sources_require_global_and_instance_opt_in() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            "CREATE TABLE instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL);
+             CREATE TABLE sync_feature_settings (feature TEXT PRIMARY KEY, globally_enabled INTEGER NOT NULL);
+             CREATE TABLE instance_sync_preferences (
+                instance_id TEXT NOT NULL,
+                feature TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                PRIMARY KEY (instance_id, feature)
+             );
+             INSERT INTO instances VALUES
+                ('included', 'Included', 'included'),
+                ('instance-disabled', 'Instance disabled', 'instance-disabled');
+             INSERT INTO sync_feature_settings VALUES ('screenshots', 1);
+             INSERT INTO instance_sync_preferences VALUES
+                ('included', 'screenshots', 1),
+                ('instance-disabled', 'screenshots', 0);",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let included = list_synced_screenshot_sources(&pool).await.unwrap();
+        assert_eq!(
+            included
+                .iter()
+                .map(|source| source.id.as_str())
+                .collect::<Vec<_>>(),
+            ["included"]
+        );
+
+        sqlx::query(
+            "UPDATE sync_feature_settings SET globally_enabled = 0 WHERE feature = 'screenshots'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(
+            list_synced_screenshot_sources(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[tokio::test]
     async fn metadata_queries_preserve_applied_content_set_revision() {

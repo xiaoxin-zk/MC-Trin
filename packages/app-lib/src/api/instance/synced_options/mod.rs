@@ -25,6 +25,6 @@ pub use self::orchestration::{
     synced_options_path,
 };
 pub(crate) use self::orchestration::{
-    reconcile_instance_after_pack_update_with_state,
+    prepare_instance_update, reconcile_instance_after_pack_update_with_state,
     remove_generated_instance_files,
 };

@@ -52,6 +52,8 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+	// Screenshot gallery preferences now control which existing instances are included; data only.
+	20261027130000: {},
     20261026140000: { columns: [{ table: 'settings', column: 'multiplayer_proxy' }] },
     // Theme default change; data only
     20261026150000: {},

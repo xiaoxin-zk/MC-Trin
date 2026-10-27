@@ -513,6 +513,9 @@ pub struct CurseForgeModpackInstallResult {
     pub overrides_written: u32,
     pub minecraft_version: String,
     pub loader: Option<String>,
+    #[serde(skip)]
+    pub(crate) game_options_source:
+        Option<crate::api::instance::GameOptionsPackSource>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

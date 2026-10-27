@@ -20,6 +20,9 @@
   "app.action-bar.backup-stage.applying": {
     "message": "Applying files"
   },
+  "app.action-bar.backup-stage.deleting": {
+    "message": "Deleting backup"
+  },
   "app.action-bar.backup-stage.hashing": {
     "message": "Calculating hashes"
   },
@@ -46,6 +49,9 @@
   },
   "app.action-bar.backup-task.completed": {
     "message": "{operation} completed"
+  },
+  "app.action-bar.backup-task.delete": {
+    "message": "Backup deletion"
   },
   "app.action-bar.backup-task.failed": {
     "message": "{operation} failed"
@@ -253,6 +259,9 @@
   },
   "app.action-bar.repository": {
     "message": "Backup repository"
+  },
+  "app.action-bar.delete-backup": {
+    "message": "Deleting backup"
   },
   "app.action-bar.repository-move": {
     "message": "Moving backup repository"
@@ -3847,6 +3856,24 @@
   },
   "app.instance.worlds.remove-server-modal.remove-button": {
     "message": "Remove server"
+  },
+  "app.instance.worlds.remove-server-modal.current-button": {
+    "message": "Only from this instance"
+  },
+  "app.instance.worlds.remove-server-modal.current-only": {
+    "message": "Only from this instance"
+  },
+  "app.instance.worlds.remove-server-modal.current-warning": {
+    "message": "This server will stay synced elsewhere and remain in this instance as a local server."
+  },
+  "app.instance.worlds.remove-server-modal.everywhere": {
+    "message": "From all instances"
+  },
+  "app.instance.worlds.remove-server-modal.everywhere-button": {
+    "message": "Remove from all instances"
+  },
+  "app.instance.worlds.remove-server-modal.everywhere-warning": {
+    "message": "This server will be removed from every instance that syncs servers."
   },
   "app.instance.worlds.remove-server-modal.title": {
     "message": "Remove server"
@@ -12842,6 +12869,12 @@
   "app.settings.synced-options.creative-hotbars.description": {
     "message": "Use the same saved creative hotbars across your instances."
   },
+  "app.settings.synced-options.screenshots": {
+    "message": "Include screenshots in the global gallery"
+  },
+  "app.settings.synced-options.screenshots.description": {
+    "message": "Choose which instances appear in the global screenshot gallery."
+  },
   "app.settings.synced-options.data-packs": {
     "message": "Sync data packs"
   },
@@ -12898,6 +12931,15 @@
   },
   "app.settings.synced-options.game-settings.not-being-synced": {
     "message": "Not being synced"
+  },
+  "app.settings.synced-options.game-settings.partial-save-text": {
+    "message": "Applied to {applied} instances, migrated {migrated}, deferred {deferred}, unsupported {unsupported}, failed {failed}."
+  },
+  "app.settings.synced-options.game-settings.partial-save-title": {
+    "message": "Some instance settings need attention"
+  },
+  "app.settings.synced-options.game-settings.preview-failed": {
+    "message": "Could not check these changes. Retry before saving."
   },
   "app.settings.synced-options.game-settings.retry": {
     "message": "Retry"
@@ -12961,6 +13003,12 @@
   },
   "app.settings.synced-options.multiplayer-servers.empty": {
     "message": "No user-added servers are currently synced."
+  },
+  "app.settings.synced-options.multiplayer-servers.check-failed": {
+    "message": "Could not check"
+  },
+  "app.settings.synced-options.multiplayer-servers.filter-check-failed": {
+    "message": "Check failed"
   },
   "app.settings.synced-options.multiplayer-servers.filter-offline": {
     "message": "Offline"
@@ -14321,6 +14369,9 @@
   "instance.backups.exclusions.remove": {
     "message": "Remove {path} from exclusions"
   },
+  "instance.backups.load-failed": {
+    "message": "Could not load backup settings."
+  },
   "instance.backups.loading": {
     "message": "Loading backup settings..."
   },
@@ -14347,6 +14398,9 @@
   },
   "instance.backups.stage.applying": {
     "message": "Applying changed files"
+  },
+  "instance.backups.stage.deleting": {
+    "message": "Deleting backup"
   },
   "instance.backups.stage.failed": {
     "message": "Backup failed"
@@ -14563,6 +14617,12 @@
   },
   "instance.settings.sync.resource-packs": {
     "message": "Resource packs"
+  },
+  "instance.settings.sync.data-packs": {
+    "message": "Data packs"
+  },
+  "instance.settings.sync.screenshots": {
+    "message": "Include in global screenshot gallery"
   },
   "instance.settings.sync.title": {
     "message": "Settings synchronization"

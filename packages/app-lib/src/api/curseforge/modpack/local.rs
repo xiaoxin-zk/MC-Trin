@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::api::curseforge::archive::{
-    loader_type, materialize_modpack_overrides, modpack_target,
-    modpack_zip_error, read_modpack_manifest,
+    game_options_pack_source, loader_type, materialize_modpack_overrides,
+    modpack_target, modpack_zip_error, read_modpack_manifest,
     settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::catalog::{
@@ -135,13 +135,17 @@ pub async fn install_modpack_from_local_archive_with_reporter(
     completion_policy: crate::launcher::InstanceCompletionPolicy,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     let manifest_archive_path = archive_path.clone();
-    let manifest = tokio::task::spawn_blocking(move || {
-        let file = std::fs::File::open(&manifest_archive_path)?;
-        let mut archive =
-            zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
-        read_modpack_manifest(&mut archive)
-    })
-    .await??;
+    let (manifest, game_options_source) =
+        tokio::task::spawn_blocking(move || {
+            let file = std::fs::File::open(&manifest_archive_path)?;
+            let mut archive =
+                zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
+            let manifest = read_modpack_manifest(&mut archive)?;
+            let game_options_source =
+                game_options_pack_source(&mut archive, &manifest)?;
+            Ok::<_, crate::Error>((manifest, game_options_source))
+        })
+        .await??;
 
     let target = modpack_target(&manifest)?;
     let loader = (target.loader != ModLoader::Vanilla)
@@ -235,6 +239,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
             overrides_written: 0,
             minecraft_version: manifest.minecraft.version,
             loader,
+            game_options_source,
         });
     }
 
@@ -312,6 +317,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
         overrides_written,
         minecraft_version: manifest.minecraft.version,
         loader,
+        game_options_source,
     })
 }
 

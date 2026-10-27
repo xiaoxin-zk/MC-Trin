@@ -1086,16 +1086,10 @@ pub(crate) async fn prepare_instance_update(
         SyncedOption::MultiplayerServers,
     ] {
         if option == SyncedOption::GameOptions {
-            if let Err(error) =
-                super::game_options::prepare_instance_update_with_state(
-                    &metadata, &state,
-                )
-                .await
-            {
-                tracing::warn!(
-                    "The modpack update will continue, but options.txt could not be prepared for game-settings sync: {error}"
-                );
-            }
+            super::game_options::prepare_instance_update_with_state(
+                &metadata, &state,
+            )
+            .await?;
             continue;
         }
         if instance_option_enabled(&metadata, option) {

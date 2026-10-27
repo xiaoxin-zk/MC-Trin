@@ -158,6 +158,7 @@ pub(super) async fn run_request(
                     location,
                     instance_id.clone(),
                     DownloadReason::Modpack,
+                    false,
                 )
                 .await?
             {
@@ -337,13 +338,27 @@ pub(super) async fn run_request(
                     .into());
                 }
                 None => {
-                    let disabled_project_ids = remove_existing_pack_content(
+                    crate::api::instance::prepare_pack_game_options_update(
+                        &instance_id,
+                    )
+                    .await?;
+                    let disabled_project_ids = match remove_existing_pack_content(
                         job_id,
                         job_state,
                         state,
                         &instance_id,
                     )
-                    .await?;
+                    .await
+                    {
+                        Ok(disabled_project_ids) => disabled_project_ids,
+                        Err(error) => {
+                            crate::api::instance::abort_pack_game_options_update(
+                                &instance_id,
+                            )
+                            .await?;
+                            return Err(error);
+                        }
+                    };
                     let mut persisted_ids = disabled_project_ids
                         .iter()
                         .cloned()
@@ -353,21 +368,39 @@ pub(super) async fn run_request(
                         disabled_project_ids: persisted_ids,
                     };
                     job_state.continuation = Some(continuation.clone());
-                    InstallProgressReporter::new(job_id, job_state.clone())
+                    if let Err(error) = InstallProgressReporter::new(job_id, job_state.clone())
                         .set_continuation(Some(continuation))
+                        .await
+                    {
+                        crate::api::instance::abort_pack_game_options_update(
+                            &instance_id,
+                        )
                         .await?;
+                        return Err(error);
+                    }
                     disabled_project_ids
                 }
             };
-            if let InstallExecutionOutcome::WaitingForUser(reason) =
-                pack::install_pack(
-                    job_id,
-                    job_state,
-                    location,
-                    instance_id.clone(),
-                    DownloadReason::Modpack,
-                )
-                .await?
+            let pack_result = pack::install_pack(
+                job_id,
+                job_state,
+                location,
+                instance_id.clone(),
+                DownloadReason::Modpack,
+                true,
+            )
+            .await;
+            let pack_result = match pack_result {
+                Ok(result) => result,
+                Err(error) => {
+                    crate::api::instance::abort_pack_game_options_update(
+                        &instance_id,
+                    )
+                    .await?;
+                    return Err(error);
+                }
+            };
+            if let InstallExecutionOutcome::WaitingForUser(reason) = pack_result
             {
                 return Ok(InstallExecutionOutcome::WaitingForUser(reason));
             }

@@ -135,6 +135,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_list_synced_servers,
             instance_update_synced_server,
             instance_remove_synced_server,
+            instance_desync_server,
             instance_get_synced_game_options_config,
             instance_preview_synced_game_option_changes,
             instance_save_synced_game_option_changes,
@@ -395,6 +396,16 @@ pub async fn instance_update_synced_server(
 #[tauri::command]
 pub async fn instance_remove_synced_server(id: String) -> Result<()> {
     theseus::instance::remove_synced_server(&id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_desync_server(
+    instance_id: String,
+    server_id: String,
+    mode: theseus::instance::DesyncServerMode,
+) -> Result<()> {
+    theseus::instance::desync_server(&instance_id, &server_id, mode).await?;
     Ok(())
 }
 

@@ -223,6 +223,23 @@ fn mrpack_override_staging_path(target_path: &Path) -> PathBuf {
     PathBuf::from(path)
 }
 
+fn game_options_source_from_overrides(
+    specs: &[OverrideExtractionSpec],
+    archive_base: &str,
+) -> Option<crate::api::instance::GameOptionsPackSource> {
+    crate::api::instance::detect_game_options_pack_source(
+        specs.iter().filter_map(|spec| {
+            let is_client_override = spec
+                .entry_name
+                .strip_prefix(archive_base)
+                .is_some_and(|name| name.starts_with("client-overrides/"));
+            let path = spec.relative_path.as_str();
+            matches!(path, "options.txt" | "config/yosbr/options.txt")
+                .then_some((is_client_override, path))
+        }),
+    )
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RequiredFileFailure {
     manifest_index: usize,
@@ -900,6 +917,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     ignore_lock: bool,
     reason: DownloadReason,
     reporter: InstallProgressReporter,
+    capture_game_options: bool,
 ) -> crate::Result<MrpackInstallOutcome> {
     let state = &State::get().await?;
 
@@ -1856,6 +1874,8 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             })
         })
         .collect::<crate::Result<Vec<_>>>()?;
+    let game_options_source =
+        game_options_source_from_overrides(&override_specs, &archive_base);
     let override_total_bytes = override_specs
         .iter()
         .map(|spec| zip_reader.file().entries()[spec.index].uncompressed_size())
@@ -2201,6 +2221,14 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     minecraft_install.join().await?;
     reporter.clear_context().await?;
 
+    if capture_game_options {
+        crate::api::instance::capture_pack_game_options_base(
+            &instance_id,
+            game_options_source,
+        )
+        .await?;
+    }
+
     Ok(MrpackInstallOutcome::Completed(instance_id.clone()))
 }
 
@@ -2361,6 +2389,32 @@ mod tests {
             relative_path: target.to_string(),
             target_path: PathBuf::from(target),
         }
+    }
+
+    #[test]
+    fn game_options_source_uses_the_actual_mrpack_override_roots() {
+        let regular = override_spec(0, "options.txt");
+        let mut client = override_spec(1, "options.txt");
+        client.entry_name = "wrapped/client-overrides/options.txt".to_string();
+        let yosbr = override_spec(2, "config/yosbr/options.txt");
+        assert_eq!(
+            game_options_source_from_overrides(
+                &[regular.clone(), client],
+                "wrapped/"
+            ),
+            Some(crate::api::instance::GameOptionsPackSource::ClientOverrides)
+        );
+        assert_eq!(
+            game_options_source_from_overrides(&[regular, yosbr], ""),
+            Some(crate::api::instance::GameOptionsPackSource::OverridesYosbr)
+        );
+        assert_eq!(
+            game_options_source_from_overrides(
+                &[override_spec(3, "config/other/options.txt")],
+                ""
+            ),
+            None
+        );
     }
 
     #[test]
