@@ -1721,7 +1721,7 @@ async fn resolve_babric_profile(
         .into());
     }
 
-    match fetch_json::<PartialVersionInfo>(
+    match fetch_json_with_pool::<PartialVersionInfo>(
         Method::GET,
         profile_url,
         None,
@@ -1753,7 +1753,7 @@ async fn build_babric_profile(
     let loader_metadata_url = format!(
         "{BABRIC_LOADER_METADATA_URL}{loader_version}/fabric-loader-{loader_version}.json"
     );
-    let polyfill = fetch_json::<serde_json::Value>(
+    let polyfill = fetch_json_with_pool::<serde_json::Value>(
         Method::GET,
         BABRIC_POLYFILL_VERSION_URL,
         None,
@@ -1763,7 +1763,7 @@ async fn build_babric_profile(
         &state.pool,
     )
     .await?;
-    let launcher_metadata = fetch_json::<BabricLauncherMetadata>(
+    let launcher_metadata = fetch_json_with_pool::<BabricLauncherMetadata>(
         Method::GET,
         &loader_metadata_url,
         None,

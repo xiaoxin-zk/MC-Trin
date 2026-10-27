@@ -972,7 +972,7 @@ async fn install_mojang_runtime(
             )
             .await?;
     }
-    let index = fetch_json::<MojangRuntimeIndex>(
+    let index = fetch_json_with_pool::<MojangRuntimeIndex>(
         Method::GET,
         MOJANG_RUNTIME_INDEX_URL,
         None,
@@ -1311,7 +1311,7 @@ async fn install_azul_runtime(
             )
             .await?;
     }
-    let packages = fetch_json::<Vec<AzulPackageSummary>>(
+    let packages = fetch_json_with_pool::<Vec<AzulPackageSummary>>(
         Method::GET,
         &metadata_url,
         None,
@@ -1333,7 +1333,7 @@ async fn install_azul_runtime(
         "https://api.azul.com/metadata/v1/zulu/packages/{}",
         summary.package_uuid
     );
-    let download = fetch_json::<AzulPackage>(
+    let download = fetch_json_with_pool::<AzulPackage>(
         Method::GET,
         &details_url,
         None,

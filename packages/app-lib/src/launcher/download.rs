@@ -360,7 +360,6 @@ async fn download_minecraft_file(
     context: InstallErrorContext,
 ) -> crate::Result<DownloadResult> {
     download_minecraft_file_with_semaphore(
-        st,
         url,
         sha1,
         expected_size,
@@ -376,7 +375,6 @@ async fn download_minecraft_file(
 }
 
 async fn download_minecraft_file_with_semaphore(
-    st: &State,
     url: &str,
     sha1: Option<&str>,
     expected_size: Option<u64>,
@@ -2217,7 +2215,6 @@ pub async fn download_assets(
                             force,
                             || {
                                 download_minecraft_file_with_semaphore(
-                                    st,
                                     &item.url,
                                     Some(hash),
                                     Some(item.size),
