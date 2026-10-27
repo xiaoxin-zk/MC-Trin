@@ -288,8 +288,10 @@ pub(crate) async fn capture_pack_base(
     pack_servers: Vec<quartz_nbt::NbtCompound>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
+    let pool = state.pool.clone();
     let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(&instance_id, &state.pool)
+    let instance_id = instance_id.as_str();
+    let metadata = crate::state::get_instance(instance_id, &pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
@@ -305,10 +307,10 @@ pub(crate) async fn capture_pack_base(
 		DELETE FROM instance_sync_checkpoints
 		WHERE instance_id = ? AND feature = ?
 		",
-        &instance_id,
+        instance_id,
         feature,
     )
-    .execute(&state.pool)
+    .execute(&pool)
     .await?;
 
     if source.is_none() {
@@ -318,9 +320,9 @@ pub(crate) async fn capture_pack_base(
 			FROM instance_game_option_update_state
 			WHERE instance_id = ?
 			"#,
-            &instance_id,
+            instance_id,
         )
-        .fetch_optional(&state.pool)
+        .fetch_optional(&pool)
         .await?;
         if let Some(pending) = pending {
             if pending.had_file {
@@ -365,7 +367,7 @@ pub(crate) async fn capture_pack_base(
     if sync_is_active_for_instance(&metadata, &state).await? {
         apply_shared_settings_to_instance(&metadata, &state, true).await?;
     }
-    let mut transaction = state.pool.begin().await?;
+    let mut transaction = pool.begin().await?;
     synced_servers::write_modpack_servers(
         &metadata,
         &local_servers,
@@ -382,7 +384,7 @@ pub(crate) async fn capture_pack_base(
 			source = excluded.source, sha1 = excluded.sha1,
 			encoding = excluded.encoding, document = excluded.document
 		",
-        &instance_id,
+        instance_id,
         version_id,
         source_name,
         sha1,
@@ -393,7 +395,7 @@ pub(crate) async fn capture_pack_base(
     .await?;
     sqlx::query!(
         "DELETE FROM instance_game_option_update_state WHERE instance_id = ?",
-        &instance_id,
+        instance_id,
     )
     .execute(&mut *transaction)
     .await?;
@@ -406,8 +408,10 @@ pub(crate) async fn capture_pack_servers_base(
     pack_servers: Vec<quartz_nbt::NbtCompound>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
+    let pool = state.pool.clone();
     let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(&instance_id, &state.pool)
+    let instance_id = instance_id.as_str();
+    let metadata = crate::state::get_instance(instance_id, &pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
@@ -416,7 +420,7 @@ pub(crate) async fn capture_pack_servers_base(
         state.clone(),
     )
     .await?;
-    let mut transaction = state.pool.begin().await?;
+    let mut transaction = pool.begin().await?;
     synced_servers::write_modpack_servers(
         &metadata,
         &local_servers,

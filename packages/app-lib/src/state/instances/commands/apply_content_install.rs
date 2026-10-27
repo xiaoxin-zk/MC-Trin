@@ -19,7 +19,7 @@ use crate::state::{
 };
 use crate::util::fetch::{
     self, ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    Integrity, ResourceClass, download_to_path,
+    FetchSemaphore, Integrity, ResourceClass, download_to_path,
 };
 use crate::util::io;
 use crate::util::io::io_error_with_lock_info;
@@ -100,7 +100,8 @@ pub(crate) struct InstanceInstallProjectRequest {
 }
 
 struct CachedEntryContentProvider<'a> {
-    state: &'a State,
+    pool: sqlx::SqlitePool,
+    api_semaphore: &'a FetchSemaphore,
     cache_behaviour: Option<CacheBehaviour>,
 }
 
@@ -110,12 +111,13 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
         &mut self,
         version_id: &str,
     ) -> Result<Option<content_management::Version>, ResolveError> {
+        let pool = self.pool.clone();
         let version = CachedEntry::get_version(
             &ModrinthVersionId::new(version_id.to_string())
                 .map_err(resolve_provider_error)?,
             self.cache_behaviour,
-            &self.state.pool,
-            &self.state.api_semaphore,
+            &pool,
+            self.api_semaphore,
         )
         .await
         .map_err(resolve_provider_error)?;
@@ -127,12 +129,13 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
         &mut self,
         project_id: &str,
     ) -> Result<Vec<content_management::Version>, ResolveError> {
+        let pool = self.pool.clone();
         let versions = CachedEntry::get_project_versions(
             &ModrinthProjectId::new(project_id.to_string())
                 .map_err(resolve_provider_error)?,
             self.cache_behaviour,
-            &self.state.pool,
-            &self.state.api_semaphore,
+            &pool,
+            self.api_semaphore,
         )
         .await
         .map_err(resolve_provider_error)?;
@@ -261,14 +264,14 @@ async fn resolve_install_plan_with_cache(
     dependency_policy: DependencyPolicy,
     state: &State,
 ) -> crate::Result<ResolveContentPlan> {
-    let content_set =
-        content_rows::get_applied_content_set(instance_id, &state.pool)
-            .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(format!(
-                    "Instance {instance_id} has no applied content set"
-                ))
-            })?;
+    let pool = state.pool.clone();
+    let content_set = content_rows::get_applied_content_set(instance_id, &pool)
+        .await?
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError(format!(
+                "Instance {instance_id} has no applied content set"
+            ))
+        })?;
     let existing_project_ids =
         crate::state::get_installed_project_ids_for_instance(
             instance_id,
@@ -277,7 +280,8 @@ async fn resolve_install_plan_with_cache(
         )
         .await?;
     let provider = CachedEntryContentProvider {
-        state,
+        pool: pool.clone(),
+        api_semaphore: &state.api_semaphore,
         cache_behaviour,
     };
     let content_type = request.content_type;
@@ -316,7 +320,7 @@ async fn resolve_install_plan_with_cache(
             let projects = CachedEntry::get_project_many(
                 &project_ids,
                 cache_behaviour,
-                &state.pool,
+                &pool,
                 &state.api_semaphore,
             )
             .await?;
@@ -349,9 +353,11 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
     dependency_policy: DependencyPolicy,
     state: &State,
 ) -> crate::Result<ResolveContentPlan> {
+    let pool = state.pool.clone();
     let cache_behaviour = Some(CacheBehaviour::MustRevalidate);
     let provider = CachedEntryContentProvider {
-        state,
+        pool: pool.clone(),
+        api_semaphore: &state.api_semaphore,
         cache_behaviour,
     };
     let content_type = request.content_type;
@@ -386,7 +392,7 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
             let projects = CachedEntry::get_project_many(
                 &project_ids,
                 cache_behaviour,
-                &state.pool,
+                &pool,
                 &state.api_semaphore,
             )
             .await?;
@@ -669,10 +675,11 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     action: &mut crate::install::ContentChangeAction,
     state: std::sync::Arc<State>,
 ) -> crate::Result<()> {
+    let pool = state.pool.clone();
     let version = CachedEntry::get_version(
         &ModrinthVersionId::new(action.target_release_id.clone())?,
         None,
-        &state.pool,
+        &pool,
         &state.api_semaphore,
     )
     .await?
@@ -706,7 +713,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         Some(version_id) => CachedEntry::get_version(
             &ModrinthVersionId::new(version_id.to_string())?,
             None,
-            &state.pool,
+            &pool,
             &state.api_semaphore,
         )
         .await?
@@ -991,6 +998,7 @@ async fn add_resolved_content_with_progress(
     progress: Option<ResolvedContentDownloadProgress>,
     state: &State,
 ) -> crate::Result<String> {
+    let pool = state.pool.clone();
     let path = add_project_from_version_with_progress(
         instance_id,
         &content.version_id,
@@ -1007,15 +1015,13 @@ async fn add_resolved_content_with_progress(
         if let Some(entry) = content_rows::get_content_entry_by_relative_path(
             &scope.content_set_id,
             &path,
-            &state.pool,
+            &pool,
         )
         .await?
         {
             let _database_permit = state.acquire_install_db_permit().await?;
             content_rows::set_content_entry_auto_dependency(
-                &entry.id,
-                true,
-                &state.pool,
+                &entry.id, true, &pool,
             )
             .await?;
         }
@@ -1204,7 +1210,8 @@ pub(crate) async fn resolve_content_scope(
     content_set_id: Option<&str>,
     state: &State,
 ) -> crate::Result<ContentScope> {
-    let instance = instance_rows::get_instance_by_id(instance_id, &state.pool)
+    let pool = state.pool.clone();
+    let instance = instance_rows::get_instance_by_id(instance_id, &pool)
         .await?
         .ok_or_else(|| {
             crate::ErrorKind::InputError("Unknown instance".to_string())
@@ -1495,9 +1502,10 @@ pub(crate) async fn prepare_version_download(
     dependent_on_version_id: Option<String>,
     state: &State,
 ) -> crate::Result<PreparedVersionDownload> {
+    let pool = state.pool.clone();
     let scope = resolve_content_scope(instance_id, None, state).await?;
     let content_set =
-        content_rows::get_content_set(&scope.content_set_id, &state.pool)
+        content_rows::get_content_set(&scope.content_set_id, &pool)
             .await?
             .ok_or_else(|| {
                 crate::ErrorKind::InputError(format!(
@@ -1508,7 +1516,7 @@ pub(crate) async fn prepare_version_download(
     let version = CachedEntry::get_version(
         &ModrinthVersionId::new(version_id.to_string())?,
         None,
-        &state.pool,
+        &pool,
         &state.api_semaphore,
     )
     .await?

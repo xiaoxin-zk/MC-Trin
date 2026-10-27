@@ -166,12 +166,10 @@ pub(crate) async fn get_installed_project_ids_for_instance(
     content_set_id: Option<&str>,
     state: &State,
 ) -> crate::Result<Vec<String>> {
-    let resolved = resolve_content_scope_with_instance(
-        instance_id,
-        content_set_id,
-        &state.pool,
-    )
-    .await?;
+    let pool = state.pool.clone();
+    let resolved =
+        resolve_content_scope_with_instance(instance_id, content_set_id, &pool)
+            .await?;
     let mut project_ids = HashSet::new();
     let provider_rows = sqlx::query(
         "SELECT DISTINCT ref.provider, ref.provider_project_id
@@ -182,7 +180,7 @@ pub(crate) async fn get_installed_project_ids_for_instance(
          WHERE entry.content_set_id = ? AND file.missing = 0",
     )
     .bind(&resolved.content_set.id)
-    .fetch_all(&state.pool)
+    .fetch_all(&pool)
     .await?;
     for row in provider_rows {
         let provider = row.try_get::<String, _>("provider")?;
@@ -1252,15 +1250,17 @@ async fn resolve_content_scope_with_instance(
     content_set_id: Option<&str>,
     pool: &SqlitePool,
 ) -> crate::Result<ResolvedContentScope> {
-    let instance = sqlite::instance_rows::get_instance_by_id(instance_id, pool)
-        .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string())
-        })?;
+    let pool = SqlitePool::clone(pool);
+    let instance =
+        sqlite::instance_rows::get_instance_by_id(instance_id, &pool)
+            .await?
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError("Unknown instance".to_string())
+            })?;
     let content_set = match content_set_id {
         Some(content_set_id) => {
             let content_set =
-                sqlite::content_rows::get_content_set(content_set_id, pool)
+                sqlite::content_rows::get_content_set(content_set_id, &pool)
                     .await?
                     .ok_or_else(|| {
                         crate::ErrorKind::InputError(format!(
@@ -1279,7 +1279,7 @@ async fn resolve_content_scope_with_instance(
             content_set
         }
         None => {
-            sqlite::content_rows::get_applied_content_set(&instance.id, pool)
+            sqlite::content_rows::get_applied_content_set(&instance.id, &pool)
                 .await?
                 .ok_or_else(|| {
                     crate::ErrorKind::InputError(format!(

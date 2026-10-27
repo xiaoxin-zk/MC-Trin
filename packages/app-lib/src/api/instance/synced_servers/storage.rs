@@ -274,7 +274,9 @@ pub(super) async fn load_local(
     instance_id: &str,
     state: &State,
 ) -> crate::Result<Vec<LocalServer>> {
-    load_local_with(instance_id, &mut *state.pool.acquire().await?).await
+    let pool = state.pool.clone();
+    let mut connection = pool.acquire().await?;
+    load_local_with(instance_id, &mut connection).await
 }
 
 async fn load_local_with(

@@ -15,9 +15,10 @@ async fn replace_modpack_servers(
     servers: Vec<NbtCompound>,
     state: &State,
 ) -> crate::Result<()> {
+    let pool = state.pool.clone();
     let local =
         prepare_modpack_servers_with_state(metadata, servers, state).await?;
-    let mut tx = state.pool.begin().await?;
+    let mut tx = pool.begin().await?;
     write_modpack_servers(metadata, &local, &mut tx).await?;
     tx.commit().await?;
     Ok(())
