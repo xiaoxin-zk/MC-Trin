@@ -1245,3 +1245,77 @@ mod copy_dir_tests {
         }
     }
 }
+
+/// Deleting an instance or a world is the only irreversible filesystem
+/// operation in the launcher, so the primitive behind it is pinned here.
+#[cfg(test)]
+mod remove_dir_all_tests {
+    use super::remove_dir_all;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn removes_nested_files_and_directories() {
+        let root = tempdir().expect("temp root");
+        let nested = root.path().join("saves/world/region");
+        std::fs::create_dir_all(&nested).expect("nested dirs");
+        std::fs::write(nested.join("r.0.0.mca"), b"region")
+            .expect("region file");
+        std::fs::write(root.path().join("level.dat"), b"level")
+            .expect("level file");
+
+        remove_dir_all(root.path().join("saves"))
+            .await
+            .expect("remove tree");
+
+        assert!(!root.path().join("saves").exists());
+        assert!(
+            root.path().join("level.dat").is_file(),
+            "only the requested subtree may be removed"
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_path_is_not_an_error() {
+        let root = tempdir().expect("temp root");
+
+        remove_dir_all(root.path().join("absent"))
+            .await
+            .expect("a missing path is already in the desired state");
+    }
+
+    #[tokio::test]
+    async fn empty_directory_is_removed() {
+        let root = tempdir().expect("temp root");
+        let empty = root.path().join("empty");
+        std::fs::create_dir(&empty).expect("empty dir");
+
+        remove_dir_all(&empty).await.expect("remove empty dir");
+
+        assert!(!empty.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn symlinked_directory_is_unlinked_without_touching_its_target() {
+        // A link inside an instance must never turn a delete into "delete
+        // whatever it points at".
+        let outside = tempdir().expect("outside root");
+        std::fs::write(outside.path().join("keep.txt"), b"keep")
+            .expect("outside file");
+
+        let root = tempdir().expect("temp root");
+        let tree = root.path().join("world");
+        std::fs::create_dir_all(tree.join("region")).expect("tree dirs");
+        std::os::unix::fs::symlink(outside.path(), tree.join("region/linked"))
+            .expect("create symlink");
+
+        remove_dir_all(&tree).await.expect("remove tree");
+
+        assert!(!tree.exists(), "the requested tree must be gone");
+        assert!(
+            outside.path().join("keep.txt").is_file(),
+            "content behind the symlink must survive"
+        );
+        assert!(outside.path().is_dir());
+    }
+}

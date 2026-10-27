@@ -131,3 +131,37 @@ fn is_version_isolated_game_dir(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         == Some("versions")
 }
+
+/// The delete target decides which directory is removed from disk. Reading a
+/// shared `.minecraft` root as an isolated version directory would delete the
+/// player's whole version folder, so both sides of the predicate are pinned.
+#[cfg(test)]
+mod delete_target_tests {
+    use super::is_version_isolated_game_dir;
+    use std::path::Path;
+
+    #[test]
+    fn versions_children_are_isolated() {
+        for path in [
+            "/mc/versions/1.20.1",
+            "versions/1.20.1",
+            r"D:\mc\versions\fabric-1.20.1",
+        ] {
+            assert!(is_version_isolated_game_dir(Path::new(path)), "{path:?}");
+        }
+    }
+
+    #[test]
+    fn shared_and_managed_directories_are_not_isolated() {
+        for path in [
+            "/mc",
+            "/mc/.minecraft",
+            "/mc/game",
+            "versions",
+            "versions/",
+            "/",
+        ] {
+            assert!(!is_version_isolated_game_dir(Path::new(path)), "{path:?}");
+        }
+    }
+}

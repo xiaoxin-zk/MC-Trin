@@ -1595,3 +1595,53 @@ mod tests {
         assert!(!read_hardcore(&NbtCompound::new()));
     }
 }
+
+/// The world name reaches a recursive delete path, so the validation inside
+/// `get_world_dir` is the only thing standing between a crafted name and a
+/// delete outside the saves folder.
+#[cfg(test)]
+mod world_path_tests {
+    use super::get_world_dir;
+    use std::path::Path;
+
+    #[test]
+    fn accepts_ordinary_and_localized_world_names() {
+        let instance = Path::new("/instances/pack");
+
+        for name in ["New World", "我的世界", "world_2024", "Ünïcode"] {
+            assert_eq!(
+                get_world_dir(instance, name).unwrap(),
+                instance.join("saves").join(name),
+                "{name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_names_that_escape_the_saves_directory() {
+        let instance = Path::new("/instances/pack");
+
+        for name in ["", ".", "..", "../outside", "nested/world", "a/../b"] {
+            assert!(get_world_dir(instance, name).is_err(), "{name:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_absolute_unix_paths() {
+        assert!(
+            get_world_dir(Path::new("/instances/pack"), "/etc").is_err(),
+            "an absolute world name must not escape the instance"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_absolute_and_prefixed_windows_paths() {
+        let instance = Path::new(r"C:\instances\pack");
+
+        for name in [r"C:\Windows", r"\\server\share", r"\\?\C:\Windows"] {
+            assert!(get_world_dir(instance, name).is_err(), "{name:?}");
+        }
+    }
+}

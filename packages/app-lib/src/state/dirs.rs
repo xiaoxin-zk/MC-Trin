@@ -33,12 +33,22 @@ pub struct DirectoryInfo {
 /// `config_dir`. A portable install already keeps everything inside the program
 /// folder, so its `config_dir` is used as-is instead of climbing one level up.
 pub fn component_root_path() -> PathBuf {
-    let configured = configured_component_root();
-    match launcher_dir_if_writable() {
-        Some(launcher_dir) if !configured.starts_with(&launcher_dir) => {
-            launcher_dir
-        }
-        _ => configured,
+    resolve_component_root(
+        &configured_component_root(),
+        launcher_dir_if_writable().as_deref(),
+    )
+}
+
+/// Picks the component root from the configured data directory and the
+/// launcher directory. Split out from [`component_root_path`] so the layout
+/// rules stay testable without touching the real executable location.
+fn resolve_component_root(
+    configured: &Path,
+    launcher_dir: Option<&Path>,
+) -> PathBuf {
+    match launcher_dir {
+        Some(dir) if !configured.starts_with(dir) => dir.to_path_buf(),
+        _ => configured.to_path_buf(),
     }
 }
 
@@ -63,12 +73,20 @@ fn launcher_dir_if_writable() -> Option<PathBuf> {
         .get_or_init(|| {
             let launcher_dir =
                 std::env::current_exe().ok()?.parent()?.to_path_buf();
-            let probe = launcher_dir.join(".mctrin-write-probe");
-            std::fs::write(&probe, b"").ok()?;
-            let _ = std::fs::remove_file(&probe);
-            Some(launcher_dir)
+            probe_dir_writable(&launcher_dir).then_some(launcher_dir)
         })
         .clone()
+}
+
+/// Reports whether `dir` accepts a new file. A probe file is written and then
+/// removed, so a writable directory is left exactly as it was found.
+fn probe_dir_writable(dir: &Path) -> bool {
+    let probe = dir.join(".mctrin-write-probe");
+    if std::fs::write(&probe, b"").is_err() {
+        return false;
+    }
+    let _ = std::fs::remove_file(&probe);
+    true
 }
 
 impl DirectoryInfo {
@@ -831,5 +849,78 @@ mod resolve_game_dir_tests {
             dirs.resolve_game_dir("inst", Some(r"relative\dir")),
             dirs.instances_dir().join("inst")
         );
+    }
+}
+
+/// Covers the layout rules behind [`component_root_path`]. The runtime picks
+/// between "components live beside the executable" and "components live in the
+/// data directory"; getting it wrong silently moves user-visible files to a
+/// different folder, so each branch is pinned here.
+#[cfg(test)]
+mod component_root_tests {
+    use super::{probe_dir_writable, resolve_component_root};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn writable_launcher_directory_receives_components() {
+        assert_eq!(
+            resolve_component_root(
+                Path::new("/home/user/.local/share/com.mctrin.launcher"),
+                Some(Path::new("/opt/mctrin")),
+            ),
+            PathBuf::from("/opt/mctrin")
+        );
+    }
+
+    #[test]
+    fn portable_install_keeps_its_config_directory() {
+        // The portable config directory already sits inside the launcher
+        // directory; climbing one level up would split the install in two.
+        assert_eq!(
+            resolve_component_root(
+                Path::new("/opt/mctrin/.MC-Trin"),
+                Some(Path::new("/opt/mctrin")),
+            ),
+            PathBuf::from("/opt/mctrin/.MC-Trin")
+        );
+    }
+
+    #[test]
+    fn read_only_launcher_directory_falls_back_to_config_directory() {
+        assert_eq!(
+            resolve_component_root(
+                Path::new("/home/user/.local/share/com.mctrin.launcher"),
+                None,
+            ),
+            PathBuf::from("/home/user/.local/share/com.mctrin.launcher")
+        );
+    }
+
+    #[test]
+    fn identical_paths_do_not_move_the_component_root() {
+        let same = Path::new("/opt/mctrin");
+        assert_eq!(
+            resolve_component_root(same, Some(same)),
+            PathBuf::from("/opt/mctrin")
+        );
+    }
+
+    #[test]
+    fn probe_accepts_a_writable_directory_and_leaves_it_clean() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert!(probe_dir_writable(dir.path()));
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            0,
+            "the write probe must not leave a file behind"
+        );
+    }
+
+    #[test]
+    fn probe_rejects_a_missing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert!(!probe_dir_writable(&dir.path().join("absent")));
     }
 }
