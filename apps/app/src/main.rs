@@ -650,6 +650,7 @@ fn raise_file_descriptor_limit() {
 
 // if Tauri app is called with arguments, then those arguments will be treated as commands
 // ie: deep links or filepaths for .mrpacks
+#[allow(clippy::default_constructed_unit_structs)]
 fn main() {
     // Initialize portable mode first (checks .Axolotl folder and sets THESEUS_CONFIG_DIR)
     // SAFETY: Called at the start of main() before any threads or tokio runtime are spawned
