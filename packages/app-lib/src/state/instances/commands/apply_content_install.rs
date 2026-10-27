@@ -767,10 +767,12 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     action.files.clear();
     action.dependencies.clear();
 
-    for (index, resolved) in std::iter::once(&plan.primary)
+    let planned_contents = std::iter::once(&plan.primary)
         .chain(plan.dependencies.iter())
-        .enumerate()
-    {
+        .cloned()
+        .collect::<Vec<_>>();
+
+    for (index, resolved) in planned_contents.into_iter().enumerate() {
         let prepared = prepare_version_download(
             instance_id.clone(),
             resolved.version_id.clone(),
