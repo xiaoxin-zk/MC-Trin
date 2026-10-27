@@ -309,7 +309,7 @@ async fn install_local_pack_file(
             }
             if capture_game_options {
                 crate::api::instance::capture_pack_game_options_base(
-                    &instance_id,
+                    instance_id.clone(),
                     result.game_options_source,
                     result.pack_servers,
                 )

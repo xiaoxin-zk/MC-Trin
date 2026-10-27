@@ -283,13 +283,13 @@ pub(crate) async fn abort_pack_update(instance_id: &str) -> crate::Result<()> {
 /// Keeps the new modpack's `options.txt` as its default, then reapplies the user's
 /// shared settings.
 pub(crate) async fn capture_pack_base(
-    instance_id: &str,
+    instance_id: String,
     source: Option<GameOptionsPackSource>,
     pack_servers: Vec<quartz_nbt::NbtCompound>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(instance_id, &state.pool)
+    let metadata = crate::state::get_instance(&instance_id, &state.pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
@@ -305,7 +305,7 @@ pub(crate) async fn capture_pack_base(
 		DELETE FROM instance_sync_checkpoints
 		WHERE instance_id = ? AND feature = ?
 		",
-        instance_id,
+        &instance_id,
         feature,
     )
     .execute(&state.pool)
@@ -318,7 +318,7 @@ pub(crate) async fn capture_pack_base(
 			FROM instance_game_option_update_state
 			WHERE instance_id = ?
 			"#,
-            instance_id,
+            &instance_id,
         )
         .fetch_optional(&state.pool)
         .await?;
@@ -382,7 +382,7 @@ pub(crate) async fn capture_pack_base(
 			source = excluded.source, sha1 = excluded.sha1,
 			encoding = excluded.encoding, document = excluded.document
 		",
-        instance_id,
+        &instance_id,
         version_id,
         source_name,
         sha1,
@@ -393,7 +393,7 @@ pub(crate) async fn capture_pack_base(
     .await?;
     sqlx::query!(
         "DELETE FROM instance_game_option_update_state WHERE instance_id = ?",
-        instance_id,
+        &instance_id,
     )
     .execute(&mut *transaction)
     .await?;

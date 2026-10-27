@@ -135,7 +135,7 @@ async fn prepare_actions(
                     let result = match action.provider {
                         ContentProvider::Modrinth => {
                             crate::state::instances::commands::prepare_modrinth_content_change_action(
-                                &instance_id,
+                                instance_id.clone(),
                                 &mut action,
                                 state.clone(),
                             )
@@ -143,7 +143,7 @@ async fn prepare_actions(
                         }
                         ContentProvider::CurseForge => {
                             crate::api::curseforge::prepare_curseforge_content_change_action(
-                                &instance_id,
+                                instance_id.clone(),
                                 &mut action,
                             )
                             .await

@@ -697,7 +697,7 @@ async fn install_modpack_inner(
         && content.failed_downloads.is_empty()
     {
         crate::api::instance::capture_pack_game_options_base(
-            &request.instance_id,
+            request.instance_id.clone(),
             game_options_source,
             std::mem::take(&mut pack_servers),
         )

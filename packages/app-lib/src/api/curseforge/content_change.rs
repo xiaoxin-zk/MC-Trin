@@ -12,7 +12,7 @@ use crate::state::ContentProvider;
 use crate::{ErrorKind, State};
 
 pub(crate) async fn prepare_curseforge_content_change_action(
-    instance_id: &str,
+    instance_id: String,
     action: &mut crate::install::ContentChangeAction,
 ) -> crate::Result<()> {
     use sqlx::Row;
@@ -37,7 +37,7 @@ pub(crate) async fn prepare_curseforge_content_change_action(
          ORDER BY entry.modified_at DESC
          LIMIT 1",
     )
-    .bind(instance_id)
+    .bind(&instance_id)
     .bind(relative_path)
     .fetch_optional(&state.pool)
     .await?
@@ -74,7 +74,7 @@ pub(crate) async fn prepare_curseforge_content_change_action(
         _ => None,
     };
     let preview = preview_install_file(CurseForgeInstallRequest {
-        instance_id: instance_id.to_string(),
+        instance_id: instance_id.clone(),
         project_id,
         file_id,
         project_type,
@@ -234,7 +234,7 @@ pub(crate) async fn prepare_curseforge_content_change_action(
             });
         let prepared =
             crate::state::instances::commands::prepare_version_download(
-                instance_id,
+                &instance_id,
                 &fallback.version_id,
                 crate::util::fetch::DownloadReason::Dependency,
                 None,

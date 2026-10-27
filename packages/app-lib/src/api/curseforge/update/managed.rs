@@ -334,7 +334,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         // with the selected release and cannot be committed for a rolled-back
         // partial update.
         crate::api::instance::capture_pack_game_options_base(
-            instance_id,
+            instance_id.to_string(),
             result.game_options_source,
             std::mem::take(&mut result.pack_servers),
         )

@@ -2259,7 +2259,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
 
     if capture_game_options {
         crate::api::instance::capture_pack_game_options_base(
-            &instance_id,
+            instance_id.clone(),
             game_options_source,
             pack_servers,
         )

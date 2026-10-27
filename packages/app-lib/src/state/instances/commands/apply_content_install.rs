@@ -665,7 +665,7 @@ pub(crate) fn primary_version_file_name(
 }
 
 pub(crate) async fn prepare_modrinth_content_change_action(
-    instance_id: &str,
+    instance_id: String,
     action: &mut crate::install::ContentChangeAction,
     state: std::sync::Arc<State>,
 ) -> crate::Result<()> {
@@ -686,7 +686,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         .map(ContentType::from)
         .unwrap_or(ContentType::Mod);
     let plan = resolve_install_plan_with_cache(
-        instance_id,
+        &instance_id,
         InstanceInstallProjectRequest {
             project_id: version.project_id.clone(),
             version_id: Some(version.id.clone()),
@@ -697,7 +697,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         },
         None,
         DependencyPolicy::RequiredOnly,
-        state,
+        &state,
     )
     .await?;
     let target_provider_file_name = primary_version_file_name(&version)?;
@@ -739,7 +739,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         .enumerate()
     {
         let prepared = prepare_version_download(
-            instance_id,
+            &instance_id,
             &resolved.version_id,
             if index == 0 {
                 DownloadReason::Update
@@ -747,7 +747,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
                 DownloadReason::Dependency
             },
             resolved.dependent_on_version_id.clone(),
-            state,
+            &state,
         )
         .await?;
         let id = format!("modrinth:{}", resolved.version_id);
