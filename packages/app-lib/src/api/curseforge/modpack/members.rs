@@ -671,7 +671,10 @@ mod tests {
             select_modpack_manifest_files(&manifest, &members, false);
 
         assert_eq!(
-            selected.iter().map(|file| file.project_id).collect::<Vec<_>>(),
+            selected
+                .iter()
+                .map(|file| file.project_id)
+                .collect::<Vec<_>>(),
             vec![3, 4]
         );
         assert_eq!(disabled, HashSet::from(["3".to_string()]));

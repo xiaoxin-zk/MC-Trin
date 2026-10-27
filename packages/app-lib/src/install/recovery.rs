@@ -1120,7 +1120,8 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn b10_restores_existing_pack_state_after_download_and_database_failures() {
+    async fn b10_restores_existing_pack_state_after_download_and_database_failures()
+     {
         crate::event::EventState::init().await.unwrap();
         let root = tempfile::tempdir().unwrap().keep();
         let state = State::init_for_test(root.to_string_lossy().to_string())
@@ -1416,10 +1417,14 @@ mod tests {
                 "mods/database-failure.jar".to_string(),
             ]);
 
-        let database_failure_path = instance_base.join("mods/database-failure.jar");
-        crate::util::io::write(&database_failure_path, b"partial database file")
-            .await
-            .unwrap();
+        let database_failure_path =
+            instance_base.join("mods/database-failure.jar");
+        crate::util::io::write(
+            &database_failure_path,
+            b"partial database file",
+        )
+        .await
+        .unwrap();
         sqlx::query(
             "CREATE TRIGGER b10_fail_instance_file_insert
              BEFORE INSERT ON instance_files

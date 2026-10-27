@@ -3,8 +3,8 @@
 use crate::api::curseforge::archive::{loader_type, looks_like_game_version};
 use crate::api::curseforge::catalog::get_file;
 use crate::api::curseforge::dto::{
-    CurseForgeInstallResult, CurseForgeInstalledFile,
-    CurseForgeManualDownload, CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
+    CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManualDownload,
+    CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
 };
 use crate::api::curseforge::modpack::{
     CurseForgePackExpectedMember, get_modpack_expected_members_with_reporter,
@@ -378,7 +378,8 @@ fn required_manual_pack_downloads(
             member.provider == Some(crate::state::ContentProvider::CurseForge)
                 && matches!(
                     member.override_kind,
-                    PackMemberOverrideKind::Removed | PackMemberOverrideKind::Version
+                    PackMemberOverrideKind::Removed
+                        | PackMemberOverrideKind::Version
                 )
         })
         .filter_map(|member| member.provider_project_id.clone())
@@ -698,7 +699,10 @@ mod tests {
     };
     use crate::state::{ContentOwnershipKind, ContentProvider, ProjectType};
 
-    fn expected_member(project_id: u32, file_id: u32) -> CurseForgePackExpectedMember {
+    fn expected_member(
+        project_id: u32,
+        file_id: u32,
+    ) -> CurseForgePackExpectedMember {
         CurseForgePackExpectedMember {
             project_id,
             file_id,
