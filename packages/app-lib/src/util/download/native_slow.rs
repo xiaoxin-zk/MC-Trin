@@ -2,9 +2,6 @@
 
 use crate::util::download::constants::NATIVE_SLOW_ABSOLUTE_SPEED_FLOOR as ABSOLUTE_SPEED_FLOOR;
 use crate::util::download::constants::NATIVE_SLOW_COLD_SPEED_FLOOR as COLD_SPEED_FLOOR;
-#[cfg(not(test))]
-use crate::util::download::constants::NATIVE_SLOW_IDLE_TIMEOUT as IDLE_TIMEOUT;
-#[cfg(test)]
 use crate::util::download::constants::NATIVE_SLOW_IDLE_TIMEOUT as IDLE_TIMEOUT;
 use crate::util::download::constants::NATIVE_SLOW_MIN_FLOW as MIN_FLOW;
 use crate::util::download::constants::NATIVE_SLOW_MIN_SAVINGS as MIN_SAVINGS;
