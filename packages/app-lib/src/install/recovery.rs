@@ -368,8 +368,11 @@ async fn prepare_existing_content_rollback_with_scope(
         .instance_game_dir(&rollback.instance.instance);
     let _instance_lock = state.lock_instance_content(&instance_id).await;
 
-    let all_entries =
-        content_rows::get_content_entries(&content_set_id, &state.pool).await?;
+    let all_entries = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_content_entries(&content_set_id, &mut *connection)
+            .await?
+    };
     let selected_entries = all_entries
         .into_iter()
         .filter(|entry| {
@@ -377,8 +380,10 @@ async fn prepare_existing_content_rollback_with_scope(
                 || entry.ownership_kind == ContentOwnershipKind::PackManaged
         })
         .collect::<Vec<_>>();
-    let instance_files =
-        content_rows::get_instance_files(&instance_id, &state.pool).await?;
+    let instance_files = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_instance_files(&instance_id, &mut *connection).await?
+    };
     let files_by_id = instance_files
         .iter()
         .map(|file| (file.id.clone(), file.clone()))
@@ -410,9 +415,11 @@ async fn prepare_existing_content_rollback_with_scope(
                 origin,
             })
             .collect();
-        let update_check =
-            content_rows::get_content_update_check(&entry.id, &state.pool)
-                .await?;
+        let update_check = {
+            let mut connection = state.pool.acquire().await?;
+            content_rows::get_content_update_check(&entry.id, &mut *connection)
+                .await?
+        };
         entry_snapshots.push(InstallRollbackContentEntry {
             entry: entry.clone(),
             provider_refs,
@@ -631,13 +638,16 @@ async fn user_owned_paths(
         .iter()
         .map(|file| (file.id.as_str(), file.relative_path.clone()))
         .collect::<HashMap<_, _>>();
-    Ok(content_rows::get_content_entries(content_set_id, pool)
-        .await?
-        .into_iter()
-        .filter(|entry| !managed_ids.contains(entry.id.as_str()))
-        .filter_map(|entry| entry.file_id)
-        .filter_map(|file_id| file_paths.get(file_id.as_str()).cloned())
-        .collect())
+    let mut connection = pool.acquire().await?;
+    Ok(
+        content_rows::get_content_entries(content_set_id, &mut *connection)
+            .await?
+            .into_iter()
+            .filter(|entry| !managed_ids.contains(entry.id.as_str()))
+            .filter_map(|entry| entry.file_id)
+            .filter_map(|file_id| file_paths.get(file_id.as_str()).cloned())
+            .collect(),
+    )
 }
 
 pub(crate) fn checked_instance_path(
@@ -881,16 +891,22 @@ async fn clean_replacement_files(
 ) -> crate::Result<()> {
     let rollback = job_state.rollback.as_ref().unwrap();
     let snapshot = rollback.content.as_ref().unwrap();
-    let current_entries = content_rows::get_content_entries(
-        &rollback.instance.applied_content_set.id,
-        &state.pool,
-    )
-    .await?;
-    let current_files = content_rows::get_instance_files(
-        &rollback.instance.instance.id,
-        &state.pool,
-    )
-    .await?;
+    let current_entries = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_content_entries(
+            &rollback.instance.applied_content_set.id,
+            &mut *connection,
+        )
+        .await?
+    };
+    let current_files = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_instance_files(
+            &rollback.instance.instance.id,
+            &mut *connection,
+        )
+        .await?
+    };
     let paths_by_id = current_files
         .iter()
         .map(|file| (file.id.as_str(), file.relative_path.as_str()))
@@ -954,8 +970,11 @@ async fn restore_snapshotted_db_state(
     let snapshot = rollback.content.as_ref().unwrap();
     let content_set_id = &rollback.instance.applied_content_set.id;
     let instance_id = &rollback.instance.instance.id;
-    let current_entries =
-        content_rows::get_content_entries(content_set_id, &state.pool).await?;
+    let current_entries = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_content_entries(content_set_id, &mut *connection)
+            .await?
+    };
     let current_file_ids = current_entries
         .iter()
         .filter(|entry| {
@@ -1063,11 +1082,14 @@ async fn verify_restored_snapshot(
         verify_file(&path, file).await?;
     }
     let rollback = job_state.rollback.as_ref().unwrap();
-    let entries = content_rows::get_content_entries(
-        &rollback.instance.applied_content_set.id,
-        &state.pool,
-    )
-    .await?;
+    let entries = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_content_entries(
+            &rollback.instance.applied_content_set.id,
+            &mut *connection,
+        )
+        .await?
+    };
     let entry_ids = entries
         .iter()
         .map(|entry| entry.id.as_str())

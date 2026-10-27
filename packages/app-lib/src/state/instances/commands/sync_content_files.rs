@@ -132,9 +132,11 @@ async fn sync_instance_content_files_with_verification(
         .iter()
         .map(|file| file.relative_path.clone())
         .collect::<HashSet<_>>();
-    let existing_files =
-        sqlite::content_rows::get_instance_files(&instance.id, &state.pool)
-            .await?;
+    let existing_files = {
+        let mut connection = state.pool.acquire().await?;
+        sqlite::content_rows::get_instance_files(&instance.id, &mut *connection)
+            .await?
+    };
     let mut existing_files_by_path = HashMap::new();
     let mut existing_files_by_sha1: HashMap<String, Vec<InstanceFile>> =
         HashMap::new();
@@ -176,20 +178,26 @@ async fn sync_instance_content_files_with_verification(
             )
         })
         .collect();
-    let content_set = sqlite::content_rows::get_applied_content_set(
-        &instance.id,
-        &state.pool,
-    )
-    .await?;
-    let entry_file_ids = match content_set.as_ref() {
-        Some(content_set) => sqlite::content_rows::get_content_entries(
-            &content_set.id,
-            &state.pool,
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        sqlite::content_rows::get_applied_content_set(
+            &instance.id,
+            &mut *connection,
         )
         .await?
-        .into_iter()
-        .filter_map(|entry| entry.file_id)
-        .collect(),
+    };
+    let entry_file_ids = match content_set.as_ref() {
+        Some(content_set) => {
+            let mut connection = state.pool.acquire().await?;
+            sqlite::content_rows::get_content_entries(
+                &content_set.id,
+                &mut *connection,
+            )
+            .await?
+            .into_iter()
+            .filter_map(|entry| entry.file_id)
+            .collect()
+        }
         None => HashSet::new(),
     };
 

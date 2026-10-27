@@ -86,7 +86,7 @@ impl ProtocolTransport for LauncherTransport {
         if source == &SourceId::modrinth() {
             let state = crate::State::get().await?;
             let pool = state.pool.clone();
-            return crate::util::fetch::fetch_json(
+            return crate::util::fetch::fetch_json_with_pool(
                 request.method,
                 url.as_str(),
                 None,
