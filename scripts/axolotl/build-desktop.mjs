@@ -44,7 +44,13 @@ if (values['installer-only']) {
     const args = ['tauri', 'build', '--ci', '--no-bundle', '--config', 'tauri-release.conf.json']
     if (target) args.push('--target', target)
     args.push('--', '--locked', '--profile', profile)
-    run('pnpm', args, { cwd: app })
+    const pnpmCommand =
+        process.platform === 'win32' && process.env.PNPM_HOME
+            ? path.join(process.env.PNPM_HOME, 'pnpm.cmd')
+            : 'pnpm'
+    run(fs.existsSync(pnpmCommand) ? pnpmCommand : 'pnpm', args, {
+        cwd: app,
+    })
     requireFile(binary)
     fs.writeFileSync(
         path.join(targetDirectory, 'axolotl-build.json'),
