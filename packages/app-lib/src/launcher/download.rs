@@ -390,7 +390,6 @@ async fn download_minecraft_file_with_semaphore(
 ) -> crate::Result<DownloadResult> {
     let urls = minecraft_library_mirrors(url);
     download_minecraft_file_with_candidates(
-        st,
         &urls,
         sha1,
         expected_size,
@@ -406,7 +405,6 @@ async fn download_minecraft_file_with_semaphore(
 }
 
 async fn download_minecraft_file_with_candidates(
-    st: &State,
     urls: &[String],
     sha1: Option<&str>,
     expected_size: Option<u64>,
@@ -2473,7 +2471,6 @@ pub async fn download_libraries(
                             force,
                             || {
                                 download_minecraft_file_with_candidates(
-                                    st,
                                     &urls,
                                     legacy_library_sha1(library),
                                     None,
@@ -2651,7 +2648,6 @@ pub async fn download_libraries(
                                 force,
                                 || {
                                     download_minecraft_file_with_candidates(
-                                        st,
                                         &urls,
                                         None,
                                         None,

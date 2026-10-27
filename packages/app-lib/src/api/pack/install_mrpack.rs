@@ -457,7 +457,7 @@ async fn load_modpack_file_infos(
     file_infos_by_hash: &Arc<Mutex<Option<HashMap<String, ModrinthHashMatch>>>>,
     file_infos_loading: &Arc<Mutex<()>>,
     file_info_hashes: &Arc<Vec<String>>,
-    pool: &sqlx::SqlitePool,
+    pool: sqlx::SqlitePool,
     api_semaphore: &crate::util::fetch::FetchSemaphore,
 ) {
     {
@@ -478,7 +478,7 @@ async fn load_modpack_file_infos(
         .map(String::as_str)
         .collect::<Vec<_>>();
     let loaded =
-        CachedEntry::get_file_many(&hash_refs, None, pool, api_semaphore)
+        CachedEntry::get_file_many(&hash_refs, None, &pool, api_semaphore)
             .await
             .map(|files| {
                 files
@@ -1113,7 +1113,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             &file_infos_by_hash,
             &file_infos_loading,
             &file_info_hashes,
-            &state.pool,
+            state.pool.clone(),
             &state.api_semaphore,
         )
         .await;
@@ -1129,7 +1129,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         &file_infos_by_hash,
         &file_infos_loading,
         &file_info_hashes,
-        &state.pool,
+        state.pool.clone(),
         &state.api_semaphore,
     )
     .await;

@@ -420,11 +420,14 @@ pub async fn execute_instance_upgrade(
     }
     let _execution_guard =
         state.lock_instance_content(&stored.plan.instance_id).await;
-    let current_revision = content_rows::get_applied_content_set(
-        &stored.plan.instance_id,
-        &state.pool,
-    )
-    .await?
+    let current_revision = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_applied_content_set(
+            &stored.plan.instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         crate::ErrorKind::InputError(
             "Instance has no applied content set".to_string(),
@@ -667,11 +670,14 @@ async fn ensure_current_revision(
     stored: &mut StoredUpgradePlanState,
     state: &State,
 ) -> crate::Result<crate::state::instances::commands::ReadOnlyUpgradeSource> {
-    let current_revision = content_rows::get_applied_content_set(
-        &stored.plan.instance_id,
-        &state.pool,
-    )
-    .await?
+    let current_revision = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_applied_content_set(
+            &stored.plan.instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         crate::ErrorKind::InputError(
             "Instance has no applied content set".to_string(),

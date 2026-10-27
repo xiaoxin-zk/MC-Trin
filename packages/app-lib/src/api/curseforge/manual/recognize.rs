@@ -33,16 +33,20 @@ pub async fn recognize_instance_files(
     let state = State::get().await?;
     let instance_files =
         crate::api::instance::sync_content_files(instance_id).await?;
-    let tracked_file_ids = match crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-        instance_id,
-        &state.pool,
-    )
-    .await?
-    {
+    let applied_content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+    };
+    let tracked_file_ids = match applied_content_set {
         Some(content_set) => {
+            let mut connection = state.pool.acquire().await?;
             crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
                 &content_set.id,
-                &state.pool,
+                &mut *connection,
             )
             .await?
             .into_iter()

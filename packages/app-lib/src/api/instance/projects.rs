@@ -344,25 +344,26 @@ pub async fn restore_pack_member_default(
         .into());
     }
 
-    let member = content_rows::get_pack_members(
-        &content_rows::get_applied_content_set(instance_id, &state.pool)
+    let content_set_id = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_applied_content_set(instance_id, &mut *connection)
             .await?
             .ok_or_else(|| {
                 crate::ErrorKind::InputError(
                     "Instance has no applied content set".to_string(),
                 )
             })?
-            .id,
-        &state.pool,
-    )
-    .await?
-    .into_iter()
-    .find(|member| member.id == member_id)
-    .ok_or_else(|| {
-        crate::ErrorKind::InputError(
-            "The selected pack member no longer exists".to_string(),
-        )
-    })?;
+            .id
+    };
+    let member = content_rows::get_pack_members(&content_set_id, &state.pool)
+        .await?
+        .into_iter()
+        .find(|member| member.id == member_id)
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError(
+                "The selected pack member no longer exists".to_string(),
+            )
+        })?;
 
     if member.override_kind == PackMemberOverrideKind::None
         && member.materialization_state
@@ -410,14 +411,19 @@ pub async fn restore_pack_member_default(
             false,
         ),
         Some(ContentProvider::CurseForge) => {
-            let content_set =
-                content_rows::get_applied_content_set(instance_id, &state.pool)
-                    .await?
-                    .ok_or_else(|| {
-                        crate::ErrorKind::InputError(
-                            "Instance has no applied content set".to_string(),
-                        )
-                    })?;
+            let content_set = {
+                let mut connection = state.pool.acquire().await?;
+                content_rows::get_applied_content_set(
+                    instance_id,
+                    &mut *connection,
+                )
+                .await?
+            }
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(
+                    "Instance has no applied content set".to_string(),
+                )
+            })?;
             let result = crate::api::curseforge::install_file(
                 crate::api::curseforge::CurseForgeInstallRequest {
                     defer_persistence: false,
@@ -510,14 +516,16 @@ pub async fn restore_pack_member_default(
         .await?;
     }
 
-    let content_set =
-        content_rows::get_applied_content_set(instance_id, &state.pool)
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_applied_content_set(instance_id, &mut *connection)
             .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(
-                    "Instance has no applied content set".to_string(),
-                )
-            })?;
+    }
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     content_rows::set_pack_member_override_in_transaction(
@@ -545,14 +553,16 @@ pub(crate) async fn emit_content_changed(
     instance_id: &str,
 ) -> crate::Result<()> {
     let state = State::get().await?;
-    let content_set =
-        content_rows::get_applied_content_set(instance_id, &state.pool)
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_applied_content_set(instance_id, &mut *connection)
             .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(
-                    "Instance has no applied content set".to_string(),
-                )
-            })?;
+    }
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?;
     emit_instance(
         instance_id,
         InstancePayloadType::ContentChanged {

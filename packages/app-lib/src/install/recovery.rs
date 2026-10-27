@@ -394,7 +394,7 @@ async fn prepare_existing_content_rollback_with_scope(
             &selected_entries,
             &instance_files,
             &content_set_id,
-            &state.pool,
+            state.pool.clone(),
         )
         .await?
     } else {
@@ -628,7 +628,7 @@ async fn user_owned_paths(
     managed_entries: &[crate::state::ContentEntry],
     files: &[crate::state::InstanceFile],
     content_set_id: &str,
-    pool: &sqlx::SqlitePool,
+    pool: sqlx::SqlitePool,
 ) -> crate::Result<HashSet<String>> {
     let managed_ids = managed_entries
         .iter()

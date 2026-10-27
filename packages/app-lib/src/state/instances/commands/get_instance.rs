@@ -24,7 +24,7 @@ pub(crate) async fn get_instance(
     instance_id: &str,
     pool: &SqlitePool,
 ) -> crate::Result<Option<InstanceMetadata>> {
-    get_instance_metadata(instance_id, pool).await
+    get_instance_metadata_with_pool(instance_id, pool.clone()).await
 }
 
 pub(crate) async fn get_instance_metadata(

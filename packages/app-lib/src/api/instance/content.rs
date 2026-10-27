@@ -261,17 +261,20 @@ pub async fn apply_content_update_plan(
             )
         })?;
     let state = State::get().await?;
-    let current_revision = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-		&plan.instance_id,
-		&state.pool,
-	)
-	.await?
-	.ok_or_else(|| {
-		crate::ErrorKind::InputError(
-			"Instance has no applied content set".to_string(),
-		)
-	})?
-	.revision;
+    let current_revision = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            &plan.instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?
+    .revision;
     if let Err(error) =
         ensure_update_plan_revision(plan.revision, current_revision)
     {

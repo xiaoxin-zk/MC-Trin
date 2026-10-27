@@ -1596,12 +1596,12 @@ pub(crate) async fn resolve_content_install_relative_path(
     instance_id: &str,
     original_relative_path: String,
     localized_candidate: Option<String>,
-    pool: &sqlx::SqlitePool,
+    pool: sqlx::SqlitePool,
 ) -> crate::Result<String> {
     if content_rows::get_instance_file_by_relative_path(
         instance_id,
         &original_relative_path,
-        pool,
+        &pool,
     )
     .await?
     .is_some()
@@ -1614,7 +1614,7 @@ pub(crate) async fn resolve_content_install_relative_path(
     if content_rows::get_instance_file_by_relative_path(
         instance_id,
         &localized_candidate,
-        pool,
+        &pool,
     )
     .await?
     .is_some()
@@ -1700,7 +1700,7 @@ pub(crate) async fn add_downloaded_project_version(
         instance_id,
         format!("{}/{}", project_type.get_folder(), file_name),
         localized_candidate,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let full_path = join_content_path(
@@ -1919,7 +1919,7 @@ pub(crate) async fn materialize_project_download_batch(
                 download.file_name
             ),
             localized,
-            &state.pool,
+            state.pool.clone(),
         )
         .await?;
         if !destinations.insert(materialization_path_key(&relative_path)) {

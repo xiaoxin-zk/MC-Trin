@@ -1,7 +1,8 @@
 use crate::State;
 use crate::state::CachedLoaderManifest;
 use crate::util::fetch::{
-    FetchSemaphore, fetch, fetch_json, fetch_metadata, fetch_official,
+    FetchSemaphore, fetch_json_with_pool, fetch_metadata_with_pool,
+    fetch_official_with_pool, fetch_with_pool,
 };
 use crate::util::io;
 use daedalus::minecraft::{
@@ -1131,7 +1132,7 @@ async fn fetch_forge_manifest(
     let (metadata, promotions) = fetch_forge_indexes(
         async {
             if official_only {
-                let bytes = fetch_official(
+                let bytes = fetch_official_with_pool(
                     &metadata_url,
                     None,
                     None,
@@ -1164,7 +1165,7 @@ pub(crate) async fn find_forge_version_in_fallback(
     );
     let bytes = tokio::time::timeout(
         LOADER_METADATA_TIMEOUT,
-        fetch_official(
+        fetch_official_with_pool(
             &url,
             None,
             None,
@@ -1474,7 +1475,7 @@ async fn fetch_maven_metadata(
     fetch_semaphore: &FetchSemaphore,
     pool: &SqlitePool,
 ) -> crate::Result<MavenMetadata> {
-    fetch_metadata(
+    fetch_metadata_with_pool(
         url,
         |bytes| parse_maven_metadata(url, bytes),
         fetch_semaphore,
@@ -1514,7 +1515,7 @@ async fn fetch_loader_json<T: serde::de::DeserializeOwned>(
     fetch_semaphore: &FetchSemaphore,
     pool: &SqlitePool,
 ) -> crate::Result<T> {
-    fetch_metadata(
+    fetch_metadata_with_pool(
         url,
         |bytes| serde_json::from_slice(bytes).map_err(Into::into),
         fetch_semaphore,
@@ -1622,7 +1623,7 @@ pub(crate) async fn resolve_loader_profile(
         .replace(DUMMY_REPLACE_STRING, game_version);
     let primary = match loader_version.profile_source {
         LoaderProfileSource::Json => {
-            fetch_json(
+            fetch_json_with_pool(
                 Method::GET,
                 &primary_url,
                 None,
@@ -1691,7 +1692,7 @@ pub(crate) async fn resolve_loader_profile(
                     .await
                 }
                 _ => {
-                    fetch_json(
+                    fetch_json_with_pool(
                         Method::GET,
                         &fallback_url,
                         None,
@@ -1926,7 +1927,7 @@ async fn resolve_liteloader_profile(
     loader_version: &str,
     url: &str,
 ) -> crate::Result<PartialVersionInfo> {
-    let metadata: serde_json::Value = fetch_json(
+    let metadata: serde_json::Value = fetch_json_with_pool(
         Method::GET,
         url,
         None,
@@ -2042,7 +2043,7 @@ async fn resolve_installer_profile(
     state: &State,
     installer_url: &str,
 ) -> crate::Result<PartialVersionInfo> {
-    let bytes = fetch(
+    let bytes = fetch_with_pool(
         installer_url,
         None,
         None,
@@ -2089,7 +2090,7 @@ pub(crate) async fn ensure_installer_artifacts(
         return Ok(());
     }
 
-    let bytes = fetch(
+    let bytes = fetch_with_pool(
         &installer_url.client,
         None,
         None,

@@ -2071,6 +2071,39 @@ pub async fn fetch_official(
     .await
 }
 
+pub(crate) async fn fetch_official_with_pool(
+    url: &str,
+    sha1: Option<&str>,
+    download_meta: Option<&DownloadMeta>,
+    uri_path: Option<&'static str>,
+    semaphore: &FetchSemaphore,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<Bytes> {
+    let method = Method::GET;
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, pool).await?;
+    let client = configured_client().await?;
+    fetch_advanced_with_credentials(
+        method,
+        &url,
+        sha1,
+        None,
+        None,
+        download_meta,
+        None,
+        uri_path,
+        semaphore,
+        requires_auth,
+        credentials,
+        &client,
+        Some(crate::state::DownloadSourceMode::OfficialOnly),
+        None,
+        None,
+        METADATA_ATTEMPT_BUDGET,
+    )
+    .await
+}
+
 #[tracing::instrument(skip_all)]
 pub(crate) async fn fetch_metadata<T>(
     url: &str,
@@ -2083,6 +2116,49 @@ pub(crate) async fn fetch_metadata<T>(
     let (url, requires_auth, credentials) =
         request_auth_context_with_executor(&method, url, None, None, exec)
             .await?;
+    let client = configured_client().await?;
+    let bytes = tokio::time::timeout(
+        METADATA_REQUEST_TIMEOUT,
+        fetch_advanced_with_credentials(
+            method,
+            &url,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            semaphore,
+            requires_auth,
+            credentials,
+            &client,
+            None,
+            None,
+            Some(&validate),
+            METADATA_ATTEMPT_BUDGET,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        ErrorKind::OtherError(format!(
+            "Metadata request timed out: {}",
+            sanitize_url_for_log(&url)
+        ))
+        .as_error()
+    })??;
+    parse(&bytes)
+}
+
+pub(crate) async fn fetch_metadata_with_pool<T>(
+    url: &str,
+    parse: impl Fn(&Bytes) -> crate::Result<T> + Send + Sync,
+    semaphore: &FetchSemaphore,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<T> {
+    let validate = |bytes: &Bytes| parse(bytes).map(|_| ());
+    let method = Method::GET;
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, None, pool).await?;
     let client = configured_client().await?;
     let bytes = tokio::time::timeout(
         METADATA_REQUEST_TIMEOUT,

@@ -33,12 +33,13 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     reporter: Option<InstallProgressReporter>,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     let state = State::get().await?;
-    let metadata = crate::state::instances::commands::get_instance_metadata(
-        instance_id,
-        &state.pool,
-    )
-    .await?
-    .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
+    let metadata =
+        crate::state::instances::commands::get_instance_metadata_with_pool(
+            instance_id,
+            state.pool.clone(),
+        )
+        .await?
+        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
     let project_id = match &metadata.link {
         InstanceLink::CurseForgeModpack { project_id, .. } => {
             project_id.parse::<u32>().map_err(|_| {
@@ -143,22 +144,26 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         });
     }
 
-    let entries = crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
-        &metadata.applied_content_set.id,
-        &state.pool,
-    )
-    .await?
-    .into_iter()
-    .filter_map(|entry| entry.file_id.map(|file_id| (entry.id, file_id)))
-    .collect::<HashMap<_, _>>();
-    let files = crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
-        instance_id,
-        &state.pool,
-    )
-    .await?
-    .into_iter()
-    .map(|file| (file.id.clone(), file.relative_path))
-    .collect::<HashMap<_, _>>();
+    let (entries, files) = {
+        let mut connection = state.pool.acquire().await?;
+        let entries = crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
+            &metadata.applied_content_set.id,
+            &mut *connection,
+        )
+        .await?
+        .into_iter()
+        .filter_map(|entry| entry.file_id.map(|file_id| (entry.id, file_id)))
+        .collect::<HashMap<_, _>>();
+        let files = crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+        .into_iter()
+        .map(|file| (file.id.clone(), file.relative_path))
+        .collect::<HashMap<_, _>>();
+        (entries, files)
+    };
     let backup = create_curseforge_update_backup(
         &metadata, &members, &entries, &files, &state,
     )
@@ -257,11 +262,14 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     let post_update: crate::Result<()> = async {
         // `install_modpack_with_reporter` resolves the target manifest and
         // writes the target Minecraft/loader metadata before returning.
-        let updated_content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-            instance_id,
-            &state.pool,
-        )
-        .await?
+        let updated_content_set = {
+            let mut connection = state.pool.acquire().await?;
+            crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+                instance_id,
+                &mut *connection,
+            )
+            .await?
+        }
         .ok_or_else(|| {
             ErrorKind::InputError(
                 "Instance has no applied content set after CurseForge update"

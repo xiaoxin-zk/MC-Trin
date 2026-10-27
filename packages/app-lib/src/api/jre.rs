@@ -9,7 +9,7 @@ use crate::install::{
 use crate::state::{DiscoveredJava, JavaVersion, java_file_signature};
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, FetchProgressFn, Integrity,
-    ResourceClass, download_to_path_without_executor, fetch_json,
+    ResourceClass, download_to_path_without_executor, fetch_json_with_pool,
 };
 use futures::{TryStreamExt, stream};
 use reqwest::Method;
@@ -137,7 +137,7 @@ pub async fn list_java_distribution_versions(
             let url = format!(
                 "https://api.azul.com/metadata/v1/zulu/packages/?os={platform}&arch={arch}&archive_type=tar.gz&java_package_type=jre&page_size=1000"
             );
-            let packages: Vec<AzulPackageSummary> = fetch_json(
+            let packages: Vec<AzulPackageSummary> = fetch_json_with_pool(
                 Method::GET,
                 &url,
                 None,

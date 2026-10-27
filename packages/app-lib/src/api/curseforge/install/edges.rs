@@ -41,7 +41,7 @@ pub(crate) async fn persist_resolution_plan_dependency_edges(
             edge.parent.provider(),
             &edge.parent.database_project_id(),
             &parent_release,
-            &state.pool,
+            &mut *tx,
         )
         .await?
         else {
@@ -52,7 +52,7 @@ pub(crate) async fn persist_resolution_plan_dependency_edges(
             edge.child.provider(),
             &edge.child.database_project_id(),
             &child_release,
-            &state.pool,
+            &mut *tx,
         )
         .await?
         else {
@@ -109,7 +109,7 @@ pub(crate) async fn persist_curseforge_dependency_edges(
                 ContentProvider::CurseForge,
                 &candidate.parent_project_id.to_string(),
                 &candidate.parent_file_id.to_string(),
-                &state.pool,
+                &mut *tx,
             )
             .await?
         else {
@@ -121,7 +121,7 @@ pub(crate) async fn persist_curseforge_dependency_edges(
                 ContentProvider::CurseForge,
                 &candidate.child_project_id.to_string(),
                 &candidate.child_file_id.to_string(),
-                &state.pool,
+                &mut *tx,
             )
             .await?
         else {
@@ -196,7 +196,7 @@ pub(crate) async fn persist_modrinth_fallback_dependency_edges(
                     ContentProvider::CurseForge,
                     &fallback.parent_project_id.to_string(),
                     &fallback.parent_file_id.to_string(),
-                    &state.pool,
+                    &mut *tx,
                 )
                 .await?
                 .map(|entry| (
@@ -216,7 +216,7 @@ pub(crate) async fn persist_modrinth_fallback_dependency_edges(
                     ContentProvider::Modrinth,
                     &parent_content.project_id,
                     &parent_content.version_id,
-                    &state.pool,
+                    &mut *tx,
                 )
                 .await?
                 .map(|entry| (
@@ -242,7 +242,7 @@ pub(crate) async fn persist_modrinth_fallback_dependency_edges(
                 ContentProvider::Modrinth,
                 &dependency.project_id,
                 &dependency.version_id,
-                &state.pool,
+                &mut *tx,
             )
             .await?
             else {

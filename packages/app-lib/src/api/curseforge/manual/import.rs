@@ -275,11 +275,14 @@ pub(super) async fn install_manual_download(
         )
         .await?;
         let state = State::get().await?;
-        let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-            instance_id,
-            &state.pool,
-        )
-        .await?
+        let content_set = {
+            let mut connection = state.pool.acquire().await?;
+            crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+                instance_id,
+                &mut *connection,
+            )
+            .await?
+        }
         .ok_or_else(|| {
             ErrorKind::InputError(
                 "Instance has no applied content set".to_string(),
@@ -351,7 +354,7 @@ pub(super) async fn install_manual_download(
         instance_id,
         format!("{target_folder}/{file_name}"),
         localized_candidate,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let full_path = crate::api::instance::get_full_path(instance_id)
@@ -419,11 +422,14 @@ pub(crate) async fn mark_pack_member_version_override(
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
-    let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-        instance_id,
-        &state.pool,
-    )
-    .await?
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         ErrorKind::InputError(
             "Instance has no applied content set".to_string(),
