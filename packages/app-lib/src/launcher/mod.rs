@@ -874,10 +874,15 @@ pub async fn resolve_minecraft_manifest_with_cache(
     state: &State,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<(d::minecraft::VersionManifest, usize)> {
-    let minecraft = crate::api::metadata::get_minecraft_versions_with_cache(
+    let minecraft = CachedEntry::get_minecraft_manifest(
         cache_behaviour,
+        &state.pool,
+        &state.api_semaphore,
     )
-    .await?;
+    .await?
+    .ok_or_else(|| {
+        crate::ErrorKind::NoValueFor("minecraft versions".to_string())
+    })?;
 
     if let Some(idx) = minecraft
         .versions

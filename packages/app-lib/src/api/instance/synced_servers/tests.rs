@@ -25,6 +25,39 @@ async fn fixture() -> (tempfile::TempDir, Arc<State>, InstanceMetadata) {
         .await
         .unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
+    let minecraft_manifest = serde_json::from_value(serde_json::json!({
+        "latest": {"release": "1.20.1", "snapshot": "1.20.1"},
+        "versions": [
+            {
+                "id": "b1.8",
+                "type": "old_beta",
+                "url": "https://example.test/b1.8.json",
+                "time": "2011-09-14T00:00:00Z",
+                "releaseTime": "2011-09-14T00:00:00Z",
+                "sha1": "0000000000000000000000000000000000000000",
+                "complianceLevel": 0
+            },
+            {
+                "id": "1.20.1",
+                "type": "release",
+                "url": "https://example.test/1.20.1.json",
+                "time": "2023-08-08T00:00:00Z",
+                "releaseTime": "2023-08-08T00:00:00Z",
+                "sha1": "0000000000000000000000000000000000000000",
+                "complianceLevel": 1
+            }
+        ]
+    }))
+    .unwrap();
+    crate::state::CachedEntry::upsert_many(
+        &[
+            crate::state::CacheValue::MinecraftManifest(minecraft_manifest)
+                .get_entry(),
+        ],
+        &pool,
+    )
+    .await
+    .unwrap();
     sqlx::raw_sql(
         "INSERT INTO instances(id, path, install_stage, launcher_feature_version, name, created, modified)
          VALUES ('a', 'a', 'installed', '1', 'A', 1, 1);
