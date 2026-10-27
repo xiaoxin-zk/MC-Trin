@@ -174,13 +174,13 @@ zip = { version = "6.0.0", default-features = false, features = [
 
 [workspace.lints.clippy]
 bool_to_int_with_if = "warn"
-default_constructed_unit_structs = "allow"
 borrow_as_ptr = "warn"
 cfg_not_test = "warn"
 clear_with_drain = "warn"
 cloned_instead_of_copied = "warn"
 collection_is_never_read = "warn"
 dbg_macro = "warn"
+default_constructed_unit_structs = "allow"
 default_trait_access = "warn"
 explicit_iter_loop = "warn"
 filter_map_next = "warn"
