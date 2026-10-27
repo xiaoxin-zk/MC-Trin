@@ -15,7 +15,7 @@ pub use self::operations::{
 };
 pub(super) use self::operations::{
     detach_servers, ensure_servers, merge_servers_from_instance,
-    reconcile_servers, seed_servers,
+    reconcile_servers, seed_servers, world_server_sync_ids,
 };
 pub(super) use self::storage::canonical_exists;
 pub use self::types::{DesyncServerMode, ServerSource, SyncedServer};

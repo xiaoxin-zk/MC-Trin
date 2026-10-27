@@ -137,6 +137,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
             overrides_written: 0,
             minecraft_version: game_version,
             loader,
+            game_options_source: None,
         });
     }
 

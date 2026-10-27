@@ -20,6 +20,8 @@ vi.mock('@/providers/instance-settings', async () => {
 })
 vi.mock('@/helpers/instance', () => ({ get_full_path: async () => '/instances/instance-a' }))
 vi.mock('@/helpers/instance-backup', () => ({
+    backupProgressState: (stage: string) =>
+        stage === 'copying' || stage === 'restoring' ? 'materializing' : stage,
     getBackupConfig: async () => ({
         instance_id: 'instance-a',
         enabled: true,

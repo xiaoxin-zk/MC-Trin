@@ -94,6 +94,7 @@ it('exposes the data pack sync toggle and saves its per-instance preference', as
     })
     backend.updated.mockReset()
     const wrapper = mount(SyncSettings)
+    await flushPromises()
 
     await wrapper.get('button[aria-label="Data packs"]').trigger('click')
     await flushPromises()
@@ -115,6 +116,7 @@ it('exposes the screenshot gallery preference and saves it per instance', async 
         synced_options: { screenshots: true },
     })
     const wrapper = mount(SyncSettings)
+    await flushPromises()
 
     await wrapper.get('button[aria-label="Include in global screenshot gallery"]').trigger('click')
     await flushPromises()
@@ -128,6 +130,7 @@ it('disables screenshot gallery preference when the backend marks it unsupported
         { option: 'screenshots', supported: false, disabled_reason: 'not_available' },
     ]
     const wrapper = mount(SyncSettings)
+    await flushPromises()
 
     expect(
         (

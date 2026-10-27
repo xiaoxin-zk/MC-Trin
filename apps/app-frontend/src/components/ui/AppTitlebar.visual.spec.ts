@@ -31,6 +31,9 @@ vi.mock('@/helpers/events', () => ({
     process_listener: async () => vi.fn(),
 }))
 vi.mock('@/helpers/instance-backup', () => ({
+    backupProgressState: (stage: string) =>
+        stage === 'copying' || stage === 'restoring' ? 'materializing' : stage,
+    isBackupActivityOperation: () => true,
     listBackupOperations: async () => [
         {
             id: 'backup',

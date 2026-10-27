@@ -9,6 +9,7 @@ use super::write_shared_settings::{
 use crate::state::{InstanceLink, InstanceMetadata, State, SyncedOption};
 use crate::util::io;
 use encoding_rs::{UTF_8, UTF_16BE, UTF_16LE};
+use sqlx::Row;
 use std::io::ErrorKind;
 use std::path::Path;
 
@@ -192,16 +193,13 @@ pub(in crate::api::instance) async fn prepare_instance_update_with_state(
     metadata: &InstanceMetadata,
     state: &State,
 ) -> crate::Result<()> {
-    let pending = sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM instance_game_option_update_state WHERE instance_id = ?
-        ) AS "pending!: bool"
-        "#,
-        metadata.instance.id,
+    let pending = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM instance_game_option_update_state WHERE instance_id = ?)",
     )
+    .bind(&metadata.instance.id)
     .fetch_one(&state.pool)
-    .await?;
+    .await?
+        != 0;
     if pending {
         return Ok(());
     }
@@ -253,20 +251,18 @@ pub(crate) async fn abort_pack_update(instance_id: &str) -> crate::Result<()> {
     let metadata = crate::state::get_instance(instance_id, &state.pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
-    let pending = sqlx::query!(
-        r#"
-        SELECT had_file AS "had_file!: bool", document
-        FROM instance_game_option_update_state
-        WHERE instance_id = ?
-        "#,
-        instance_id,
+    let pending = sqlx::query(
+        "SELECT had_file, document FROM instance_game_option_update_state WHERE instance_id = ?",
     )
+    .bind(instance_id)
     .fetch_optional(&state.pool)
     .await?;
     if let Some(pending) = pending {
         let path = options_path(&metadata, &state)?;
-        if pending.had_file {
-            let document = pending.document.ok_or_else(|| {
+        let had_file = pending.try_get::<bool, _>("had_file")?;
+        let document = pending.try_get::<Option<Vec<u8>>, _>("document")?;
+        if had_file {
+            let document = document.ok_or_else(|| {
                 input_error("The saved options.txt backup is missing")
             })?;
             let _ = options_target_exists(&path).await?;
