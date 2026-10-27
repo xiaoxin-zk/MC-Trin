@@ -275,7 +275,7 @@ pub async fn preview_install_file(
                     else {
                         if fallback_parents.insert((project_id, file_id)) {
                             match resolve_modrinth_fallback_plan(
-                                &file, item_type, &request, &state,
+                                &file, item_type, &request,
                             )
                             .await
                             {
@@ -290,14 +290,12 @@ pub async fn preview_install_file(
                                         &curseforge_content_ref(
                                             project_id, file_id,
                                         )?,
-                                        &state,
                                     )
                                     .await?;
                                     modrinth_fallbacks.extend(
                                         preview_modrinth_fallbacks(
                                             &fallback_plan,
                                             project_id,
-                                            &state,
                                         )
                                         .await?,
                                     );

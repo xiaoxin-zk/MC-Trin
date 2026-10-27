@@ -1854,6 +1854,37 @@ impl_cache_method_singular!(
 );
 
 impl CachedEntry {
+    #[tracing::instrument(skip(keys))]
+    pub(crate) async fn get_resource_many(
+        type_: CacheValueType,
+        keys: &[&str],
+        cache_behaviour: Option<CacheBehaviour>,
+    ) -> crate::Result<Vec<Self>> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        if !crate::resources::protocol::owns(type_) {
+            return Err(crate::ErrorKind::InputError(
+                "cache type is not owned by the resource service".into(),
+            )
+            .into());
+        }
+
+        let state = crate::State::get().await?;
+        let service = state
+            .resources()
+            .await
+            .map_err(crate::resources::protocol::error)?;
+        crate::resources::protocol::many(
+            service,
+            type_,
+            keys,
+            cache_behaviour,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
     async fn persist_fetched_cache_best_effort(
         type_: CacheValueType,
         entries: &[Self],
@@ -1969,19 +2000,7 @@ impl CachedEntry {
         }
 
         if crate::resources::protocol::owns(type_) {
-            let state = crate::State::get().await?;
-            let service = state
-                .resources()
-                .await
-                .map_err(crate::resources::protocol::error)?;
-            return crate::resources::protocol::many(
-                service,
-                type_,
-                keys,
-                cache_behaviour,
-                &tokio_util::sync::CancellationToken::new(),
-            )
-            .await;
+            return Self::get_resource_many(type_, keys, cache_behaviour).await;
         }
 
         let cache_behaviour = cache_behaviour.unwrap_or_default();

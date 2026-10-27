@@ -257,10 +257,7 @@ pub(crate) async fn enqueue_curseforge_dependencies(
                 file: Some(selected.file.clone()),
             });
         } else if fallback_parents.insert((project_id, file_id)) {
-            match resolve_modrinth_fallback_plan(
-                file, item_type, request, state,
-            )
-            .await
+            match resolve_modrinth_fallback_plan(file, item_type, request).await
             {
                 Ok(Some(plan)) if !plan.dependencies.is_empty() => {
                     modrinth_fallbacks.push(ModrinthFallbackPlan {

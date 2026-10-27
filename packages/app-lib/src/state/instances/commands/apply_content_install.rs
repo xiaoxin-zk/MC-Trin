@@ -12,10 +12,11 @@ use crate::state::instances::{
     },
 };
 use crate::state::{
-    CacheBehaviour, CacheValue, CachedEntry, CachedFileHash, ContentProvider,
-    ContentProviderRef, CurseForgeFileId, CurseForgeProjectId, Dependency,
-    DependencyType, KnownModrinthFile, ModLoader, ModrinthProjectId,
-    ModrinthVersionId, Project, ProjectType, State, Version, cache_file_hash,
+    CacheBehaviour, CacheValue, CacheValueType, CachedEntry, CachedFileHash,
+    ContentProvider, ContentProviderRef, CurseForgeFileId, CurseForgeProjectId,
+    Dependency, DependencyType, KnownModrinthFile, ModLoader,
+    ModrinthProjectId, ModrinthVersionId, Project, ProjectType, State, Version,
+    cache_file_hash,
 };
 use crate::util::fetch::{
     self, ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
@@ -100,28 +101,28 @@ pub(crate) struct InstanceInstallProjectRequest {
     pub force_project_ids: Vec<String>,
 }
 
-struct CachedEntryContentProvider<'a> {
-    pool: sqlx::SqlitePool,
-    api_semaphore: &'a FetchSemaphore,
+struct CachedEntryContentProvider {
     cache_behaviour: Option<CacheBehaviour>,
 }
 
 #[async_trait]
-impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
+impl ContentMetadataProvider for CachedEntryContentProvider {
     async fn get_version(
         &mut self,
         version_id: &str,
     ) -> Result<Option<content_management::Version>, ResolveError> {
-        let pool = self.pool.clone();
-        let version = CachedEntry::get_version(
-            &ModrinthVersionId::new(version_id.to_string())
-                .map_err(resolve_provider_error)?,
+        let key = version_id.to_string();
+        let entries = CachedEntry::get_resource_many(
+            CacheValueType::Version,
+            &[key.as_str()],
             self.cache_behaviour,
-            &pool,
-            self.api_semaphore,
         )
         .await
         .map_err(resolve_provider_error)?;
+        let version = entries.into_iter().find_map(|entry| match entry.data {
+            Some(CacheValue::Version(version)) => Some(version),
+            _ => None,
+        });
 
         Ok(version.map(version_to_resolver))
     }
@@ -130,16 +131,19 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
         &mut self,
         project_id: &str,
     ) -> Result<Vec<content_management::Version>, ResolveError> {
-        let pool = self.pool.clone();
-        let versions = CachedEntry::get_project_versions(
-            &ModrinthProjectId::new(project_id.to_string())
-                .map_err(resolve_provider_error)?,
+        let entries = CachedEntry::get_resource_many(
+            CacheValueType::ProjectVersions,
+            &[project_id],
             self.cache_behaviour,
-            &pool,
-            self.api_semaphore,
         )
         .await
         .map_err(resolve_provider_error)?;
+        let versions = entries.into_iter().find_map(|entry| match entry.data {
+            Some(CacheValue::ProjectVersions(versions)) => {
+                Some(versions.versions)
+            }
+            _ => None,
+        });
 
         Ok(versions
             .unwrap_or_default()
@@ -151,6 +155,58 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
 
 fn resolve_provider_error(error: crate::Error) -> ResolveError {
     ResolveError::Provider(error.to_string())
+}
+
+async fn cached_modrinth_version(
+    version_id: &ModrinthVersionId,
+    cache_behaviour: Option<CacheBehaviour>,
+) -> crate::Result<Option<Version>> {
+    let entries = CachedEntry::get_resource_many(
+        CacheValueType::Version,
+        &[version_id.as_str()],
+        cache_behaviour,
+    )
+    .await?;
+    Ok(entries.into_iter().find_map(|entry| match entry.data {
+        Some(CacheValue::Version(version)) => Some(version),
+        _ => None,
+    }))
+}
+
+async fn cached_modrinth_projects(
+    project_ids: &[ModrinthProjectId],
+    cache_behaviour: Option<CacheBehaviour>,
+) -> crate::Result<Vec<Project>> {
+    let project_ids = project_ids
+        .iter()
+        .map(ModrinthProjectId::as_str)
+        .collect::<Vec<_>>();
+    let entries = CachedEntry::get_resource_many(
+        CacheValueType::Project,
+        &project_ids,
+        cache_behaviour,
+    )
+    .await?;
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry| match entry.data {
+            Some(CacheValue::Project(project)) => Some(project),
+            _ => None,
+        })
+        .collect())
+}
+
+async fn cached_modrinth_project(
+    project_id: &ModrinthProjectId,
+    cache_behaviour: Option<CacheBehaviour>,
+) -> crate::Result<Option<Project>> {
+    Ok(cached_modrinth_projects(
+        std::slice::from_ref(project_id),
+        cache_behaviour,
+    )
+    .await?
+    .into_iter()
+    .next())
 }
 
 fn resolver_error(error: ResolveError) -> crate::Error {
@@ -283,11 +339,7 @@ async fn resolve_install_plan_with_cache(
             state,
         )
         .await?;
-    let provider = CachedEntryContentProvider {
-        pool: pool.clone(),
-        api_semaphore: &state.api_semaphore,
-        cache_behaviour,
-    };
+    let provider = CachedEntryContentProvider { cache_behaviour };
     let content_type = request.content_type;
     let request = ResolveContentRequest {
         project_id: request.project_id,
@@ -321,13 +373,8 @@ async fn resolve_install_plan_with_cache(
                 .collect();
 
         if !project_ids.is_empty() {
-            let projects = CachedEntry::get_project_many(
-                &project_ids,
-                cache_behaviour,
-                &pool,
-                &state.api_semaphore,
-            )
-            .await?;
+            let projects =
+                cached_modrinth_projects(&project_ids, cache_behaviour).await?;
 
             let project_map: HashMap<String, &Project> =
                 projects.iter().map(|p| (p.id.clone(), p)).collect();
@@ -355,15 +402,9 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
     game_version: String,
     loader: ModLoader,
     dependency_policy: DependencyPolicy,
-    state: &State,
 ) -> crate::Result<ResolveContentPlan> {
-    let pool = state.pool.clone();
     let cache_behaviour = Some(CacheBehaviour::MustRevalidate);
-    let provider = CachedEntryContentProvider {
-        pool: pool.clone(),
-        api_semaphore: &state.api_semaphore,
-        cache_behaviour,
-    };
+    let provider = CachedEntryContentProvider { cache_behaviour };
     let content_type = request.content_type;
     let request = ResolveContentRequest {
         project_id: request.project_id,
@@ -393,13 +434,8 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
                 .collect();
 
         if !project_ids.is_empty() {
-            let projects = CachedEntry::get_project_many(
-                &project_ids,
-                cache_behaviour,
-                &pool,
-                &state.api_semaphore,
-            )
-            .await?;
+            let projects =
+                cached_modrinth_projects(&project_ids, cache_behaviour).await?;
 
             let project_map: HashMap<String, &Project> =
                 projects.iter().map(|p| (p.id.clone(), p)).collect();
@@ -505,11 +541,9 @@ async fn resolved_content_file_size(
     content: &ResolvedContent,
     state: &State,
 ) -> crate::Result<u64> {
-    let version = CachedEntry::get_version(
+    let version = cached_modrinth_version(
         &ModrinthVersionId::new(content.version_id.clone())?,
         None,
-        &state.pool,
-        &state.api_semaphore,
     )
     .await?
     .ok_or_else(|| {
@@ -534,11 +568,9 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
     reporter: Option<crate::install::InstallProgressReporter>,
     state: &State,
 ) -> crate::Result<String> {
-    let version = CachedEntry::get_version(
+    let version = cached_modrinth_version(
         &ModrinthVersionId::new(version_id.to_string())?,
         Some(CacheBehaviour::MustRevalidate),
-        &state.pool,
-        &state.api_semaphore,
     )
     .await?
     .ok_or_else(|| {
@@ -564,11 +596,9 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
     .await?;
     let new_provider_file_name = primary_version_file_name(&version)?;
     let old_provider_file_name = match current_version_id {
-        Some(current_version_id) => CachedEntry::get_version(
+        Some(current_version_id) => cached_modrinth_version(
             &ModrinthVersionId::new(current_version_id.to_string())?,
             Some(CacheBehaviour::MustRevalidate),
-            &state.pool,
-            &state.api_semaphore,
         )
         .await?
         .map(|version| primary_version_file_name(&version))
@@ -680,11 +710,9 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     state: std::sync::Arc<State>,
 ) -> crate::Result<()> {
     let pool = state.pool.clone();
-    let version = CachedEntry::get_version(
+    let version = cached_modrinth_version(
         &ModrinthVersionId::new(action.target_release_id.clone())?,
         None,
-        &pool,
-        &state.api_semaphore,
     )
     .await?
     .ok_or_else(|| {
@@ -714,11 +742,9 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     let target_provider_file_name = primary_version_file_name(&version)?;
     let current_provider_file_name = match action.expected_release_id.as_deref()
     {
-        Some(version_id) => CachedEntry::get_version(
+        Some(version_id) => cached_modrinth_version(
             &ModrinthVersionId::new(version_id.to_string())?,
             None,
-            &pool,
-            &state.api_semaphore,
         )
         .await?
         .map(|version| primary_version_file_name(&version))
@@ -1523,11 +1549,9 @@ pub(crate) async fn prepare_version_download(
             scope.content_set_id
         ))
     })?;
-    let version = CachedEntry::get_version(
+    let version = cached_modrinth_version(
         &ModrinthVersionId::new(version_id.to_string())?,
         None,
-        &pool,
-        &state.api_semaphore,
     )
     .await?
     .ok_or_else(|| {
@@ -1650,11 +1674,9 @@ async fn modrinth_chinese_file_name_candidate(
     if !use_chinese_names {
         return None;
     }
-    let project = CachedEntry::get_project(
+    let project = cached_modrinth_project(
         &ModrinthProjectId::new(project_id.to_string()).ok()?,
         None,
-        &state.pool,
-        &state.api_semaphore,
     )
     .await
     .ok()??;

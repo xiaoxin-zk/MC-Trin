@@ -1,13 +1,12 @@
 //! Modrinth fallback planning for CurseForge dependencies.
 
-use crate::State;
 use crate::api::curseforge::dto::{CurseForgeFile, CurseForgeInstallRequest};
 use crate::api::curseforge::install::{
     CurseForgeModrinthFallbackPreview, dependency_policy,
 };
 use crate::state::{
-    CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef,
-    DependencyResolutionEdge, DependencyResolutionIssue,
+    CacheBehaviour, CacheValue, CacheValueType, CachedEntry, ContentProvider,
+    ContentProviderRef, DependencyResolutionEdge, DependencyResolutionIssue,
     DependencyResolutionNode, DependencyResolutionPlan,
     DependencySelectionReason, ModLoader, ModrinthProjectId, ModrinthVersionId,
     ProjectType,
@@ -17,7 +16,6 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
     file: &CurseForgeFile,
     item_type: ProjectType,
     request: &CurseForgeInstallRequest,
-    state: &State,
 ) -> crate::Result<Option<content_management::ResolveContentPlan>> {
     let Some(sha1) = file
         .hashes
@@ -36,24 +34,22 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
         return Ok(None);
     };
 
-    let matches = CachedEntry::get_file_many(
-        &[sha1],
+    let Some(CacheValue::File(file_match)) = resource_cache_value(
+        CacheValueType::File,
+        sha1,
         Some(CacheBehaviour::MustRevalidate),
-        &state.pool,
-        &state.api_semaphore,
     )
-    .await?;
-    let Some(file_match) = matches.into_iter().next() else {
+    .await?
+    else {
         return Ok(None);
     };
-    let version = CachedEntry::get_version(
-        &ModrinthVersionId::new(file_match.version_id)?,
+    let Some(CacheValue::Version(version)) = resource_cache_value(
+        CacheValueType::Version,
+        &ModrinthVersionId::new(file_match.version_id)?.to_string(),
         Some(CacheBehaviour::MustRevalidate),
-        &state.pool,
-        &state.api_semaphore,
     )
-    .await?;
-    let Some(version) = version else {
+    .await?
+    else {
         return Ok(None);
     };
     if !modrinth_version_matches_target(&version, game_version, loader) {
@@ -72,7 +68,6 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
         game_version.to_string(),
         loader,
         dependency_policy(request.manual_operation_kind),
-        state,
     )
     .await
     .map(Some)
@@ -106,27 +101,28 @@ fn mod_loader_from_curseforge_type(mod_loader_type: u32) -> Option<ModLoader> {
 pub(crate) async fn preview_modrinth_fallbacks(
     plan: &content_management::ResolveContentPlan,
     parent_project_id: u32,
-    state: &State,
 ) -> crate::Result<Vec<CurseForgeModrinthFallbackPreview>> {
     let mut preview = Vec::new();
     for dependency in &plan.dependencies {
-        let version = CachedEntry::get_version(
-            &ModrinthVersionId::new(dependency.version_id.clone())?,
+        let Some(CacheValue::Version(version)) = resource_cache_value(
+            CacheValueType::Version,
+            &ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
-            &state.pool,
-            &state.api_semaphore,
         )
-        .await?;
-        let Some(version) = version else {
+        .await?
+        else {
             continue;
         };
-        let project = CachedEntry::get_project(
-            &ModrinthProjectId::new(dependency.project_id.clone())?,
+        let project = resource_cache_value(
+            CacheValueType::Project,
+            &ModrinthProjectId::new(dependency.project_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
-            &state.pool,
-            &state.api_semaphore,
         )
-        .await?;
+        .await?
+        .and_then(|value| match value {
+            CacheValue::Project(project) => Some(project),
+            _ => None,
+        });
         preview.push(CurseForgeModrinthFallbackPreview {
             project_id: dependency.project_id.clone(),
             version_id: dependency.version_id.clone(),
@@ -147,7 +143,6 @@ pub(crate) async fn append_modrinth_fallback_plan(
     resolution_plan: &mut DependencyResolutionPlan,
     fallback_plan: &content_management::ResolveContentPlan,
     curseforge_parent: &ContentProviderRef,
-    state: &State,
 ) -> crate::Result<()> {
     for dependency in &fallback_plan.dependencies {
         let content = ContentProviderRef::Modrinth {
@@ -190,14 +185,13 @@ pub(crate) async fn append_modrinth_fallback_plan(
             }
             None => curseforge_parent.clone(),
         };
-        let version = CachedEntry::get_version(
-            &ModrinthVersionId::new(dependency.version_id.clone())?,
+        let Some(CacheValue::Version(version)) = resource_cache_value(
+            CacheValueType::Version,
+            &ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
-            &state.pool,
-            &state.api_semaphore,
         )
-        .await?;
-        let Some(version) = version else {
+        .await?
+        else {
             resolution_plan.issues.push(DependencyResolutionIssue {
                 provider: ContentProvider::Modrinth,
                 project_id: dependency.project_id.clone(),
@@ -240,4 +234,18 @@ pub(crate) async fn append_modrinth_fallback_plan(
         }
     }
     Ok(())
+}
+
+async fn resource_cache_value(
+    type_: CacheValueType,
+    key: &str,
+    cache_behaviour: Option<CacheBehaviour>,
+) -> crate::Result<Option<CacheValue>> {
+    Ok(
+        CachedEntry::get_resource_many(type_, &[key], cache_behaviour)
+            .await?
+            .into_iter()
+            .next()
+            .and_then(|entry| entry.data),
+    )
 }
