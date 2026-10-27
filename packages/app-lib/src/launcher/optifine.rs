@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::State;
 use crate::util::fetch::{
     self, ContentValidation, DownloadRequest, Integrity, ResourceClass,
-    download_to_path_without_executor, fetch_json,
+    download_to_path_without_executor, fetch_json_with_pool,
 };
 use crate::util::{io, java_environment};
 
@@ -62,7 +62,7 @@ async fn list_entries(
     game_version: &str,
 ) -> crate::Result<Vec<BmclapiOptifineEntry>> {
     let state = State::get().await?;
-    let entries: Vec<BmclapiOptifineEntry> = fetch_json(
+    let entries: Vec<BmclapiOptifineEntry> = fetch_json_with_pool(
         Method::GET,
         &format!("{BMCLAPI_OPTIFINE_BASE}/{game_version}"),
         None,

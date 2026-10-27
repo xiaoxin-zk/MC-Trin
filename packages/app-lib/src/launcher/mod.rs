@@ -429,7 +429,7 @@ async fn download_mojmaps_for_processor(
         return Ok(true);
     }
 
-    let bytes = crate::util::fetch::fetch_official(
+    let bytes = crate::util::fetch::fetch_official_with_pool(
         download_url,
         Some(download_sha1),
         None,

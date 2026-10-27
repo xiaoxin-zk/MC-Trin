@@ -2,7 +2,7 @@ use super::codec::read_pack_servers_async;
 use super::storage::{load_local, write_local_rows};
 use super::types::{LocalServer, ServerSource};
 use crate::state::{CachedEntry, InstanceLink, InstanceMetadata};
-use crate::util::fetch::{DownloadMeta, DownloadReason, fetch};
+use crate::util::fetch::{DownloadMeta, DownloadReason, fetch_with_pool};
 use crate::{ErrorKind, State};
 use async_zip::base::read::seek::ZipFileReader;
 use quartz_nbt::NbtCompound;
@@ -164,7 +164,7 @@ pub(super) async fn reconstruct_modpack_servers(
         loader: metadata.applied_content_set.loader.as_str().to_string(),
         dependent_on: Some(version_id.to_string()),
     };
-    let mrpack = fetch(
+    let mrpack = fetch_with_pool(
         &primary_file.url,
         primary_file.hashes.get("sha1").map(String::as_str),
         Some(&download_meta),
