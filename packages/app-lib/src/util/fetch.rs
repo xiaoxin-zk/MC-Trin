@@ -2107,7 +2107,7 @@ pub(crate) async fn fetch_metadata<T>(
     .map_err(|_| {
         ErrorKind::OtherError(format!(
             "Metadata request timed out: {}",
-            sanitize_url_for_log(url)
+            sanitize_url_for_log(&url)
         ))
         .as_error()
     })??;

@@ -1557,6 +1557,7 @@ pub(crate) async fn finish_import(
             io::create_symlink(&dotminecraft, &instance_path).await?;
         }
 
+        let pool = state.pool.clone();
         crate::state::edit_instance(
             instance_id,
             crate::state::EditInstance {
@@ -1565,7 +1566,7 @@ pub(crate) async fn finish_import(
                 )),
                 ..Default::default()
             },
-            &crate::state::State::get().await?.pool,
+            &pool,
         )
         .await?;
     } else {

@@ -1893,7 +1893,12 @@ impl CachedEntry {
             },
             None => None,
         };
-        if let Err(error) = Self::upsert_many(entries, pool).await {
+        let result = async {
+            let mut connection = pool.acquire().await?;
+            Self::upsert_many(entries, &mut *connection).await
+        }
+        .await;
+        if let Err(error) = result {
             Self::log_cache_write_failure(
                 type_,
                 entries.len(),
