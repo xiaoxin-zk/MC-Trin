@@ -128,7 +128,7 @@ jobs:
           --all-features
           --message-format=json
           -- -A clippy::default_constructed_unit_structs |
-          jq -c 'select((.message.message // "") | contains("BundleTarget::default()") | not)' |
+          jq -c 'select(((.message.spans // []) | any(.file_name | contains("tauri-build-context.rs"))) | not)' |
           clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
       - name: Upload analysis results to GitHub
         if: ${{ !cancelled() && (success() || steps.clippy.outcome == 'failure') }}
