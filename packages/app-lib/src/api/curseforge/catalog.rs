@@ -37,9 +37,9 @@ pub(super) async fn get_modpack_projects(
     project_ids: Vec<u32>,
 ) -> crate::Result<HashMap<u32, CurseForgeProject>> {
     let chunks = unique_metadata_chunks(project_ids);
-    let project_ids = chunks.iter().flatten().copied();
-    let batches = stream::iter(chunks.iter())
-        .map(|chunk| async move { get_projects(chunk.clone()).await })
+    let project_ids = chunks.iter().flatten().copied().collect::<Vec<_>>();
+    let batches = stream::iter(chunks)
+        .map(|chunk| async move { get_projects(chunk).await })
         .buffer_unordered(MODPACK_METADATA_CONCURRENCY)
         .collect::<Vec<_>>()
         .await;
@@ -50,6 +50,7 @@ pub(super) async fn get_modpack_projects(
         }
     }
     let missing = project_ids
+        .into_iter()
         .filter(|project_id| !projects.contains_key(project_id))
         .collect::<Vec<_>>();
     let fallbacks = stream::iter(missing)
