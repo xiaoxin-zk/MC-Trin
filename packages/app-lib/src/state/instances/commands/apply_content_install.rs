@@ -1216,11 +1216,14 @@ pub(crate) async fn resolve_content_scope(
     state: &State,
 ) -> crate::Result<ContentScope> {
     let pool = state.pool.clone();
-    let instance = instance_rows::get_instance_by_id(instance_id, &pool)
-        .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string())
-        })?;
+    let instance = instance_rows::get_instance_by_id_with_pool(
+        instance_id.to_string(),
+        pool.clone(),
+    )
+    .await?
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError("Unknown instance".to_string())
+    })?;
     let content_set_id = match content_set_id {
         Some(id) => id.to_string(),
         None => instance.applied_content_set_id.clone().ok_or_else(|| {
@@ -2515,7 +2518,7 @@ async fn add_project_bytes_with_provider(
         Some(&sha1),
         Some(project_type),
         None,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     fetch::write(&full_path, &bytes, &state.io_semaphore).await?;

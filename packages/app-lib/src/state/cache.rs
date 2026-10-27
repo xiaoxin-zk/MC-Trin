@@ -3066,7 +3066,7 @@ pub async fn cache_file_hash(
     known_hash: Option<&str>,
     project_type: Option<ProjectType>,
     known_modrinth_file: Option<KnownModrinthFile<'_>>,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    pool: sqlx::SqlitePool,
 ) -> crate::Result<()> {
     let size = bytes.len();
 
@@ -3076,6 +3076,7 @@ pub async fn cache_file_hash(
         sha1_async(bytes).await?
     };
 
+    let mut connection = pool.acquire().await?;
     cache_file_hash_metadata(
         instance_path,
         path,
@@ -3083,7 +3084,7 @@ pub async fn cache_file_hash(
         hash,
         project_type,
         known_modrinth_file,
-        exec,
+        &mut *connection,
     )
     .await
 }

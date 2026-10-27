@@ -58,28 +58,39 @@ async fn get_content_snapshot_inner(
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
     super::repair_recorded_pack_unlink(instance_id, &state.pool).await?;
-    let instance = instance_rows::get_instance_by_id(instance_id, &state.pool)
+    let instance = instance_rows::get_instance_by_id_with_pool(
+        instance_id.to_string(),
+        state.pool.clone(),
+    )
+    .await?
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError("Unknown instance".to_string())
+    })?;
+    let (content_set, link, cached_files) = {
+        let mut connection = state.pool.acquire().await?;
+        let content_set = content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
         .await?
         .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string())
+            crate::ErrorKind::InputError(
+                "Instance has no applied content set".to_string(),
+            )
         })?;
-    let content_set =
-        content_rows::get_applied_content_set(instance_id, &state.pool)
-            .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(
-                    "Instance has no applied content set".to_string(),
-                )
-            })?;
-    let link =
-        instance_rows::get_instance_link(instance_id, &state.pool).await?;
+        let link =
+            instance_rows::get_instance_link(instance_id, &mut *connection)
+                .await?;
+        let files =
+            content_rows::get_instance_files(&instance.id, &mut *connection)
+                .await?;
+        (content_set, link, files)
+    };
     // Managed instances keep their cached database snapshot on first open.
     // Directly associated instances have no install pipeline to seed that
     // snapshot, so their first content-page load must scan the external game
     // directory. Later loads reuse the populated rows unless explicitly
     // refreshed.
-    let cached_files =
-        content_rows::get_instance_files(&instance.id, &state.pool).await?;
     let files = if refresh_remote
         || (sync_direct_instance
             && instance.is_direct_linked()
@@ -103,20 +114,27 @@ async fn get_content_snapshot_inner(
         };
         refreshed
             .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
-        content_rows::get_instance_files(&instance.id, &state.pool).await?
+        {
+            let mut connection = state.pool.acquire().await?;
+            content_rows::get_instance_files(&instance.id, &mut *connection)
+                .await?
+        }
     } else {
         cached_files
     };
     let content_set = if refresh_remote
         || sync_direct_instance && instance.is_direct_linked()
     {
-        content_rows::get_applied_content_set(instance_id, &state.pool)
-            .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(
-                    "Instance has no applied content set after refresh".into(),
-                )
-            })?
+        {
+            let mut connection = state.pool.acquire().await?;
+            content_rows::get_applied_content_set(instance_id, &mut *connection)
+                .await?
+        }
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError(
+                "Instance has no applied content set after refresh".into(),
+            )
+        })?
     } else {
         content_set
     };
@@ -219,8 +237,11 @@ async fn get_content_snapshot_inner(
         }
     }
 
-    let entries =
-        content_rows::get_content_entries(&content_set.id, &state.pool).await?;
+    let entries = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_content_entries(&content_set.id, &mut *connection)
+            .await?
+    };
     let members =
         content_rows::get_pack_members(&content_set.id, &state.pool).await?;
     let pending_manual_downloads =
@@ -664,11 +685,11 @@ async fn get_content_snapshot_inner(
 
     Ok(InstanceContentSnapshot {
         instance_id: instance_id.to_string(),
-        revision: content_rows::get_applied_content_set(
-            instance_id,
-            &state.pool,
-        )
-        .await?
+        revision: {
+            let mut connection = state.pool.acquire().await?;
+            content_rows::get_applied_content_set(instance_id, &mut *connection)
+                .await?
+        }
         .map_or(content_set.revision, |set| set.revision),
         pack,
         items,

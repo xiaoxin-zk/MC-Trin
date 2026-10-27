@@ -160,14 +160,15 @@ pub(crate) async fn instance_content_revision(
     if instance_id.is_empty() {
         return Ok(None);
     }
-    Ok(
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
         crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
             instance_id,
-            &state.pool,
+            &mut *connection,
         )
         .await?
-        .map(|content_set| content_set.revision),
-    )
+    };
+    Ok(content_set.map(|content_set| content_set.revision))
 }
 
 pub(crate) fn store_dependency_resolution_plan(plan: DependencyResolutionPlan) {

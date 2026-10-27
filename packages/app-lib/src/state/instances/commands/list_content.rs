@@ -147,7 +147,7 @@ pub(crate) async fn get_content_projects(
     let resolved = resolve_content_scope_with_instance(
         instance_id,
         content_set_id,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
 
@@ -167,9 +167,12 @@ pub(crate) async fn get_installed_project_ids_for_instance(
     state: &State,
 ) -> crate::Result<Vec<String>> {
     let pool = state.pool.clone();
-    let resolved =
-        resolve_content_scope_with_instance(instance_id, content_set_id, &pool)
-            .await?;
+    let resolved = resolve_content_scope_with_instance(
+        instance_id,
+        content_set_id,
+        pool.clone(),
+    )
+    .await?;
     let mut project_ids = HashSet::new();
     let provider_rows = sqlx::query(
         "SELECT DISTINCT ref.provider, ref.provider_project_id
@@ -313,7 +316,7 @@ pub(crate) async fn list_content(
     let resolved = resolve_content_scope_with_instance(
         instance_id,
         content_set_id,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let link = sqlite::instance_rows::get_instance_link(
@@ -387,9 +390,12 @@ pub(crate) async fn list_all_content_from_files(
     refresh_file_updates: bool,
     state: &State,
 ) -> crate::Result<Vec<ContentItem>> {
-    let resolved =
-        resolve_content_scope_with_instance(instance_id, None, &state.pool)
-            .await?;
+    let resolved = resolve_content_scope_with_instance(
+        instance_id,
+        None,
+        state.pool.clone(),
+    )
+    .await?;
     let files = content_projects_for_files(
         &resolved,
         files,
@@ -423,9 +429,12 @@ pub(crate) async fn list_content_by_paths(
         return Ok(Vec::new());
     }
 
-    let resolved =
-        resolve_content_scope_with_instance(instance_id, None, &state.pool)
-            .await?;
+    let resolved = resolve_content_scope_with_instance(
+        instance_id,
+        None,
+        state.pool.clone(),
+    )
+    .await?;
 
     let path_set = paths.iter().map(String::as_str).collect::<HashSet<_>>();
 
@@ -468,7 +477,7 @@ pub(crate) async fn list_linked_modpack_content(
     let resolved = resolve_content_scope_with_instance(
         instance_id,
         content_set_id,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let link = sqlite::instance_rows::get_instance_link(
@@ -567,7 +576,7 @@ pub(crate) async fn get_linked_modpack_info(
     let resolved = resolve_content_scope_with_instance(
         instance_id,
         content_set_id,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let link = sqlite::instance_rows::get_instance_link(
@@ -1248,15 +1257,16 @@ pub(crate) async fn dependencies_to_content_items(
 async fn resolve_content_scope_with_instance(
     instance_id: &str,
     content_set_id: Option<&str>,
-    pool: &SqlitePool,
+    pool: SqlitePool,
 ) -> crate::Result<ResolvedContentScope> {
-    let pool = SqlitePool::clone(pool);
-    let instance =
-        sqlite::instance_rows::get_instance_by_id(instance_id, &pool)
-            .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError("Unknown instance".to_string())
-            })?;
+    let instance = sqlite::instance_rows::get_instance_by_id_with_pool(
+        instance_id.to_string(),
+        pool.clone(),
+    )
+    .await?
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError("Unknown instance".to_string())
+    })?;
     let content_set = match content_set_id {
         Some(content_set_id) => {
             let content_set = {

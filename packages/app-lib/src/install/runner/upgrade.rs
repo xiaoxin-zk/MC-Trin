@@ -631,15 +631,25 @@ async fn clone_upgrade_backup_content_metadata(
 ) -> crate::Result<()> {
     use crate::state::instances::adapters::sqlite::content_rows;
 
-    let source_files =
-        content_rows::get_instance_files(source_instance_id, &state.pool)
-            .await?;
-    let target_files =
-        content_rows::get_instance_files(target_instance_id, &state.pool)
-            .await?;
-    let source_entries =
-        content_rows::get_content_entries(source_content_set_id, &state.pool)
-            .await?;
+    let (source_files, target_files, source_entries) = {
+        let mut connection = state.pool.acquire().await?;
+        let source_files = content_rows::get_instance_files(
+            source_instance_id,
+            &mut *connection,
+        )
+        .await?;
+        let target_files = content_rows::get_instance_files(
+            target_instance_id,
+            &mut *connection,
+        )
+        .await?;
+        let source_entries = content_rows::get_content_entries(
+            source_content_set_id,
+            &mut *connection,
+        )
+        .await?;
+        (source_files, target_files, source_entries)
+    };
     let source_edges = content_rows::get_content_dependency_edges(
         source_content_set_id,
         &state.pool,
@@ -807,16 +817,20 @@ async fn stage_upgrade_content(
         .ok_or_else(|| {
             crate::ErrorKind::InputError("Unknown upgrade target".to_string())
         })?;
-    let entries = crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
-        &metadata.applied_content_set.id,
-        &state.pool,
-    )
-    .await?;
-    let files = crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
-        instance_id,
-        &state.pool,
-    )
-    .await?;
+    let (entries, files) = {
+        let mut connection = state.pool.acquire().await?;
+        let entries = crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
+            &metadata.applied_content_set.id,
+            &mut *connection,
+        )
+        .await?;
+        let files = crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
+            instance_id,
+            &mut *connection,
+        )
+        .await?;
+        (entries, files)
+    };
     let files_by_id = files
         .iter()
         .map(|file| (file.id.as_str(), file.relative_path.as_str()))

@@ -546,6 +546,13 @@ pub(crate) async fn get_instance_by_id(
     id: &str,
     pool: &SqlitePool,
 ) -> crate::Result<Option<Instance>> {
+    get_instance_by_id_with_pool(id.to_string(), pool.clone()).await
+}
+
+pub(crate) async fn get_instance_by_id_with_pool(
+    id: String,
+    pool: SqlitePool,
+) -> crate::Result<Option<Instance>> {
     let mut connection = pool.acquire().await?;
     let row = sqlx::query_as::<_, InstanceRow>(
         "
@@ -570,7 +577,7 @@ pub(crate) async fn get_instance_by_id(
 		WHERE id = ?
 		",
     )
-    .bind(id)
+    .bind(&id)
     .fetch_optional(&mut *connection)
     .await?;
 
@@ -578,7 +585,7 @@ pub(crate) async fn get_instance_by_id(
         return Ok(None);
     };
     let mut instance: Instance = row.try_into()?;
-    let fields = get_direct_link_fields(id, &mut *connection).await?;
+    let fields = get_direct_link_fields(&id, &mut *connection).await?;
     fields.apply_to(&mut instance);
 
     Ok(Some(instance))
