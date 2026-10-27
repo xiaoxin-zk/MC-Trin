@@ -3,7 +3,8 @@ use crate::state::{
     CurseForgeProjectId, ModrinthProjectId, ModrinthVersionId, ProjectType,
 };
 use crate::util::fetch::{
-    FetchSemaphore, fetch_json, fetch_json_nonempty, sha1_async,
+    FetchSemaphore, fetch_json, fetch_json_nonempty_with_pool,
+    fetch_json_with_pool, sha1_async,
 };
 use chrono::{DateTime, Utc};
 use dashmap::DashSet;
