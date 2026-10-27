@@ -62,18 +62,18 @@ vi.mock('@modrinth/ui', async () => {
         defineMessages: (messages: unknown) => messages,
         injectNotificationManager: () => ({ handleError: vi.fn() }),
         Toggle: defineComponent({
-            props: ['modelValue', 'disabled', 'aria-label'],
+            props: ['modelValue', 'disabled'],
             emits: ['update:modelValue'],
-            setup(props, { emit }) {
+            setup(props, { attrs, emit }) {
                 return () =>
                     h(
                         'button',
                         {
-                            'aria-label': props['aria-label'],
+                            ...attrs,
                             disabled: props.disabled,
                             onClick: () => emit('update:modelValue', !props.modelValue),
                         },
-                        props['aria-label'],
+                        attrs['aria-label'],
                     )
             },
         }),
