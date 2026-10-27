@@ -108,11 +108,11 @@ struct CachedEntryContentProvider {
 impl ContentMetadataProvider for CachedEntryContentProvider {
     async fn get_version(
         &mut self,
-        version_id: &str,
+        version_id: String,
     ) -> Result<Option<content_management::Version>, ResolveError> {
         let values = CachedEntry::get_resource_values(
             CacheValueType::Version,
-            vec![version_id.to_string()],
+            vec![version_id],
             self.cache_behaviour,
         )
         .await
@@ -127,11 +127,11 @@ impl ContentMetadataProvider for CachedEntryContentProvider {
 
     async fn get_project_versions(
         &mut self,
-        project_id: &str,
+        project_id: String,
     ) -> Result<Vec<content_management::Version>, ResolveError> {
         let values = CachedEntry::get_resource_values(
             CacheValueType::ProjectVersions,
-            vec![project_id.to_string()],
+            vec![project_id],
             self.cache_behaviour,
         )
         .await

@@ -6,11 +6,11 @@ use crate::model::{Error, Version};
 pub trait ContentMetadataProvider: Send + Sync {
     async fn get_version(
         &mut self,
-        version_id: &str,
+        version_id: String,
     ) -> Result<Option<Version>, Error>;
 
     async fn get_project_versions(
         &mut self,
-        project_id: &str,
+        project_id: String,
     ) -> Result<Vec<Version>, Error>;
 }

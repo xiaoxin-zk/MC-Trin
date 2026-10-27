@@ -115,7 +115,7 @@ async fn resolve_primary_version<P: ContentMetadataProvider>(
 ) -> Result<Version, Error> {
     if let Some(version_id) = &request.version_id {
         let version = provider
-            .get_version(version_id)
+            .get_version(version_id.clone())
             .await?
             .ok_or_else(|| Error::VersionNotFound(version_id.clone()))?;
 
@@ -129,7 +129,9 @@ async fn resolve_primary_version<P: ContentMetadataProvider>(
         return Ok(version);
     }
 
-    let versions = provider.get_project_versions(&request.project_id).await?;
+    let versions = provider
+        .get_project_versions(request.project_id.clone())
+        .await?;
     if versions.is_empty() {
         return Err(Error::ProjectNotFound(request.project_id.clone()));
     }
@@ -341,7 +343,7 @@ impl<'a, P: ContentMetadataProvider> InstallResolver<'a, P> {
         dependency: &Dependency,
     ) -> Result<Option<Version>, Error> {
         if let Some(version_id) = &dependency.version_id {
-            let version = self.provider.get_version(version_id).await?;
+            let version = self.provider.get_version(version_id.clone()).await?;
             if version.is_none() {
                 self.skipped.push(SkippedContent {
                     project_id: dependency
@@ -359,7 +361,10 @@ impl<'a, P: ContentMetadataProvider> InstallResolver<'a, P> {
         let Some(project_id) = &dependency.project_id else {
             return Ok(None);
         };
-        let versions = self.provider.get_project_versions(project_id).await?;
+        let versions = self
+            .provider
+            .get_project_versions(project_id.clone())
+            .await?;
         let version = select_newest_matching_version(
             versions,
             self.content_type,

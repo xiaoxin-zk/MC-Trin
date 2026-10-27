@@ -24,20 +24,20 @@ mod tests {
     impl ContentMetadataProvider for MemoryProvider {
         async fn get_version(
             &mut self,
-            version_id: &str,
+            version_id: String,
         ) -> Result<Option<Version>, Error> {
-            self.requests.lock().unwrap().push(version_id.to_string());
-            Ok(self.versions.get(version_id).cloned())
+            self.requests.lock().unwrap().push(version_id.clone());
+            Ok(self.versions.get(&version_id).cloned())
         }
 
         async fn get_project_versions(
             &mut self,
-            project_id: &str,
+            project_id: String,
         ) -> Result<Vec<Version>, Error> {
-            self.requests.lock().unwrap().push(project_id.to_string());
+            self.requests.lock().unwrap().push(project_id.clone());
             Ok(self
                 .project_versions
-                .get(project_id)
+                .get(&project_id)
                 .into_iter()
                 .flatten()
                 .filter_map(|id| self.versions.get(id))
