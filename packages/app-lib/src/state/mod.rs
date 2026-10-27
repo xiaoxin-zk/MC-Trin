@@ -1296,7 +1296,7 @@ impl State {
             file_watcher,
             screenshot_locks: DashMap::new(),
             synced_options_lock: Arc::new(AsyncMutex::new(())),
-            game_locale_indexer: Default::default(),
+            game_locale_indexer: crate::api::instance::synced_options::game_options::locales::GameLocaleIndexer::default(),
             // app_identifier,
         }))
     }
@@ -1420,7 +1420,7 @@ pub(crate) async fn test_state(
         file_watcher,
         screenshot_locks: DashMap::new(),
         synced_options_lock: Arc::new(AsyncMutex::new(())),
-        game_locale_indexer: Default::default(),
+        game_locale_indexer: crate::api::instance::synced_options::game_options::locales::GameLocaleIndexer::default(),
     }))
 }
 

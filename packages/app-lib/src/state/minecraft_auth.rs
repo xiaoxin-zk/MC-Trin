@@ -103,7 +103,7 @@ pub struct MinecraftDeviceLoginFlow {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum MinecraftDeviceLoginPoll {
     Pending { slow_down: bool },
-    Complete { credentials: Credentials },
+    Complete { credentials: Box<Credentials> },
 }
 
 #[tracing::instrument]
@@ -244,7 +244,9 @@ pub async fn device_login_poll(
     )
     .await?;
 
-    Ok(MinecraftDeviceLoginPoll::Complete { credentials })
+    Ok(MinecraftDeviceLoginPoll::Complete {
+        credentials: Box::new(credentials),
+    })
 }
 
 #[tracing::instrument(skip(code, state, flow, exec))]
@@ -615,7 +617,9 @@ impl Credentials {
         }
         state.source_token = Some(self.refresh_token.clone());
         let result = self.refresh_tokens(exec).await;
-        if result.is_ok() {
+        if let Err(error) = &result {
+            state.failure = Some((Instant::now(), Arc::clone(&error.raw)));
+        } else {
             // Keep only a short-lived refresh result for concurrent readers.
             state.refreshed = Some(RefreshedTokens {
                 access_token: self.access_token.clone(),
@@ -624,11 +628,6 @@ impl Credentials {
                 yggdrasil: self.yggdrasil.clone(),
             });
             state.failure = None;
-        } else {
-            state.failure = Some((
-                Instant::now(),
-                Arc::clone(&result.as_ref().unwrap_err().raw),
-            ));
         }
         result
     }

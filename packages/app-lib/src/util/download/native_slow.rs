@@ -61,12 +61,11 @@ impl NativeSlowPolicy {
         expected_speed: Option<u64>,
     ) -> Self {
         let now = Instant::now();
+        let (window, min_flow) = (WINDOW, MIN_FLOW);
         #[cfg(test)]
         let (window, min_flow) = TEST_TIMING
             .try_with(|timing| *timing)
-            .unwrap_or((WINDOW, MIN_FLOW));
-        #[cfg(not(test))]
-        let (window, min_flow) = (WINDOW, MIN_FLOW);
+            .unwrap_or((window, min_flow));
         Self {
             window,
             min_flow,

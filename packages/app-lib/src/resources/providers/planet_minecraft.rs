@@ -39,7 +39,7 @@ impl PlanetMinecraftProvider {
         query: &ProviderQuery,
     ) -> ResourceResult<ProviderValue> {
         match query {
-            ProviderQuery::Project { id, .. } => Ok(ProviderValue::Project(self.project(id).await?.document()?)),
+            ProviderQuery::Project { id, .. } => Ok(ProviderValue::project(self.project(id).await?.document()?)),
             ProviderQuery::Description { id, .. } => {
                 let project = self.project(id).await?;
                 let body = project.description.ok_or_else(|| ResourceError::Unsupported("connector returned no project description".into()))?;
@@ -49,7 +49,7 @@ impl PlanetMinecraftProvider {
                 let id = project_id.as_ref().ok_or_else(|| ResourceError::Unsupported("Planet Minecraft requires project-qualified releases".into()))?;
                 let project = self.project(id).await?;
                 let reference = source_project(SourceId::planet_minecraft(), project.id)?;
-                project.versions.into_iter().find(|version| version.id == release_id.as_str()).map(|version| version.document(reference).map(ProviderValue::Release)).unwrap_or(Ok(ProviderValue::NotFound))
+                project.versions.into_iter().find(|version| version.id == release_id.as_str()).map(|version| version.document(reference).map(ProviderValue::release)).unwrap_or(Ok(ProviderValue::NotFound))
             }
             ProviderQuery::Releases { project_id, target, cursor, page_size, .. } => {
                 if !target.loaders.is_empty() || !target.channels.is_empty() { return Err(ResourceError::Unsupported("connector has no loader or channel metadata".into())); }

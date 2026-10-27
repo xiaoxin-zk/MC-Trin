@@ -122,7 +122,7 @@ pub(super) fn pending_manual_download(
                 ownership_kind: if item.pack_member_id.is_some() {
                     crate::state::instances::ContentOwnershipKind::PackManaged
                 } else {
-                    Default::default()
+                    crate::state::instances::ContentOwnershipKind::default()
                 },
                 operation_kind: item.operation_kind,
                 website_url: item.website_url,
@@ -179,6 +179,6 @@ pub(super) async fn manually_imported_curseforge_world_downloads(
     Ok(if imported {
         HashSet::from([(project_id, file_id)])
     } else {
-        Default::default()
+        HashSet::default()
     })
 }

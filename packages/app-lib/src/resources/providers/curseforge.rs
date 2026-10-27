@@ -91,7 +91,7 @@ impl CurseForgeProvider {
                     Ok(values
                         .get(&id)
                         .cloned()
-                        .map(ProviderValue::Project)
+                        .map(ProviderValue::project)
                         .unwrap_or(ProviderValue::NotFound))
                 })
                 .collect());
@@ -163,7 +163,7 @@ impl CurseForgeProvider {
                     Ok(values
                         .get(&id)
                         .cloned()
-                        .map(ProviderValue::Release)
+                        .map(ProviderValue::release)
                         .unwrap_or(ProviderValue::NotFound))
                 })
                 .collect());

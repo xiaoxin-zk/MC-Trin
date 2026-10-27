@@ -131,7 +131,7 @@ test('every rule that declares a baseline also publishes the scale', () => {
             // requires. Matching the reference form let a removed `@include` pass.
             assert.match(
                 block,
-                /--opacity-ratio-[a-z0-9-]+\s*:|@include\s+opacity-scale/,
+                /--opacity-ratio-[a-z0-9-]+\s*:|@include\s+(?:[\w-]+\.)?opacity-scale\b/,
                 `${sheet.name}: a rule declares --opacity-baseline without publishing the scale`,
             )
         }

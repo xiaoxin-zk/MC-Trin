@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use crate::mod_translation::error::{
     Result, TranslateError, TranslateErrorCode,
@@ -228,7 +229,7 @@ impl JsonValue {
             JsonValue::Number(value) => {
                 if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0
                 {
-                    out.push_str(&format!("{}", *value as i64));
+                    let _ = write!(out, "{}", *value as i64);
                 } else {
                     out.push_str(&value.to_string());
                 }
@@ -256,7 +257,7 @@ fn json_escape(value: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             character if (character as u32) < 0x20 => {
-                out.push_str(&format!("\\u{:04x}", character as u32));
+                let _ = write!(out, "\\u{:04x}", character as u32);
             }
             character => out.push(character),
         }

@@ -44,13 +44,6 @@ export default defineNuxtConfig({
         appManifest: false,
     },
     vite: {
-        css: {
-            preprocessorOptions: {
-                scss: {
-                    silenceDeprecations: ['import'],
-                },
-            },
-        },
         resolve: {
             alias: [{ find: /^@modrinth\/ui$/, replacement: UI_PUBLIC_ENTRY }],
             dedupe: ['vue'],

@@ -35,7 +35,7 @@ pub struct YggdrasilAccount {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum YggdrasilLoginResult {
     Complete {
-        credentials: Credentials,
+        credentials: Box<Credentials>,
     },
     SelectProfile {
         flow_id: Uuid,
@@ -207,7 +207,9 @@ pub async fn begin_yggdrasil_login(
             login,
         );
         credentials.upsert(exec).await?;
-        return Ok(YggdrasilLoginResult::Complete { credentials });
+        return Ok(YggdrasilLoginResult::Complete {
+            credentials: Box::new(credentials),
+        });
     }
 
     if response.available_profiles.is_empty() {
@@ -242,7 +244,9 @@ pub async fn begin_yggdrasil_login(
             login,
         );
         credentials.upsert(exec).await?;
-        return Ok(YggdrasilLoginResult::Complete { credentials });
+        return Ok(YggdrasilLoginResult::Complete {
+            credentials: Box::new(credentials),
+        });
     }
 
     let flow_id = Uuid::new_v4();

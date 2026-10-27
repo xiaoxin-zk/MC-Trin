@@ -358,14 +358,13 @@ pub async fn screenshot_thumbnail(
     let _permit = SCREENSHOT_DECODER.acquire().await.map_err(|error| {
         theseus::Error::from(theseus::ErrorKind::OtherError(error.to_string()))
     })?;
-    if let Ok(mut cache) = SCREENSHOT_THUMBNAILS.lock() {
-        if let Some(index) = cache.iter().position(|(cached, _)| cached == &key)
-        {
-            let entry = cache.remove(index).unwrap();
-            let bytes = entry.1.clone();
-            cache.push_back(entry);
-            return Ok(tauri::ipc::Response::new(bytes));
-        }
+    if let Ok(mut cache) = SCREENSHOT_THUMBNAILS.lock()
+        && let Some(index) = cache.iter().position(|(cached, _)| cached == &key)
+    {
+        let entry = cache.remove(index).unwrap();
+        let bytes = entry.1.clone();
+        cache.push_back(entry);
+        return Ok(tauri::ipc::Response::new(bytes));
     }
     let bytes = tokio::fs::read(&canonical_source).await?;
     let thumbnail = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
@@ -416,23 +415,23 @@ pub async fn screenshot_thumbnail(
         )))
     })??;
 
-    if thumbnail.len() <= SCREENSHOT_THUMBNAIL_CACHE_BYTES {
-        if let Ok(mut cache) = SCREENSHOT_THUMBNAILS.lock() {
-            cache.retain(|(cached, _)| {
-                cached.source != key.source
-                    || cached.max_dimension != key.max_dimension
-            });
-            let mut size =
-                cache.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
-            while size + thumbnail.len() > SCREENSHOT_THUMBNAIL_CACHE_BYTES {
-                if let Some((_, bytes)) = cache.pop_front() {
-                    size -= bytes.len();
-                } else {
-                    break;
-                }
+    if thumbnail.len() <= SCREENSHOT_THUMBNAIL_CACHE_BYTES
+        && let Ok(mut cache) = SCREENSHOT_THUMBNAILS.lock()
+    {
+        cache.retain(|(cached, _)| {
+            cached.source != key.source
+                || cached.max_dimension != key.max_dimension
+        });
+        let mut size =
+            cache.iter().map(|(_, bytes)| bytes.len()).sum::<usize>();
+        while size + thumbnail.len() > SCREENSHOT_THUMBNAIL_CACHE_BYTES {
+            if let Some((_, bytes)) = cache.pop_front() {
+                size -= bytes.len();
+            } else {
+                break;
             }
-            cache.push_back((key, thumbnail.clone()));
         }
+        cache.push_back((key, thumbnail.clone()));
     }
     Ok(tauri::ipc::Response::new(thumbnail))
 }
@@ -471,10 +470,10 @@ pub(crate) async fn local_instance_icon_path(
             cache.push_back(entry);
             Some(path)
         });
-        if let Some(path) = cached {
-            if tokio::fs::try_exists(&path).await.unwrap_or(false) {
-                return Ok(Some(path));
-            }
+        if let Some(path) = cached
+            && tokio::fs::try_exists(&path).await.unwrap_or(false)
+        {
+            return Ok(Some(path));
         }
 
         let candidate: Result<Option<String>> = async {
@@ -546,16 +545,16 @@ pub(crate) async fn local_instance_icon_path(
         .await;
 
         if let Ok(Some(path)) = candidate {
-            if let Some(key) = cache_key {
-                if let Ok(mut cache) = LOCAL_ICON_CACHE.lock() {
-                    cache.retain(|(existing, _)| {
-                        existing.source != key.source
-                            || existing.max_dimension != key.max_dimension
-                    });
-                    cache.push_back((key, path.clone()));
-                    while cache.len() > 256 {
-                        cache.pop_front();
-                    }
+            if let Some(key) = cache_key
+                && let Ok(mut cache) = LOCAL_ICON_CACHE.lock()
+            {
+                cache.retain(|(existing, _)| {
+                    existing.source != key.source
+                        || existing.max_dimension != key.max_dimension
+                });
+                cache.push_back((key, path.clone()));
+                while cache.len() > 256 {
+                    cache.pop_front();
                 }
             }
             return Ok(Some(path));

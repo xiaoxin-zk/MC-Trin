@@ -1075,12 +1075,10 @@ async fn collect_candidates(
                     | "debug.log"
                     | "launcher_log.txt"
                     | "latest_stdout.log"
-            ) {
-                "minecraft_log"
-            } else if matches!(
+            ) || (matches!(
                 default_type,
                 "instance_log" | "minecraft_root_log"
-            ) && lower.ends_with(".log")
+            ) && lower.ends_with(".log"))
             {
                 "minecraft_log"
             } else {
@@ -1110,7 +1108,7 @@ fn select_run_candidates(
             .unwrap_or_default()
             <= RUN_ASSOCIATION_WINDOW
     });
-    candidates.sort_by(|left, right| right.modified.cmp(&left.modified));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.modified));
     let Some(anchor) = candidates.first().map(|candidate| candidate.modified)
     else {
         return Vec::new();

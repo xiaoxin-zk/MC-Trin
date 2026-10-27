@@ -2930,7 +2930,7 @@ async fn initialize_operation(
         retained_requirements: Vec::new(),
         resolve_dependencies,
         skip_unwritable_files: false,
-        import_files: Default::default(),
+        import_files: HashMap::default(),
         naming: {
             let settings = crate::state::Settings::get(&state.pool).await?;
             super::naming::NamingPreferences {

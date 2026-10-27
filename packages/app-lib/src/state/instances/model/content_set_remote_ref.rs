@@ -16,8 +16,19 @@ impl ContentSetRemoteRefType {
             Self::HostingInstance => "hosting_instance",
         }
     }
+}
 
-    pub fn from_str(value: &str) -> crate::Result<Self> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContentSetRemoteRef {
+    pub content_set_id: String,
+    pub ref_type: ContentSetRemoteRefType,
+    pub ref_id: String,
+}
+
+impl std::str::FromStr for ContentSetRemoteRefType {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
         match value {
             "shared_content_set" => Ok(Self::SharedContentSet),
             "hosting_instance" => Ok(Self::HostingInstance),
@@ -26,9 +37,8 @@ impl ContentSetRemoteRefType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ContentSetRemoteRef {
-    pub content_set_id: String,
-    pub ref_type: ContentSetRemoteRefType,
-    pub ref_id: String,
+impl ContentSetRemoteRefType {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
 }

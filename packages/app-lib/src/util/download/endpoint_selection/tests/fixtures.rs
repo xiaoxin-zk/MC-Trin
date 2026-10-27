@@ -3,7 +3,7 @@ use super::{EndpointSelector, SelectionMode};
 use crate::util::fetch::DownloadClients;
 use parking_lot::Mutex;
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
-use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer};
+use rustls_pki_types::PrivatePkcs8KeyDer;
 use std::collections::HashSet;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
@@ -65,7 +65,6 @@ impl Drop for ActiveSocket {
 pub(super) struct EndpointFixture {
     pub(super) address: SocketAddr,
     pub(super) root: reqwest::Certificate,
-    pub(super) rustls_root: CertificateDer<'static>,
     pub(super) stats: Arc<SocketStats>,
     cancellation: CancellationToken,
     task: Option<std::thread::JoinHandle<()>>,
@@ -211,7 +210,6 @@ impl EndpointFixture {
         Self {
             address,
             root: reqwest::Certificate::from_der(ca.der()).unwrap(),
-            rustls_root: ca.der().clone(),
             stats,
             cancellation,
             task: Some(task),

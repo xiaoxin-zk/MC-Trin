@@ -28,19 +28,6 @@ impl ContentSourceKind {
             Self::SharedInstance => "shared_instance",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "local" => Ok(Self::Local),
-            "curseforge" => Ok(Self::CurseForge),
-            "mcarchive" => Ok(Self::McArchive),
-            "modrinth_modpack" => Ok(Self::ModrinthModpack),
-            "server_project" => Ok(Self::ServerProject),
-            "imported_modpack" => Ok(Self::ImportedModpack),
-            "shared_instance" => Ok(Self::SharedInstance),
-            other => Err(unknown_value("content source kind", other)),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -61,16 +48,6 @@ impl ContentSetStatus {
             Self::MissingFiles => "missing_files",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "available" => Ok(Self::Available),
-            "installing" => Ok(Self::Installing),
-            "stale" => Ok(Self::Stale),
-            "missing_files" => Ok(Self::MissingFiles),
-            other => Err(unknown_value("content set status", other)),
-        }
-    }
 }
 
 /// Represents a playable setup slot for an instance.
@@ -89,4 +66,47 @@ pub struct ContentSet {
     pub revision: u64,
     pub created: DateTime<Utc>,
     pub modified: DateTime<Utc>,
+}
+
+impl std::str::FromStr for ContentSourceKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "local" => Ok(Self::Local),
+            "curseforge" => Ok(Self::CurseForge),
+            "mcarchive" => Ok(Self::McArchive),
+            "modrinth_modpack" => Ok(Self::ModrinthModpack),
+            "server_project" => Ok(Self::ServerProject),
+            "imported_modpack" => Ok(Self::ImportedModpack),
+            "shared_instance" => Ok(Self::SharedInstance),
+            other => Err(unknown_value("content source kind", other)),
+        }
+    }
+}
+
+impl std::str::FromStr for ContentSetStatus {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "available" => Ok(Self::Available),
+            "installing" => Ok(Self::Installing),
+            "stale" => Ok(Self::Stale),
+            "missing_files" => Ok(Self::MissingFiles),
+            other => Err(unknown_value("content set status", other)),
+        }
+    }
+}
+
+impl ContentSourceKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl ContentSetStatus {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
 }

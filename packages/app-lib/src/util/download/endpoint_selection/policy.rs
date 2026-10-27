@@ -3,6 +3,7 @@ use crate::util::download::constants::{
     ENDPOINT_MAX_RATE_SPREAD, ENDPOINT_MIN_SAMPLE_TIME,
     ENDPOINT_MIN_SUCCESS_SAMPLES,
 };
+#[cfg(test)]
 use crate::util::download::native_slow;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;

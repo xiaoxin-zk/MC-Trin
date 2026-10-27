@@ -108,10 +108,8 @@ pub async fn search_projects(
         urlencoding::encode(query)
     );
     if let Some(game_version) = game_version.filter(|value| !value.is_empty()) {
-        url.push_str(&format!(
-            "&game_version={}",
-            urlencoding::encode(game_version)
-        ));
+        url.push_str("&game_version=");
+        url.push_str(&urlencoding::encode(game_version));
     }
     connector_get(&url).await
 }

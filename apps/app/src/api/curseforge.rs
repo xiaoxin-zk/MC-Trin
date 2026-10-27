@@ -7,7 +7,7 @@ use theseus::curseforge::{
     CurseForgeRecognitionResult, CurseForgeSearchRequest,
     UnifiedSearchResponse,
 };
-use theseus::prelude::{CacheBehaviour, State};
+use theseus::prelude::State;
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("curseforge")

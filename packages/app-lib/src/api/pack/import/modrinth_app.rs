@@ -15,7 +15,7 @@ use crate::{
 };
 
 async fn open_source_db(
-    base_path: &PathBuf,
+    base_path: &std::path::Path,
 ) -> crate::Result<sqlx::SqlitePool> {
     let db_path = base_path.join("app.db");
     let options = SqliteConnectOptions::new()
@@ -30,7 +30,7 @@ async fn open_source_db(
 }
 
 async fn source_config_dir(
-    base_path: &PathBuf,
+    base_path: &std::path::Path,
     pool: &sqlx::SqlitePool,
 ) -> crate::Result<PathBuf> {
     let custom_dir: Option<String> =
@@ -38,7 +38,7 @@ async fn source_config_dir(
             .fetch_optional(pool)
             .await?
             .flatten();
-    Ok(custom_dir.map_or_else(|| base_path.clone(), PathBuf::from))
+    Ok(custom_dir.map_or_else(|| base_path.to_path_buf(), PathBuf::from))
 }
 
 async fn has_table(

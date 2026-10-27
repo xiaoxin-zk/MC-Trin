@@ -1,9 +1,11 @@
+@use 'sass:meta';
+@use '@modrinth/assets/styles/opacity.scss';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import '@modrinth/assets/styles/opacity.scss';
-@import './deepcraft.scss';
+@include meta.load-css('./deepcraft.scss');
 
 @font-face {
     font-family: 'bundled-minecraft-font-mrapp';
@@ -95,7 +97,7 @@ html body {
     --surface-content-muted: var(--surface-2-opaque);
     --surface-content-selected: var(--surface-2-5-opaque);
 
-    @include opacity-scale;
+    @include opacity.opacity-scale;
 }
 
 // Declared on `body`, not on the root: the opaque snapshots above live on the
@@ -146,7 +148,7 @@ html.transparent-window body {
         transparent
     );
 
-    @include opacity-scale;
+    @include opacity.opacity-scale;
 
     // The ratio goes through a variable: `color-mix()` rejects a `calc()` in its
     // percentage slot, and an invalid argument drops the surface entirely.
@@ -358,7 +360,7 @@ html.has-custom-background body {
         transparent
     );
 
-    @include opacity-scale;
+    @include opacity.opacity-scale;
 
     // Interpolation and a variable both matter here: Sass leaves a custom
     // property value as written, and `color-mix()` rejects a `calc()` in its
@@ -681,7 +683,7 @@ img {
     }
 }
 
-@import '@modrinth/assets/omorphia.scss';
+@include meta.load-css('@modrinth/assets/omorphia.scss');
 
 input {
     border-radius: var(--radius-md);
@@ -789,7 +791,8 @@ textarea {
     }
 }
 
-html.dark-mode {
+html.dark-mode,
+html.oled-mode {
     --surface-1: #0a0c10;
     --surface-1-5: #0c0f14;
     --surface-2: #0e1116;

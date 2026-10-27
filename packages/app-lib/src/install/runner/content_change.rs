@@ -5,8 +5,24 @@ use std::time::Duration;
 
 #[derive(Clone)]
 enum DownloadedContent {
-    Modrinth(crate::state::instances::commands::DownloadedProjectVersion),
-    CurseForge(crate::api::curseforge::StagedCurseForgeUpgrade),
+    Modrinth(Box<crate::state::instances::commands::DownloadedProjectVersion>),
+    CurseForge(Box<crate::api::curseforge::StagedCurseForgeUpgrade>),
+}
+
+impl DownloadedContent {
+    pub(super) fn modrinth(
+        download: impl Into<
+            Box<crate::state::instances::commands::DownloadedProjectVersion>,
+        >,
+    ) -> Self {
+        Self::Modrinth(download.into())
+    }
+
+    pub(super) fn curseforge(
+        download: impl Into<Box<crate::api::curseforge::StagedCurseForgeUpgrade>>,
+    ) -> Self {
+        Self::CurseForge(download.into())
+    }
 }
 
 pub(super) async fn run(
@@ -103,9 +119,8 @@ async fn prepare_actions(
             .iter()
             .enumerate()
             .filter(|(_, action)| needs_preparation(action))
-            .map(|(index, action)| (index, action.clone()))
-            .collect::<Vec<_>>();
-        let mut preparations = spawn_bounded(pending_actions.into_iter().map(
+            .map(|(index, action)| (index, action.clone()));
+        let mut preparations = spawn_bounded(pending_actions.map(
             |(index, mut action)| {
                 let cancellation = cancellation.clone();
                 let instance_id = instance_id.to_string();
@@ -308,7 +323,7 @@ async fn download_prepared_files(
 						&state,
 					)
 					.await
-					.map(DownloadedContent::Modrinth)
+					.map(DownloadedContent::modrinth)
 				}
 				ContentProvider::CurseForge => {
 					match (
@@ -323,7 +338,7 @@ async fn download_prepared_files(
 								Some(&reporter),
 							)
 							.await
-								.map(DownloadedContent::CurseForge)
+								.map(DownloadedContent::curseforge)
 						}
 						_ => Err(crate::ErrorKind::InputError(
 							"Invalid CurseForge project or file ID".to_string(),
@@ -678,7 +693,7 @@ async fn publish_downloaded_action(
                 content::apply_downloaded_project_version_at_path(
                     instance_id,
                     &install_path,
-                    downloaded.clone(),
+                    downloaded.as_ref().clone(),
                     ContentSourceKind::Local,
                     ownership,
                     state,
@@ -688,7 +703,7 @@ async fn publish_downloaded_action(
             DownloadedContent::CurseForge(staged) => {
                 crate::api::curseforge::apply_staged_curseforge_upgrade_file_with_state(
                     instance_id,
-                    staged.clone(),
+                    staged.as_ref().clone(),
                     ownership,
                     &install_path,
                     state,
@@ -1217,7 +1232,7 @@ mod tests {
         action.target_provider_file_name = Some("new.jar".into());
         let artifacts = HashMap::from([(
             "primary".into(),
-            DownloadedContent::Modrinth(content::DownloadedProjectVersion {
+            DownloadedContent::modrinth(content::DownloadedProjectVersion {
                 file_name: "new.jar".into(),
                 path: cache,
                 sha1,
@@ -1307,7 +1322,7 @@ mod tests {
         })).unwrap();
         let mut artifacts = HashMap::from([(
             "primary".into(),
-            DownloadedContent::CurseForge(
+            DownloadedContent::curseforge(
                 crate::api::curseforge::StagedCurseForgeUpgrade {
                     path: cache.clone(),
                     file: staged_file,
@@ -1368,7 +1383,7 @@ mod tests {
             crate::util::fetch::sha1_file_async(&cache).await.unwrap();
         artifacts.insert(
             "dependency".into(),
-            DownloadedContent::Modrinth(content::DownloadedProjectVersion {
+            DownloadedContent::modrinth(content::DownloadedProjectVersion {
                 file_name: "dependency.jar".into(),
                 path: cache,
                 sha1,

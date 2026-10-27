@@ -163,10 +163,9 @@ pub(crate) async fn http1_range_limit(path: &Path) -> usize {
 
 async fn range_limit_with_ssd_cap(path: &Path, ssd_cap: usize) -> usize {
     initialize_disks().await;
-    #[cfg(test)]
-    let test_kind = TEST_DISK_KINDS.lock().get(path).copied();
-    #[cfg(not(test))]
     let test_kind: Option<sysinfo::DiskKind> = None;
+    #[cfg(test)]
+    let test_kind = TEST_DISK_KINDS.lock().get(path).copied().or(test_kind);
     let kind = test_kind.or_else(|| {
         DISKS
             .get()

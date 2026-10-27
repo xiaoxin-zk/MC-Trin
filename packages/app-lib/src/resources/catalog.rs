@@ -180,7 +180,7 @@ impl ResourceService {
             self.query(source, query, policy, cancel).await?
         };
         match result.value {
-            ProviderValue::Project(document) => Ok(document),
+            ProviderValue::Project(document) => Ok(*document),
             _ => {
                 Err(ResourceError::InvalidResponse("project not found".into()))
             }
@@ -273,7 +273,7 @@ impl ResourceService {
                         "project identity changed".into(),
                     ));
                 }
-                Ok(document)
+                Ok(*document)
             }
             _ => {
                 Err(ResourceError::InvalidResponse("project not found".into()))

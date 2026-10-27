@@ -21,7 +21,7 @@ use parking_lot::Mutex;
 use sha2::Digest;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 struct H2Range {
@@ -422,8 +422,8 @@ pub(crate) async fn download(
         total_size,
         semaphore,
         fallback_budget: fetch::FetchSemaphore(tokio::sync::Semaphore::new(8)),
-        used_http1: Default::default(),
-        protocol_failed: Default::default(),
+        used_http1: AtomicBool::default(),
+        protocol_failed: AtomicBool::default(),
     };
     let started = std::time::Instant::now();
     let outcome = run_download(
@@ -499,8 +499,8 @@ pub(crate) async fn resume_http1(
         total_size: size,
         semaphore: Some(semaphore),
         fallback_budget: fetch::FetchSemaphore(tokio::sync::Semaphore::new(8)),
-        used_http1: Default::default(),
-        protocol_failed: Default::default(),
+        used_http1: AtomicBool::default(),
+        protocol_failed: AtomicBool::default(),
     };
     Ok(Some(
         run_download(
@@ -588,14 +588,11 @@ async fn run_download(
     } else {
         super::range_output::RangeOutput::create(part, size).await
     };
-    let output = match output {
-        Ok(output) => output,
-        Err(_) => {
-            return H2DownloadOutcome::Fallback {
-                failure: H2DownloadFailure::Io,
-                preserve_partial: false,
-            };
-        }
+    let Ok(output) = output else {
+        return H2DownloadOutcome::Fallback {
+            failure: H2DownloadFailure::Io,
+            preserve_partial: false,
+        };
     };
     let journal = loaded.unwrap_or_else(|| {
         RangeJournal::new(part, &request.integrity, size, concurrency)

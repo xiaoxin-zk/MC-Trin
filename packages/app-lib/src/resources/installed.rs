@@ -310,7 +310,7 @@ pub(crate) async fn cached_file_compatibility(
             let Ok(result) = result else { continue };
             let documents = match result.value {
                 ProviderValue::Identified(documents) => documents,
-                ProviderValue::Release(document) => vec![document],
+                ProviderValue::Release(document) => vec![*document],
                 _ => continue,
             };
             for document in documents {

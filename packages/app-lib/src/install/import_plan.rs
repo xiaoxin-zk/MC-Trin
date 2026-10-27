@@ -23,8 +23,7 @@ use crate::launcher::download::{
 use crate::launcher::parse_rules;
 use crate::state::{ModLoader, State};
 
-#[path = "../api/pack/import/instance_json.rs"]
-mod instance_json;
+use crate::api::pack::import::instance_json;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

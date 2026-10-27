@@ -1411,8 +1411,7 @@ impl DownloadClients {
             } else {
                 proxy.apply(builder)?
             };
-            #[cfg(not(test))]
-            let builder = builder.https_only(true);
+            let builder = builder.https_only(!cfg!(test));
             builder.build().map_err(crate::Error::from)
         };
         Ok(Self {
@@ -1473,7 +1472,7 @@ impl DownloadClients {
             direct: direct.clone(),
             http1_system: HTTP1_NO_REDIRECT_REQWEST_CLIENT.clone(),
             http1_direct: HTTP1_DIRECT_REQWEST_CLIENT.clone(),
-            proxy: Default::default(),
+            proxy: crate::util::proxy::ProxyConfig::default(),
             ignore_ssl_errors: false,
             scope: FETCH_UNCONFIGURED.into(),
             system_dns: Arc::clone(&DOWNLOAD_DNS_RESOLVER),
@@ -1507,8 +1506,7 @@ pub(crate) static NO_REDIRECT_REQWEST_CLIENT: LazyLock<reqwest::Client> =
     LazyLock::new(|| {
         let builder = file_reqwest_client_builder()
             .redirect(reqwest::redirect::Policy::none());
-        #[cfg(not(test))]
-        let builder = builder.https_only(true);
+        let builder = builder.https_only(!cfg!(test));
         builder
             .build()
             .expect(FETCH_CLIENT_CONFIGURATION_SHOULD_BE_VALID)
@@ -1519,8 +1517,7 @@ pub(crate) static DIRECT_REQWEST_CLIENT: LazyLock<reqwest::Client> =
         let builder = file_reqwest_client_builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none());
-        #[cfg(not(test))]
-        let builder = builder.https_only(true);
+        let builder = builder.https_only(!cfg!(test));
         builder
             .build()
             .expect(FETCH_CLIENT_CONFIGURATION_SHOULD_BE_VALID)
@@ -1530,8 +1527,7 @@ pub(crate) static HTTP1_NO_REDIRECT_REQWEST_CLIENT: LazyLock<reqwest::Client> =
     LazyLock::new(|| {
         let builder = http1_file_reqwest_client_builder()
             .redirect(reqwest::redirect::Policy::none());
-        #[cfg(not(test))]
-        let builder = builder.https_only(true);
+        let builder = builder.https_only(!cfg!(test));
         builder
             .build()
             .expect(FETCH_CLIENT_CONFIGURATION_SHOULD_BE_VALID)
@@ -1542,8 +1538,7 @@ pub(crate) static HTTP1_DIRECT_REQWEST_CLIENT: LazyLock<reqwest::Client> =
         let builder = http1_file_reqwest_client_builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none());
-        #[cfg(not(test))]
-        let builder = builder.https_only(true);
+        let builder = builder.https_only(!cfg!(test));
         builder
             .build()
             .expect(FETCH_CLIENT_CONFIGURATION_SHOULD_BE_VALID)
@@ -4159,12 +4154,9 @@ async fn probe_route_throughput(
         ),
     )
     .await;
-    let (mut response, final_url) = match response {
-        Ok(Ok(response)) => response,
-        Ok(Err(_)) | Err(_) => {
-            record_route_health_failure(route, resource, None);
-            return None;
-        }
+    let Ok(Ok((mut response, final_url))) = response else {
+        record_route_health_failure(route, resource, None);
+        return None;
     };
     let ttfb = started.elapsed();
     let final_authority = url_authority(&final_url)?;
@@ -4193,14 +4185,11 @@ async fn probe_route_throughput(
             record_route_health_failure(route, resource, None);
             return None;
         }
-        let chunk = match tokio::time::timeout(remaining_time, response.chunk())
-            .await
-        {
-            Ok(Ok(Some(chunk))) => chunk,
-            _ => {
-                record_route_health_failure(route, resource, None);
-                return None;
-            }
+        let Ok(Ok(Some(chunk))) =
+            tokio::time::timeout(remaining_time, response.chunk()).await
+        else {
+            record_route_health_failure(route, resource, None);
+            return None;
         };
         received = received.saturating_add(chunk.len() as u64);
     }
@@ -4500,9 +4489,7 @@ fn claim_task_probe(plan: &TaskProbePlan) -> TaskProbeDecision {
                 TASK_PROBE_WINDOW
             }
     });
-    if recently_probed {
-        TaskProbeDecision::Done
-    } else if entry.in_flight.is_some() {
+    if recently_probed || entry.in_flight.is_some() {
         TaskProbeDecision::Done
     } else {
         let notify = Arc::new(Notify::new());
@@ -4575,7 +4562,7 @@ async fn run_task_probe(
 
 async fn ensure_task_routes_probed(
     request: &DownloadRequest,
-    routes: &mut Vec<DownloadRoute>,
+    routes: &mut [DownloadRoute],
     semaphore: &FetchSemaphore,
     system_client: &reqwest::Client,
     direct_client: &reqwest::Client,
@@ -6621,7 +6608,7 @@ pub(crate) async fn download_benchmark_fixture(
 
 enum NativeSegmentedAttempt {
     RetryRoute,
-    Completed(DownloadResult),
+    Completed(Box<DownloadResult>),
 }
 
 async fn try_segmented_native_attempt(
@@ -6748,7 +6735,7 @@ async fn try_segmented_native_attempt(
                         "Failed to record completed download request"
                     );
                 }
-                return Ok(Some(NativeSegmentedAttempt::Completed(
+                return Ok(Some(NativeSegmentedAttempt::Completed(Box::new(
                     DownloadResult {
                         path: destination.to_path_buf(),
                         url: result.final_url,
@@ -6760,7 +6747,7 @@ async fn try_segmented_native_attempt(
                         verified_sha512: request.integrity.sha512.clone(),
                         verified_file: None,
                     },
-                )));
+                ))));
             }
             SegmentedDownloadOutcome::FallbackSingle {
                 disable_range,
@@ -7028,7 +7015,7 @@ async fn run_native_download_attempts(
             )
             .await?
             {
-                NativeRouteAttempt::Completed(result) => return Ok(result),
+                NativeRouteAttempt::Completed(result) => return Ok(*result),
                 NativeRouteAttempt::Continue => {}
             }
         }
@@ -7232,7 +7219,7 @@ pub async fn sha1_file_cancellable(
 }
 enum NativeRouteAttempt {
     Continue,
-    Completed(DownloadResult),
+    Completed(Box<DownloadResult>),
 }
 
 async fn run_native_route_attempts(
@@ -8220,7 +8207,7 @@ async fn run_native_route_attempts(
                 "Failed to record completed download request"
             );
         }
-        return Ok(NativeRouteAttempt::Completed(DownloadResult {
+        return Ok(NativeRouteAttempt::Completed(Box::new(DownloadResult {
             path: destination.to_path_buf(),
             url: final_url,
             source: route.source,
@@ -8230,7 +8217,7 @@ async fn run_native_route_attempts(
             verified_sha1: request.integrity.sha1.clone(),
             verified_sha512: request.integrity.sha512.clone(),
             verified_file: None,
-        }));
+        })));
     }
 
     Ok(NativeRouteAttempt::Continue)

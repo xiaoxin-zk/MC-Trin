@@ -1,7 +1,4 @@
-use super::super::synced_options::instance_game_dir;
-use super::SERVERS_FILE;
-use super::codec::{read_servers, servers_from_bytes};
-use super::operations::{compose_instance, effective};
+use super::codec::read_pack_servers_async;
 use super::storage::{load_local, write_local_rows};
 use super::types::{LocalServer, ServerSource};
 use crate::state::{CachedEntry, InstanceLink, InstanceMetadata};
@@ -12,39 +9,23 @@ use quartz_nbt::NbtCompound;
 use std::io::Cursor;
 use uuid::Uuid;
 
-pub async fn capture_modpack_servers(instance_id: &str) -> crate::Result<()> {
-    let state = State::get().await?;
-    let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(instance_id, &state.pool)
-        .await?
-        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
-    let path = instance_game_dir(&metadata, &state)?.join(SERVERS_FILE);
-    let servers = read_servers(&path).await?;
-    replace_modpack_servers(&metadata, servers, &state).await?;
-    if effective(&metadata, &state).await? {
-        compose_instance(&metadata, &state).await?;
-    }
-    Ok(())
-}
-
-pub async fn clear_modpack_servers(instance_id: &str) -> crate::Result<()> {
-    let state = State::get().await?;
-    let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(instance_id, &state.pool)
-        .await?
-        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
-    replace_modpack_servers(&metadata, Vec::new(), &state).await?;
-    if effective(&metadata, &state).await? {
-        compose_instance(&metadata, &state).await?;
-    }
-    Ok(())
-}
-
 async fn replace_modpack_servers(
     metadata: &InstanceMetadata,
     servers: Vec<NbtCompound>,
     state: &State,
 ) -> crate::Result<()> {
+    let local = prepare_modpack_servers(metadata, servers, state).await?;
+    let mut tx = state.pool.begin().await?;
+    write_modpack_servers(metadata, &local, &mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub(in crate::api::instance) async fn prepare_modpack_servers(
+    metadata: &InstanceMetadata,
+    servers: Vec<NbtCompound>,
+    state: &State,
+) -> crate::Result<Vec<LocalServer>> {
     let mut local = servers
         .into_iter()
         .enumerate()
@@ -56,17 +37,24 @@ async fn replace_modpack_servers(
             position: position as i64,
         })
         .collect::<Vec<_>>();
-    let mut retained = load_local(&metadata.instance.id, state)
+    let retained = load_local(&metadata.instance.id, state)
         .await?
         .into_iter()
         .filter(|server| server.source != ServerSource::Modpack)
         .collect::<Vec<_>>();
-    for server in &mut retained {
+    for mut server in retained {
         server.position = local.len() as i64;
-        local.push(server.clone());
+        local.push(server);
     }
-    let mut tx = state.pool.begin().await?;
-    write_local_rows(&mut tx, &metadata.instance.id, &local).await?;
+    Ok(local)
+}
+
+pub(in crate::api::instance) async fn write_modpack_servers(
+    metadata: &InstanceMetadata,
+    local: &[LocalServer],
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> crate::Result<()> {
+    write_local_rows(tx, &metadata.instance.id, local).await?;
     let version_id = modpack_version_id(&metadata.link);
     sqlx::query!(
         "
@@ -78,9 +66,8 @@ async fn replace_modpack_servers(
         metadata.instance.id,
         version_id,
     )
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -123,6 +110,13 @@ pub(super) async fn reconstruct_modpack_servers(
     metadata: &InstanceMetadata,
     state: &State,
 ) -> crate::Result<()> {
+    if matches!(metadata.link, InstanceLink::CurseForgeModpack { .. }) {
+        return Err(ErrorKind::InputError(
+            "Reinstall this CurseForge pack to recover its supplied server list."
+                .to_string(),
+        )
+        .into());
+    }
     let version_id = modpack_version_id(&metadata.link).ok_or_else(|| {
         ErrorKind::InputError(
             "This modpack does not have a recoverable Modrinth version."
@@ -189,10 +183,7 @@ pub(super) async fn reconstruct_modpack_servers(
     }
 
     let servers = if let Some((_, index)) = selected {
-        let mut bytes = Vec::new();
-        let mut reader = archive.reader_with_entry(index).await?;
-        reader.read_to_end_checked(&mut bytes).await?;
-        servers_from_bytes(bytes)?
+        read_pack_servers_async(archive.reader_with_entry(index).await?).await?
     } else {
         Vec::new()
     };
@@ -203,6 +194,7 @@ pub(super) fn is_modpack_link(link: &InstanceLink) -> bool {
     matches!(
         link,
         InstanceLink::ModrinthModpack { .. }
+            | InstanceLink::CurseForgeModpack { .. }
             | InstanceLink::ServerProjectModpack { .. }
             | InstanceLink::ImportedModpack { .. }
     )
@@ -210,7 +202,10 @@ pub(super) fn is_modpack_link(link: &InstanceLink) -> bool {
 
 fn modpack_version_id(link: &InstanceLink) -> Option<&str> {
     match link {
-        InstanceLink::ModrinthModpack { version_id, .. } => Some(version_id),
+        InstanceLink::ModrinthModpack { version_id, .. }
+        | InstanceLink::CurseForgeModpack { version_id, .. } => {
+            Some(version_id)
+        }
         InstanceLink::ServerProjectModpack {
             content_version_id, ..
         } => Some(content_version_id),

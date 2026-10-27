@@ -10,6 +10,7 @@ use crate::api::{Result, TheseusSerializableError};
 use async_zip::tokio::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use dashmap::DashMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use theseus::prelude::canonicalize;
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
@@ -293,7 +294,7 @@ pub async fn export_launcher_logs(
     if !skipped_logs.is_empty() {
         manifest.push_str("\nSkipped unreadable log files:\n");
         for name in &skipped_logs {
-            manifest.push_str(&format!("- {name}\n"));
+            let _ = writeln!(manifest, "- {name}");
         }
     }
     write_zip_entry(&mut writer, "manifest.txt", manifest.as_bytes()).await?;

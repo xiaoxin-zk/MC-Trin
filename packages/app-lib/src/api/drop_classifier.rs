@@ -740,9 +740,8 @@ fn classify_zip_entries<R: std::io::Read + std::io::Seek>(
         || entries.has_direct_version_json(base)
         || entries.has_mods_jar(base)
         || entries.has_root_jar_and_json(base)
+        || entries.has_multiple_instance_children(base)
     {
-        Some(ImportLauncherType::Generic)
-    } else if entries.has_multiple_instance_children(base) {
         Some(ImportLauncherType::Generic)
     } else if entries.has_file(base, ".hmcl/config/launcher-settings.json") {
         Some(ImportLauncherType::HMCL)
@@ -949,7 +948,7 @@ fn classify_nested_zip<R: std::io::Read + std::io::Seek>(
             };
         }
     };
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     loop {
         if is_cancelled(cancellation) {
             return cancelled_result();
@@ -1276,7 +1275,7 @@ fn extract_all_with_cancellation(
                 std::fs::File::create(&out_path).map_err(|error| {
                     format!("Failed to create extracted file '{name}': {error}")
                 })?;
-            let mut buffer = [0u8; 64 * 1024];
+            let mut buffer = vec![0u8; 64 * 1024];
             loop {
                 if is_cancelled(cancellation) {
                     return Err("Operation cancelled".to_string());
@@ -1398,7 +1397,7 @@ fn extract_zip_to_dir_with_cancellation(
                 let mut reader =
                     archive.by_index(index).map_err(std::io::Error::other)?;
                 let mut writer = std::fs::File::create(&out_path)?;
-                let mut buffer = [0u8; 64 * 1024];
+                let mut buffer = vec![0u8; 64 * 1024];
                 loop {
                     if is_cancelled(cancellation) {
                         return Err(std::io::Error::new(

@@ -22,16 +22,6 @@ impl ContentRequirement {
             Self::Unknown => "unknown",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "required" => Ok(Self::Required),
-            "optional" => Ok(Self::Optional),
-            "unsupported" => Ok(Self::Unsupported),
-            "unknown" => Ok(Self::Unknown),
-            other => Err(unknown_value("content requirement", other)),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,4 +39,24 @@ pub struct ContentEntry {
     pub enabled: bool,
     pub added_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
+}
+
+impl std::str::FromStr for ContentRequirement {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "required" => Ok(Self::Required),
+            "optional" => Ok(Self::Optional),
+            "unsupported" => Ok(Self::Unsupported),
+            "unknown" => Ok(Self::Unknown),
+            other => Err(unknown_value("content requirement", other)),
+        }
+    }
+}
+
+impl ContentRequirement {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
 }

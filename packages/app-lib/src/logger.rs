@@ -853,7 +853,8 @@ fn compact_modrinth_console_event(input: &str) -> Option<String> {
                 "attempting"
             }
         });
-        output.push_str(&format!(" mirror_status={mirror_status}"));
+        output.push_str(" mirror_status=");
+        output.push_str(mirror_status);
     }
 
     for field in [
@@ -887,9 +888,13 @@ fn compact_modrinth_console_event(input: &str) -> Option<String> {
                 value = compact_console_url(&value);
             }
             if value.chars().any(char::is_whitespace) {
-                output.push_str(&format!(" {field}={value:?}"));
+                use std::fmt::Write as _;
+                let _ = write!(output, " {field}={value:?}");
             } else {
-                output.push_str(&format!(" {field}={value}"));
+                output.push(' ');
+                output.push_str(field);
+                output.push('=');
+                output.push_str(&value);
             }
         }
     }
@@ -1539,11 +1544,8 @@ fn launcher_log_writer(app_identifier: &str) -> Option<RotatingLogWriter> {
     use crate::prelude::DirectoryInfo;
     use chrono::Local;
     // Initialize and get logs directory path
-    let logs_dir = if let Some(d) =
-        DirectoryInfo::launcher_logs_dir_path(app_identifier)
-    {
-        d
-    } else {
+    let Some(logs_dir) = DirectoryInfo::launcher_logs_dir_path(app_identifier)
+    else {
         eprintln!("Could not start logger");
         return None;
     };

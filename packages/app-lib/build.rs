@@ -167,7 +167,7 @@ fn newest_mtime(path: &PathBuf) -> Option<std::time::SystemTime> {
     newest
 }
 
-fn java_jars_are_fresh(out_dir: &PathBuf) -> bool {
+fn java_jars_are_fresh(out_dir: &std::path::Path) -> bool {
     let theseus_jar = out_dir.join("java/libs/theseus.jar");
     let authlib_jar = out_dir.join("java/libs/authlib-injector.jar");
     let Ok(theseus_time) = theseus_jar.metadata().and_then(|m| m.modified())

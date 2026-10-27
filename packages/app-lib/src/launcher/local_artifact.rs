@@ -15,9 +15,8 @@ pub(crate) async fn candidate_is_usable(
         return Ok(false);
     };
     let candidate = local.root.join(relative_path);
-    let metadata = match tokio::fs::metadata(candidate).await {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(false),
+    let Ok(metadata) = tokio::fs::metadata(candidate).await else {
+        return Ok(false);
     };
     Ok(metadata.is_file()
         && expected_size.is_none_or(|size| metadata.len() == size))

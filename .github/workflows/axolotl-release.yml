@@ -62,6 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          node --test scripts/axolotl/desktop-build-utils.test.mjs
           node --test scripts/axolotl/release-policy.test.mjs
           node --test scripts/axolotl/aliyunoss-release.test.mjs
           node --test scripts/axolotl/set-version.test.mjs
@@ -128,6 +129,9 @@ jobs:
             runner: windows-2025
             platform: windows
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+      actions: read
     env:
       SQLX_OFFLINE: true
       CARGO_PROFILE_RELEASE_LTO: 'true'
@@ -198,6 +202,9 @@ jobs:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      actions: read
     env:
       SQLX_OFFLINE: true
       CARGO_PROFILE_RELEASE_LTO: 'true'
@@ -232,6 +239,9 @@ jobs:
     name: Package macOS universal
     needs: [preflight, macos-build]
     runs-on: macos-26
+    permissions:
+      contents: write
+      actions: read
     env:
       SQLX_OFFLINE: true
       CARGO_PROFILE_RELEASE_LTO: 'true'
@@ -247,12 +257,12 @@ jobs:
           profile: release
           package-only: 'true'
       - name: Download macOS ARM64 build artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: macos-aarch64-apple-darwin
           path: target/macos-input/aarch64-apple-darwin
       - name: Download macOS x64 build artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: macos-x86_64-apple-darwin
           path: target/macos-input/x86_64-apple-darwin
@@ -318,6 +328,9 @@ jobs:
     timeout-minutes: 45
     if: false
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -328,7 +341,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Download published release metadata
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: published-release-metadata
           path: release-check
@@ -349,6 +362,9 @@ jobs:
     if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
     concurrency:
       group: website-production
       cancel-in-progress: false
@@ -373,7 +389,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Download published release metadata
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: published-release-metadata
           path: release-check
@@ -449,6 +465,9 @@ jobs:
     needs: verify-and-publish
     if: false
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -459,7 +478,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Download published release metadata
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: published-release-metadata
           path: release-check
@@ -501,6 +520,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      actions: read
     concurrency:
       group: aliyunoss-release-mirror
       cancel-in-progress: false
@@ -516,7 +536,7 @@ jobs:
       - name: Install OSS SDK
         run: npm install --prefix "$RUNNER_TEMP/aliyunoss-sdk" --ignore-scripts --no-audit --no-fund ali-oss@6.23.0
       - name: Download published release metadata
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: published-release-metadata
           path: release-check
@@ -538,6 +558,9 @@ jobs:
     needs: verify-and-publish
     if: false
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -548,7 +571,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Download published release metadata
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: ./.github/actions/download-run-artifact
         with:
           name: published-release-metadata
           path: release-check

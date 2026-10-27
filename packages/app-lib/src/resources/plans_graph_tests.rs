@@ -1139,7 +1139,7 @@ async fn cross_type_dependencies_use_the_child_type_and_world_scope_is_never_inv
                         })
                         .cloned()
                         .map(|release| {
-                            ProviderValue::Release(ReleaseDocument {
+                            ProviderValue::release(ReleaseDocument {
                                 release,
                                 protocol: None,
                                 changelog: None,

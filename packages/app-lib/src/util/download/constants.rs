@@ -44,9 +44,11 @@ pub(crate) const MIN_PARALLEL_RANGES: usize = 2;
 pub(crate) const MIN_SEGMENT_SIZE: u64 = 256 * 1024;
 pub(crate) const RANGE_CHECKPOINT_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const RANGE_FULL_FAILURE_LIMIT: u32 = 1;
-#[cfg(not(test))]
-pub(crate) const RANGE_IDLE_RECONNECT_TIMEOUT: Duration =
-    Duration::from_secs(8);
+pub(crate) const RANGE_IDLE_RECONNECT_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_millis(250)
+} else {
+    Duration::from_secs(8)
+};
 pub(crate) const RANGE_JOURNAL_MAX_BYTES: u64 = 16 * 1024;
 pub(crate) const RANGE_REDUCED_CONCURRENCY: usize = 2;
 pub(crate) const RANGE_REDUCED_FAILURE_LIMIT: u32 = 3;
@@ -58,8 +60,11 @@ pub(crate) const SEGMENT_EXPANSION_SAMPLE_COUNT: usize = 3;
 pub(crate) const SEGMENT_EXPANSION_GAIN_PERCENT: u128 = 115;
 pub(crate) const SEGMENT_EXPANSION_RETRY_SPEED_PERCENT: u128 = 50;
 pub(crate) const SEGMENT_RETRY_ATTEMPTS: usize = 3;
-#[cfg(not(test))]
-pub(crate) const TAIL_HEDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(5);
+pub(crate) const TAIL_HEDGE_IDLE_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_millis(150)
+} else {
+    Duration::from_secs(5)
+};
 pub(crate) const TAIL_HEDGE_MIN_REMAINING: u64 = 16 * 1024 * 1024;
 pub(crate) const TAIL_SPLIT_PERCENT: u64 = 40;
 
@@ -174,15 +179,23 @@ pub(crate) const FILE_RETRY_SINGLE_STREAM_ROUNDS: [bool; 3] =
 pub(crate) const FILE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
 pub(crate) const FILE_TRANSFER_CONNECT_TIMEOUT: Duration =
     Duration::from_secs(20);
-#[cfg(not(test))]
-pub(crate) const FILE_TRANSFER_FIRST_BYTE_TIMEOUT: Duration =
-    Duration::from_secs(20);
-#[cfg(not(test))]
-pub(crate) const FILE_TRANSFER_READ_TIMEOUT: Duration = Duration::from_secs(60);
+pub(crate) const FILE_TRANSFER_FIRST_BYTE_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(20)
+};
+pub(crate) const FILE_TRANSFER_READ_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(60)
+};
 pub(crate) const FILE_VALIDATION_CONCURRENCY: usize = 8;
 pub(crate) const HTTPS_PORT: u16 = 443;
-#[cfg(not(test))]
-pub(crate) const JOB_PROBE_WINDOW: Duration = Duration::from_secs(5 * 60);
+pub(crate) const JOB_PROBE_WINDOW: Duration = if cfg!(test) {
+    Duration::from_secs(10)
+} else {
+    Duration::from_secs(5 * 60)
+};
 pub(crate) const MAX_CERTIFICATE_DIAGNOSTIC_CHARS: usize = 512;
 pub(crate) const MAX_DOWNLOAD_ATTEMPT_HISTORY: usize = 12;
 pub(crate) const MAX_DOWNLOAD_DIAGNOSTIC_BYTES: usize = 8 * 1024;
@@ -193,24 +206,35 @@ pub(crate) const MAX_REDIRECT_LOCATION_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_TASK_PROBE_STATES: usize = 64;
 pub(crate) const METADATA_ATTEMPT_BUDGET: usize = 4;
 pub(crate) const METADATA_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(not(test))]
-pub(crate) const METADATA_HEDGE_DELAY: Duration = Duration::from_secs(2);
+pub(crate) const METADATA_HEDGE_DELAY: Duration = if cfg!(test) {
+    Duration::from_millis(100)
+} else {
+    Duration::from_secs(2)
+};
 pub(crate) const MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 pub(crate) const MODRINTH_CDN_ATTEMPTS: usize = 3;
 pub(crate) const MODRINTH_CDN_ATTEMPT_TIMEOUT: Duration =
     Duration::from_secs(120);
-#[cfg(not(test))]
-pub(crate) const REASSIGNABLE_FIRST_BYTE_TIMEOUT: Duration =
-    Duration::from_secs(5);
+pub(crate) const REASSIGNABLE_FIRST_BYTE_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_millis(500)
+} else {
+    Duration::from_secs(5)
+};
 pub(crate) const RESOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
 pub(crate) const RETRY_AFTER_CAP: Duration = Duration::from_secs(60);
 pub(crate) const STALE_PARTIAL_DOWNLOAD_MAX_AGE: Duration =
     Duration::from_secs(7 * 24 * 60 * 60);
 pub(crate) const TASK_PROBE_MAX_ROUTES: usize = 3;
-#[cfg(not(test))]
-pub(crate) const TASK_PROBE_MAX_WAIT: Duration = Duration::from_secs(10);
-#[cfg(not(test))]
-pub(crate) const TASK_PROBE_WINDOW: Duration = Duration::from_secs(60);
+pub(crate) const TASK_PROBE_MAX_WAIT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(10)
+};
+pub(crate) const TASK_PROBE_WINDOW: Duration = if cfg!(test) {
+    Duration::from_secs(5)
+} else {
+    Duration::from_secs(60)
+};
 
 /// Slow-route decisions, cooldowns and persisted transport reputation.
 pub(crate) const NATIVE_BREAKER_DEFAULT_COOLDOWN: Duration =
@@ -232,8 +256,11 @@ pub(crate) const NATIVE_REPUTATION_WRITE_DELAY: Duration =
 pub(crate) const NATIVE_SLOW_ABSOLUTE_SPEED_FLOOR: u64 = 16 * 1024;
 pub(crate) const NATIVE_SLOW_COLD_SPEED_FLOOR: u64 = 256 * 1024;
 pub(crate) const NATIVE_SLOW_EXPECTED_PERCENT: u64 = 40;
-#[cfg(not(test))]
-pub(crate) const NATIVE_SLOW_IDLE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const NATIVE_SLOW_IDLE_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_millis(500)
+} else {
+    Duration::from_secs(20)
+};
 pub(crate) const NATIVE_SLOW_MIN_FLOW: Duration = Duration::from_secs(10);
 pub(crate) const NATIVE_SLOW_MIN_SAVINGS: Duration = Duration::from_secs(2);
 pub(crate) const NATIVE_SLOW_RECONNECT_OVERHEAD: Duration =
@@ -760,35 +787,11 @@ pub(crate) const FETCH_127_0_0_1: &str = "127.0.0.1";
 #[cfg(test)]
 pub(crate) const FETCH_LOCALHOST: &str = "localhost";
 #[cfg(test)]
-pub(crate) const FILE_TRANSFER_FIRST_BYTE_TIMEOUT: Duration =
-    Duration::from_secs(2);
-#[cfg(test)]
-pub(crate) const FILE_TRANSFER_READ_TIMEOUT: Duration = Duration::from_secs(2);
-#[cfg(test)]
 pub(crate) const H2_CONNECTION_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(test)]
 pub(crate) const H2_DNS_REFRESH_TIMEOUT: Duration = Duration::from_secs(6);
 #[cfg(test)]
 pub(crate) const H2_POOL_TEST_INVALID_443: &str = "test.invalid:443";
-#[cfg(test)]
-pub(crate) const JOB_PROBE_WINDOW: Duration = Duration::from_secs(10);
-#[cfg(test)]
-pub(crate) const METADATA_HEDGE_DELAY: Duration = Duration::from_millis(100);
-#[cfg(test)]
-pub(crate) const NATIVE_SLOW_IDLE_TIMEOUT: Duration =
-    Duration::from_millis(500);
-#[cfg(test)]
-pub(crate) const RANGE_IDLE_RECONNECT_TIMEOUT: Duration =
-    Duration::from_millis(250);
-#[cfg(test)]
-pub(crate) const REASSIGNABLE_FIRST_BYTE_TIMEOUT: Duration =
-    Duration::from_millis(500);
-#[cfg(test)]
-pub(crate) const TAIL_HEDGE_IDLE_TIMEOUT: Duration = Duration::from_millis(150);
-#[cfg(test)]
-pub(crate) const TASK_PROBE_MAX_WAIT: Duration = Duration::from_secs(2);
-#[cfg(test)]
-pub(crate) const TASK_PROBE_WINDOW: Duration = Duration::from_secs(5);
 #[cfg(test)]
 pub(crate) const TEST_BODY_SIZE: usize = 2 * 1024 * 1024;
 #[cfg(test)]

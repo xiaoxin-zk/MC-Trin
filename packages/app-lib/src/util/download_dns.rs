@@ -1137,9 +1137,8 @@ impl Resolve for DownloadDnsResolver {
                 .refresh(&host)
                 .await?
                 .into_iter()
-                .map(|address| SocketAddr::new(address, 0))
-                .collect::<Vec<_>>();
-            Ok(Box::new(addresses.into_iter()) as Addrs)
+                .map(|address| SocketAddr::new(address, 0));
+            Ok(Box::new(addresses) as Addrs)
         })
     }
 }

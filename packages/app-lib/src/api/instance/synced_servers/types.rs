@@ -68,10 +68,6 @@ impl ServerRecord {
             .to_string()
     }
 
-    pub fn icon(&self) -> Option<String> {
-        self.data.get::<_, &str>("icon").ok().map(ToOwned::to_owned)
-    }
-
     pub fn hidden(&self) -> bool {
         self.data.get::<_, i8>("hidden").unwrap_or(0) != 0
     }
@@ -91,7 +87,7 @@ pub(super) struct CanonicalServer {
 }
 
 #[derive(Clone)]
-pub(super) struct LocalServer {
+pub(in crate::api::instance) struct LocalServer {
     pub id: String,
     pub source: ServerSource,
     pub excluded_synced_server_id: Option<String>,

@@ -89,10 +89,8 @@ fn normalize_language_code(
     }
 
     match code.split_once('_') {
-        Some((language, _)) if language.is_empty() => None,
-        Some((language, region)) if region.is_empty() => {
-            Some(language.to_lowercase())
-        }
+        Some(("", _)) => None,
+        Some((language, "")) => Some(language.to_lowercase()),
         Some((language, region)) => {
             let region = if legacy_region_case {
                 region.to_uppercase()

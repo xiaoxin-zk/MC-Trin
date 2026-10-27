@@ -112,6 +112,7 @@ pub(crate) use self::screenshots::{
 pub(crate) use self::synced_options::game_options::{
     GameOptionsPackSource, abort_pack_update as abort_pack_game_options_update,
     capture_pack_base as capture_pack_game_options_base,
+    capture_pack_servers_base as capture_pack_server_base,
     detect_game_options_pack_source,
 };
 pub use self::synced_options::game_options::{

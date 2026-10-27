@@ -75,6 +75,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node --test scripts/axolotl/ci-changes.test.mjs
+          node --test scripts/axolotl/desktop-build-utils.test.mjs
           node --test scripts/axolotl/release-policy.test.mjs
           node --test scripts/axolotl/aliyunoss-release.test.mjs
           node --test scripts/axolotl/set-version.test.mjs
@@ -192,6 +193,9 @@ jobs:
     name: Build and test desktop application
     needs: [changes, guardrails, resources]
     if: needs.changes.outputs.desktop == 'true'
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:

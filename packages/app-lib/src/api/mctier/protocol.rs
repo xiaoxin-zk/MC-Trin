@@ -49,7 +49,7 @@ impl Identity {
         // than truncating to two bytes and silently reusing addresses.
         let address_start = address_slot(digest.as_slice());
         let mut step_hash = Sha256::new();
-        step_hash.update(&digest);
+        step_hash.update(digest);
         step_hash.update(b"MC-TRIN-EASYTIER-ADDRESS-STEP");
         let address_step =
             usable_address_step(address_slot(&step_hash.finalize()));

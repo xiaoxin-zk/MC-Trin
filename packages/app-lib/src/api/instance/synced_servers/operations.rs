@@ -355,13 +355,31 @@ async fn list_local_server_records(
     )
 }
 
+async fn prepare_server_edit(
+    metadata: &InstanceMetadata,
+    state: &State,
+) -> crate::Result<()> {
+    if sync_files_are_protected(metadata)
+        || instance_is_running(metadata, state).await?
+    {
+        return Err(ErrorKind::InputError(
+            "Close the instance and finish its installation before editing servers."
+                .to_string(),
+        )
+        .into());
+    }
+    // Import any game-side edits before interpreting an index from servers.dat.
+    reconcile_servers(metadata, state).await
+}
+
 /// Keeps an automatically added server local, even before server sync is enabled.
 pub(crate) async fn ensure_managed_server(
     metadata: &InstanceMetadata,
     data: NbtCompound,
     state: &State,
-) -> crate::Result<()> {
+) -> crate::Result<usize> {
     let _guard = state.lock_synced_options().await;
+    prepare_server_edit(metadata, state).await?;
     let path = instance_game_dir(metadata, state)?.join(SERVERS_FILE);
     let syncing = participating(metadata, state).await?;
     let records = list_server_records_locked(metadata, state).await?;
@@ -414,7 +432,7 @@ pub(crate) async fn ensure_managed_server(
             && local.excluded_synced_server_id == excluded_synced_server_id
             && (!syncing || path.exists())
         {
-            return Ok(());
+            return Ok(position);
         }
         local.data = data.clone();
         local.position = position as i64;
@@ -445,24 +463,39 @@ pub(crate) async fn ensure_managed_server(
         }
         write_servers(&path, &servers).await?;
     }
-    Ok(())
+    Ok(position)
 }
 
 pub(crate) async fn add_user_server(
     metadata: &InstanceMetadata,
-    mut data: NbtCompound,
+    data: NbtCompound,
     state: &State,
-) -> crate::Result<String> {
+) -> crate::Result<usize> {
     let _guard = state.lock_synced_options().await;
+    prepare_server_edit(metadata, state).await?;
     let id = Uuid::new_v4().to_string();
-    if participating(metadata, state).await? {
+    let insert_index = if participating(metadata, state).await? {
         let mut canonical = read_canonical(state).await?;
-        canonical.push(CanonicalServer {
-            id: id.clone(),
-            data,
-        });
+        let position = canonical
+            .iter()
+            .position(|server| server_hidden(&server.data))
+            .unwrap_or(canonical.len());
+        canonical.insert(
+            position,
+            CanonicalServer {
+                id: id.clone(),
+                data,
+            },
+        );
         commit_server_state(Some(&canonical), None, state).await?;
         regenerate_servers(state).await?;
+        compose_records(metadata, state)
+            .await?
+            .iter()
+            .position(|record| record.id == id)
+            .ok_or_else(|| {
+                ErrorKind::InputError("Added server is missing".to_string())
+            })?
     } else {
         let path = instance_game_dir(metadata, state)?.join(SERVERS_FILE);
         let mut servers = read_servers(&path).await?;
@@ -470,10 +503,11 @@ pub(crate) async fn add_user_server(
             .iter()
             .position(server_hidden)
             .unwrap_or(servers.len());
-        servers.insert(insert_index, std::mem::take(&mut data));
+        servers.insert(insert_index, data);
         write_servers(&path, &servers).await?;
-    }
-    Ok(id)
+        insert_index
+    };
+    Ok(insert_index)
 }
 
 async fn update_server_locked(
@@ -531,6 +565,7 @@ pub(crate) async fn update_server_by_index(
     state: &State,
 ) -> crate::Result<()> {
     let _guard = state.lock_synced_options().await;
+    prepare_server_edit(metadata, state).await?;
     if participating(metadata, state).await? {
         let records = list_server_records_locked(metadata, state).await?;
         let record = records
@@ -595,6 +630,7 @@ pub(crate) async fn remove_server_by_index(
     state: &State,
 ) -> crate::Result<()> {
     let _guard = state.lock_synced_options().await;
+    prepare_server_edit(metadata, state).await?;
     if participating(metadata, state).await? {
         let records = list_server_records_locked(metadata, state).await?;
         let record = records

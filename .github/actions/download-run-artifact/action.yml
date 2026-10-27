@@ -1,0 +1,49 @@
+name: Download artifact from current workflow run
+description: Download a named artifact from this workflow run with the GitHub CLI
+inputs:
+  name:
+    description: Artifact name
+    required: true
+  path:
+    description: Directory to extract the artifact into
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download artifact from current run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_NAME: ${{ inputs.name }}
+        DOWNLOAD_PATH: ${{ inputs.path }}
+        WORKFLOW_RUN_ID: ${{ github.run_id }}
+        REPOSITORY: ${{ github.repository }}
+      run: |
+        if [[ ! "$ARTIFACT_NAME" =~ ^[A-Za-z0-9._-]+$ || ! "$DOWNLOAD_PATH" =~ ^[A-Za-z0-9_./-]+$ || ! "$WORKFLOW_RUN_ID" =~ ^[0-9]+$ ]]; then
+          echo '::error::Artifact name, destination, and current run ID are required.'
+          exit 1
+        fi
+        case "/$DOWNLOAD_PATH/" in
+          *"/../"*|*"/./"*|*"//"*)
+            echo '::error::Artifact destination must be a normalized path inside the workspace.'
+            exit 1
+            ;;
+        esac
+        workspace="$(pwd -P)"
+        destination="$workspace"
+        IFS='/' read -r -a path_segments <<< "$DOWNLOAD_PATH"
+        for segment in "${path_segments[@]}"; do
+          mkdir -p -- "$destination/$segment"
+          destination="$(cd -- "$destination/$segment" && pwd -P)"
+          case "$destination" in
+            "$workspace"/*) ;;
+            *)
+              echo '::error::Artifact destination resolves outside the workspace.'
+              exit 1
+              ;;
+          esac
+        done
+        gh run download "$WORKFLOW_RUN_ID" \
+          --repo "$REPOSITORY" \
+          --name "$ARTIFACT_NAME" \
+          --dir "$destination"

@@ -549,7 +549,7 @@ async fn upgrade_catalog_reuses_the_previous_normalized_cache_when_protocol_list
     cache
         .put(
             &key,
-            &ProviderValue::Release(document),
+            &ProviderValue::release(document),
             -1,
             cache.generation().await,
             chrono::Utc::now().timestamp_micros(),

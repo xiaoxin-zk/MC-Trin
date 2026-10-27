@@ -191,7 +191,7 @@ async fn latest_healthy_app_db_backup(
         let modified = entry.metadata().await?.modified().unwrap_or(UNIX_EPOCH);
         candidates.push((modified, path));
     }
-    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
 
     for (_, candidate) in candidates {
         if matches!(
@@ -570,7 +570,7 @@ async fn prune_app_db_backups(backup_dir: &Path) -> crate::Result<()> {
         }
     }
 
-    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
     let protected_prefix = format!(
         "app-db-before-{}-from-",
         sanitize_version_for_filename(CURRENT_APP_VERSION)

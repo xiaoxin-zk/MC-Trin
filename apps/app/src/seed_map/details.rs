@@ -54,7 +54,7 @@ fn ancient_city_layout(
     })?
     .0;
     let mut decoded = Vec::new();
-    flate2::read::GzDecoder::new(&compressed[..])
+    flate2::read::GzDecoder::new(compressed)
         .read_to_end(&mut decoded)
         .map_err(io::Error::other)?;
     let layout = CString::new(decoded).map_err(|_| {
@@ -92,7 +92,7 @@ fn ancient_city_block_pack(
     })?
     .1;
     let mut decoded = Vec::new();
-    flate2::read::GzDecoder::new(&compressed[..])
+    flate2::read::GzDecoder::new(compressed)
         .read_to_end(&mut decoded)
         .map_err(io::Error::other)?;
     let pack: serde_json::Value =
@@ -404,10 +404,9 @@ pub fn structure_details(
             containers
                 .iter()
                 .any(|container| container["estimated"] == true)
-        }) {
-            if let Some(limits) = result["limits"].as_array_mut() {
-                limits.push(serde_json::json!("loot_seed_estimated"));
-            }
+        }) && let Some(limits) = result["limits"].as_array_mut()
+        {
+            limits.push(serde_json::json!("loot_seed_estimated"));
         }
         if query.include_blocks {
             result["blocks"] = ancient_city_blocks(&result["pieces"], &pack)?;

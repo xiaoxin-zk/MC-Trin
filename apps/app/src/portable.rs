@@ -15,9 +15,8 @@ static PORTABLE_MODE: AtomicBool = AtomicBool::new(false);
 /// 必须在 main() 开头、任何其他线程（包括 tokio runtime）启动之前调用。
 /// 此函数内部会调用 `std::env::set_var`，该函数在 Rust 中不是线程安全的。
 pub unsafe fn init_portable_mode() -> bool {
-    let exe_path = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(_) => return false,
+    let Ok(exe_path) = std::env::current_exe() else {
+        return false;
     };
 
     let Some(app_dir) = exe_path.parent() else {

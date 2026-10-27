@@ -264,20 +264,6 @@ fn scan_directory_blocking(
     })
 }
 
-#[cfg(test)]
-fn world_name(path: &Path) -> Option<String> {
-    let path = path.join("level.dat");
-    let metadata = std::fs::symlink_metadata(&path).ok()?;
-    if linked(&metadata)
-        || !metadata.is_file()
-        || metadata.len() > 4 * 1024 * 1024
-    {
-        return None;
-    }
-    let file = std::fs::File::open(path).ok()?;
-    world_name_from_file(file)
-}
-
 fn world_name_from_file(file: std::fs::File) -> Option<String> {
     use std::io::Read;
     if file.metadata().ok()?.len() > 4 * 1024 * 1024 {

@@ -330,7 +330,7 @@ async fn installed_compatibility_uses_cached_exact_bytes_without_network_or_name
     cache
         .put(
             &release_key,
-            &ProviderValue::Release(ReleaseDocument {
+            &ProviderValue::release(ReleaseDocument {
                 release: release.clone(),
                 changelog: None,
                 protocol: None,
@@ -861,7 +861,7 @@ fn project_query(id: &str) -> ProviderQuery {
 }
 
 fn project_value(source: SourceId, id: &str, title: &str) -> ProviderValue {
-    ProviderValue::Project(ProjectDocument {
+    ProviderValue::project(ProjectDocument {
         protocol: None,
         metadata: SourceProjectMetadata {
             environments: vec![],
@@ -2942,7 +2942,7 @@ async fn selected_counterparts_trust_curated_pairs_without_artifact_probes() {
                 .map(|query| match query {
                     ProviderQuery::Project { .. }
                     | ProviderQuery::Locate { .. } => {
-                        Ok(ProviderValue::Project(self.project.clone()))
+                        Ok(ProviderValue::project(self.project.clone()))
                     }
                     ProviderQuery::Search { .. } => {
                         Ok(ProviderValue::Search(SourcePage {
@@ -2991,13 +2991,13 @@ async fn selected_counterparts_trust_curated_pairs_without_artifact_probes() {
         for same_bytes in [true, false] {
             let mut mr_doc =
                 match project_value(SourceId::modrinth(), "abcdefgh", "AE2") {
-                    ProviderValue::Project(doc) => doc,
+                    ProviderValue::Project(doc) => *doc,
                     _ => unreachable!(),
                 };
             mr_doc.metadata.slug = Some("ae2".into());
             let mut cf_doc =
                 match project_value(SourceId::curseforge(), "42", "AE2") {
-                    ProviderValue::Project(doc) => doc,
+                    ProviderValue::Project(doc) => *doc,
                     _ => unreachable!(),
                 };
             cf_doc.metadata.slug = Some("applied-energistics-2".into());

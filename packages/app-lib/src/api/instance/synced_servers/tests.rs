@@ -94,6 +94,195 @@ async fn captured_change_survives_failed_publication_without_reimport() {
 }
 
 #[tokio::test]
+async fn world_server_crud_updates_the_shared_source_and_returns_file_indexes()
+{
+    let (_temp, state, metadata) = fixture().await;
+    sqlx::query("UPDATE sync_feature_settings SET globally_enabled = 1 WHERE feature = 'multiplayer_servers'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    let original = server("original");
+    commit_server_state(Some(&[original]), None, &state)
+        .await
+        .unwrap();
+    compose_instance(&metadata, &state).await.unwrap();
+
+    update_server_by_index(
+        &metadata,
+        0,
+        "renamed".to_string(),
+        "renamed.example.test".to_string(),
+        Some(true),
+        &state,
+    )
+    .await
+    .unwrap();
+    let canonical = read_canonical(&state).await.unwrap();
+    assert_eq!(canonical[0].id, "original");
+    assert_eq!(server_identity_name(&canonical[0].data), "renamed");
+    assert_eq!(
+        server_identity_address(&canonical[0].data),
+        "renamed.example.test"
+    );
+
+    assert!(remove_server_by_index(&metadata, 0, &state).await.is_ok());
+    assert!(read_canonical(&state).await.unwrap().is_empty());
+
+    let index = add_user_server(
+        &metadata,
+        codec::server_data(
+            "local".to_string(),
+            "local.example.test".to_string(),
+            None,
+        ),
+        &state,
+    )
+    .await
+    .unwrap();
+    assert_eq!(index, 0);
+    let bytes = tokio::fs::read(
+        instance_game_dir(&metadata, &state)
+            .unwrap()
+            .join(SERVERS_FILE),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        codec::servers_from_bytes(bytes).unwrap()[index]
+            .get::<_, &str>("ip")
+            .unwrap(),
+        "local.example.test"
+    );
+}
+
+#[tokio::test]
+async fn linked_server_project_is_local_while_syncing_is_enabled() {
+    let (_temp, state, mut metadata) = fixture().await;
+    metadata.link = crate::state::InstanceLink::ServerProject {
+        project_id: "project".to_string(),
+    };
+    sqlx::query("UPDATE sync_feature_settings SET globally_enabled = 1 WHERE feature = 'multiplayer_servers'")
+        .execute(&state.pool)
+        .await
+        .unwrap();
+
+    let index = ensure_managed_server(
+        &metadata,
+        codec::server_data(
+            "Managed project".to_string(),
+            "project.example.test".to_string(),
+            None,
+        ),
+        &state,
+    )
+    .await
+    .unwrap();
+
+    let local = load_local("a", &state).await.unwrap();
+    assert_eq!(index, 0);
+    assert_eq!(local.len(), 1);
+    assert_eq!(local[0].source, ServerSource::LinkedServerProject);
+    assert!(read_canonical(&state).await.unwrap().is_empty());
+    assert_eq!(
+        read_servers(
+            &instance_game_dir(&metadata, &state)
+                .unwrap()
+                .join(SERVERS_FILE)
+        )
+        .await
+        .unwrap()[index]
+            .get::<_, &str>("ip")
+            .unwrap(),
+        "project.example.test"
+    );
+}
+
+#[tokio::test]
+async fn modpack_server_capture_preserves_player_servers_and_rolls_back_atomically()
+ {
+    let (_temp, state, metadata) = fixture().await;
+    let old_pack = LocalServer {
+        id: "old-pack".to_string(),
+        source: ServerSource::Modpack,
+        excluded_synced_server_id: None,
+        data: codec::server_data(
+            "old pack".to_string(),
+            "old-pack.example.test".to_string(),
+            None,
+        ),
+        position: 0,
+    };
+    let player_server = LocalServer {
+        id: "player".to_string(),
+        source: ServerSource::LocalDesynced,
+        excluded_synced_server_id: None,
+        data: codec::server_data(
+            "player".to_string(),
+            "player.example.test".to_string(),
+            None,
+        ),
+        position: 1,
+    };
+    write_local("a", &[old_pack.clone(), player_server.clone()], &state)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO instance_server_pack_state (instance_id, version_id) VALUES ('a', 'old-version')",
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+
+    let next_servers = vec![codec::server_data(
+        "new pack".to_string(),
+        "new-pack.example.test".to_string(),
+        None,
+    )];
+    let prepared =
+        prepare_modpack_servers(&metadata, next_servers.clone(), &state)
+            .await
+            .unwrap();
+    assert_eq!(prepared[1].id, "player");
+
+    let mut transaction = state.pool.begin().await.unwrap();
+    write_modpack_servers(&metadata, &prepared, &mut transaction)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO table_missing_from_test VALUES (1)")
+        .execute(&mut *transaction)
+        .await
+        .unwrap_err();
+    transaction.rollback().await.unwrap();
+
+    let current = load_local("a", &state).await.unwrap();
+    assert_eq!(current.len(), 2);
+    assert_eq!(current[0].id, old_pack.id);
+    assert_eq!(current[0].data, old_pack.data);
+    assert_eq!(current[1].id, player_server.id);
+    let version: Option<String> = sqlx::query_scalar(
+        "SELECT version_id FROM instance_server_pack_state WHERE instance_id = 'a'",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(version.as_deref(), Some("old-version"));
+
+    let prepared = prepare_modpack_servers(&metadata, next_servers, &state)
+        .await
+        .unwrap();
+    let mut transaction = state.pool.begin().await.unwrap();
+    write_modpack_servers(&metadata, &prepared, &mut transaction)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let current = load_local("a", &state).await.unwrap();
+    assert_eq!(current.len(), 2);
+    assert_eq!(current[0].source, ServerSource::Modpack);
+    assert_eq!(server_identity_name(&current[0].data), "new pack");
+    assert_eq!(current[1].id, player_server.id);
+}
+
+#[tokio::test]
 async fn capture_and_pending_checkpoint_roll_back_together() {
     let (_temp, state, _) = fixture().await;
     commit_server_state(Some(&[server("original")]), None, &state)

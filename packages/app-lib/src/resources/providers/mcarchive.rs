@@ -74,9 +74,9 @@ impl McArchiveProvider {
                     )
                     .await?,
                 )?;
-                Ok(ProviderValue::Project(project.document()?))
+                Ok(ProviderValue::project(project.document()?))
             }
-            ProviderQuery::Project { id, slug } => Ok(ProviderValue::Project(
+            ProviderQuery::Project { id, slug } => Ok(ProviderValue::project(
                 self.project(id, slug).await?.document()?,
             )),
             ProviderQuery::Description { id, slug } => {
@@ -104,7 +104,7 @@ impl McArchiveProvider {
                     .find(|version| version.uuid == release_id.as_str());
                 release
                     .map(|release| {
-                        release.document(reference).map(ProviderValue::Release)
+                        release.document(reference).map(ProviderValue::release)
                     })
                     .unwrap_or(Ok(ProviderValue::NotFound))
             }

@@ -195,13 +195,12 @@ impl Artifact {
                     let _ = tokio::fs::remove_file(&destination).await;
                 }
                 result?;
-                if self.always_stale {
-                    if let Err(error) =
+                if self.always_stale
+                    && let Err(error) =
                         io::atomically_replace_file(&destination, &path)
-                    {
-                        let _ = tokio::fs::remove_file(&destination).await;
-                        return Err(error.into());
-                    }
+                {
+                    let _ = tokio::fs::remove_file(&destination).await;
+                    return Err(error.into());
                 }
             }
         }
@@ -246,7 +245,7 @@ async fn artifact_is_current(
         }
         if !sha1.is_empty() {
             let mut hash = sha1_smol::Sha1::new();
-            let mut buffer = [0u8; 64 * 1024];
+            let mut buffer = vec![0u8; 64 * 1024];
             loop {
                 let count = file.read(&mut buffer)?;
                 if count == 0 {

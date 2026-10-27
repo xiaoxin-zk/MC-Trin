@@ -24,16 +24,6 @@ impl ContentProvider {
             Self::Local => "local",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "modrinth" => Ok(Self::Modrinth),
-            "curseforge" => Ok(Self::CurseForge),
-            "mcarchive" => Ok(Self::McArchive),
-            "local" => Ok(Self::Local),
-            other => Err(unknown_value("content provider", other)),
-        }
-    }
 }
 
 macro_rules! modrinth_id {
@@ -346,5 +336,25 @@ mod tests {
         };
         assert_ne!(modrinth, curseforge);
         assert_ne!(modrinth.provider(), curseforge.provider());
+    }
+}
+
+impl std::str::FromStr for ContentProvider {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "modrinth" => Ok(Self::Modrinth),
+            "curseforge" => Ok(Self::CurseForge),
+            "mcarchive" => Ok(Self::McArchive),
+            "local" => Ok(Self::Local),
+            other => Err(unknown_value("content provider", other)),
+        }
+    }
+}
+
+impl ContentProvider {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
     }
 }

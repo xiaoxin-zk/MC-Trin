@@ -32,7 +32,7 @@ static SEARCHER_WORDS: LazyLock<Vec<String>> = LazyLock::new(|| {
         .collect::<Vec<_>>();
     words.sort();
     words.dedup();
-    words.sort_by(|left, right| right.len().cmp(&left.len()));
+    words.sort_by_key(|word| std::cmp::Reverse(word.len()));
     words
 });
 
@@ -574,9 +574,7 @@ fn segment_compact_query(compact: &str) -> Option<String> {
     let mut parts = Vec::new();
     let mut rest = compact;
     while !rest.is_empty() {
-        let Some((word, remainder)) = longest_prefix_word(rest) else {
-            return None;
-        };
+        let (word, remainder) = longest_prefix_word(rest)?;
         parts.push(word);
         rest = remainder;
     }
@@ -597,12 +595,10 @@ fn parse_wiki_entries(source: &str) -> Vec<WikiEntry> {
     let Some(popularity_data) = lines.pop() else {
         return Vec::new();
     };
-    let popularities = popularity_data
+    let mut popularity_iter = popularity_data
         .as_bytes()
         .chunks_exact(3)
-        .map(decode_popularity)
-        .collect::<Vec<_>>();
-    let mut popularity_iter = popularities.into_iter();
+        .map(decode_popularity);
     let mut results = Vec::new();
 
     for (line_index, line) in lines.into_iter().enumerate() {

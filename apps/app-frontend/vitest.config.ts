@@ -25,14 +25,6 @@ import svgLoader from 'vite-svg-loader'
 const projectRootDir = resolve(fileURLToPath(new URL('.', import.meta.url)))
 
 export default defineConfig({
-    // Matches `vite.config.ts`: the shared stylesheet chain uses Sass `@import`.
-    css: {
-        preprocessorOptions: {
-            scss: {
-                silenceDeprecations: ['import'],
-            },
-        },
-    },
     resolve: {
         alias: [
             {

@@ -438,7 +438,7 @@ pub async fn resolve_source(
                 value: ProviderValue::Release(document),
                 ..
             }) => {
-                draft.releases.insert(reference, document);
+                draft.releases.insert(reference, *document);
             }
             Ok(QueryOutcome {
                 value: ProviderValue::NotFound,
@@ -549,7 +549,7 @@ pub async fn resolve_source(
                 value: ProviderValue::Project(document),
                 ..
             }) => {
-                draft.projects.insert(project, document);
+                draft.projects.insert(project, *document);
             }
             Ok(_) => {
                 project_errors.insert(

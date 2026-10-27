@@ -29,6 +29,7 @@ use crate::util::fetch::{
 };
 use reqwest::StatusCode;
 use std::collections::VecDeque;
+use std::fmt::Write as _;
 
 /// Stable local diagnostic codes; presentation text must not be used to
 /// classify endpoint failures or decide protocol health.
@@ -184,9 +185,9 @@ pub(crate) fn download_error_detail(error: &crate::Error) -> String {
                     if let Some(io) = error.downcast_ref::<std::io::Error>() {
                         // Error messages can contain proxy credentials or URLs.
                         // Keep only structured, non-sensitive OS diagnostics.
-                        detail.push_str(&format!("; io={:?}", io.kind()));
+                        let _ = write!(detail, "; io={:?}", io.kind());
                         if let Some(code) = io.raw_os_error() {
-                            detail.push_str(&format!("; os={code}"));
+                            let _ = write!(detail, "; os={code}");
                         }
                         break;
                     }

@@ -6,6 +6,7 @@ use super::write_shared_settings::{
     apply_shared_settings_to_instance, capture_instance_options,
     sync_is_active_for_instance,
 };
+use crate::api::instance::synced_servers;
 use crate::state::{InstanceLink, InstanceMetadata, State, SyncedOption};
 use crate::util::io;
 use encoding_rs::{UTF_8, UTF_16BE, UTF_16LE};
@@ -46,19 +47,18 @@ pub(crate) fn detect_game_options_pack_source<'a>(
             _ => None,
         };
         match path {
-            "options.txt" => {
+            "options.txt"
                 if source == Some(GameOptionsPackSource::ClientOverrides)
-                    || options_source.is_none()
-                {
-                    options_source = source;
-                }
+                    || options_source.is_none() =>
+            {
+                options_source = source;
             }
-            "config/yosbr/options.txt" => {
-                if source == Some(GameOptionsPackSource::ClientOverridesYosbr)
-                    || yosbr_source.is_none()
-                {
-                    yosbr_source = source;
-                }
+            "config/yosbr/options.txt"
+                if source
+                    == Some(GameOptionsPackSource::ClientOverridesYosbr)
+                    || yosbr_source.is_none() =>
+            {
+                yosbr_source = source;
             }
             _ => {}
         }
@@ -285,12 +285,19 @@ pub(crate) async fn abort_pack_update(instance_id: &str) -> crate::Result<()> {
 pub(crate) async fn capture_pack_base(
     instance_id: &str,
     source: Option<GameOptionsPackSource>,
+    pack_servers: Vec<quartz_nbt::NbtCompound>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _guard = state.lock_synced_options().await;
     let metadata = crate::state::get_instance(instance_id, &state.pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
+    let local_servers = synced_servers::prepare_modpack_servers(
+        &metadata,
+        pack_servers,
+        &state,
+    )
+    .await?;
     let path = options_path(&metadata, &state)?;
     let feature = SyncedOption::GameOptions.as_str();
     sqlx::query!(
@@ -359,6 +366,12 @@ pub(crate) async fn capture_pack_base(
         apply_shared_settings_to_instance(&metadata, &state, true).await?;
     }
     let mut transaction = state.pool.begin().await?;
+    synced_servers::write_modpack_servers(
+        &metadata,
+        &local_servers,
+        &mut transaction,
+    )
+    .await?;
     sqlx::query!(
         "
 		INSERT INTO instance_game_option_pack_bases
@@ -383,6 +396,32 @@ pub(crate) async fn capture_pack_base(
         instance_id,
     )
     .execute(&mut *transaction)
+    .await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+pub(crate) async fn capture_pack_servers_base(
+    instance_id: &str,
+    pack_servers: Vec<quartz_nbt::NbtCompound>,
+) -> crate::Result<()> {
+    let state = State::get().await?;
+    let _guard = state.lock_synced_options().await;
+    let metadata = crate::state::get_instance(instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| input_error("Unknown instance"))?;
+    let local_servers = synced_servers::prepare_modpack_servers(
+        &metadata,
+        pack_servers,
+        &state,
+    )
+    .await?;
+    let mut transaction = state.pool.begin().await?;
+    synced_servers::write_modpack_servers(
+        &metadata,
+        &local_servers,
+        &mut transaction,
+    )
     .await?;
     transaction.commit().await?;
     Ok(())

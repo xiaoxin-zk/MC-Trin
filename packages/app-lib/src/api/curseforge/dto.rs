@@ -516,6 +516,8 @@ pub struct CurseForgeModpackInstallResult {
     #[serde(skip)]
     pub(crate) game_options_source:
         Option<crate::api::instance::GameOptionsPackSource>,
+    #[serde(skip)]
+    pub(crate) pack_servers: Vec<quartz_nbt::NbtCompound>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

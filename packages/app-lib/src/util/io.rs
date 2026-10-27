@@ -576,11 +576,6 @@ pub(crate) fn win32_from_hresult(code: i32) -> i32 {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn win32_from_hresult(code: i32) -> i32 {
-    code
-}
-
 /// Flushes a file's contents to stable storage. Used before an atomic replace
 /// so a crash after the rename cannot leave an empty destination behind.
 ///
@@ -796,16 +791,13 @@ async fn copy_dir_inner(
                     .unwrap_or_else(|| Path::new(""))
                     .join(raw_target)
             };
-            let target_meta = match tokio::fs::metadata(&resolved).await {
-                Ok(meta) => meta,
-                Err(_) => {
-                    return Err(IOError::with_path(
-                        std::io::Error::other(format!(
-                            "broken symlink {entry_path:?} points to missing target {resolved:?}"
-                        )),
-                        &entry_path,
-                    ));
-                }
+            let Ok(target_meta) = tokio::fs::metadata(&resolved).await else {
+                return Err(IOError::with_path(
+                    std::io::Error::other(format!(
+                        "broken symlink {entry_path:?} points to missing target {resolved:?}"
+                    )),
+                    &entry_path,
+                ));
             };
             if target_meta.is_dir() {
                 // Materialize the directory link: copy the target subtree as

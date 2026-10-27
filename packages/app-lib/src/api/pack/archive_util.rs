@@ -623,7 +623,7 @@ where
     R: std::io::Read,
     W: std::io::Write,
 {
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     let mut written = 0_u64;
     loop {
         check_cancellation(cancellation)?;

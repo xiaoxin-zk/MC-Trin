@@ -1618,7 +1618,7 @@ pub async fn list_java_feed_versions(
         })
         .collect();
 
-    versions.sort_by(|a, b| b.major_version.cmp(&a.major_version));
+    versions.sort_by_key(|version| std::cmp::Reverse(version.major_version));
     versions.dedup_by(|a, b| a.major_version == b.major_version);
     Ok(versions)
 }

@@ -35,7 +35,6 @@ use http::header::{ACCEPT_ENCODING, LOCATION, RANGE, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use std::path::Path;
 use std::pin::Pin;
-use std::str::FromStr;
 use std::sync::Arc;
 #[cfg(test)]
 use std::time::Duration;
@@ -149,7 +148,7 @@ pub(crate) async fn try_download_via_h2(
     let total_size = if let Some(size) = expected_size {
         size
     } else {
-        let _probe_stream_permit = match tokio::time::timeout(
+        let Ok(Ok(_probe_stream_permit)) = tokio::time::timeout(
             ASSET_RESOURCE_WAIT_TIMEOUT,
             super::h2_stream_budget::acquire_download(
                 route,
@@ -158,14 +157,11 @@ pub(crate) async fn try_download_via_h2(
             ),
         )
         .await
-        {
-            Ok(Ok(permit)) => permit,
-            Ok(Err(_)) | Err(_) => {
-                return H2DownloadOutcome::Fallback {
-                    failure: H2DownloadFailure::Connect,
-                    preserve_partial: false,
-                };
-            }
+        else {
+            return H2DownloadOutcome::Fallback {
+                failure: H2DownloadFailure::Connect,
+                preserve_partial: false,
+            };
         };
         let mut probe_headers = request_headers(request, route);
         probe_headers
@@ -268,14 +264,11 @@ pub(crate) async fn try_download_via_h2(
     } else {
         stream_wait.await
     };
-    let _stream_permit = match stream_result {
-        Ok(Ok(permit)) => permit,
-        Ok(Err(_)) | Err(_) => {
-            return H2DownloadOutcome::Fallback {
-                failure: H2DownloadFailure::Connect,
-                preserve_partial: false,
-            };
-        }
+    let Ok(Ok(_stream_permit)) = stream_result else {
+        return H2DownloadOutcome::Fallback {
+            failure: H2DownloadFailure::Connect,
+            preserve_partial: false,
+        };
     };
     tracing::debug!(
         route = %fetch::sanitize_url_for_log(&route.url),
@@ -554,13 +547,11 @@ pub(crate) async fn open_stream(
 
 async fn drain_body(stream: &mut h2::RecvStream) {
     loop {
-        let chunk =
-            match super::h2_receive::receive_chunk(stream, H2_DOWNLOAD_PROBE)
-                .await
-            {
-                Ok(Some(chunk)) => chunk,
-                Ok(None) | Err(_) => break,
-            };
+        let Ok(Some(chunk)) =
+            super::h2_receive::receive_chunk(stream, H2_DOWNLOAD_PROBE).await
+        else {
+            break;
+        };
         if super::h2_receive::release_capacity(stream, chunk.len()).is_err() {
             break;
         }

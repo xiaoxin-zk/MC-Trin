@@ -1,6 +1,6 @@
-import { userEvent } from '@vitest/browser/context'
 import { DropdownMenuItem } from 'reka-ui'
 import { expect, it } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { h } from 'vue'
 
 import PopoutMenu from '../components/base/PopoutMenu.vue'

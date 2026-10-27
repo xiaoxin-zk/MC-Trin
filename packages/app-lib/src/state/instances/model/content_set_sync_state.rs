@@ -15,13 +15,6 @@ impl ContentSetSyncProvider {
             Self::SharedInstance => "shared_instance",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "shared_instance" => Ok(Self::SharedInstance),
-            other => Err(unknown_value("content set sync provider", other)),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -48,8 +41,33 @@ impl ContentSetSyncStatus {
             Self::Error => "error",
         }
     }
+}
 
-    pub fn from_str(value: &str) -> crate::Result<Self> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ContentSetSyncState {
+    pub content_set_id: String,
+    pub provider: ContentSetSyncProvider,
+    pub applied_update_id: Option<String>,
+    pub latest_available_update_id: Option<String>,
+    pub checked_at: Option<DateTime<Utc>>,
+    pub status: ContentSetSyncStatus,
+}
+
+impl std::str::FromStr for ContentSetSyncProvider {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "shared_instance" => Ok(Self::SharedInstance),
+            other => Err(unknown_value("content set sync provider", other)),
+        }
+    }
+}
+
+impl std::str::FromStr for ContentSetSyncStatus {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
         match value {
             "unknown" => Ok(Self::Unknown),
             "up_to_date" => Ok(Self::UpToDate),
@@ -63,12 +81,14 @@ impl ContentSetSyncStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ContentSetSyncState {
-    pub content_set_id: String,
-    pub provider: ContentSetSyncProvider,
-    pub applied_update_id: Option<String>,
-    pub latest_available_update_id: Option<String>,
-    pub checked_at: Option<DateTime<Utc>>,
-    pub status: ContentSetSyncStatus,
+impl ContentSetSyncProvider {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl ContentSetSyncStatus {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
 }

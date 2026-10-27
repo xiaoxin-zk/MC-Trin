@@ -72,14 +72,6 @@ if (existsSync(envFilePath)) {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
-    css: {
-        preprocessorOptions: {
-            scss: {
-                // TODO: dont forget about this
-                silenceDeprecations: ['import'],
-            },
-        },
-    },
     resolve: {
         alias: [
             {
@@ -171,13 +163,13 @@ export default defineConfig(({ command }) => ({
     envPrefix: ['VITE_', 'TAURI_', 'MODRINTH_'],
     build: {
         rolldownOptions: {
-            onwarn(warning, defaultHandler) {
-                if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return
-                defaultHandler(warning)
+            onLog(level, log, defaultHandler) {
+                if (level === 'warn' && log.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return
+                defaultHandler(level, log)
             },
             output: {
-                manualChunks(id) {
-                    if (id.includes('node_modules/three')) return 'vendor-three'
+                codeSplitting: {
+                    groups: [{ name: 'vendor-three', test: 'node_modules/three' }],
                 },
             },
         },

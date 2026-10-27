@@ -17,10 +17,9 @@ use sqlx::sqlite::{
 use sqlx::{Row, SqlitePool};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Component, Path, PathBuf};
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -3388,7 +3387,17 @@ async fn materialize_restore_plan(
     staged: &Path,
     entries: &[RestoreEntry],
     roots: &[RestoreJournalRoot],
+    progress: &RestoreProgress,
 ) -> crate::Result<()> {
+    let selected_bytes = entries
+        .iter()
+        .filter(|entry| restore_path_is_selected(&entry.path, roots))
+        .filter(|entry| entry.kind == EntryKind::File)
+        .fold(0_u64, |total, entry| total.saturating_add(entry.size));
+    let mut processed_bytes =
+        progress.total_bytes.saturating_sub(selected_bytes);
+    progress.emit(processed_bytes).await;
+    let mut last_emitted = Instant::now();
     for entry in entries {
         if !restore_path_is_selected(&entry.path, roots) {
             continue;
@@ -3410,6 +3419,7 @@ async fn materialize_restore_plan(
                 tokio::fs::copy(object_path(repository, hash), &destination)
                     .await?;
                 apply_unix_mode(&destination, entry.unix_mode).await?;
+                processed_bytes = processed_bytes.saturating_add(entry.size);
             }
             EntryKind::Symlink => {
                 if let Some(parent) = destination.parent() {
@@ -3429,8 +3439,37 @@ async fn materialize_restore_plan(
                 .await?;
             }
         }
+        if last_emitted.elapsed() >= Duration::from_millis(100) {
+            progress.emit(processed_bytes).await;
+            last_emitted = Instant::now();
+        }
     }
+    progress.emit(processed_bytes).await;
     Ok(())
+}
+
+struct RestoreProgress {
+    operation_id: Uuid,
+    instance_id: String,
+    snapshot_id: String,
+    total_bytes: u64,
+}
+
+impl RestoreProgress {
+    async fn emit(&self, processed_bytes: u64) {
+        emit_backup_progress(
+            self.operation_id,
+            Some(&self.instance_id),
+            InstanceBackupOperationType::Restore,
+            InstanceBackupProgressStage::Restoring,
+            processed_bytes.min(self.total_bytes),
+            self.total_bytes,
+            None,
+            Some(&self.snapshot_id),
+            None,
+        )
+        .await;
+    }
 }
 
 async fn apply_restore_roots(
@@ -3467,7 +3506,8 @@ async fn restore_snapshot_inner(
     operation_id: Uuid,
 ) -> crate::Result<()> {
     let state = State::get().await?;
-    let (instance_id, _) = snapshot_operation_metadata(snapshot_id).await?;
+    let (instance_id, total_bytes) =
+        snapshot_operation_metadata(snapshot_id).await?;
     let _maintenance_guard = lock_instance_maintenance(&instance_id).await;
     let _instance_guard =
         state.lock_instance_content_exclusive(&instance_id).await;
@@ -3545,6 +3585,12 @@ async fn restore_snapshot_inner(
         &staged,
         &plan.target_entries,
         &plan.roots,
+        &RestoreProgress {
+            operation_id,
+            instance_id: instance_id.clone(),
+            snapshot_id: snapshot_id.to_string(),
+            total_bytes,
+        },
     )
     .await;
     if let Err(error) = materialize {

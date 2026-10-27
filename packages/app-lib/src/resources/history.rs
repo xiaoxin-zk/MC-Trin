@@ -308,12 +308,12 @@ pub(crate) async fn prepare_rollback(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
-        local_metadata: Default::default(),
+        local_metadata: std::collections::HashMap::default(),
         retained_requirements: Vec::new(),
         resolve_dependencies: true,
         skip_unwritable_files: false,
-        import_files: Default::default(),
-        naming: Default::default(),
+        import_files: std::collections::HashMap::default(),
+        naming: super::naming::NamingPreferences::default(),
         plan,
         install_dependencies: false,
         candidates: vec![],

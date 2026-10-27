@@ -5,6 +5,7 @@ mod expected;
 mod local;
 mod members;
 
+pub(crate) use self::entry::install_managed_modpack_with_reporter;
 pub use self::entry::{
     get_modpack_target, install_modpack, install_modpack_with_reporter,
 };

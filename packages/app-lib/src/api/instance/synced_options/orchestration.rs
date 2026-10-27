@@ -133,12 +133,6 @@ pub async fn get_initialized_options() -> crate::Result<GlobalSyncedOptions> {
     Ok(options)
 }
 
-pub async fn get_synced_options_folder() -> crate::Result<PathBuf> {
-    let state = State::get().await?;
-    create_synced_directories(&state).await?;
-    Ok(synced_options_path(&state))
-}
-
 async fn get_global_options_with_state(
     state: &State,
 ) -> crate::Result<GlobalSyncedOptions> {
@@ -967,71 +961,6 @@ async fn apply_pending_changes(state: &State) -> crate::Result<()> {
                 change.instance_id,
             );
         }
-    }
-    Ok(())
-}
-
-pub async fn reconcile_all() -> crate::Result<()> {
-    let state = State::get().await?;
-    let _guard = state.lock_synced_options().await;
-    create_synced_directories(&state).await?;
-    apply_pending_changes(&state).await?;
-    let instances = crate::state::list_instances(&state.pool).await?;
-    for metadata in instances {
-        if let Err(error) =
-            reconcile_instance_with_state(&metadata, &state, false).await
-        {
-            tracing::warn!(
-                "Failed to reconcile synced options for {}: {error}",
-                metadata.instance.id
-            );
-        }
-    }
-    Ok(())
-}
-
-pub(crate) async fn monitor_persisted_processes() -> crate::Result<()> {
-    let state = State::get().await?;
-    let instance_ids =
-        sqlx::query_scalar!("SELECT DISTINCT instance_id FROM processes",)
-            .fetch_all(&state.pool)
-            .await?;
-    for instance_id in instance_ids {
-        tokio::spawn(async move {
-            loop {
-                let Ok(state) = State::get().await else {
-                    break;
-                };
-                let Ok(Some(metadata)) =
-                    crate::state::get_instance(&instance_id, &state.pool).await
-                else {
-                    break;
-                };
-                match instance_is_running(&metadata, &state).await {
-                    Ok(true) => {
-                        tokio::time::sleep(std::time::Duration::from_secs(5))
-                            .await;
-                    }
-                    Ok(false) => {
-                        if let Err(error) =
-                            reconcile_instance(&instance_id).await
-                        {
-                            tracing::warn!(
-                                "Failed to reconcile synced options after closing {instance_id}: {error}"
-                            );
-                        }
-                        break;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            "Failed to inspect the persisted process for {instance_id}: {error}"
-                        );
-                        tokio::time::sleep(std::time::Duration::from_secs(5))
-                            .await;
-                    }
-                }
-            }
-        });
     }
     Ok(())
 }

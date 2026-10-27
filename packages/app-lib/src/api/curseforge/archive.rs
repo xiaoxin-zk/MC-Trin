@@ -326,6 +326,33 @@ pub(crate) fn game_options_pack_source<R: Read + Seek>(
     ))
 }
 
+pub(crate) fn modpack_servers<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+) -> crate::Result<Vec<quartz_nbt::NbtCompound>> {
+    let prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+    let mut selected = None;
+    for index in 0..archive.len() {
+        let entry = archive.by_index(index).map_err(modpack_zip_error)?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = crate::pack::detect::decode_zip_entry_name(entry.name_raw())
+            .replace('\\', "/");
+        if let Some(relative) = name.strip_prefix(&prefix)
+            && safe_archive_relative_path(relative)? == "servers.dat"
+        {
+            selected = Some(index);
+        }
+    }
+    match selected {
+        Some(index) => crate::api::instance::synced_servers::read_pack_servers(
+            archive.by_index(index).map_err(modpack_zip_error)?,
+        ),
+        None => Ok(Vec::new()),
+    }
+}
+
 pub(crate) fn modpack_target(
     manifest: &CurseForgeModpackManifest,
 ) -> crate::Result<CurseForgeModpackTarget> {

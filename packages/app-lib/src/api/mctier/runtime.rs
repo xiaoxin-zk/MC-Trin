@@ -35,7 +35,8 @@ fn stun_binding_response(
         return None;
     }
     let message_length = u16::from_be_bytes([request[2], request[3]]) as usize;
-    if message_length % 4 != 0 || message_length + 20 != request.len() {
+    if !message_length.is_multiple_of(4) || message_length + 20 != request.len()
+    {
         return None;
     }
     let mut response = [0u8; 32];

@@ -128,7 +128,7 @@ fn read_file_cancellable(
     }
 
     let mut bytes = Vec::with_capacity(length as usize);
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     loop {
         if cancellation.is_cancelled() {
             return Err("Operation cancelled".to_string());

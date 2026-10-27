@@ -214,9 +214,12 @@ fn extend_bootstrap_ignore_argument(
             true
         }
         Value::Array(arguments) => {
-            arguments.iter_mut().fold(false, |changed, argument| {
-                extend_bootstrap_ignore_argument(argument, filenames) || changed
-            })
+            let mut changed = false;
+            for argument in arguments {
+                changed |=
+                    extend_bootstrap_ignore_argument(argument, filenames);
+            }
+            changed
         }
         Value::Object(argument) => {
             argument.get_mut("value").is_some_and(|value| {

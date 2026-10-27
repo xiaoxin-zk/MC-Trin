@@ -1482,7 +1482,7 @@ async fn upgrade_applies_solver_and_non_solver_physical_actions() {
         ownership: crate::state::instances::ContentOwnershipKind::UserAdded,
         auto_dependency: false,
         enabled: true,
-        download: StagedUpgradeDownload::Modrinth(
+        download: StagedUpgradeDownload::modrinth(
             crate::state::instances::commands::DownloadedProjectVersion {
                 file_name: "solver-upgrade.jar".to_string(),
                 path: staged_path,
@@ -1697,7 +1697,7 @@ fn test_upgrade_mutation(
         ownership: crate::state::instances::ContentOwnershipKind::UserAdded,
         auto_dependency: false,
         enabled: true,
-        download: StagedUpgradeDownload::Modrinth(
+        download: StagedUpgradeDownload::modrinth(
             crate::state::instances::commands::DownloadedProjectVersion {
                 file_name: "new.jar".to_string(),
                 path: PathBuf::from("new.jar"),

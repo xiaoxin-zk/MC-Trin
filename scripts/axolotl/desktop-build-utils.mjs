@@ -7,19 +7,40 @@ import { fileURLToPath } from 'node:url'
 export const root = fileURLToPath(new URL('../..', import.meta.url))
 export const app = path.join(root, 'apps/app')
 
+export function createSpawnInvocation(
+    command,
+    args,
+    platform = process.platform,
+    comspec = process.env.ComSpec || 'cmd.exe',
+) {
+    if (platform !== 'win32' || !/(?:pnpm|npm|\.bat|\.cmd)$/i.test(command)) {
+        return { command, args, shell: false, windowsVerbatimArguments: false }
+    }
+
+    const commandLine = [command, ...args]
+        .map((argument) => {
+            if (/["\r\n%&|<>^()!]/.test(argument))
+                throw new Error('Unsupported Windows shell argument')
+            return `"${argument}"`
+        })
+        .join(' ')
+
+    return {
+        command: comspec,
+        args: ['/d', '/s', '/c', `"${commandLine}"`],
+        shell: false,
+        windowsVerbatimArguments: true,
+    }
+}
+
 export function run(command, args, options = {}) {
-    const shell = process.platform === 'win32' && /(?:pnpm|npm|\.bat|\.cmd)$/.test(command)
-    const invocation = shell
-        ? args.map((argument) => {
-              if (/["\r\n%]/.test(argument)) throw new Error('Unsupported shell argument')
-              return `"${argument}"`
-          })
-        : args
-    const result = spawnSync(command, invocation, {
+    const invocation = createSpawnInvocation(command, args, process.platform, options.env?.ComSpec)
+    const result = spawnSync(invocation.command, invocation.args, {
         cwd: root,
         stdio: 'inherit',
         ...options,
-        shell,
+        shell: invocation.shell,
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     })
     if (result.error) throw result.error
     if (result.status !== 0) {

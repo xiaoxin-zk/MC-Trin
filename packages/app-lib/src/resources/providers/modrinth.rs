@@ -50,7 +50,7 @@ impl ModrinthProvider {
             let mut request = ProtocolRequest::get("/v3/projects");
             request.query.push(("ids".into(), serde_json::to_string(&locators)?));
             let values: Vec<Value> = serde_json::from_value(self.request(request).await?)?;
-            return Ok(locators.iter().map(|locator| values.iter().find(|value| value["id"].as_str() == Some(locator) || value["slug"].as_str().is_some_and(|slug| slug.eq_ignore_ascii_case(locator))).map(|value| protocol_document(value.clone()).map(ProviderValue::Project)).unwrap_or(Ok(ProviderValue::NotFound))).collect());
+            return Ok(locators.iter().map(|locator| values.iter().find(|value| value["id"].as_str() == Some(locator) || value["slug"].as_str().is_some_and(|slug| slug.eq_ignore_ascii_case(locator))).map(|value| protocol_document(value.clone()).map(ProviderValue::project)).unwrap_or(Ok(ProviderValue::NotFound))).collect());
         }
         if queries
             .iter()
@@ -133,7 +133,7 @@ impl ModrinthProvider {
                 let document = authors.and_then(|authors| {
                     project.document().map(|mut document| {
                         document.metadata.authors = authors;
-                        ProviderValue::Project(document)
+                        ProviderValue::project(document)
                     })
                 });
                 if values.insert(id, document).is_some() {
@@ -192,7 +192,7 @@ impl ModrinthProvider {
                     Ok(values
                         .get(id)
                         .cloned()
-                        .map(ProviderValue::Release)
+                        .map(ProviderValue::release)
                         .unwrap_or(ProviderValue::NotFound))
                 })
                 .collect());
@@ -380,7 +380,7 @@ impl ModrinthProvider {
                     )))
                     .await?,
                 )?;
-                Ok(ProviderValue::Project(project.document()?))
+                Ok(ProviderValue::project(project.document()?))
             }
             ProviderQuery::Description { id, .. } => {
                 let project: RemoteProject = serde_json::from_value(

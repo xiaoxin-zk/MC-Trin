@@ -743,6 +743,26 @@ impl MrpackZipReader {
         }
     }
 
+    async fn read_pack_servers(
+        &mut self,
+        index: usize,
+    ) -> crate::Result<Vec<quartz_nbt::NbtCompound>> {
+        match self {
+            Self::Memory(reader) => {
+                crate::api::instance::synced_servers::read_pack_servers_async(
+                    reader.reader_with_entry(index).await?,
+                )
+                .await
+            }
+            Self::File(reader) => {
+                crate::api::instance::synced_servers::read_pack_servers_async(
+                    reader.reader_with_entry(index).await?,
+                )
+                .await
+            }
+        }
+    }
+
     async fn extract_entry(
         &mut self,
         index: usize,
@@ -1876,6 +1896,22 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .collect::<crate::Result<Vec<_>>>()?;
     let game_options_source =
         game_options_source_from_overrides(&override_specs, &archive_base);
+    let server_override_index = override_specs
+        .iter()
+        .filter(|spec| spec.relative_path == "servers.dat")
+        .max_by_key(|spec| {
+            (
+                spec.entry_name
+                    .strip_prefix(&archive_base)
+                    .is_some_and(|name| name.starts_with("client-overrides/")),
+                spec.index,
+            )
+        })
+        .map(|spec| spec.index);
+    let pack_servers = match server_override_index {
+        Some(index) => zip_reader.read_pack_servers(index).await?,
+        None => Vec::new(),
+    };
     let override_total_bytes = override_specs
         .iter()
         .map(|spec| zip_reader.file().entries()[spec.index].uncompressed_size())
@@ -2225,6 +2261,13 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         crate::api::instance::capture_pack_game_options_base(
             &instance_id,
             game_options_source,
+            pack_servers,
+        )
+        .await?;
+    } else {
+        crate::api::instance::capture_pack_server_base(
+            &instance_id,
+            pack_servers,
         )
         .await?;
     }

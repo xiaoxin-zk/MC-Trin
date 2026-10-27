@@ -76,8 +76,8 @@ impl Parser {
         Self {
             format,
             message: json!({"content":""}),
-            blocks: Default::default(),
-            calls: Default::default(),
+            blocks: BTreeMap::default(),
+            calls: BTreeMap::default(),
             done: false,
         }
     }

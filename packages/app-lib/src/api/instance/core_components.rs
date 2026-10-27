@@ -346,7 +346,7 @@ pub(crate) async fn assemble_for_launch(
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum McArchiveCoreInstallResult {
     Installed {
-        component: CoreComponent,
+        component: Box<CoreComponent>,
     },
     ManualDownload {
         file_name: String,
@@ -395,7 +395,9 @@ pub async fn install_mcarchive_modloader(
     )
     .await;
     let _ = tokio::fs::remove_file(temporary).await;
-    result.map(|component| McArchiveCoreInstallResult::Installed { component })
+    result.map(|component| McArchiveCoreInstallResult::Installed {
+        component: Box::new(component),
+    })
 }
 
 pub async fn import_mcarchive_modloader(
@@ -451,7 +453,9 @@ pub async fn import_mcarchive_modloader(
         file,
     )
     .await
-    .map(|component| McArchiveCoreInstallResult::Installed { component })
+    .map(|component| McArchiveCoreInstallResult::Installed {
+        component: Box::new(component),
+    })
 }
 
 fn resolve_modloader_file<'a>(
@@ -726,7 +730,7 @@ async fn sha256_file(path: &Path) -> crate::Result<String> {
             crate::util::io::IOError::with_path(error, &path)
         })?;
         let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 262_144];
+        let mut buffer = vec![0_u8; 262_144];
         loop {
             let read = file.read(&mut buffer)?;
             if read == 0 {

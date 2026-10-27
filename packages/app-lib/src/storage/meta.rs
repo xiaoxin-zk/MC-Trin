@@ -871,7 +871,7 @@ fn verified_legacy_copy(
     options.read(true).follow(FollowSymlinks::No);
     let mut file = dir.open_with(name, &options)?;
     let mut digest = Sha1::new();
-    let mut buffer = [0; 65536];
+    let mut buffer = vec![0; 65536];
     loop {
         let length = file.read(&mut buffer)?;
         if length == 0 {

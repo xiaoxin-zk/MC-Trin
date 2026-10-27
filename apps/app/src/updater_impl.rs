@@ -178,13 +178,13 @@ async fn check_with_endpoints<R: Runtime>(
     // The channel is still validated so an unknown value fails here rather
     // than silently checking the default manifest.
     let _channel = update_channel(channel)?;
-    let mut updater = webview
+    let updater = webview
         .updater_builder()
         .endpoints(vec![update_endpoint()?])?
         .header("Accept", "application/json")?;
 
     #[cfg(target_os = "windows")]
-    {
+    let updater = {
         let install_dir = std::env::current_exe()
             .map_err(|error| {
                 theseus::Error::from(theseus::ErrorKind::OtherError(format!(
@@ -203,11 +203,11 @@ async fn check_with_endpoints<R: Runtime>(
             install_dir = %install_dir.display(),
             "Using current executable directory for Windows app updates"
         );
-        updater = updater.installer_arg(format!(
+        updater.installer_arg(format!(
             "/INSTALL_DIR=\"{}\"",
             install_dir.display()
-        ));
-    }
+        ))
+    };
 
     let updater = updater.build()?;
     updater.check().await.map_err(Into::into)

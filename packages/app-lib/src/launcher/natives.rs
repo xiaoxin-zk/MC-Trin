@@ -341,7 +341,7 @@ fn file_matches(path: &Path, size: u64, crc32: u32) -> crate::Result<bool> {
     }
     let mut file = std::fs::File::open(path)?;
     let mut hasher = Hasher::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
@@ -355,7 +355,7 @@ fn file_matches(path: &Path, size: u64, crc32: u32) -> crate::Result<bool> {
 fn sha1_file(path: &Path) -> crate::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut hasher = sha1_smol::Sha1::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
@@ -400,7 +400,7 @@ fn materialize_entry(
         .tempfile_in(parent)?;
     let mut hasher = Hasher::new();
     let mut written = 0_u64;
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let read = source.read(&mut buffer)?;
         if read == 0 {

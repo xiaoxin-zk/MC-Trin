@@ -130,7 +130,6 @@ async fn collect_candidate_paths(
     if full_scan || exhaustive {
         let found: Vec<HashSet<PathBuf>> = stream::iter(bfs_search_roots())
             .map(|root| {
-                let root = root;
                 tokio::task::spawn_blocking(move || {
                     if exhaustive {
                         bfs_exhaustive_scan(&root)
@@ -281,11 +280,11 @@ fn get_common_install_paths() -> HashSet<PathBuf> {
 
         // sdkman candidates
         let sdkman_path = home.join(".sdkman").join("candidates").join("java");
-        if sdkman_path.is_dir() {
-            if let Ok(dir) = std::fs::read_dir(sdkman_path) {
-                for entry in dir.flatten() {
-                    jre_paths.insert(entry.path().join("bin"));
-                }
+        if sdkman_path.is_dir()
+            && let Ok(dir) = std::fs::read_dir(sdkman_path)
+        {
+            for entry in dir.flatten() {
+                jre_paths.insert(entry.path().join("bin"));
             }
         }
     }
@@ -323,42 +322,42 @@ fn get_common_install_paths() -> HashSet<PathBuf> {
     if let Some(home) = dirs::home_dir() {
         // sdkman candidates
         let sdkman_path = home.join(".sdkman").join("candidates").join("java");
-        if sdkman_path.is_dir() {
-            if let Ok(dir) = std::fs::read_dir(sdkman_path) {
-                for entry in dir.flatten() {
-                    jre_paths.insert(entry.path().join("bin"));
-                }
+        if sdkman_path.is_dir()
+            && let Ok(dir) = std::fs::read_dir(sdkman_path)
+        {
+            for entry in dir.flatten() {
+                jre_paths.insert(entry.path().join("bin"));
             }
         }
 
         // asdf installs
         let asdf_path = home.join(".asdf").join("installs").join("java");
-        if asdf_path.is_dir() {
-            if let Ok(dir) = std::fs::read_dir(asdf_path) {
-                for entry in dir.flatten() {
-                    jre_paths.insert(entry.path().join("bin"));
-                }
+        if asdf_path.is_dir()
+            && let Ok(dir) = std::fs::read_dir(asdf_path)
+        {
+            for entry in dir.flatten() {
+                jre_paths.insert(entry.path().join("bin"));
             }
         }
 
         // jabba jdk
         let jabba_path = home.join(".jabba").join("jdk");
-        if jabba_path.is_dir() {
-            if let Ok(dir) = std::fs::read_dir(jabba_path) {
-                for entry in dir.flatten() {
-                    jre_paths.insert(entry.path().join("bin"));
-                }
+        if jabba_path.is_dir()
+            && let Ok(dir) = std::fs::read_dir(jabba_path)
+        {
+            for entry in dir.flatten() {
+                jre_paths.insert(entry.path().join("bin"));
             }
         }
     }
 
     // Snap packages
     let snap_path = PathBuf::from("/snap");
-    if snap_path.is_dir() {
-        if let Ok(dir) = std::fs::read_dir(snap_path) {
-            for entry in dir.flatten() {
-                jre_paths.insert(entry.path().join("bin"));
-            }
+    if snap_path.is_dir()
+        && let Ok(dir) = std::fs::read_dir(snap_path)
+    {
+        for entry in dir.flatten() {
+            jre_paths.insert(entry.path().join("bin"));
         }
     }
 
@@ -546,19 +545,19 @@ fn bfs_search_roots() -> Vec<PathBuf> {
                 continue;
             }
             let mount = disk.mount_point().to_path_buf();
-            if mount != PathBuf::from("/") && mount.as_os_str() != "/" {
+            if mount.as_path() != Path::new("/") {
                 roots.push(mount);
             }
         }
 
         // Also scan common mount directories
         for common in &["/mnt", "/media", "/run/media"] {
-            if std::path::Path::new(common).is_dir() {
-                if let Ok(entries) = std::fs::read_dir(common) {
-                    for entry in entries.flatten() {
-                        if entry.path().is_dir() {
-                            roots.push(entry.path());
-                        }
+            if std::path::Path::new(common).is_dir()
+                && let Ok(entries) = std::fs::read_dir(common)
+            {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        roots.push(entry.path());
                     }
                 }
             }

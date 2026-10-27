@@ -22,15 +22,6 @@ impl ContentOwnershipKind {
             Self::LocalDiscovered => "local_discovered",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "pack_managed" => Ok(Self::PackManaged),
-            "user_added" => Ok(Self::UserAdded),
-            "local_discovered" => Ok(Self::LocalDiscovered),
-            other => Err(unknown_value("content ownership kind", other)),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -51,18 +42,6 @@ impl PackMemberMaterializationState {
             Self::Removed => "removed",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "present" => Ok(Self::Present),
-            "pending_manual" => Ok(Self::PendingManual),
-            "missing" => Ok(Self::Missing),
-            "removed" => Ok(Self::Removed),
-            other => {
-                Err(unknown_value("pack member materialization state", other))
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -81,16 +60,6 @@ impl PackMemberOverrideKind {
             Self::Disabled => "disabled",
             Self::Removed => "removed",
             Self::Version => "version",
-        }
-    }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "none" => Ok(Self::None),
-            "disabled" => Ok(Self::Disabled),
-            "removed" => Ok(Self::Removed),
-            "version" => Ok(Self::Version),
-            other => Err(unknown_value("pack member override kind", other)),
         }
     }
 }
@@ -137,18 +106,6 @@ impl ManualDownloadOperationKind {
             Self::ContentUpdate => "content_update",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "pack_install" => Ok(Self::PackInstall),
-            "pack_update" => Ok(Self::PackUpdate),
-            "content_install" => Ok(Self::ContentInstall),
-            "content_update" => Ok(Self::ContentUpdate),
-            other => {
-                Err(unknown_value("manual download operation kind", other))
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -169,17 +126,6 @@ impl ManualDownloadState {
             Self::Imported => "imported",
             Self::Error => "error",
             Self::Cancelled => "cancelled",
-        }
-    }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "waiting" => Ok(Self::Waiting),
-            "matched" => Ok(Self::Matched),
-            "imported" => Ok(Self::Imported),
-            "error" => Ok(Self::Error),
-            "cancelled" => Ok(Self::Cancelled),
-            other => Err(unknown_value("manual download state", other)),
         }
     }
 }
@@ -243,5 +189,109 @@ mod tests {
         assert_eq!(value["targetRelativePath"], "mods/example.jar");
         assert!(value.get("target_relative_path").is_none());
         assert_eq!(value["providerProjectId"], "123");
+    }
+}
+
+impl std::str::FromStr for ContentOwnershipKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "pack_managed" => Ok(Self::PackManaged),
+            "user_added" => Ok(Self::UserAdded),
+            "local_discovered" => Ok(Self::LocalDiscovered),
+            other => Err(unknown_value("content ownership kind", other)),
+        }
+    }
+}
+
+impl std::str::FromStr for PackMemberMaterializationState {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "present" => Ok(Self::Present),
+            "pending_manual" => Ok(Self::PendingManual),
+            "missing" => Ok(Self::Missing),
+            "removed" => Ok(Self::Removed),
+            other => {
+                Err(unknown_value("pack member materialization state", other))
+            }
+        }
+    }
+}
+
+impl std::str::FromStr for PackMemberOverrideKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "none" => Ok(Self::None),
+            "disabled" => Ok(Self::Disabled),
+            "removed" => Ok(Self::Removed),
+            "version" => Ok(Self::Version),
+            other => Err(unknown_value("pack member override kind", other)),
+        }
+    }
+}
+
+impl std::str::FromStr for ManualDownloadOperationKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "pack_install" => Ok(Self::PackInstall),
+            "pack_update" => Ok(Self::PackUpdate),
+            "content_install" => Ok(Self::ContentInstall),
+            "content_update" => Ok(Self::ContentUpdate),
+            other => {
+                Err(unknown_value("manual download operation kind", other))
+            }
+        }
+    }
+}
+
+impl std::str::FromStr for ManualDownloadState {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "waiting" => Ok(Self::Waiting),
+            "matched" => Ok(Self::Matched),
+            "imported" => Ok(Self::Imported),
+            "error" => Ok(Self::Error),
+            "cancelled" => Ok(Self::Cancelled),
+            other => Err(unknown_value("manual download state", other)),
+        }
+    }
+}
+
+impl ContentOwnershipKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl PackMemberMaterializationState {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl PackMemberOverrideKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl ManualDownloadOperationKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl ManualDownloadState {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
     }
 }

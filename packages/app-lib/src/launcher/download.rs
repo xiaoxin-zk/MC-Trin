@@ -1427,8 +1427,6 @@ async fn write_version_info(path: &Path, data: Vec<u8>) -> crate::Result<()> {
     Ok(())
 }
 
-/// Bumped when derived loader metadata must be rebuilt from the base profile.
-
 fn normalize_version_timestamps(
     version: &GameVersion,
     info: &mut GameVersionInfo,

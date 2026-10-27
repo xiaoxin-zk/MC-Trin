@@ -50,23 +50,6 @@ impl LoaderComponentKind {
         }
     }
 
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "vanilla" => Ok(Self::Vanilla),
-            "forge" => Ok(Self::Forge),
-            "neoforge" => Ok(Self::NeoForge),
-            "fabric" => Ok(Self::Fabric),
-            "quilt" => Ok(Self::Quilt),
-            "cleanroom" => Ok(Self::Cleanroom),
-            "legacy_fabric" => Ok(Self::LegacyFabric),
-            "babric" => Ok(Self::Babric),
-            "optifine" => Ok(Self::OptiFine),
-            "lite_loader" => Ok(Self::LiteLoader),
-            "optifabric" => Ok(Self::OptiFabric),
-            other => Err(unknown_value("loader component kind", other)),
-        }
-    }
-
     pub fn from_loader(loader: ModLoader) -> Self {
         match loader {
             ModLoader::Vanilla => Self::Vanilla,
@@ -111,14 +94,6 @@ impl LoaderComponentRole {
         match self {
             Self::Primary => "primary",
             Self::Adjunct => "adjunct",
-        }
-    }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "primary" => Ok(Self::Primary),
-            "adjunct" => Ok(Self::Adjunct),
-            other => Err(unknown_value("loader component role", other)),
         }
     }
 }
@@ -298,5 +273,50 @@ mod tests {
                 kind
             );
         }
+    }
+}
+
+impl std::str::FromStr for LoaderComponentKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "vanilla" => Ok(Self::Vanilla),
+            "forge" => Ok(Self::Forge),
+            "neoforge" => Ok(Self::NeoForge),
+            "fabric" => Ok(Self::Fabric),
+            "quilt" => Ok(Self::Quilt),
+            "cleanroom" => Ok(Self::Cleanroom),
+            "legacy_fabric" => Ok(Self::LegacyFabric),
+            "babric" => Ok(Self::Babric),
+            "optifine" => Ok(Self::OptiFine),
+            "lite_loader" => Ok(Self::LiteLoader),
+            "optifabric" => Ok(Self::OptiFabric),
+            other => Err(unknown_value("loader component kind", other)),
+        }
+    }
+}
+
+impl std::str::FromStr for LoaderComponentRole {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "primary" => Ok(Self::Primary),
+            "adjunct" => Ok(Self::Adjunct),
+            other => Err(unknown_value("loader component role", other)),
+        }
+    }
+}
+
+impl LoaderComponentKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
+}
+
+impl LoaderComponentRole {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
     }
 }

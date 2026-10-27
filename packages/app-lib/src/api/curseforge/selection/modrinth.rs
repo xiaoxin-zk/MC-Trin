@@ -65,7 +65,7 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
             project_id: version.project_id,
             version_id: Some(version.id),
             content_type: item_type.into(),
-            selected: Default::default(),
+            selected: content_management::ResolutionPreferences::default(),
             excluded_project_ids: Vec::new(),
             force_project_ids: Vec::new(),
         },

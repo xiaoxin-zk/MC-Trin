@@ -90,7 +90,7 @@ pub async fn list_loader_versions(
             id: format!("{OPTIFINE_LOADER_PREFIX}{}", entry.version_id()),
             url: entry.download_url(),
             stable: entry.is_stable(),
-            profile_source: Default::default(),
+            profile_source: daedalus::modded::LoaderProfileSource::default(),
             fallback_url: None,
         })
         .collect())
@@ -136,7 +136,8 @@ pub async fn resolve_loader_version(
                 id: format!("{OPTIFINE_LOADER_PREFIX}{of_id}"),
                 url: String::new(),
                 stable: !of_id.to_ascii_lowercase().contains("pre"),
-                profile_source: Default::default(),
+                profile_source: daedalus::modded::LoaderProfileSource::default(
+                ),
                 fallback_url: None,
             })
         }

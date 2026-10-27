@@ -214,9 +214,9 @@ pub struct ReleaseDocument {
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ProviderValue {
     Protocol(serde_json::Value),
-    Project(ProjectDocument),
+    Project(Box<ProjectDocument>),
     Description(ResourceText),
-    Release(ReleaseDocument),
+    Release(Box<ReleaseDocument>),
     Releases(SourcePage<ResourceRelease>),
     Changelog(ResourceText),
     Search(SourcePage<SourceProjectMetadata>),
@@ -224,6 +224,16 @@ pub enum ProviderValue {
     Matches(Vec<ResourceArtifact>),
     Identified(Vec<ReleaseDocument>),
     NotFound,
+}
+
+impl ProviderValue {
+    pub(crate) fn project(document: impl Into<Box<ProjectDocument>>) -> Self {
+        Self::Project(document.into())
+    }
+
+    pub(crate) fn release(document: impl Into<Box<ReleaseDocument>>) -> Self {
+        Self::Release(document.into())
+    }
 }
 
 #[async_trait]

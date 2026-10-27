@@ -129,7 +129,7 @@ impl ResourceProvider for SearchProvider {
                         .iter()
                         .find(|entry| entry.project.project_id == *id)
                         .map(|metadata| {
-                            ProviderValue::Project(ProjectDocument {
+                            ProviderValue::project(ProjectDocument {
                                 metadata: metadata.clone(),
                                 description: ResourceText {
                                     source: self.source.clone(),

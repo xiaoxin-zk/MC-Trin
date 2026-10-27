@@ -162,15 +162,11 @@ async fn install_local_pack_file_recursive(
         // Extract the entire archive to check for sub-packs
         // First, let's list all entries to find potential sub-compressed files
         let file = std::fs::File::open(&path)?;
-        let mut archive = match zip::ZipArchive::new(file) {
-            Ok(a) => a,
-            Err(_) => {
-                // Not a valid zip, can't proceed further
-                let _ = tokio::fs::remove_dir_all(&scratch).await;
-                return Err(crate::ErrorKind::InputError(
-                    "Unrecognized modpack format: no known pack manifest was found in the archive".to_string()
-                ).into());
-            }
+        let Ok(mut archive) = zip::ZipArchive::new(file) else {
+            let _ = tokio::fs::remove_dir_all(&scratch).await;
+            return Err(crate::ErrorKind::InputError(
+                "Unrecognized modpack format: no known pack manifest was found in the archive".to_string()
+            ).into());
         };
 
         let mut sub_archive_paths = Vec::new();
@@ -315,6 +311,13 @@ async fn install_local_pack_file(
                 crate::api::instance::capture_pack_game_options_base(
                     &instance_id,
                     result.game_options_source,
+                    result.pack_servers,
+                )
+                .await?;
+            } else {
+                crate::api::instance::capture_pack_server_base(
+                    &instance_id,
+                    result.pack_servers,
                 )
                 .await?;
             }

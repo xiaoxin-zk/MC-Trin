@@ -710,7 +710,7 @@ fn installed_offline_loader_version(
         id: id.to_string(),
         url: String::new(),
         stable: false,
-        profile_source: Default::default(),
+        profile_source: d::modded::LoaderProfileSource::default(),
         fallback_url: None,
     })
 }
@@ -1623,7 +1623,7 @@ async fn install_minecraft_with_local_source(
     if has_client_processors(version_info.processors.as_deref())
         && version_info.data.is_none()
     {
-        version_info.data = Some(Default::default());
+        version_info.data = Some(std::collections::HashMap::default());
     }
     if let Some(processors) = &version_info.processors {
         let libraries_dir = state.directories.libraries_dir();

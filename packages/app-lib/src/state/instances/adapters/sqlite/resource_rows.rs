@@ -346,8 +346,8 @@ impl ResourceStore {
             ));
         };
         let lookup = crate::content_search::lookup_content_identities(
-            &[mr_slug.clone()],
-            &[cf_slug.clone()],
+            std::slice::from_ref(mr_slug),
+            std::slice::from_ref(cf_slug),
         );
         let record = lookup
             .modrinth

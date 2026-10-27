@@ -631,7 +631,7 @@ pub async fn resource_release_documents(
             Ok(QueryOutcome {
                 value: ProviderValue::Release(document),
                 ..
-            }) => Some(Ok(document)),
+            }) => Some(Ok(*document)),
             Ok(QueryOutcome {
                 value: ProviderValue::NotFound,
                 ..
@@ -671,7 +671,7 @@ pub async fn resource_project_documents(
             Ok(QueryOutcome {
                 value: ProviderValue::Project(document),
                 ..
-            }) => Some(Ok(document)),
+            }) => Some(Ok(*document)),
             Ok(QueryOutcome {
                 value: ProviderValue::NotFound,
                 ..
@@ -714,7 +714,7 @@ pub async fn resource_project_protocol(
             Ok(QueryOutcome {
                 value: ProviderValue::Project(document),
                 ..
-            }) => Some(Ok(document)),
+            }) => Some(Ok(*document)),
             Ok(QueryOutcome {
                 value: ProviderValue::NotFound,
                 ..

@@ -352,7 +352,7 @@ pub async fn download_job_list(
             });
         }
     }
-    jobs.sort_by(|a, b| b.created.cmp(&a.created));
+    jobs.sort_by_key(|job| std::cmp::Reverse(job.created));
     let offset = request
         .cursor
         .as_deref()

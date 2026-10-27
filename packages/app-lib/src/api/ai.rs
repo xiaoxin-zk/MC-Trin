@@ -2399,10 +2399,9 @@ async fn complete_openai(
         Uuid::new_v4(),
     );
     if !token.is_empty() {
-        builder = if config.protocol == AiProtocol::Azure {
-            builder.header("api-key", token)
-        } else if config.protocol == AiProtocol::AzureAi
-            && definition.id != "github"
+        builder = if config.protocol == AiProtocol::Azure
+            || (config.protocol == AiProtocol::AzureAi
+                && definition.id != "github")
         {
             builder.header("api-key", token)
         } else {
@@ -2582,7 +2581,9 @@ fn sign_bedrock_request(
     let mut signed_headers =
         "content-type;host;x-amz-content-sha256;x-amz-date".to_string();
     if let Some(token) = session_token {
-        canonical_headers.push_str(&format!("x-amz-security-token:{token}\n"));
+        canonical_headers.push_str("x-amz-security-token:");
+        canonical_headers.push_str(token);
+        canonical_headers.push('\n');
         signed_headers.push_str(";x-amz-security-token");
     }
     let canonical_request = format!(
@@ -3234,10 +3235,9 @@ pub async fn fetch_models(
             AiProtocol::Google | AiProtocol::Anthropic
         )
     {
-        builder = if config.protocol == AiProtocol::Azure {
-            builder.header("api-key", key)
-        } else if config.protocol == AiProtocol::AzureAi
-            && definition.id != "github"
+        builder = if config.protocol == AiProtocol::Azure
+            || (config.protocol == AiProtocol::AzureAi
+                && definition.id != "github")
         {
             builder.header("api-key", key)
         } else {

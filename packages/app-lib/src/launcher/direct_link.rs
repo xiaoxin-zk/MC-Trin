@@ -1477,10 +1477,10 @@ pub(crate) fn resolve_pcl_game_dir(
             LinkedLauncherDialect::PclCe => read_flat_config(
                 &launcher_root.join("PCL").join("config.v1.yml"),
             )?,
-            _ => Default::default(),
+            _ => std::collections::HashMap::default(),
         }
     } else {
-        Default::default()
+        std::collections::HashMap::default()
     };
     // TODO(direct-link): PCL/PCL-CE fullscreen and other unmapped per-version
     // settings remain P1 follow-up; Java selection, RAM, and custom JVM/game
@@ -1584,7 +1584,7 @@ fn read_flat_config(
     let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Default::default());
+            return Ok(std::collections::HashMap::default());
         }
         Err(error) => {
             return Err(crate::ErrorKind::FSError(format!(

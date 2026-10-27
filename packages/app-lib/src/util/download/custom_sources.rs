@@ -54,7 +54,7 @@ pub fn normalize_base_url(input: &str) -> crate::Result<String> {
 }
 
 pub fn normalize_download_sources(
-    sources: &mut Vec<CustomDownloadSource>,
+    sources: &mut [CustomDownloadSource],
 ) -> crate::Result<()> {
     if sources.len() > MAX_CUSTOM_DOWNLOAD_SOURCES {
         return Err(input_error("Too many custom download sources"));

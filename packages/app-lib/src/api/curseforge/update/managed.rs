@@ -7,7 +7,8 @@ use crate::api::curseforge::dto::{
     CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
 };
 use crate::api::curseforge::modpack::{
-    get_modpack_expected_members_with_reporter, install_modpack_with_reporter,
+    get_modpack_expected_members_with_reporter,
+    install_managed_modpack_with_reporter,
 };
 use crate::api::curseforge::selection::persist_manual_download;
 use crate::install::{InstallJobEventKind, InstallProgressReporter};
@@ -138,6 +139,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
             minecraft_version: game_version,
             loader,
             game_options_source: None,
+            pack_servers: Vec::new(),
         });
     }
 
@@ -162,7 +164,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     )
     .await?;
     crate::api::instance::prepare_pack_game_options_update(instance_id).await?;
-    let result = match install_modpack_with_reporter(
+    let mut result = match install_managed_modpack_with_reporter(
         CurseForgeModpackInstallRequest {
             instance_id: instance_id.to_string(),
             project_id,
@@ -334,6 +336,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         crate::api::instance::capture_pack_game_options_base(
             instance_id,
             result.game_options_source,
+            std::mem::take(&mut result.pack_servers),
         )
         .await?;
         Ok(())
@@ -393,7 +396,7 @@ async fn restore_managed_curseforge_metadata(
                     metadata.applied_content_set.game_version.clone(),
                 ),
                 protocol_version: Some(
-                    metadata.applied_content_set.protocol_version.clone(),
+                    metadata.applied_content_set.protocol_version,
                 ),
                 loader: Some(metadata.applied_content_set.loader),
                 loader_version: Some(

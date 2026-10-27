@@ -412,7 +412,7 @@ async fn fetch_loader_manifest_uncached(
     force_refresh: bool,
 ) -> crate::Result<CachedLoaderManifest> {
     let official = tokio::time::timeout(LOADER_METADATA_TIMEOUT, async {
-        let official = match (loader, game_version) {
+        match (loader, game_version) {
             ("fabric", Some(game_version)) => {
                 fetch_fabric_manifest_for_game(
                     game_version,
@@ -518,8 +518,7 @@ async fn fetch_loader_manifest_uncached(
                 .await
                 .map(|metadata| metadata.manifest);
             }
-        };
-        official
+        }
     })
     .await
     .unwrap_or_else(|_| {
@@ -1101,12 +1100,8 @@ fn meta_api_manifest(
             stable,
             profile_source: LoaderProfileSource::Json,
             fallback_url: Some(format!(
-                "{}{}{}{}{}",
+                "{}{loader}/v{fallback_format_version}/versions/{version}.json",
                 env!("MODRINTH_LAUNCHER_META_URL"),
-                loader,
-                "/v",
-                fallback_format_version,
-                format!("/versions/{version}.json"),
             )),
         })
         .collect();
@@ -1492,7 +1487,7 @@ fn parse_maven_metadata(
     url: &str,
     bytes: &[u8],
 ) -> crate::Result<MavenMetadata> {
-    let xml = std::str::from_utf8(&bytes).map_err(|error| {
+    let xml = std::str::from_utf8(bytes).map_err(|error| {
         crate::ErrorKind::OtherError(format!(
             "Maven metadata at {url} was not UTF-8: {error}"
         ))

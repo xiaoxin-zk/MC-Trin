@@ -295,14 +295,13 @@ impl<'a, P: ContentMetadataProvider> InstallResolver<'a, P> {
                 if let Some(planned_version_id) =
                     self.planned_project_versions.get(&project_id)
                 {
-                    if required {
-                        if let Some(existing) = self
+                    if required
+                        && let Some(existing) = self
                             .dependencies
                             .iter_mut()
                             .find(|existing| existing.project_id == project_id)
-                        {
-                            existing.required = true;
-                        }
+                    {
+                        existing.required = true;
                     }
                     let reason = if planned_version_id.is_empty()
                         || planned_version_id == &dependency_version.id

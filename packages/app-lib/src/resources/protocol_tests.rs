@@ -354,7 +354,7 @@ async fn force_refresh_never_falls_back_to_saved_protocol_metadata() {
     cache
         .put(
             &key,
-            &ProviderValue::Release(
+            &ProviderValue::release(
                 providers::legacy::release(mr_protocol()).unwrap(),
             ),
             -1,
@@ -533,7 +533,7 @@ async fn imported_pack_member_persists_exact_artifact_and_identity_after_cache_c
         .cache()
         .put(
             &key,
-            &ProviderValue::Release(document.clone()),
+            &ProviderValue::release(document.clone()),
             86400,
             service.cache().generation().await,
             chrono::Utc::now().timestamp_micros(),

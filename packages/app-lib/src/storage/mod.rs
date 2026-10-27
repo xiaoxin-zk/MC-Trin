@@ -152,7 +152,7 @@ pub struct StorageTree {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StorageScanEvent {
     Cached {
-        tree: StorageTree,
+        tree: Box<StorageTree>,
     },
     Progress {
         completed: usize,
@@ -504,7 +504,9 @@ pub async fn scan_storage_with_progress(
         && let Ok(bytes) = fs::read(&cache_path).await
         && let Some(tree) = decode_snapshot(&bytes, &roots)
     {
-        progress(StorageScanEvent::Cached { tree: tree.clone() });
+        progress(StorageScanEvent::Cached {
+            tree: Box::new(tree.clone()),
+        });
         if snapshot_is_fresh(&tree) {
             return Ok(tree);
         }

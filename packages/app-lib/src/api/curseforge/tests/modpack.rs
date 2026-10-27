@@ -7,7 +7,7 @@ use super::fixtures::{
 use crate::api::curseforge::archive::{
     collect_modpack_override_tasks, curseforge_override_content,
     extract_modpack_overrides, game_options_pack_source,
-    materialize_modpack_overrides, read_modpack_manifest,
+    materialize_modpack_overrides, modpack_servers, read_modpack_manifest,
     safe_archive_relative_path,
 };
 use crate::api::curseforge::catalog::unique_metadata_chunks;
@@ -424,6 +424,56 @@ fn curseforge_game_options_source_uses_manifest_override_root() {
     assert_eq!(
         game_options_pack_source(&mut archive, &manifest).unwrap(),
         Some(crate::api::instance::GameOptionsPackSource::OverridesYosbr)
+    );
+}
+
+#[test]
+fn curseforge_server_capture_uses_only_the_manifest_override_root() {
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    writer
+        .start_file("manifest.json", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer
+        .write_all(
+            br#"{"minecraft":{"version":"1.20.1"},"overrides":"pack-files"}"#,
+        )
+        .unwrap();
+    writer
+        .start_file("servers.dat", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(b"not a minecraft server list").unwrap();
+    writer
+        .start_file(
+            "pack-files/servers.dat",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    let mut server = quartz_nbt::NbtCompound::new();
+    server.insert("name", "Pack server");
+    server.insert("ip", "pack.example.test");
+    let mut servers = quartz_nbt::NbtList::new();
+    servers.push(server);
+    let mut root = quartz_nbt::NbtCompound::new();
+    root.insert("servers", servers);
+    let mut supplied_servers = Vec::new();
+    quartz_nbt::io::write_nbt(
+        &mut supplied_servers,
+        None,
+        &root,
+        quartz_nbt::io::Flavor::Uncompressed,
+    )
+    .unwrap();
+    writer.write_all(&supplied_servers).unwrap();
+    let bytes = writer.finish().unwrap().into_inner();
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let manifest = read_modpack_manifest(&mut archive).unwrap();
+
+    let servers = modpack_servers(&mut archive, &manifest).unwrap();
+    assert_eq!(servers.len(), 1);
+    assert_eq!(
+        servers[0].get::<_, &str>("ip").unwrap(),
+        "pack.example.test"
     );
 }
 

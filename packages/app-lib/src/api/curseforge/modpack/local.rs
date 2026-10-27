@@ -3,7 +3,7 @@
 use super::*;
 use crate::api::curseforge::archive::{
     game_options_pack_source, loader_type, materialize_modpack_overrides,
-    modpack_target, modpack_zip_error, read_modpack_manifest,
+    modpack_servers, modpack_target, modpack_zip_error, read_modpack_manifest,
     settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::catalog::{
@@ -135,7 +135,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
     completion_policy: crate::launcher::InstanceCompletionPolicy,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     let manifest_archive_path = archive_path.clone();
-    let (manifest, game_options_source) =
+    let (manifest, game_options_source, pack_servers) =
         tokio::task::spawn_blocking(move || {
             let file = std::fs::File::open(&manifest_archive_path)?;
             let mut archive =
@@ -143,7 +143,8 @@ pub async fn install_modpack_from_local_archive_with_reporter(
             let manifest = read_modpack_manifest(&mut archive)?;
             let game_options_source =
                 game_options_pack_source(&mut archive, &manifest)?;
-            Ok::<_, crate::Error>((manifest, game_options_source))
+            let pack_servers = modpack_servers(&mut archive, &manifest)?;
+            Ok::<_, crate::Error>((manifest, game_options_source, pack_servers))
         })
         .await??;
 
@@ -240,6 +241,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
             minecraft_version: manifest.minecraft.version,
             loader,
             game_options_source,
+            pack_servers,
         });
     }
 
@@ -318,6 +320,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
         minecraft_version: manifest.minecraft.version,
         loader,
         game_options_source,
+        pack_servers,
     })
 }
 

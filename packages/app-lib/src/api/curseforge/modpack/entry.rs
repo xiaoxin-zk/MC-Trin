@@ -3,8 +3,9 @@
 use super::*;
 use crate::api::curseforge::archive::{
     cache_instance_icon_from_url, game_options_pack_source, loader_type,
-    materialize_modpack_overrides, modpack_target, modpack_zip_error,
-    read_modpack_manifest, settle_materialized_modpack_overrides,
+    materialize_modpack_overrides, modpack_servers, modpack_target,
+    modpack_zip_error, read_modpack_manifest,
+    settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::catalog::{
     get_file, get_modpack_files, get_modpack_projects, get_project,
@@ -39,6 +40,20 @@ pub async fn install_modpack(
     request: CurseForgeModpackInstallRequest,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     install_modpack_with_reporter(request, None).await
+}
+
+pub async fn install_modpack_with_reporter(
+    request: CurseForgeModpackInstallRequest,
+    reporter: Option<InstallProgressReporter>,
+) -> crate::Result<CurseForgeModpackInstallResult> {
+    install_modpack_inner(request, reporter, true).await
+}
+
+pub(crate) async fn install_managed_modpack_with_reporter(
+    request: CurseForgeModpackInstallRequest,
+    reporter: Option<InstallProgressReporter>,
+) -> crate::Result<CurseForgeModpackInstallResult> {
+    install_modpack_inner(request, reporter, false).await
 }
 
 pub async fn get_modpack_target(
@@ -125,6 +140,7 @@ pub(super) async fn download_modpack_archive_with_reporter(
     PathBuf,
     CurseForgeModpackManifest,
     Option<crate::api::instance::GameOptionsPackSource>,
+    Vec<quartz_nbt::NbtCompound>,
 )> {
     if let Some(reporter) = reporter.as_ref() {
         let state = State::get().await?;
@@ -233,7 +249,7 @@ pub(super) async fn download_modpack_archive_with_reporter(
             .await?;
     }
     let pack_path_for_manifest = pack_path.clone();
-    let (manifest, game_options_source) =
+    let (manifest, game_options_source, pack_servers) =
         tokio::task::spawn_blocking(move || {
             let file = std::fs::File::open(&pack_path_for_manifest)?;
             let mut archive =
@@ -241,15 +257,17 @@ pub(super) async fn download_modpack_archive_with_reporter(
             let manifest = read_modpack_manifest(&mut archive)?;
             let game_options_source =
                 game_options_pack_source(&mut archive, &manifest)?;
-            Ok::<_, crate::Error>((manifest, game_options_source))
+            let pack_servers = modpack_servers(&mut archive, &manifest)?;
+            Ok::<_, crate::Error>((manifest, game_options_source, pack_servers))
         })
         .await??;
-    Ok((pack_path, manifest, game_options_source))
+    Ok((pack_path, manifest, game_options_source, pack_servers))
 }
 
-pub async fn install_modpack_with_reporter(
+async fn install_modpack_inner(
     request: CurseForgeModpackInstallRequest,
     reporter: Option<InstallProgressReporter>,
+    capture_pack_state: bool,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     let reporter =
         reporter.map(InstallProgressReporter::with_pipeline_cancellation);
@@ -327,7 +345,7 @@ pub async fn install_modpack_with_reporter(
         version_id: Some(request.file_id.to_string()),
         title: Some(project.name.clone()),
     };
-    let (pack_path, manifest, game_options_source) =
+    let (pack_path, manifest, game_options_source, mut pack_servers) =
         download_modpack_archive_with_reporter(
             request.project_id,
             request.file_id,
@@ -674,11 +692,23 @@ pub async fn install_modpack_with_reporter(
     } else {
         post_override_result?;
     }
+    if capture_pack_state
+        && content.manual_downloads.is_empty()
+        && content.failed_downloads.is_empty()
+    {
+        crate::api::instance::capture_pack_game_options_base(
+            &request.instance_id,
+            game_options_source,
+            std::mem::take(&mut pack_servers),
+        )
+        .await?;
+    }
     Ok(CurseForgeModpackInstallResult {
         content,
         overrides_written,
         minecraft_version: manifest.minecraft.version,
         loader,
         game_options_source,
+        pack_servers,
     })
 }

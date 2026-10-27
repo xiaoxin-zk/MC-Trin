@@ -195,7 +195,7 @@ fn project_values(
                         id: project_id,
                         slug: None,
                     },
-                    ProviderValue::Project(document),
+                    ProviderValue::project(document),
                 ));
             }
             if data_type == "curseforge_project" {
@@ -253,7 +253,7 @@ fn release_values(
                 release_id: release_id.clone(),
                 slug: None,
             },
-            ProviderValue::Release(document.clone()),
+            ProviderValue::release(document.clone()),
         ));
     }
     output

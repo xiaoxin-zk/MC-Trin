@@ -140,7 +140,6 @@ struct State {
     last_round_status: RoundStatus,
     active_feedback: HashMap<PoolKey, usize>,
     feedback: Option<FeedbackWindow>,
-    #[cfg(test)]
     endpoint_port: u16,
     closed: bool,
     epoch: u64,
@@ -467,7 +466,6 @@ impl EndpointSelector {
                 last_round_status: RoundStatus::NoGain,
                 active_feedback: HashMap::new(),
                 feedback: None,
-                #[cfg(test)]
                 endpoint_port: HTTPS_PORT,
                 closed: false,
                 epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
@@ -593,16 +591,10 @@ impl EndpointSelector {
                     epoch: state.epoch,
                 },
                 generation: state.generation,
-                endpoint: SocketAddr::new(selection.preferred.ip, {
-                    #[cfg(test)]
-                    {
-                        state.endpoint_port
-                    }
-                    #[cfg(not(test))]
-                    {
-                        HTTPS_PORT
-                    }
-                }),
+                endpoint: SocketAddr::new(
+                    selection.preferred.ip,
+                    state.endpoint_port,
+                ),
                 protocol,
             },
         })
@@ -843,14 +835,14 @@ impl EndpointSelector {
                 else {
                     return RoundStatus::BudgetExhausted;
                 };
+                let fixture_metered: Option<bool> = None;
                 #[cfg(test)]
                 let fixture_metered = selector
                     .probe_fixture
                     .lock()
                     .as_ref()
-                    .map(|fixture| fixture.metered);
-                #[cfg(not(test))]
-                let fixture_metered: Option<bool> = None;
+                    .map(|fixture| fixture.metered)
+                    .or(fixture_metered);
                 let unmetered = if let Some(metered) = fixture_metered {
                     !metered
                 } else {

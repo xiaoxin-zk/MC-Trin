@@ -124,8 +124,8 @@ impl MultiMcProfile {
                         .uid
                         .to_ascii_lowercase()
                         .contains("liteloader")
-                    && !(component.uid == "org.lwjgl3"
-                        && !root.join("patches/net.minecraft.json").is_file())
+                    && (component.uid != "org.lwjgl3"
+                        || root.join("patches/net.minecraft.json").is_file())
                     && !matches!(
                         component.uid.as_str(),
                         "net.minecraft"
@@ -467,11 +467,10 @@ impl MultiMcProfile {
                 let arguments =
                     info.minecraft_arguments.get_or_insert_with(String::new);
                 for tweaker in tweakers {
-                    arguments.push_str(&format!(
-                        " --tweakClass {}",
-                        shlex::try_quote(&tweaker)
-                            .map_err(|_| invalid("Invalid MultiMC tweaker"))?
-                    ));
+                    let quoted = shlex::try_quote(&tweaker)
+                        .map_err(|_| invalid("Invalid MultiMC tweaker"))?;
+                    arguments.push_str(" --tweakClass ");
+                    arguments.push_str(&quoted);
                 }
             }
         }

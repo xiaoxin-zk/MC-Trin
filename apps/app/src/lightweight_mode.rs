@@ -253,13 +253,11 @@ impl LightweightMode {
                                 // A concurrent enter may have re-activated
                                 // lightweight mode; only resume the gate when
                                 // it still matches a non-lightweight state.
-                                if !state.active {
-                                    if let Some(theseus_state) =
+                                if !state.active
+                                    && let Some(theseus_state) =
                                         theseus::State::get_if_initialized()
-                                    {
-                                        theseus_state
-                                            .resume_background_services();
-                                    }
+                                {
+                                    theseus_state.resume_background_services();
                                 }
                             }
                         }

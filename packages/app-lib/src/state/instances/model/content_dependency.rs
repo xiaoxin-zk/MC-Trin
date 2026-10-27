@@ -19,14 +19,6 @@ impl ContentDependencyKind {
             Self::Include => "include",
         }
     }
-
-    pub fn from_str(value: &str) -> crate::Result<Self> {
-        match value {
-            "required" => Ok(Self::Required),
-            "include" => Ok(Self::Include),
-            other => Err(unknown_value("content dependency kind", other)),
-        }
-    }
 }
 
 /// The `relationType` CurseForge assigns to a file dependency. Shared by the
@@ -112,4 +104,22 @@ pub struct ContentDependencyInfo {
     pub requires: Vec<ContentDependencyRef>,
     #[serde(default)]
     pub orphaned: bool,
+}
+
+impl std::str::FromStr for ContentDependencyKind {
+    type Err = crate::Error;
+
+    fn from_str(value: &str) -> crate::Result<Self> {
+        match value {
+            "required" => Ok(Self::Required),
+            "include" => Ok(Self::Include),
+            other => Err(unknown_value("content dependency kind", other)),
+        }
+    }
+}
+
+impl ContentDependencyKind {
+    pub fn from_str(value: &str) -> crate::Result<Self> {
+        <Self as std::str::FromStr>::from_str(value)
+    }
 }

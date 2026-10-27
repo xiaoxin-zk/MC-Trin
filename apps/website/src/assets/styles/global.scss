@@ -1,5 +1,6 @@
-@import '@modrinth/assets/styles/reset.scss';
-@import '@modrinth/assets/styles/variables.scss';
+@use 'sass:meta';
+@use '@modrinth/assets/styles/reset.scss';
+@use '@modrinth/assets/styles/variables.scss';
 
 // 主题化图标：图标组件同时渲染暗色/亮色两版，由主题类切换显示
 .dark-icon {
@@ -426,32 +427,6 @@ kbd {
     font-size: 0.85em !important;
 }
 
-@import './layout.scss';
-@import './utils.scss';
-@import './components.scss';
-
-// OMORPHIA FIXES
-.card {
-    outline-offset: -2px;
-}
-
-input {
-    outline: 2px solid transparent !important;
-}
-
-.button-animation {
-    transition:
-        opacity 0.5s ease-in-out,
-        filter 0.2s ease-in-out,
-        transform 0.05s ease-in-out,
-        outline-width 0.2s ease-in-out;
-}
-
-.button-transparent {
-    box-shadow: none;
-}
-
-.qc-cmp2-close-tooltip {
-    background-color: transparent;
-    color: hsl(145, 78%, 28%);
-}
+@include meta.load-css('./layout.scss');
+@include meta.load-css('./utils.scss');
+@include meta.load-css('./components.scss');

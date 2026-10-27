@@ -58,11 +58,9 @@ impl ProbeSession {
                     .cloned()
             },
         );
-        #[cfg(test)]
-        let public_candidate =
-            super::candidates::is_public_ip(candidate.ip) || fixture.is_some();
-        #[cfg(not(test))]
         let public_candidate = super::candidates::is_public_ip(candidate.ip);
+        #[cfg(test)]
+        let public_candidate = public_candidate || fixture.is_some();
         if !super::EndpointSelector::eligible_network(clients, route.proxy)
             || !crate::util::download::modrinth_cdn::is_current_url(&target.url)
             || !target.url.path().starts_with(MODRINTH_DATA_PREFIX)

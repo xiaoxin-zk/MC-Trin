@@ -18,7 +18,7 @@ const settingsOpen = ref(false)
 </template>
 
 <style lang="scss">
-@import '~/assets/styles/global.scss';
+@use '~/assets/styles/global.scss';
 
 html.accent-pink.light-mode {
     --color-on-brand: #ffffff;
@@ -28,7 +28,8 @@ html.accent-pink.light-mode {
     --landing-border-color: rgb(166 107 138 / 32%);
 }
 
-html.accent-pink.dark-mode {
+html.accent-pink.dark-mode,
+html.accent-pink.oled-mode {
     --color-on-brand: #1a1018;
     --landing-color-heading: #fff8fc;
     --landing-color-subheading: #bdb0ba;

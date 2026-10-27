@@ -1293,7 +1293,7 @@ impl ResourceProvider for PlanProvider {
                     .find(|release| &release.reference.release_id == release_id)
                     .cloned()
                     .map(|release| {
-                        ProviderValue::Release(ReleaseDocument {
+                        ProviderValue::release(ReleaseDocument {
                             release,
                             changelog: None,
                             protocol: None,

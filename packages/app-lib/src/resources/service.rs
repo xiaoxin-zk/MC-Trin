@@ -612,7 +612,7 @@ impl ResourceService {
                                     slug: None,
                                 };
                                 let value =
-                                    ProviderValue::Release(document.clone());
+                                    ProviderValue::release(document.clone());
                                 if validate_value(
                                     &flight.key.cache.source,
                                     &query,

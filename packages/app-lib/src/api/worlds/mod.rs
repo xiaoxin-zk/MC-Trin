@@ -905,31 +905,26 @@ pub async fn add_server_to_instance(
     content_kind: Option<String>,
 ) -> Result<usize> {
     let state = State::get().await?;
-    let (instance_id, instance_path, game_dir_override) =
-        resolve_instance_identity(instance_id, &state).await?;
-    let instance_dir = resolve_instance_data_dir(
-        &instance_id,
-        &instance_path,
-        game_dir_override.as_deref(),
-        &state,
-    )
-    .await?;
-    let mut servers = servers_data::read(&instance_dir).await?;
-    let insert_index = servers
-        .iter()
-        .position(|x| x.hidden)
-        .unwrap_or(servers.len());
-    servers.insert(
-        insert_index,
-        servers_data::ServerData {
-            name,
-            ip: address.clone(),
-            accept_textures: pack_status.into(),
-            hidden: false,
-            icon: None,
-        },
+    let instance_id = resolve_instance_id(instance_id, &state).await?;
+    let metadata = crate::state::get_instance(&instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
+    let data = crate::api::instance::synced_servers::server_data(
+        name,
+        address.clone(),
+        pack_status.into(),
     );
-    servers_data::write(&instance_dir, &servers).await?;
+    let insert_index = if project_id.is_some() {
+        crate::api::instance::synced_servers::ensure_managed_server(
+            &metadata, data, &state,
+        )
+        .await?
+    } else {
+        crate::api::instance::synced_servers::add_user_server(
+            &metadata, data, &state,
+        )
+        .await?
+    };
 
     if project_id.is_some() || content_kind.is_some() {
         if let Some(project_id) = &project_id {
@@ -965,31 +960,19 @@ pub async fn edit_server_in_instance(
     pack_status: ServerPackStatus,
 ) -> Result<()> {
     let state = State::get().await?;
-    let (instance_id, instance_path, game_dir_override) =
-        resolve_instance_identity(instance_id, &state).await?;
-    let instance_dir = resolve_instance_data_dir(
-        &instance_id,
-        &instance_path,
-        game_dir_override.as_deref(),
+    let instance_id = resolve_instance_id(instance_id, &state).await?;
+    let metadata = crate::state::get_instance(&instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
+    crate::api::instance::synced_servers::update_server_by_index(
+        &metadata,
+        index,
+        name,
+        address,
+        pack_status.into(),
         &state,
     )
-    .await?;
-    let mut servers = servers_data::read(&instance_dir).await?;
-    let server =
-        servers
-            .get_mut(index)
-            .filter(|x| !x.hidden)
-            .ok_or_else(|| {
-                ErrorKind::InputError(format!(
-                    "No editable server at index {index}"
-                ))
-                .as_error()
-            })?;
-    server.name = name;
-    server.ip = address;
-    server.accept_textures = pack_status.into();
-    servers_data::write(&instance_dir, &servers).await?;
-    Ok(())
+    .await
 }
 
 pub async fn remove_server_from_instance(
@@ -997,25 +980,14 @@ pub async fn remove_server_from_instance(
     index: usize,
 ) -> Result<()> {
     let state = State::get().await?;
-    let (_, instance_path, game_dir_override) =
-        resolve_instance_identity(instance_id, &state).await?;
-    let instance_dir = resolve_instance_data_dir(
-        instance_id,
-        &instance_path,
-        game_dir_override.as_deref(),
-        &state,
+    let instance_id = resolve_instance_id(instance_id, &state).await?;
+    let metadata = crate::state::get_instance(&instance_id, &state.pool)
+        .await?
+        .ok_or_else(|| ErrorKind::InputError("Unknown instance".to_string()))?;
+    crate::api::instance::synced_servers::remove_server_by_index(
+        &metadata, index, &state,
     )
-    .await?;
-    let mut servers = servers_data::read(&instance_dir).await?;
-    if servers.get(index).as_ref().is_none_or(|x| x.hidden) {
-        return Err(ErrorKind::InputError(format!(
-            "No removable server at index {index}"
-        ))
-        .into());
-    }
-    servers.remove(index);
-    servers_data::write(&instance_dir, &servers).await?;
-    Ok(())
+    .await
 }
 
 mod servers_data {
@@ -1057,25 +1029,6 @@ mod servers_data {
         )?
         .0;
         Ok(servers_data.servers)
-    }
-
-    pub async fn write(
-        instance_dir: &Path,
-        servers: &[ServerData],
-    ) -> Result<()> {
-        #[derive(Serialize, Debug)]
-        struct ServersData<'a> {
-            servers: &'a [ServerData],
-        }
-
-        let servers_dat_path = instance_dir.join("servers.dat");
-        let data = quartz_nbt::serde::serialize(
-            &ServersData { servers },
-            None,
-            quartz_nbt::io::Flavor::Uncompressed,
-        )?;
-        io::write(servers_dat_path, data).await?;
-        Ok(())
     }
 }
 

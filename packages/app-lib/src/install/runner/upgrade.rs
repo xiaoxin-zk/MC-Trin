@@ -1,8 +1,24 @@
 use super::*;
 
 pub(super) enum StagedUpgradeDownload {
-    Modrinth(crate::state::instances::commands::DownloadedProjectVersion),
-    CurseForge(crate::api::curseforge::StagedCurseForgeUpgrade),
+    Modrinth(Box<crate::state::instances::commands::DownloadedProjectVersion>),
+    CurseForge(Box<crate::api::curseforge::StagedCurseForgeUpgrade>),
+}
+
+impl StagedUpgradeDownload {
+    pub(super) fn modrinth(
+        download: impl Into<
+            Box<crate::state::instances::commands::DownloadedProjectVersion>,
+        >,
+    ) -> Self {
+        Self::Modrinth(download.into())
+    }
+
+    pub(super) fn curseforge(
+        download: impl Into<Box<crate::api::curseforge::StagedCurseForgeUpgrade>>,
+    ) -> Self {
+        Self::CurseForge(download.into())
+    }
 }
 
 pub(super) struct StagedUpgradeMutation {
@@ -995,7 +1011,7 @@ async fn stage_one_upgrade_request(
     state: &State,
 ) -> crate::Result<StagedUpgradeMutation> {
     let download = match context.provider {
-            ContentProvider::Modrinth => StagedUpgradeDownload::Modrinth(
+            ContentProvider::Modrinth => StagedUpgradeDownload::modrinth(
                 match reporter.as_ref() {
                     Some(reporter) => crate::state::instances::commands::download_project_version_with_reporter(
                         instance_id,
@@ -1035,7 +1051,7 @@ async fn stage_one_upgrade_request(
                         "CurseForge file id is invalid".to_string(),
                     )
                 })?;
-                StagedUpgradeDownload::CurseForge(
+                StagedUpgradeDownload::curseforge(
                     crate::api::curseforge::stage_curseforge_upgrade_file(
                         project_id,
                         file_id,
@@ -1150,7 +1166,7 @@ pub(super) async fn apply_upgrade_content(
                 crate::state::instances::commands::apply_downloaded_project_version_at_path(
                     instance_id,
                     &mutation.target_path,
-                    download,
+                    *download,
                     crate::state::instances::ContentSourceKind::Local,
                     mutation.ownership,
                     state,
@@ -1160,7 +1176,7 @@ pub(super) async fn apply_upgrade_content(
             StagedUpgradeDownload::CurseForge(download) => {
                 crate::api::curseforge::apply_staged_curseforge_upgrade_file(
                     instance_id,
-                    download,
+                    *download,
                     mutation.ownership,
                     &mutation.target_path,
                 )
@@ -1410,16 +1426,13 @@ async fn collect_upgrade_external_changes(
     let base = crate::api::instance::get_full_path(instance_id).await?;
     let mut changes = Vec::new();
     for relative_path in dirty_paths {
-        let path = match recovery::checked_instance_path(&base, &relative_path)
-        {
-            Ok(path) => path,
-            Err(_) => {
-                changes.push(InstanceUpgradeExternalChange {
-                    relative_path,
-                    kind: InstanceUpgradeExternalChangeKind::Modified,
-                });
-                continue;
-            }
+        let Ok(path) = recovery::checked_instance_path(&base, &relative_path)
+        else {
+            changes.push(InstanceUpgradeExternalChange {
+                relative_path,
+                kind: InstanceUpgradeExternalChangeKind::Modified,
+            });
+            continue;
         };
         let exists = tokio::fs::symlink_metadata(&path).await.is_ok();
         let kind = classify_upgrade_external_change(
@@ -1521,9 +1534,8 @@ async fn source_file_changed(
         return Ok(false);
     };
     let base = crate::api::instance::get_full_path(instance_id).await?;
-    let path = match recovery::checked_instance_path(&base, relative_path) {
-        Ok(path) => path,
-        Err(_) => return Ok(true),
+    let Ok(path) = recovery::checked_instance_path(&base, relative_path) else {
+        return Ok(true);
     };
     let metadata = match tokio::fs::symlink_metadata(&path).await {
         Ok(metadata) => metadata,

@@ -14,11 +14,15 @@ pub(super) fn ensure_available() -> std::io::Result<()> {
         let parent = executable.parent().ok_or_else(|| {
             std::io::Error::other("Cannot locate the seed map engine")
         })?;
-        let mut paths =
-            vec![parent.join("resources/seed-map/axolotl-cubiomes.dll")];
+        let release_path =
+            parent.join("resources/seed-map/axolotl-cubiomes.dll");
         #[cfg(debug_assertions)]
-        paths
-            .push(std::path::PathBuf::from(env!("AXOLOTL_CUBIOMES_BUILD_DLL")));
+        let paths = vec![
+            release_path,
+            std::path::PathBuf::from(env!("AXOLOTL_CUBIOMES_BUILD_DLL")),
+        ];
+        #[cfg(not(debug_assertions))]
+        let paths = vec![release_path];
         let mut failures = Vec::new();
         for path in paths {
             let result = unsafe { libloading::Library::new(&path) }.and_then(

@@ -71,14 +71,11 @@ fn blockbench_skin_response(
     } else {
         relative_path.to_path_buf()
     });
-    let contents = match fs::read(file_path) {
-        Ok(contents) => contents,
-        Err(_) => {
-            return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Vec::new())
-                .expect("failed to build Blockbench skin response");
-        }
+    let Ok(contents) = fs::read(file_path) else {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Vec::new())
+            .expect("failed to build Blockbench skin response");
     };
     let contents = if is_compressed_bundle {
         let mut decompressed = Vec::new();

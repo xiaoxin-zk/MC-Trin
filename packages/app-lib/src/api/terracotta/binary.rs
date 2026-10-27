@@ -112,16 +112,14 @@ pub(super) fn find_terracotta_executable(
     let mut candidates = Vec::new();
 
     while let Some(current) = pending.pop() {
-        let entries = match std::fs::read_dir(current) {
-            Ok(entries) => entries,
-            Err(_) => continue,
+        let Ok(entries) = std::fs::read_dir(current) else {
+            continue;
         };
 
         for entry in entries.flatten() {
             let path = entry.path();
-            let file_type = match entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(_) => continue,
+            let Ok(file_type) = entry.file_type() else {
+                continue;
             };
             if file_type.is_dir() {
                 pending.push(path);

@@ -23,15 +23,7 @@ impl InstanceInstallStage {
     }
 
     pub fn from_str(val: &str) -> Self {
-        match val {
-            "installed" => Self::Installed,
-            "minecraft_installing" => Self::MinecraftInstalling,
-            "installing" => Self::MinecraftInstalling,
-            "pack_installed" => Self::PackInstalled,
-            "pack_installing" => Self::PackInstalling,
-            "not_installed" => Self::NotInstalled,
-            _ => Self::NotInstalled,
-        }
+        Self::from(val)
     }
 }
 
@@ -59,14 +51,7 @@ impl LauncherFeatureVersion {
     }
 
     pub fn from_str(val: &str) -> Self {
-        match val {
-            "none" => Self::None,
-            "migrated_server_last_play_time" => {
-                Self::MigratedServerLastPlayTime
-            }
-            "migrated_launch_hooks" => Self::MigratedLaunchHooks,
-            _ => Self::None,
-        }
+        Self::from(val)
     }
 }
 
@@ -290,6 +275,68 @@ impl From<ProjectType> for content_management::ContentType {
             // Modrinth API resolution; map to Mod as a reasonable default.
             ProjectType::Schematic => Self::Mod,
             ProjectType::WorldSave => Self::Mod,
+        }
+    }
+}
+
+impl From<&str> for InstanceInstallStage {
+    fn from(val: &str) -> Self {
+        match val {
+            "installed" => Self::Installed,
+            "minecraft_installing" => Self::MinecraftInstalling,
+            "installing" => Self::MinecraftInstalling,
+            "pack_installed" => Self::PackInstalled,
+            "pack_installing" => Self::PackInstalling,
+            "not_installed" => Self::NotInstalled,
+            _ => Self::NotInstalled,
+        }
+    }
+}
+
+impl From<&str> for LauncherFeatureVersion {
+    fn from(val: &str) -> Self {
+        match val {
+            "none" => Self::None,
+            "migrated_server_last_play_time" => {
+                Self::MigratedServerLastPlayTime
+            }
+            "migrated_launch_hooks" => Self::MigratedLaunchHooks,
+            _ => Self::None,
+        }
+    }
+}
+
+impl std::str::FromStr for InstanceInstallStage {
+    type Err = crate::Error;
+
+    fn from_str(val: &str) -> crate::Result<Self> {
+        match val {
+            "installed"
+            | "minecraft_installing"
+            | "installing"
+            | "pack_installed"
+            | "pack_installing"
+            | "not_installed" => Ok(Self::from(val)),
+            other => Err(crate::ErrorKind::InputError(format!(
+                "Unsupported instance install stage {other}"
+            ))
+            .into()),
+        }
+    }
+}
+
+impl std::str::FromStr for LauncherFeatureVersion {
+    type Err = crate::Error;
+
+    fn from_str(val: &str) -> crate::Result<Self> {
+        match val {
+            "none"
+            | "migrated_server_last_play_time"
+            | "migrated_launch_hooks" => Ok(Self::from(val)),
+            other => Err(crate::ErrorKind::InputError(format!(
+                "Unsupported launcher feature version {other}"
+            ))
+            .into()),
         }
     }
 }

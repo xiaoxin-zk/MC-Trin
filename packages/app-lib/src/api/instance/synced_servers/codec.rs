@@ -5,6 +5,25 @@ use quartz_nbt::{NbtCompound, NbtList, NbtTag};
 use std::path::Path;
 use tokio::io::AsyncReadExt;
 
+pub(crate) fn read_pack_servers(
+    reader: impl std::io::Read,
+) -> crate::Result<Vec<NbtCompound>> {
+    let mut bytes = Vec::new();
+    let mut reader = std::io::Read::take(reader, MAX_SERVER_BYTES as u64 + 1);
+    std::io::Read::read_to_end(&mut reader, &mut bytes)?;
+    servers_from_bytes(bytes)
+}
+
+pub(crate) async fn read_pack_servers_async(
+    reader: impl futures::AsyncRead + Unpin,
+) -> crate::Result<Vec<NbtCompound>> {
+    let mut bytes = Vec::new();
+    let mut reader =
+        futures::AsyncReadExt::take(reader, MAX_SERVER_BYTES as u64 + 1);
+    futures::AsyncReadExt::read_to_end(&mut reader, &mut bytes).await?;
+    servers_from_bytes(bytes)
+}
+
 pub(crate) async fn read_servers(
     path: &Path,
 ) -> crate::Result<Vec<NbtCompound>> {
@@ -32,7 +51,7 @@ pub(super) async fn read_server_bytes(path: &Path) -> crate::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-pub(super) fn servers_from_bytes(
+pub(in crate::api::instance) fn servers_from_bytes(
     bytes: Vec<u8>,
 ) -> crate::Result<Vec<NbtCompound>> {
     validate_size(0, bytes.len())?;
