@@ -316,7 +316,7 @@ async fn install_local_pack_file(
                 .await?;
             } else {
                 crate::api::instance::capture_pack_server_base(
-                    &instance_id,
+                    instance_id.clone(),
                     result.pack_servers,
                 )
                 .await?;

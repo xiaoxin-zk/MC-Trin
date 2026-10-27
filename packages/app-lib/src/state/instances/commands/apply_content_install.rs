@@ -667,7 +667,7 @@ pub(crate) fn primary_version_file_name(
 pub(crate) async fn prepare_modrinth_content_change_action(
     instance_id: &str,
     action: &mut crate::install::ContentChangeAction,
-    state: &State,
+    state: std::sync::Arc<State>,
 ) -> crate::Result<()> {
     let version = CachedEntry::get_version(
         &ModrinthVersionId::new(action.target_release_id.clone())?,

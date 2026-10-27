@@ -137,7 +137,7 @@ async fn prepare_actions(
                             crate::state::instances::commands::prepare_modrinth_content_change_action(
                                 &instance_id,
                                 &mut action,
-                                &state,
+                                state.clone(),
                             )
                             .await
                         }

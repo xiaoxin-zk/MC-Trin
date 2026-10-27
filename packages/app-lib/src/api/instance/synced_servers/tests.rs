@@ -240,7 +240,7 @@ async fn modpack_server_capture_preserves_player_servers_and_rolls_back_atomical
         None,
     )];
     let prepared =
-        prepare_modpack_servers(&metadata, next_servers.clone(), &state)
+        prepare_modpack_servers(&metadata, next_servers.clone(), state.clone())
             .await
             .unwrap();
     assert_eq!(prepared[1].id, "player");
@@ -268,9 +268,10 @@ async fn modpack_server_capture_preserves_player_servers_and_rolls_back_atomical
     .unwrap();
     assert_eq!(version.as_deref(), Some("old-version"));
 
-    let prepared = prepare_modpack_servers(&metadata, next_servers, &state)
-        .await
-        .unwrap();
+    let prepared =
+        prepare_modpack_servers(&metadata, next_servers, state.clone())
+            .await
+            .unwrap();
     let mut transaction = state.pool.begin().await.unwrap();
     write_modpack_servers(&metadata, &prepared, &mut transaction)
         .await

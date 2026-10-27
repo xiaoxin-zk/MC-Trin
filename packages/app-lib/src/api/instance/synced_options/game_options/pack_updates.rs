@@ -295,7 +295,7 @@ pub(crate) async fn capture_pack_base(
     let local_servers = synced_servers::prepare_modpack_servers(
         &metadata,
         pack_servers,
-        &state,
+        state.clone(),
     )
     .await?;
     let path = options_path(&metadata, &state)?;
@@ -402,18 +402,18 @@ pub(crate) async fn capture_pack_base(
 }
 
 pub(crate) async fn capture_pack_servers_base(
-    instance_id: &str,
+    instance_id: String,
     pack_servers: Vec<quartz_nbt::NbtCompound>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _guard = state.lock_synced_options().await;
-    let metadata = crate::state::get_instance(instance_id, &state.pool)
+    let metadata = crate::state::get_instance(&instance_id, &state.pool)
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
         &metadata,
         pack_servers,
-        &state,
+        state.clone(),
     )
     .await?;
     let mut transaction = state.pool.begin().await?;

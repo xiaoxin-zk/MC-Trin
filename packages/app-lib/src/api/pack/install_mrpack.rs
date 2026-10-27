@@ -2266,7 +2266,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .await?;
     } else {
         crate::api::instance::capture_pack_server_base(
-            &instance_id,
+            instance_id.clone(),
             pack_servers,
         )
         .await?;

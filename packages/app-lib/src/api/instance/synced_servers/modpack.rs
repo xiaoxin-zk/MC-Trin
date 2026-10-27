@@ -7,6 +7,7 @@ use crate::{ErrorKind, State};
 use async_zip::base::read::seek::ZipFileReader;
 use quartz_nbt::NbtCompound;
 use std::io::Cursor;
+use std::sync::Arc;
 use uuid::Uuid;
 
 async fn replace_modpack_servers(
@@ -14,7 +15,8 @@ async fn replace_modpack_servers(
     servers: Vec<NbtCompound>,
     state: &State,
 ) -> crate::Result<()> {
-    let local = prepare_modpack_servers(metadata, servers, state).await?;
+    let local =
+        prepare_modpack_servers_with_state(metadata, servers, state).await?;
     let mut tx = state.pool.begin().await?;
     write_modpack_servers(metadata, &local, &mut tx).await?;
     tx.commit().await?;
@@ -22,6 +24,14 @@ async fn replace_modpack_servers(
 }
 
 pub(in crate::api::instance) async fn prepare_modpack_servers(
+    metadata: &InstanceMetadata,
+    servers: Vec<NbtCompound>,
+    state: Arc<State>,
+) -> crate::Result<Vec<LocalServer>> {
+    prepare_modpack_servers_with_state(metadata, servers, &state).await
+}
+
+async fn prepare_modpack_servers_with_state(
     metadata: &InstanceMetadata,
     servers: Vec<NbtCompound>,
     state: &State,
