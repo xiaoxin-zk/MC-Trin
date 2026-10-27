@@ -36,7 +36,7 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
 
     let Some(CacheValue::File(file_match)) = resource_cache_value(
         CacheValueType::File,
-        sha1,
+        sha1.to_string(),
         Some(CacheBehaviour::MustRevalidate),
     )
     .await?
@@ -45,7 +45,7 @@ pub(crate) async fn resolve_modrinth_fallback_plan(
     };
     let Some(CacheValue::Version(version)) = resource_cache_value(
         CacheValueType::Version,
-        &ModrinthVersionId::new(file_match.version_id)?.to_string(),
+        ModrinthVersionId::new(file_match.version_id)?.to_string(),
         Some(CacheBehaviour::MustRevalidate),
     )
     .await?
@@ -106,7 +106,7 @@ pub(crate) async fn preview_modrinth_fallbacks(
     for dependency in &plan.dependencies {
         let Some(CacheValue::Version(version)) = resource_cache_value(
             CacheValueType::Version,
-            &ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
+            ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
         )
         .await?
@@ -115,7 +115,7 @@ pub(crate) async fn preview_modrinth_fallbacks(
         };
         let project = resource_cache_value(
             CacheValueType::Project,
-            &ModrinthProjectId::new(dependency.project_id.clone())?.to_string(),
+            ModrinthProjectId::new(dependency.project_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
         )
         .await?
@@ -187,7 +187,7 @@ pub(crate) async fn append_modrinth_fallback_plan(
         };
         let Some(CacheValue::Version(version)) = resource_cache_value(
             CacheValueType::Version,
-            &ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
+            ModrinthVersionId::new(dependency.version_id.clone())?.to_string(),
             Some(CacheBehaviour::MustRevalidate),
         )
         .await?
@@ -238,14 +238,13 @@ pub(crate) async fn append_modrinth_fallback_plan(
 
 async fn resource_cache_value(
     type_: CacheValueType,
-    key: &str,
+    key: String,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Option<CacheValue>> {
     Ok(
-        CachedEntry::get_resource_many(type_, &[key], cache_behaviour)
+        CachedEntry::get_resource_values(type_, vec![key], cache_behaviour)
             .await?
             .into_iter()
-            .next()
-            .and_then(|entry| entry.data),
+            .next(),
     )
 }

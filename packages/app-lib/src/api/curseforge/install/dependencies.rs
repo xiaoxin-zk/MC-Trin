@@ -178,7 +178,6 @@ pub(crate) async fn enqueue_curseforge_dependencies(
     file_id: u32,
     item_type: ProjectType,
     request: &CurseForgeInstallRequest,
-    state: &State,
     installed_project_ids: &[String],
     projects: &mut HashMap<u32, CurseForgeProject>,
     pending: &mut Vec<PendingCurseForgeFile>,

@@ -20,8 +20,7 @@ use crate::state::{
 };
 use crate::util::fetch::{
     self, ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    FetchSemaphore, Integrity, ResourceClass,
-    download_to_path_without_executor,
+    Integrity, ResourceClass, download_to_path_without_executor,
 };
 use crate::util::io;
 use crate::util::io::io_error_with_lock_info;
@@ -111,16 +110,15 @@ impl ContentMetadataProvider for CachedEntryContentProvider {
         &mut self,
         version_id: &str,
     ) -> Result<Option<content_management::Version>, ResolveError> {
-        let key = version_id.to_string();
-        let entries = CachedEntry::get_resource_many(
+        let values = CachedEntry::get_resource_values(
             CacheValueType::Version,
-            &[key.as_str()],
+            vec![version_id.to_string()],
             self.cache_behaviour,
         )
         .await
         .map_err(resolve_provider_error)?;
-        let version = entries.into_iter().find_map(|entry| match entry.data {
-            Some(CacheValue::Version(version)) => Some(version),
+        let version = values.into_iter().find_map(|value| match value {
+            CacheValue::Version(version) => Some(version),
             _ => None,
         });
 
@@ -131,17 +129,15 @@ impl ContentMetadataProvider for CachedEntryContentProvider {
         &mut self,
         project_id: &str,
     ) -> Result<Vec<content_management::Version>, ResolveError> {
-        let entries = CachedEntry::get_resource_many(
+        let values = CachedEntry::get_resource_values(
             CacheValueType::ProjectVersions,
-            &[project_id],
+            vec![project_id.to_string()],
             self.cache_behaviour,
         )
         .await
         .map_err(resolve_provider_error)?;
-        let versions = entries.into_iter().find_map(|entry| match entry.data {
-            Some(CacheValue::ProjectVersions(versions)) => {
-                Some(versions.versions)
-            }
+        let versions = values.into_iter().find_map(|value| match value {
+            CacheValue::ProjectVersions(versions) => Some(versions.versions),
             _ => None,
         });
 
@@ -161,36 +157,36 @@ async fn cached_modrinth_version(
     version_id: &ModrinthVersionId,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Option<Version>> {
-    let entries = CachedEntry::get_resource_many(
+    let values = CachedEntry::get_resource_values(
         CacheValueType::Version,
-        &[version_id.as_str()],
+        vec![version_id.to_string()],
         cache_behaviour,
     )
     .await?;
-    Ok(entries.into_iter().find_map(|entry| match entry.data {
-        Some(CacheValue::Version(version)) => Some(version),
+    Ok(values.into_iter().find_map(|value| match value {
+        CacheValue::Version(version) => Some(version),
         _ => None,
     }))
 }
 
 async fn cached_modrinth_projects(
-    project_ids: &[ModrinthProjectId],
+    project_ids: Vec<ModrinthProjectId>,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Vec<Project>> {
     let project_ids = project_ids
         .iter()
-        .map(ModrinthProjectId::as_str)
+        .map(ToString::to_string)
         .collect::<Vec<_>>();
-    let entries = CachedEntry::get_resource_many(
+    let values = CachedEntry::get_resource_values(
         CacheValueType::Project,
-        &project_ids,
+        project_ids,
         cache_behaviour,
     )
     .await?;
-    Ok(entries
+    Ok(values
         .into_iter()
-        .filter_map(|entry| match entry.data {
-            Some(CacheValue::Project(project)) => Some(project),
+        .filter_map(|value| match value {
+            CacheValue::Project(project) => Some(project),
             _ => None,
         })
         .collect())
@@ -200,13 +196,16 @@ async fn cached_modrinth_project(
     project_id: &ModrinthProjectId,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Option<Project>> {
-    Ok(cached_modrinth_projects(
-        std::slice::from_ref(project_id),
+    let values = CachedEntry::get_resource_values(
+        CacheValueType::Project,
+        vec![project_id.to_string()],
         cache_behaviour,
     )
-    .await?
-    .into_iter()
-    .next())
+    .await?;
+    Ok(values.into_iter().find_map(|value| match value {
+        CacheValue::Project(project) => Some(project),
+        _ => None,
+    }))
 }
 
 fn resolver_error(error: ResolveError) -> crate::Error {
@@ -374,7 +373,7 @@ async fn resolve_install_plan_with_cache(
 
         if !project_ids.is_empty() {
             let projects =
-                cached_modrinth_projects(&project_ids, cache_behaviour).await?;
+                cached_modrinth_projects(project_ids, cache_behaviour).await?;
 
             let project_map: HashMap<String, &Project> =
                 projects.iter().map(|p| (p.id.clone(), p)).collect();
@@ -435,7 +434,7 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
 
         if !project_ids.is_empty() {
             let projects =
-                cached_modrinth_projects(&project_ids, cache_behaviour).await?;
+                cached_modrinth_projects(project_ids, cache_behaviour).await?;
 
             let project_map: HashMap<String, &Project> =
                 projects.iter().map(|p| (p.id.clone(), p)).collect();
@@ -464,7 +463,7 @@ pub(crate) async fn install_resolved_content_plan_with_reporter(
     reporter: Option<crate::install::InstallProgressReporter>,
     state: &State,
 ) -> crate::Result<Vec<String>> {
-    let total_bytes = resolved_plan_total_bytes(plan, state).await?;
+    let total_bytes = resolved_plan_total_bytes(plan).await?;
     let file_count = (plan.dependencies.len() + 1) as u64;
     let planned_contents = std::iter::once(&plan.primary)
         .chain(plan.dependencies.iter())
@@ -528,18 +527,16 @@ pub(crate) async fn install_resolved_content_plan_with_reporter(
 
 async fn resolved_plan_total_bytes(
     plan: &ResolveContentPlan,
-    state: &State,
 ) -> crate::Result<u64> {
-    let mut total = resolved_content_file_size(&plan.primary, state).await?;
+    let mut total = resolved_content_file_size(&plan.primary).await?;
     for dependency in &plan.dependencies {
-        total += resolved_content_file_size(dependency, state).await?;
+        total += resolved_content_file_size(dependency).await?;
     }
     Ok(total.max(1))
 }
 
 async fn resolved_content_file_size(
     content: &ResolvedContent,
-    state: &State,
 ) -> crate::Result<u64> {
     let version = cached_modrinth_version(
         &ModrinthVersionId::new(content.version_id.clone())?,
@@ -609,7 +606,7 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
     let was_disabled = project_path.ends_with(".disabled");
     let ownership_kind =
         content_ownership_for_path(instance_id, project_path, state).await?;
-    let total_bytes = resolved_plan_total_bytes(&plan, state).await?;
+    let total_bytes = resolved_plan_total_bytes(&plan).await?;
     let file_count = (plan.dependencies.len() + 1) as u64;
     let mut base_bytes = 0_u64;
     let primary_progress =
@@ -633,7 +630,7 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
         state,
     )
     .await?;
-    base_bytes += resolved_content_file_size(&plan.primary, state).await?;
+    base_bytes += resolved_content_file_size(&plan.primary).await?;
 
     if was_disabled {
         new_path =
@@ -665,7 +662,7 @@ pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
             )
             .await?,
         );
-        base_bytes += resolved_content_file_size(dependency, state).await?;
+        base_bytes += resolved_content_file_size(dependency).await?;
     }
     persist_resolved_plan_dependency_edges(
         instance_id,

@@ -290,7 +290,6 @@ pub(crate) async fn install_file_with_metrics(
             file_id,
             item_type,
             &request,
-            &state,
             &installed_project_ids,
             &mut projects,
             &mut pending,

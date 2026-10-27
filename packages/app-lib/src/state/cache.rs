@@ -1857,7 +1857,7 @@ impl CachedEntry {
     #[tracing::instrument(skip(keys))]
     pub(crate) async fn get_resource_many(
         type_: CacheValueType,
-        keys: &[&str],
+        keys: Vec<String>,
         cache_behaviour: Option<CacheBehaviour>,
     ) -> crate::Result<Vec<Self>> {
         if keys.is_empty() {
@@ -1875,14 +1875,27 @@ impl CachedEntry {
             .resources()
             .await
             .map_err(crate::resources::protocol::error)?;
+        let key_refs = keys.iter().map(String::as_str).collect::<Vec<_>>();
         crate::resources::protocol::many(
             service,
             type_,
-            keys,
+            &key_refs,
             cache_behaviour,
             &tokio_util::sync::CancellationToken::new(),
         )
         .await
+    }
+
+    pub(crate) async fn get_resource_values(
+        type_: CacheValueType,
+        keys: Vec<String>,
+        cache_behaviour: Option<CacheBehaviour>,
+    ) -> crate::Result<Vec<CacheValue>> {
+        Ok(Self::get_resource_many(type_, keys, cache_behaviour)
+            .await?
+            .into_iter()
+            .filter_map(|entry| entry.data)
+            .collect())
     }
 
     async fn persist_fetched_cache_best_effort(
@@ -2000,7 +2013,12 @@ impl CachedEntry {
         }
 
         if crate::resources::protocol::owns(type_) {
-            return Self::get_resource_many(type_, keys, cache_behaviour).await;
+            return Self::get_resource_many(
+                type_,
+                keys.iter().map(|key| (*key).to_string()).collect(),
+                cache_behaviour,
+            )
+            .await;
         }
 
         let cache_behaviour = cache_behaviour.unwrap_or_default();
