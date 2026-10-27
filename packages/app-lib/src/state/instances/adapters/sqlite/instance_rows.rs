@@ -542,13 +542,10 @@ impl InstanceMetadataRow {
     }
 }
 
-pub(crate) async fn get_instance_by_id<'e, E>(
+pub(crate) async fn get_instance_by_id(
     id: &str,
-    exec: E,
-) -> crate::Result<Option<Instance>>
-where
-    E: Executor<'e, Database = Sqlite> + Copy,
-{
+    pool: &SqlitePool,
+) -> crate::Result<Option<Instance>> {
     let row = sqlx::query_as::<_, InstanceRow>(
         "
 		SELECT
@@ -573,14 +570,14 @@ where
 		",
     )
     .bind(id)
-    .fetch_optional(exec)
+    .fetch_optional(pool)
     .await?;
 
     let Some(row) = row else {
         return Ok(None);
     };
     let mut instance: Instance = row.try_into()?;
-    let fields = get_direct_link_fields(id, exec).await?;
+    let fields = get_direct_link_fields(id, pool).await?;
     fields.apply_to(&mut instance);
 
     Ok(Some(instance))

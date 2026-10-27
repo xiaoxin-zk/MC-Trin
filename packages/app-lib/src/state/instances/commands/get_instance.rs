@@ -31,18 +31,27 @@ pub(crate) async fn get_instance_metadata(
     instance_id: &str,
     pool: &SqlitePool,
 ) -> crate::Result<Option<InstanceMetadata>> {
+    get_instance_metadata_with_pool(instance_id, pool.clone()).await
+}
+
+pub(crate) async fn get_instance_metadata_with_pool(
+    instance_id: &str,
+    pool: SqlitePool,
+) -> crate::Result<Option<InstanceMetadata>> {
     let Some(record) =
-        instance_rows::get_instance_metadata_by_id(instance_id, pool).await?
+        instance_rows::get_instance_metadata_by_id(instance_id, &pool).await?
     else {
         return Ok(None);
     };
     let loader_components =
-        loader_component_rows::list_loader_components(instance_id, pool)
+        loader_component_rows::list_loader_components(instance_id, &pool)
             .await?;
     let mut metadata = InstanceMetadata::from_record(record, loader_components);
-    metadata.synced_options =
-        instance_rows::get_instance_synced_options(&metadata.instance.id, pool)
-            .await?;
+    metadata.synced_options = instance_rows::get_instance_synced_options(
+        &metadata.instance.id,
+        &pool,
+    )
+    .await?;
     Ok(Some(metadata))
 }
 

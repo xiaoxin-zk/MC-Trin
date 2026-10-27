@@ -732,7 +732,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
             current_path,
             current_provider_file_name.as_deref(),
             &target_provider_file_name,
-            &state.pool,
+            pool.clone(),
         )
         .await?,
     );
@@ -866,9 +866,11 @@ async fn configured_update_relative_path(
     current_path: &str,
     old_name: Option<&str>,
     new_name: &str,
-    pool: &sqlx::SqlitePool,
+    pool: sqlx::SqlitePool,
 ) -> crate::Result<String> {
-    let settings = crate::state::Settings::get(pool).await?;
+    let mut connection = pool.acquire().await?;
+    let settings =
+        crate::state::Settings::get_with_connection(&mut connection).await?;
     let current_name = current_path.rsplit('/').next().unwrap_or(current_path);
     let current_name = current_name
         .strip_suffix(".disabled")
@@ -896,7 +898,7 @@ pub(crate) async fn finalize_updated_project_path(
         old_path,
         old_provider_file_name,
         new_provider_file_name,
-        &state.pool,
+        state.pool.clone(),
     )
     .await?;
     let mut old_archived = false;

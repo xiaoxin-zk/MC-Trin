@@ -291,7 +291,11 @@ pub(crate) async fn capture_pack_base(
     let pool = state.pool.clone();
     let _guard = state.lock_synced_options().await;
     let instance_id = instance_id.as_str();
-    let metadata = crate::state::get_instance(instance_id, &pool)
+    let metadata =
+        crate::state::instances::commands::get_instance_metadata_with_pool(
+            instance_id,
+            pool.clone(),
+        )
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
@@ -411,7 +415,11 @@ pub(crate) async fn capture_pack_servers_base(
     let pool = state.pool.clone();
     let _guard = state.lock_synced_options().await;
     let instance_id = instance_id.as_str();
-    let metadata = crate::state::get_instance(instance_id, &pool)
+    let metadata =
+        crate::state::instances::commands::get_instance_metadata_with_pool(
+            instance_id,
+            pool.clone(),
+        )
         .await?
         .ok_or_else(|| input_error("Unknown instance"))?;
     let local_servers = synced_servers::prepare_modpack_servers(
