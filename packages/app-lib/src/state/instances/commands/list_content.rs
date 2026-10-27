@@ -173,7 +173,19 @@ pub(crate) async fn get_installed_project_ids_for_instance(
     content_set_id: Option<String>,
     state: &State,
 ) -> crate::Result<Vec<String>> {
-    let pool = state.pool.clone();
+    get_installed_project_ids_for_instance_with_pool(
+        instance_id,
+        content_set_id,
+        state.pool.clone(),
+    )
+    .await
+}
+
+pub(crate) async fn get_installed_project_ids_for_instance_with_pool(
+    instance_id: String,
+    content_set_id: Option<String>,
+    pool: SqlitePool,
+) -> crate::Result<Vec<String>> {
     let resolved = resolve_content_scope_with_instance(
         instance_id,
         content_set_id,

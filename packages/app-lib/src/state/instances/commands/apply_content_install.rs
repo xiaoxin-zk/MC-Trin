@@ -293,7 +293,7 @@ pub(crate) async fn resolve_install_plan(
         request,
         Some(CacheBehaviour::MustRevalidate),
         DependencyPolicy::IncludeOptional,
-        state,
+        state.pool.clone(),
     )
     .await
 }
@@ -308,7 +308,7 @@ pub(crate) async fn resolve_update_plan(
         request,
         Some(CacheBehaviour::MustRevalidate),
         DependencyPolicy::RequiredOnly,
-        state,
+        state.pool.clone(),
     )
     .await
 }
@@ -318,9 +318,8 @@ async fn resolve_install_plan_with_cache(
     request: InstanceInstallProjectRequest,
     cache_behaviour: Option<CacheBehaviour>,
     dependency_policy: DependencyPolicy,
-    state: &State,
+    pool: sqlx::SqlitePool,
 ) -> crate::Result<ResolveContentPlan> {
-    let pool = state.pool.clone();
     let content_set = {
         let mut connection = pool.acquire().await?;
         content_rows::get_applied_content_set(&instance_id, &mut *connection)
@@ -332,10 +331,10 @@ async fn resolve_install_plan_with_cache(
         ))
     })?;
     let existing_project_ids =
-        crate::state::get_installed_project_ids_for_instance(
+        crate::state::instances::commands::get_installed_project_ids_for_instance_with_pool(
             instance_id.clone(),
             None,
-            state,
+            pool.clone(),
         )
         .await?;
     let provider = CachedEntryContentProvider { cache_behaviour };
@@ -733,7 +732,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         },
         None,
         DependencyPolicy::RequiredOnly,
-        &state,
+        state.pool.clone(),
     )
     .await?;
     let target_provider_file_name = primary_version_file_name(&version)?;
@@ -781,7 +780,8 @@ pub(crate) async fn prepare_modrinth_content_change_action(
                 DownloadReason::Dependency
             },
             resolved.dependent_on_version_id.clone(),
-            &state,
+            state.pool.clone(),
+            state.directories.caches_dir().to_path_buf(),
         )
         .await?;
         let id = format!("modrinth:{}", resolved.version_id);
@@ -1252,7 +1252,19 @@ async fn resolve_content_scope_with_owned_id(
     content_set_id: Option<String>,
     state: &State,
 ) -> crate::Result<ContentScope> {
-    let pool = state.pool.clone();
+    resolve_content_scope_with_pool(
+        instance_id,
+        content_set_id,
+        state.pool.clone(),
+    )
+    .await
+}
+
+async fn resolve_content_scope_with_pool(
+    instance_id: String,
+    content_set_id: Option<String>,
+    pool: sqlx::SqlitePool,
+) -> crate::Result<ContentScope> {
     let instance =
         instance_rows::get_instance_by_id_with_pool(instance_id, pool.clone())
             .await?
@@ -1410,7 +1422,8 @@ async fn download_project_version_with_reporting(
         version_id.to_string(),
         reason,
         dependent_on_version_id,
-        state,
+        state.pool.clone(),
+        state.directories.caches_dir().to_path_buf(),
     )
     .await?;
     let integrity = prepared.integrity.clone();
@@ -1542,11 +1555,12 @@ pub(crate) async fn prepare_version_download(
     version_id: String,
     reason: DownloadReason,
     dependent_on_version_id: Option<String>,
-    state: &State,
+    pool: sqlx::SqlitePool,
+    cache_dir: PathBuf,
 ) -> crate::Result<PreparedVersionDownload> {
-    let pool = state.pool.clone();
     let scope =
-        resolve_content_scope_with_owned_id(instance_id, None, state).await?;
+        resolve_content_scope_with_pool(instance_id, None, pool.clone())
+            .await?;
     let content_set = {
         let mut connection = pool.acquire().await?;
         content_rows::get_content_set(&scope.content_set_id, &mut *connection)
@@ -1586,9 +1600,7 @@ pub(crate) async fn prepare_version_download(
     };
     let file_name = io::sanitize_download_file_name(&file.filename)?;
     let file_name_path = Path::new(&file_name);
-    let path = state
-        .directories
-        .caches_dir()
+    let path = cache_dir
         .join("content")
         .join("modrinth")
         .join(&version.id)

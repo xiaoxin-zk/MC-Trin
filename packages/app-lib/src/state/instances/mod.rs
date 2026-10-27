@@ -22,6 +22,7 @@ pub(crate) use self::commands::{
 pub(crate) use self::commands::{
     dependencies_to_content_items, finalize_project_materialization,
     get_content_projects, get_installed_project_ids_for_instance,
+    get_installed_project_ids_for_instance_with_pool,
     get_instance_install_candidates, get_linked_modpack_info,
     instance_content_root, list_content, list_content_by_paths,
     list_content_sets, list_linked_modpack_content,

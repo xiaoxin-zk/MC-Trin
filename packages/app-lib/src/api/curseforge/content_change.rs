@@ -238,7 +238,8 @@ pub(crate) async fn prepare_curseforge_content_change_action(
                 fallback.version_id.clone(),
                 crate::util::fetch::DownloadReason::Dependency,
                 None,
-                &state,
+                state.pool.clone(),
+                state.directories.caches_dir().to_path_buf(),
             )
             .await?;
         action.files.push(crate::install::ContentChangeFile {
