@@ -122,6 +122,8 @@ jobs:
       - name: Run rust-clippy
         id: clippy
         shell: bash
+        env:
+          RUSTFLAGS: -A clippy::default_constructed_unit_structs
         run: cargo clippy
           --all-features
           --message-format=json
