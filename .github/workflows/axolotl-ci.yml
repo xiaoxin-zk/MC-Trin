@@ -247,7 +247,7 @@ jobs:
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
         timeout-minutes: 20
-        run: cargo test --package theseus synced_ -- --test-threads=1
+        run: cargo test --package theseus synced_ -- --test-threads=1 --nocapture
       - name: Test modpack game settings source detection
         if: runner.os == 'Linux'
         run: cargo test --package theseus pack_options_source

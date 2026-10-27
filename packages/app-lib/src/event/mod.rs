@@ -424,6 +424,7 @@ pub enum InstancePayloadType {
 }
 
 #[derive(Serialize, Clone)]
+#[cfg_attr(not(feature = "tauri"), allow(dead_code))]
 pub struct InstanceGroupsChangedPayload {
     pub instance_ids: Vec<String>,
 }
