@@ -1,5 +1,6 @@
 use super::*;
 use futures::StreamExt;
+use std::collections::BTreeMap;
 
 pub(super) enum Format {
     Openai,
@@ -66,8 +67,8 @@ pub(super) async fn read(
 struct Parser {
     format: Format,
     message: Value,
-    blocks: std::collections::BTreeMap<usize, Value>,
-    calls: std::collections::BTreeMap<usize, Value>,
+    blocks: BTreeMap<usize, Value>,
+    calls: BTreeMap<usize, Value>,
     done: bool,
 }
 

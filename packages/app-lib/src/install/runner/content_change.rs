@@ -115,12 +115,14 @@ async fn prepare_actions(
     let concurrency = state.download_concurrency().max(1);
     let mut completed = 0_u64;
     {
+        // Spawned work must own its inputs instead of borrowing from `actions`.
         let pending_actions = actions
             .iter()
             .enumerate()
             .filter(|(_, action)| needs_preparation(action))
-            .map(|(index, action)| (index, action.clone()));
-        let mut preparations = spawn_bounded(pending_actions.map(
+            .map(|(index, action)| (index, action.clone()))
+            .collect::<Vec<_>>();
+        let mut preparations = spawn_bounded(pending_actions.into_iter().map(
             |(index, mut action)| {
                 let cancellation = cancellation.clone();
                 let instance_id = instance_id.to_string();

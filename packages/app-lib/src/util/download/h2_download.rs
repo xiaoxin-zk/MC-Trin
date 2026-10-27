@@ -35,6 +35,7 @@ use http::header::{ACCEPT_ENCODING, LOCATION, RANGE, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use std::path::Path;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::Arc;
 #[cfg(test)]
 use std::time::Duration;
