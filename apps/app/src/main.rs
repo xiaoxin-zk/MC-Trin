@@ -732,6 +732,7 @@ fn main() {
     std::mem::forget(rt);
     tauri::async_runtime::set(handle);
 
+    #[allow(clippy::default_constructed_unit_structs)]
     let tauri_context = tauri::tauri_build_context!();
 
     let _log_guard = theseus::start_logger(&tauri_context.config().identifier);
