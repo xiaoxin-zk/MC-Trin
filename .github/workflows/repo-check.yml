@@ -127,7 +127,9 @@ jobs:
         run: cargo clippy
           --all-features
           --message-format=json
-          -- -A clippy::default_constructed_unit_structs | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
+          -- -A clippy::default_constructed_unit_structs |
+          jq -c 'select(.message.code.code != "clippy::default_constructed_unit_structs")' |
+          clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
       - name: Upload analysis results to GitHub
         if: ${{ !cancelled() && (success() || steps.clippy.outcome == 'failure') }}
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4

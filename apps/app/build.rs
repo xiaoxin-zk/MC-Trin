@@ -23,21 +23,6 @@ fn copy_if_changed(source: &std::path::Path, destination: &std::path::Path) {
     }
 }
 
-fn allow_generated_tauri_lints() {
-    let Some(out_dir) = std::env::var_os("OUT_DIR") else {
-        return;
-    };
-    let path = std::path::PathBuf::from(out_dir).join("tauri-build-context.rs");
-    let Ok(contents) = std::fs::read_to_string(&path) else {
-        return;
-    };
-    let attribute = "#![allow(clippy::default_constructed_unit_structs)]\n";
-    if !contents.starts_with(attribute) {
-        std::fs::write(&path, format!("{attribute}{contents}"))
-            .expect("Write generated Tauri lint configuration");
-    }
-}
-
 fn newest_mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
     let mut newest: Option<std::time::SystemTime> = None;
     if path.is_file() {
@@ -1218,5 +1203,4 @@ fn main() {
             ),
     )
     .expect("Failed to run tauri-build");
-    allow_generated_tauri_lints();
 }
