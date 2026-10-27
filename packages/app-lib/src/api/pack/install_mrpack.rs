@@ -32,7 +32,7 @@ use crate::util::download::constants::NATIVE_CONTENT_FINALIZE_CONCURRENCY;
 use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    Integrity, ResourceClass, download_to_path,
+    Integrity, ResourceClass, download_to_path_without_executor,
 };
 use crate::util::io;
 use async_zip::base::read::seek::ZipFileReader as SeekZipFileReader;
@@ -1709,7 +1709,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                 // possible. The downloader can then verify/reuse it without
                 // ever deleting the live target when validation fails.
                 seed_mrpack_staged_download(&target_path, &download_path).await;
-                let download = match download_to_path(
+                let download = match download_to_path_without_executor(
                     DownloadRequest::new(primary_url, ResourceClass::Modpack)
                         .with_candidate_urls(
                             project.downloads.iter().skip(1).cloned(),
@@ -1726,7 +1726,6 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                         ),
                     &download_path,
                     &state.download_semaphore,
-                    &state.pool,
                     None,
                 )
                 .await

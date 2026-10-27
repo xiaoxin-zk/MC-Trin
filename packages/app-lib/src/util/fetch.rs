@@ -2202,6 +2202,39 @@ where
     Ok(serde_json::from_slice(&result)?)
 }
 
+pub(crate) async fn fetch_with_pool(
+    url: &str,
+    sha1: Option<&str>,
+    download_meta: Option<&DownloadMeta>,
+    uri_path: Option<&'static str>,
+    semaphore: &FetchSemaphore,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<Bytes> {
+    let method = Method::GET;
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, pool).await?;
+    let client = configured_client().await?;
+    fetch_advanced_with_credentials(
+        method,
+        &url,
+        sha1,
+        None,
+        None,
+        download_meta,
+        None,
+        uri_path,
+        semaphore,
+        requires_auth,
+        credentials,
+        &client,
+        None,
+        None,
+        None,
+        METADATA_ATTEMPT_BUDGET,
+    )
+    .await
+}
+
 /// Like [`fetch_json`], but rejects responses that are empty JSON arrays.
 ///
 /// Mirrors can serve an empty array for collection endpoints they have not
@@ -6256,10 +6289,20 @@ fn error_chain(error: &crate::Error) -> String {
 /// moves it into place.
 #[tracing::instrument(skip(semaphore, _exec, progress, request, destination))]
 pub async fn download_to_path(
-    mut request: DownloadRequest,
+    request: DownloadRequest,
     destination: impl AsRef<Path>,
     semaphore: &FetchSemaphore,
     _exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    progress: Option<&mut FetchProgressFn<'_>>,
+) -> crate::Result<DownloadResult> {
+    download_to_path_without_executor(request, destination, semaphore, progress)
+        .await
+}
+
+pub(crate) async fn download_to_path_without_executor(
+    mut request: DownloadRequest,
+    destination: impl AsRef<Path>,
+    semaphore: &FetchSemaphore,
     progress: Option<&mut FetchProgressFn<'_>>,
 ) -> crate::Result<DownloadResult> {
     let tracking = request.install_tracking.clone();

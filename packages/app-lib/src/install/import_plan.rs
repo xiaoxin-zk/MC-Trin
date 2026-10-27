@@ -853,7 +853,7 @@ async fn load_assets_index(
         }
     }
 
-    crate::util::fetch::fetch_json(
+    crate::util::fetch::fetch_json_with_pool(
         Method::GET,
         &version_info.asset_index.url,
         Some(&version_info.asset_index.sha1),

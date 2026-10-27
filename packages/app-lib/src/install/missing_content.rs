@@ -10,7 +10,7 @@ use crate::util::download::constants::DOWNLOAD_SCAN_CACHE_TTL;
 use crate::util::download::constants::DOWNLOAD_STABILITY_WINDOW;
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, Integrity, ResourceClass,
-    download_to_path, verify_file,
+    download_to_path_without_executor, verify_file,
 };
 use futures::{StreamExt, stream};
 use parking_lot::Mutex;
@@ -732,7 +732,7 @@ pub async fn retry_missing_modpack_file(
         }])
         .await?;
 
-    let result = download_to_path(
+    let result = download_to_path_without_executor(
         DownloadRequest::new(primary_url, ResourceClass::Modpack)
             .with_candidate_urls(file.download_urls.iter().skip(1).cloned())
             .with_integrity(integrity)
@@ -743,7 +743,6 @@ pub async fn retry_missing_modpack_file(
             ),
         &target,
         &state.download_semaphore,
-        &state.pool,
         None,
     )
     .await;

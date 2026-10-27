@@ -168,11 +168,14 @@ async fn persist_manual_modpack_archive(
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
-    let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-        instance_id,
-        &state.pool,
-    )
-    .await?
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         ErrorKind::InputError(
             "Instance has no applied content set".to_string(),
@@ -298,11 +301,14 @@ pub(crate) async fn persist_manual_download(
     let project_type = managed_project_type(&download.project_type)?;
     let state = State::get().await?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
-    let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-        instance_id,
-        &state.pool,
-    )
-    .await?
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         ErrorKind::InputError(
             "Instance has no applied content set".to_string(),

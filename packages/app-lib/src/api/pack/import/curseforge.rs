@@ -7,10 +7,7 @@ use crate::{
     install::{InstallPhaseDetails, InstallProgressReporter},
     prelude::ModLoader,
     state::{AppliedContentSetPatch, EditInstance, InstanceInstallStage},
-    util::{
-        fetch::{fetch, write_cached_icon},
-        io,
-    },
+    util::{fetch::write_cached_icon, io},
 };
 
 use super::{finish_import, instance_json, recache_icon};
@@ -113,7 +110,7 @@ pub async fn import_curseforge(
         thumbnail_url: Some(thumbnail_url),
     }) = minecraft_instance.installed_modpack.clone()
     {
-        let icon_bytes = fetch(
+        let icon_bytes = crate::util::fetch::fetch_with_pool(
             &thumbnail_url,
             None,
             None,

@@ -455,11 +455,10 @@ async fn download_minecraft_file_with_candidates(
         );
     }
     let Some(progress) = progress else {
-        return download_to_path(
+        return download_to_path_without_executor(
             request,
             destination,
             semaphore,
-            &st.pool,
             None,
         )
         .await;
@@ -487,11 +486,10 @@ async fn download_minecraft_file_with_candidates(
         }
     };
 
-    let result = match download_to_path(
+    let result = match download_to_path_without_executor(
         request,
         destination,
         semaphore,
-        &st.pool,
         Some(&mut progress_fn as &mut FetchProgressFn<'_>),
     )
     .await
@@ -1186,7 +1184,7 @@ pub async fn download_version_info(
                 )
                 .await?;
         }
-        let mut info = match fetch_json(
+        let mut info = match fetch_json_with_pool(
             Method::GET,
             &version.url,
             Some(&version.sha1),
@@ -1205,27 +1203,28 @@ pub async fn download_version_info(
                     error = %primary_error,
                     "Version metadata failed; looking up the Mojang fallback"
                 );
-                let manifest: d::minecraft::VersionManifest = match fetch_json(
-                    Method::GET,
-                    d::minecraft::VERSION_MANIFEST_URL,
-                    None,
-                    None,
-                    None,
-                    &st.api_semaphore,
-                    &st.pool,
-                )
-                .await
-                {
-                    Ok(manifest) => manifest,
-                    Err(error) => {
-                        tracing::warn!(
-                            minecraft_version = %version.id,
-                            error = %error,
-                            "Mojang manifest fallback failed"
-                        );
-                        return Err(primary_error);
-                    }
-                };
+                let manifest: d::minecraft::VersionManifest =
+                    match fetch_json_with_pool(
+                        Method::GET,
+                        d::minecraft::VERSION_MANIFEST_URL,
+                        None,
+                        None,
+                        None,
+                        &st.api_semaphore,
+                        &st.pool,
+                    )
+                    .await
+                    {
+                        Ok(manifest) => manifest,
+                        Err(error) => {
+                            tracing::warn!(
+                                minecraft_version = %version.id,
+                                error = %error,
+                                "Mojang manifest fallback failed"
+                            );
+                            return Err(primary_error);
+                        }
+                    };
                 let Some(fallback_version) = manifest
                     .versions
                     .into_iter()
@@ -1252,7 +1251,7 @@ pub async fn download_version_info(
                         )
                         .await?;
                 }
-                fetch_json(
+                fetch_json_with_pool(
                     Method::GET,
                     &fallback_version.url,
                     Some(&fallback_version.sha1),

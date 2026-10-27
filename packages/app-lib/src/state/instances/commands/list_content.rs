@@ -21,7 +21,8 @@ use crate::state::{
 };
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    FetchSemaphore, Integrity, ResourceClass, download_to_path, sha1_async,
+    FetchSemaphore, Integrity, ResourceClass,
+    download_to_path_without_executor, sha1_async,
 };
 use async_zip::tokio::read::fs::ZipFileReader;
 use dashmap::DashMap;
@@ -43,10 +44,16 @@ struct EntryMaps {
 
 async fn load_entry_maps(
     content_set_id: &str,
-    pool: &SqlitePool,
+    pool: SqlitePool,
 ) -> crate::Result<EntryMaps> {
-    let entries =
-        sqlite::content_rows::get_content_entries(content_set_id, pool).await?;
+    let entries = {
+        let mut connection = pool.acquire().await?;
+        sqlite::content_rows::get_content_entries(
+            content_set_id,
+            &mut *connection,
+        )
+        .await?
+    };
     let entries_by_file_id = entries
         .iter()
         .filter_map(|entry| {
@@ -68,7 +75,7 @@ async fn load_entry_maps(
             ref.provider_release_id IS NULL, ref.provider_release_id",
     )
     .bind(content_set_id)
-    .fetch_all(pool)
+        .fetch_all(&pool)
     .await?;
     for row in rows {
         let Some(file_id) = row.try_get::<Option<String>, _>("file_id")? else {
@@ -1354,7 +1361,7 @@ async fn content_projects_for_files(
     update_lookup: ContentUpdateLookup,
 ) -> crate::Result<DashMap<String, ContentFile>> {
     let mut entry_maps =
-        load_entry_maps(&resolved.content_set.id, &state.pool).await?;
+        load_entry_maps(&resolved.content_set.id, state.pool.clone()).await?;
     let hashes = files
         .iter()
         .map(|file| file.sha1.as_str())
@@ -1385,7 +1392,8 @@ async fn content_projects_for_files(
     };
     if reconciled {
         entry_maps =
-            load_entry_maps(&resolved.content_set.id, &state.pool).await?;
+            load_entry_maps(&resolved.content_set.id, state.pool.clone())
+                .await?;
     }
     // Visible-row metadata must not depend on update catalogs: one invalid
     // candidate release would otherwise discard the whole display batch.
@@ -1592,7 +1600,7 @@ async fn reconcile_hash_matched_entries(
     let _instance_lock =
         state.lock_instance_content(&resolved.instance.id).await;
     let entry_maps =
-        load_entry_maps(&resolved.content_set.id, &state.pool).await?;
+        load_entry_maps(&resolved.content_set.id, state.pool.clone()).await?;
     let candidates = files
         .iter()
         .filter_map(|file| {
@@ -1824,11 +1832,14 @@ async fn content_files_to_content_items(
         .map(|project| (project.id.to_string(), project))
         .collect::<HashMap<_, _>>()
     };
-    let content_set = sqlite::content_rows::get_applied_content_set(
-        &instance.id,
-        &state.pool,
-    )
-    .await?;
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        sqlite::content_rows::get_applied_content_set(
+            &instance.id,
+            &mut *connection,
+        )
+        .await?
+    };
     let project_ids = files
         .iter()
         .filter_map(|(_, file)| {
@@ -2671,7 +2682,7 @@ async fn get_modpack_identifiers(
         .join(&version.project_id)
         .join(version_id)
         .join(file_name);
-    download_to_path(
+    download_to_path_without_executor(
         DownloadRequest::new(&primary_file.url, ResourceClass::Modpack)
             .with_integrity(Integrity {
                 size: Some(primary_file.size as u64),
@@ -2683,7 +2694,6 @@ async fn get_modpack_identifiers(
             .with_download_meta(download_meta),
         &pack_path,
         &state.download_semaphore,
-        pool,
         None,
     )
     .await?;
@@ -3022,9 +3032,10 @@ mod tests {
         ids.sort();
         assert_eq!(ids, ["curseforge:123", "projectA"]);
 
-        let maps = load_entry_maps(&resolved.content_set.id, &state.pool)
-            .await
-            .unwrap();
+        let maps =
+            load_entry_maps(&resolved.content_set.id, state.pool.clone())
+                .await
+                .unwrap();
         for (file_id, entry) in &maps.entries_by_file_id {
             assert_eq!(
                 maps.provider_refs_by_file_id

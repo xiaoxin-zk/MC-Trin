@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use crate::State;
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, FetchProgressFn, Integrity,
-    ResourceClass, download_to_path,
+    ResourceClass, download_to_path_without_executor,
 };
 
 use crate::Result;
@@ -136,11 +136,10 @@ pub(super) async fn download_server_file(
             })
         },
     );
-    download_to_path(
+    download_to_path_without_executor(
         request,
         &destination,
         &state.download_semaphore,
-        &state.pool,
         Some(progress.as_mut()),
     )
     .await?;

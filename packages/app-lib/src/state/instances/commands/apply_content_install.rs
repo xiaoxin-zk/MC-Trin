@@ -19,7 +19,8 @@ use crate::state::{
 };
 use crate::util::fetch::{
     self, ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    FetchSemaphore, Integrity, ResourceClass, download_to_path,
+    FetchSemaphore, Integrity, ResourceClass,
+    download_to_path_without_executor,
 };
 use crate::util::io;
 use crate::util::io::io_error_with_lock_info;
@@ -1440,11 +1441,10 @@ async fn download_project_version_with_reporting(
         .as_mut()
         .map(|progress| progress as &mut fetch::FetchProgressFn<'_>);
 
-    let download = download_to_path(
+    let download = download_to_path_without_executor(
         request,
         &prepared.path,
         &state.download_semaphore,
-        &state.pool,
         progress,
     )
     .await?;

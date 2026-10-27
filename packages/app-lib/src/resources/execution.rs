@@ -450,11 +450,10 @@ pub(crate) async fn execute(
                 );
             }
             request.cancellation = Some(cancel.clone());
-            fetch::download_to_path(
+            fetch::download_to_path_without_executor(
                 request,
                 &path,
                 &state.download_semaphore,
-                &state.pool,
                 None,
             )
             .await?;

@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::State;
 use crate::util::fetch::{
     self, ContentValidation, DownloadRequest, Integrity, ResourceClass,
-    download_to_path, fetch_json,
+    download_to_path_without_executor, fetch_json,
 };
 use crate::util::{io, java_environment};
 
@@ -240,7 +240,7 @@ async fn ensure_installer(
             ))
         })?;
 
-    download_to_path(
+    download_to_path_without_executor(
         DownloadRequest::new(entry.download_url(), ResourceClass::Loader)
             .with_integrity(Integrity {
                 content: ContentValidation::Jar,
@@ -248,7 +248,6 @@ async fn ensure_installer(
             }),
         &path,
         &state.download_semaphore,
-        &state.pool,
         None,
     )
     .await?;

@@ -28,7 +28,7 @@ use crate::event::emit::emit_server;
 use crate::event::emit::loading_try_for_each_concurrent;
 use crate::util::fetch::{
     DownloadRequest, FetchProgressFn, Integrity, ResourceClass,
-    download_to_path,
+    download_to_path_without_executor,
 };
 use crate::util::io::IOError;
 use crate::{ErrorKind, Result};
@@ -647,11 +647,10 @@ async fn download_with_engine(
         },
     );
 
-    download_to_path(
+    download_to_path_without_executor(
         request,
         destination,
         &state.download_semaphore,
-        &state.pool,
         Some(progress_fn.as_mut()),
     )
     .await?;
@@ -776,11 +775,10 @@ async fn download_metadata_jar(
 ) -> Result<()> {
     let request = DownloadRequest::new(url, ResourceClass::Modpack)
         .with_integrity(integrity);
-    download_to_path(
+    download_to_path_without_executor(
         request,
         destination,
         &state.download_semaphore,
-        &state.pool,
         None,
     )
     .await?;

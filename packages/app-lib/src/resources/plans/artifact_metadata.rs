@@ -71,11 +71,10 @@ impl ArtifactMetadataReader for RuntimeArtifactMetadataReader {
             ));
         request.candidate_urls = urls.iter().skip(1).cloned().collect();
         request.cancellation = Some(cancel.clone());
-        crate::util::fetch::download_to_path(
+        crate::util::fetch::download_to_path_without_executor(
             request,
             &path,
             &state.download_semaphore,
-            &state.pool,
             None,
         )
         .await?;

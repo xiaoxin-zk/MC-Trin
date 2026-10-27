@@ -375,11 +375,10 @@ async fn ensure_file(st: &State, plan: &LinkedFilePlan) -> crate::Result<bool> {
                 content: plan.validation,
                 ..Integrity::default()
             });
-    fetch::download_to_path(
+    fetch::download_to_path_without_executor(
         request,
         &plan.destination,
         &st.download_semaphore,
-        &st.pool,
         None,
     )
     .await
@@ -469,11 +468,10 @@ async fn ensure_linked_assets_from_with_progress(
         if let Some(progress) = progress {
             progress.add_total(asset_index.size as u64).await?;
         }
-        fetch::download_to_path(
+        fetch::download_to_path_without_executor(
             request,
             &index_path,
             &st.download_semaphore,
-            &st.pool,
             None,
         )
         .await
@@ -561,11 +559,10 @@ async fn ensure_linked_assets_from_with_progress(
                         ResourceClass::MinecraftAsset,
                     )
                     .with_integrity(Integrity::sha1(&hash).with_size(size));
-                    fetch::download_to_path(
+                    fetch::download_to_path_without_executor(
                         request,
                         &destination,
                         &st.download_semaphore,
-                        &st.pool,
                         None,
                     )
                     .await
@@ -653,11 +650,10 @@ pub(crate) async fn ensure_linked_log_config(
                 content: ContentValidation::None,
                 ..Integrity::default()
             });
-    fetch::download_to_path(
+    fetch::download_to_path_without_executor(
         request,
         &destination,
         &st.download_semaphore,
-        &st.pool,
         None,
     )
     .await

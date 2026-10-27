@@ -21,7 +21,7 @@ use crate::install::InstallProgressReporter;
 use crate::state::ProjectType;
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, FetchProgressFn, ResourceClass,
-    download_to_path,
+    download_to_path_without_executor,
 };
 use crate::{ErrorKind, State};
 use std::path::Path;
@@ -60,11 +60,10 @@ pub(crate) async fn download_curseforge_path(
             file.file_name.clone(),
         );
     }
-    download_to_path(
+    download_to_path_without_executor(
         request,
         destination,
         &state.download_semaphore,
-        &state.pool,
         progress,
     )
     .await

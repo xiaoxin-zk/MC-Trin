@@ -17,8 +17,8 @@ use crate::util::download::constants::{
 };
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
-    FetchProgressFn, Integrity, ResourceClass, download_to_path, fetch,
-    write_cached_icon,
+    FetchProgressFn, Integrity, ResourceClass,
+    download_to_path_without_executor, fetch_with_pool, write_cached_icon,
 };
 use path_util::SafeRelativeUtf8UnixPathBuf;
 use serde::{Deserialize, Serialize};
@@ -413,7 +413,7 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
         )
         .await?;
     reporter.persist().await?;
-    let download_result = download_to_path(
+    let download_result = download_to_path_without_executor(
         DownloadRequest::new(&pack_file.url, ResourceClass::Modpack)
             .with_integrity(Integrity {
                 size: Some(pack_file.size as u64),
@@ -432,7 +432,6 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
             ),
         &pack_path,
         &state.download_semaphore,
-        &state.pool,
         progress,
     )
     .await?;
@@ -477,7 +476,7 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
                         .build(),
                 )
                 .await?;
-            let icon_bytes = fetch(
+            let icon_bytes = fetch_with_pool(
                 &icon_url,
                 None,
                 None,

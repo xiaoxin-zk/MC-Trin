@@ -183,11 +183,10 @@ impl Artifact {
                 } else {
                     path.clone()
                 };
-                let result = fetch::download_to_path(
+                let result = fetch::download_to_path_without_executor(
                     request,
                     &destination,
                     &state.download_semaphore,
-                    &state.pool,
                     None,
                 )
                 .await;

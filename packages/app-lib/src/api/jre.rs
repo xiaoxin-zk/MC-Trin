@@ -9,7 +9,7 @@ use crate::install::{
 use crate::state::{DiscoveredJava, JavaVersion, java_file_signature};
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, FetchProgressFn, Integrity,
-    ResourceClass, download_to_path, fetch_json,
+    ResourceClass, download_to_path_without_executor, fetch_json,
 };
 use futures::{TryStreamExt, stream};
 use reqwest::Method;
@@ -1027,11 +1027,10 @@ async fn install_mojang_runtime(
                 .unwrap_or_else(|| "runtime-manifest.json".to_string()),
         );
     }
-    let download_result = download_to_path(
+    let download_result = download_to_path_without_executor(
         request,
         &manifest_path,
         &state.download_semaphore,
-        &state.pool,
         None,
     )
     .await?;
@@ -1195,11 +1194,10 @@ async fn install_mojang_runtime(
                             relative_path.clone(),
                         );
                     }
-                    let result = download_to_path(
+                    let result = download_to_path_without_executor(
                         request,
                         &path,
                         &state.download_semaphore,
-                        &state.pool,
                         Some(&mut progress as &mut FetchProgressFn<'_>),
                     )
                     .await?;
@@ -1430,11 +1428,10 @@ async fn install_azul_runtime(
                 .unwrap_or_else(|| "java-runtime".to_string()),
         );
     }
-    let download_result = download_to_path(
+    let download_result = download_to_path_without_executor(
         request,
         &archive_path,
         &state.download_semaphore,
-        &state.pool,
         Some(&mut progress as &mut FetchProgressFn<'_>),
     )
     .await?;
@@ -1822,11 +1819,10 @@ async fn download_java_from_feed_inner(
             pkg.install_folder_name.clone(),
         );
     }
-    download_to_path(
+    download_to_path_without_executor(
         request,
         &archive_path,
         &state.download_semaphore,
-        &state.pool,
         Some(&mut progress as &mut FetchProgressFn<'_>),
     )
     .await
