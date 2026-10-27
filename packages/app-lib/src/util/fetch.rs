@@ -2043,11 +2043,12 @@ pub async fn fetch_official(
     download_meta: Option<&DownloadMeta>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: &sqlx::SqlitePool,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<Bytes> {
     let method = Method::GET;
     let (url, requires_auth, credentials) =
-        request_auth_context(&method, url, None, uri_path, exec).await?;
+        request_auth_context_with_executor(&method, url, None, uri_path, exec)
+            .await?;
     let client = configured_client().await?;
     fetch_advanced_with_credentials(
         method,
@@ -2075,12 +2076,13 @@ pub(crate) async fn fetch_metadata<T>(
     url: &str,
     parse: impl Fn(&Bytes) -> crate::Result<T> + Send + Sync,
     semaphore: &FetchSemaphore,
-    exec: &sqlx::SqlitePool,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<T> {
     let validate = |bytes: &Bytes| parse(bytes).map(|_| ());
     let method = Method::GET;
     let (url, requires_auth, credentials) =
-        request_auth_context(&method, url, None, None, exec).await?;
+        request_auth_context_with_executor(&method, url, None, None, exec)
+            .await?;
     let client = configured_client().await?;
     let bytes = tokio::time::timeout(
         METADATA_REQUEST_TIMEOUT,
@@ -2122,7 +2124,7 @@ pub async fn fetch_json<T>(
     json_body: Option<serde_json::Value>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: &sqlx::SqlitePool,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<T>
 where
     T: DeserializeOwned,
@@ -2133,7 +2135,50 @@ where
             .map_err(Into::into)
     };
     let (url, requires_auth, credentials) =
-        request_auth_context(&method, url, None, uri_path, exec).await?;
+        request_auth_context_with_executor(&method, url, None, uri_path, exec)
+            .await?;
+    let client = configured_client().await?;
+    let result = fetch_advanced_with_credentials(
+        method,
+        &url,
+        sha1,
+        json_body,
+        None,
+        None,
+        None,
+        uri_path,
+        semaphore,
+        requires_auth,
+        credentials,
+        &client,
+        None,
+        None,
+        Some(&validate_json),
+        METADATA_ATTEMPT_BUDGET,
+    )
+    .await?;
+    Ok(serde_json::from_slice(&result)?)
+}
+
+pub(crate) async fn fetch_json_with_pool<T>(
+    method: Method,
+    url: &str,
+    sha1: Option<&str>,
+    json_body: Option<serde_json::Value>,
+    uri_path: Option<&'static str>,
+    semaphore: &FetchSemaphore,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<T>
+where
+    T: DeserializeOwned,
+{
+    let validate_json = |bytes: &Bytes| -> crate::Result<()> {
+        serde_json::from_slice::<T>(bytes)
+            .map(|_| ())
+            .map_err(Into::into)
+    };
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, pool).await?;
     let client = configured_client().await?;
     let result = fetch_advanced_with_credentials(
         method,
@@ -2171,7 +2216,7 @@ pub async fn fetch_json_nonempty<T>(
     json_body: Option<serde_json::Value>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: &sqlx::SqlitePool,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<T>
 where
     T: DeserializeOwned,
@@ -2189,7 +2234,57 @@ where
             .map_err(Into::into)
     };
     let (url, requires_auth, credentials) =
-        request_auth_context(&method, url, None, uri_path, exec).await?;
+        request_auth_context_with_executor(&method, url, None, uri_path, exec)
+            .await?;
+    let client = configured_client().await?;
+    let result = fetch_advanced_with_credentials(
+        method,
+        &url,
+        sha1,
+        json_body,
+        None,
+        None,
+        None,
+        uri_path,
+        semaphore,
+        requires_auth,
+        credentials,
+        &client,
+        None,
+        None,
+        Some(&validate_json),
+        METADATA_ATTEMPT_BUDGET,
+    )
+    .await?;
+    Ok(serde_json::from_slice(&result)?)
+}
+
+pub(crate) async fn fetch_json_nonempty_with_pool<T>(
+    method: Method,
+    url: &str,
+    sha1: Option<&str>,
+    json_body: Option<serde_json::Value>,
+    uri_path: Option<&'static str>,
+    semaphore: &FetchSemaphore,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<T>
+where
+    T: DeserializeOwned,
+{
+    let validate_json = |bytes: &Bytes| -> crate::Result<()> {
+        let parsed: serde_json::Value = serde_json::from_slice(bytes)?;
+        if parsed.as_array().is_some_and(|array| array.is_empty()) {
+            return Err(ErrorKind::OtherError(format!(
+                "Expected a non-empty JSON collection from {url}, got an empty array"
+            ))
+            .into());
+        }
+        serde_json::from_slice::<T>(bytes)
+            .map(|_| ())
+            .map_err(Into::into)
+    };
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, pool).await?;
     let client = configured_client().await?;
     let result = fetch_advanced_with_credentials(
         method,

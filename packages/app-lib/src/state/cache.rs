@@ -2353,7 +2353,7 @@ impl CachedEntry {
             ($type:ident, $api_url:expr, $url_suffix:expr, $uri_path:expr, $cache_variant:path) => {{
                 vec![(
                     $cache_variant(
-                        fetch_json_nonempty(
+                        fetch_json_nonempty_with_pool(
                             Method::GET,
                             &*format!("{}{}", $api_url, $url_suffix),
                             None,
@@ -2547,7 +2547,7 @@ impl CachedEntry {
                 );
                 let launcher_meta = tokio::time::timeout(
                     std::time::Duration::from_secs(2),
-                    fetch_json(
+                    fetch_json_with_pool(
                         Method::GET,
                         &launcher_meta_url,
                         None,
@@ -2566,7 +2566,7 @@ impl CachedEntry {
                             error = %error,
                             "Launcher metadata failed; falling back to Mojang manifest"
                         );
-                        fetch_json(
+                        fetch_json_with_pool(
                             Method::GET,
                             daedalus::minecraft::VERSION_MANIFEST_URL,
                             None,
@@ -2582,7 +2582,7 @@ impl CachedEntry {
                             url = launcher_meta_url,
                             "Launcher metadata was slow; falling back to Mojang manifest"
                         );
-                        fetch_json(
+                        fetch_json_with_pool(
                             Method::GET,
                             daedalus::minecraft::VERSION_MANIFEST_URL,
                             None,
