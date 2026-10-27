@@ -991,7 +991,9 @@ mod tests {
             }
         });
         let (sender, driver) = h2::client::handshake(client_io).await.unwrap();
-        let driver = tokio::spawn(driver);
+        let driver = tokio::spawn(async move {
+            let _ = driver.await;
+        });
         let connection =
             SharedH2Connection::cache_for_test(route, sender).await;
         H2RangeFixture {
