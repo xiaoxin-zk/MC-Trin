@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import {
     app,
     files,
+    pnpmCommand,
     requireFile,
     requireProfile,
     root,
@@ -58,7 +59,7 @@ for (const variant of ['modern', 'native']) {
     if (variant === 'modern' && withUpdaterArtifacts)
         args.push('--config', 'tauri-updater.conf.json')
     if (profile === 'ci') args.push('--no-sign')
-    run('pnpm', args, { cwd: app })
+    run(pnpmCommand(), args, { cwd: app })
     const installers = fs.readdirSync(bundleDirectory).filter((file) => file.endsWith('-setup.exe'))
     if (installers.length !== 1) throw new Error(`Expected one ${variant} installer`)
     const installer = path.join(bundleDirectory, installers[0])

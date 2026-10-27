@@ -7,6 +7,14 @@ import { fileURLToPath } from 'node:url'
 export const root = fileURLToPath(new URL('../..', import.meta.url))
 export const app = path.join(root, 'apps/app')
 
+export function pnpmCommand() {
+    if (process.platform === 'win32' && process.env.PNPM_HOME) {
+        const command = path.join(process.env.PNPM_HOME, 'pnpm.cmd')
+        if (fs.existsSync(command)) return command
+    }
+    return 'pnpm'
+}
+
 export function createSpawnInvocation(
     command,
     args,
