@@ -73,7 +73,7 @@ const overviewQuery = useQuery({
     queryFn: () => get_synced_options_overview(instance.value.id),
 })
 
-const optionSections = computed(() => {
+const optionRows = computed(() => {
     const unsupportedOptionKeys = new Set(
         overviewQuery.data.value?.capabilities
             .filter((capability) => capability.supported === false)
@@ -83,10 +83,16 @@ const optionSections = computed(() => {
     const unsupported = options.filter((option) => unsupportedOptionKeys.has(option.key))
 
     return [
-        { key: 'supported', items: supported, disabled: false },
-        ...(unsupported.length > 0
-            ? [{ key: 'unsupported', items: unsupported, disabled: true }]
-            : []),
+        ...supported.map((option) => ({
+            ...option,
+            disabled: false,
+            showUnsupportedHeader: false,
+        })),
+        ...unsupported.map((option, index) => ({
+            ...option,
+            disabled: true,
+            showUnsupportedHeader: index === 0,
+        })),
     ]
 })
 
@@ -119,30 +125,26 @@ function enabled(option: SyncedOption) {
                 {{ formatMessage(messages.description) }}
             </p>
         </div>
-        <template v-for="section in optionSections" :key="section.key">
+        <div v-for="item in optionRows" :key="item.key">
             <h3
-                v-if="section.key === 'unsupported'"
+                v-if="item.showUnsupportedHeader"
                 class="m-0 text-sm font-semibold text-[var(--color-text-tertiary)]"
             >
                 {{ formatMessage(messages.unsupported) }}
             </h3>
-            <div
-                v-for="item in section.items"
-                :key="item.key"
-                class="flex items-center justify-between gap-4"
-            >
+            <div class="flex items-center justify-between gap-4">
                 <span class="text-[var(--color-text-primary)]">{{
                     formatMessage(messages[item.label])
                 }}</span>
                 <Toggle
                     :model-value="enabled(item.key)"
-                    :disabled="section.disabled || mutation.isPending.value"
+                    :disabled="item.disabled || mutation.isPending.value"
                     :aria-label="formatMessage(messages[item.label])"
                     @update:model-value="
                         (value) => mutation.mutate({ option: item.key, enabled: value })
                     "
                 />
             </div>
-        </template>
+        </div>
     </div>
 </template>
