@@ -152,15 +152,20 @@ pub(crate) async fn edit_instance(
 
     let mut content_set = match patch.content_set_patch {
         Some(content_set_patch) => {
-            let applied_content_set =
-                content_rows::get_applied_content_set(&instance.id, pool)
-                    .await?
-                    .ok_or_else(|| {
-                        crate::ErrorKind::InputError(format!(
-                            "Instance {} has no applied content set",
-                            instance.id
-                        ))
-                    })?;
+            let applied_content_set = {
+                let mut connection = pool.acquire().await?;
+                content_rows::get_applied_content_set(
+                    &instance.id,
+                    &mut *connection,
+                )
+                .await?
+            }
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(format!(
+                    "Instance {} has no applied content set",
+                    instance.id
+                ))
+            })?;
             Some(apply_content_set_patch(
                 applied_content_set,
                 content_set_patch,
@@ -171,11 +176,14 @@ pub(crate) async fn edit_instance(
     };
     let mut launch_overrides = match patch.launch_overrides {
         Some(launch_patch) => {
-            let current = instance_rows::get_instance_launch_overrides(
-                &instance.id,
-                pool,
-            )
-            .await?
+            let current = {
+                let mut connection = pool.acquire().await?;
+                instance_rows::get_instance_launch_overrides(
+                    &instance.id,
+                    &mut *connection,
+                )
+                .await?
+            }
             .unwrap_or_else(|| {
                 InstanceLaunchOverrides::empty(instance.id.clone())
             });

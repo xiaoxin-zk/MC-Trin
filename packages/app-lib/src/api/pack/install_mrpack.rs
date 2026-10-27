@@ -1101,8 +1101,10 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     let file_infos_by_hash =
         Arc::new(Mutex::new(None::<HashMap<String, ModrinthHashMatch>>));
     let file_infos_loading = Arc::new(Mutex::new(()));
-    let chinese_naming_enabled =
-        Settings::get(&state.pool).await?.locale == "zh-CN";
+    let chinese_naming_enabled = {
+        let mut connection = state.pool.acquire().await?;
+        Settings::get_with_connection(&mut connection).await?.locale == "zh-CN"
+    };
     let chinese_titles_by_sha1 = Arc::new(if chinese_naming_enabled {
         // Chinese titles shape the on-disk file names, so they must be known
         // before any download starts. All other installs resolve them lazily
@@ -1132,16 +1134,19 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     )
     .await;
     let existing_paths_by_original = Arc::new(
-        content_rows::get_instance_files(&instance_id, &state.pool)
-            .await?
-            .into_iter()
-            .map(|file| {
-                (
-                    original_content_relative_path(&file.relative_path),
-                    file.relative_path,
-                )
-            })
-            .collect::<HashMap<_, _>>(),
+        {
+            let mut connection = state.pool.acquire().await?;
+            content_rows::get_instance_files(&instance_id, &mut *connection)
+                .await?
+        }
+        .into_iter()
+        .map(|file| {
+            (
+                original_content_relative_path(&file.relative_path),
+                file.relative_path,
+            )
+        })
+        .collect::<HashMap<_, _>>(),
     );
     let content_context = ModpackContentInstallContext {
         instance_id: instance_id.clone(),

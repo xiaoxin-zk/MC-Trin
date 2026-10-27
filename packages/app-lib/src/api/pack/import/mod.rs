@@ -1438,15 +1438,17 @@ pub(crate) async fn finish_import(
     // an explicit override, so copy imports always stay built-in (no override)
     // and the frontend's choice is never clobbered.
     let state = crate::state::State::get().await?;
-    let pool = &state.pool;
-    let existing_override =
+    let pool = state.pool.clone();
+    let existing_override = {
+        let mut connection = pool.acquire().await?;
         instance_rows::get_instance_path_and_game_dir_override_by_id(
             instance_id,
-            pool,
+            &mut *connection,
         )
         .await?
-        .map(|(_, override_dir)| override_dir)
-        .unwrap_or(None);
+    }
+    .map(|(_, override_dir)| override_dir)
+    .unwrap_or(None);
     if existing_override.is_none() && symlink {
         // For a non-version-isolated import the game content (mods, saves, config)
         // lives in the `.minecraft` root, not in the detected `versions/<name>`
@@ -1462,7 +1464,7 @@ pub(crate) async fn finish_import(
                     )),
                     ..Default::default()
                 },
-                pool,
+                &pool,
             )
             .await?;
         }
@@ -1470,12 +1472,17 @@ pub(crate) async fn finish_import(
 
     if symlink {
         let state = State::get().await?;
-        let relative_path =
-            instance_rows::get_instance_path_by_id(instance_id, &state.pool)
-                .await?
-                .ok_or_else(|| {
-                    crate::ErrorKind::InputError("Unknown instance".to_string())
-                })?;
+        let relative_path = {
+            let mut connection = state.pool.acquire().await?;
+            instance_rows::get_instance_path_by_id(
+                instance_id,
+                &mut *connection,
+            )
+            .await?
+        }
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError("Unknown instance".to_string())
+        })?;
         // The instance's managed folder lives at instances_dir/<path>. This is
         // where the symlink is created; it must NOT go through the game-dir
         // override (which points at the external .minecraft root).

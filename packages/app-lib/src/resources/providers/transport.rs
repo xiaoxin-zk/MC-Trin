@@ -85,6 +85,7 @@ impl ProtocolTransport for LauncherTransport {
         url.query_pairs_mut().extend_pairs(request.query);
         if source == &SourceId::modrinth() {
             let state = crate::State::get().await?;
+            let pool = state.pool.clone();
             return crate::util::fetch::fetch_json(
                 request.method,
                 url.as_str(),
@@ -92,7 +93,7 @@ impl ProtocolTransport for LauncherTransport {
                 request.body,
                 None,
                 &state.api_semaphore,
-                &state.pool,
+                &pool,
             )
             .await
             .map_err(Into::into);

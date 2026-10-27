@@ -339,11 +339,14 @@ pub(crate) async fn install_local_manifest_files(
 ) -> crate::Result<CurseForgeInstallResult> {
     let reporter = &reporter.clone().with_pipeline_cancellation();
     let state = State::get().await?;
-    let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-        instance_id,
-        &state.pool,
-    )
-    .await?
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &mut *connection,
+        )
+        .await?
+    }
     .ok_or_else(|| {
         ErrorKind::InputError(
             "Instance has no applied content set".to_string(),
@@ -387,17 +390,24 @@ pub(crate) async fn install_local_manifest_files(
         .collect::<Vec<_>>();
     let file_meta = get_modpack_files(file_ids).await?;
     let existing_relative_paths = Arc::new(
-        crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
-            instance_id,
-            &state.pool,
-        )
-        .await?
+        {
+            let mut connection = state.pool.acquire().await?;
+            crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
+                instance_id,
+                &mut *connection,
+            )
+            .await?
+        }
         .into_iter()
         .map(|file| file.relative_path)
         .collect::<HashSet<_>>(),
     );
-    let prefer_localized_names =
-        Settings::get(&state.pool).await?.resource_chinese_filenames;
+    let prefer_localized_names = {
+        let mut connection = state.pool.acquire().await?;
+        Settings::get_with_connection(&mut connection)
+            .await?
+            .resource_chinese_filenames
+    };
     let content_total_bytes = selected_files
         .iter()
         .map(|file| {

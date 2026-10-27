@@ -265,13 +265,16 @@ async fn resolve_install_plan_with_cache(
     state: &State,
 ) -> crate::Result<ResolveContentPlan> {
     let pool = state.pool.clone();
-    let content_set = content_rows::get_applied_content_set(instance_id, &pool)
-        .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError(format!(
-                "Instance {instance_id} has no applied content set"
-            ))
-        })?;
+    let content_set = {
+        let mut connection = pool.acquire().await?;
+        content_rows::get_applied_content_set(instance_id, &mut *connection)
+            .await?
+    }
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(format!(
+            "Instance {instance_id} has no applied content set"
+        ))
+    })?;
     let existing_project_ids =
         crate::state::get_installed_project_ids_for_instance(
             instance_id,
@@ -1506,15 +1509,17 @@ pub(crate) async fn prepare_version_download(
 ) -> crate::Result<PreparedVersionDownload> {
     let pool = state.pool.clone();
     let scope = resolve_content_scope(instance_id, None, state).await?;
-    let content_set =
-        content_rows::get_content_set(&scope.content_set_id, &pool)
+    let content_set = {
+        let mut connection = pool.acquire().await?;
+        content_rows::get_content_set(&scope.content_set_id, &mut *connection)
             .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(format!(
-                    "Unknown content set {}",
-                    scope.content_set_id
-                ))
-            })?;
+    }
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(format!(
+            "Unknown content set {}",
+            scope.content_set_id
+        ))
+    })?;
     let version = CachedEntry::get_version(
         &ModrinthVersionId::new(version_id.to_string())?,
         None,
@@ -1613,10 +1618,13 @@ pub(crate) async fn resolve_content_install_relative_path(
     {
         return Ok(localized_candidate);
     }
-    if crate::state::Settings::get(pool)
-        .await?
-        .resource_chinese_filenames
-    {
+    let preserve_localized_names = {
+        let mut connection = pool.acquire().await?;
+        crate::state::Settings::get_with_connection(&mut connection)
+            .await?
+            .resource_chinese_filenames
+    };
+    if preserve_localized_names {
         return Ok(localized_candidate);
     }
     Ok(original_relative_path)
@@ -1629,11 +1637,14 @@ async fn modrinth_chinese_file_name_candidate(
     file_name: &str,
     state: &State,
 ) -> Option<String> {
-    if !crate::state::Settings::get(&state.pool)
-        .await
-        .ok()?
-        .resource_chinese_filenames
-    {
+    let use_chinese_names = {
+        let mut connection = state.pool.acquire().await.ok()?;
+        crate::state::Settings::get_with_connection(&mut connection)
+            .await
+            .ok()?
+            .resource_chinese_filenames
+    };
+    if !use_chinese_names {
         return None;
     }
     let project = CachedEntry::get_project(
@@ -3338,12 +3349,14 @@ pub(crate) async fn toggle_content_entries(
         });
     }
 
-    let indexed_paths =
-        content_rows::get_instance_files(&scope.instance.id, &state.pool)
+    let indexed_paths = {
+        let mut connection = state.pool.acquire().await?;
+        content_rows::get_instance_files(&scope.instance.id, &mut *connection)
             .await?
-            .into_iter()
-            .map(|file| file.relative_path)
-            .collect::<std::collections::HashSet<_>>();
+    }
+    .into_iter()
+    .map(|file| file.relative_path)
+    .collect::<std::collections::HashSet<_>>();
     for operation in &operations {
         if !indexed_paths.contains(&operation.current_path) {
             return Err(crate::ErrorKind::InputError(format!(
@@ -4122,15 +4135,23 @@ pub(crate) async fn list_project_files(
     state: &State,
 ) -> crate::Result<Vec<InstalledContentFile>> {
     let scope = resolve_content_scope(instance_id, None, state).await?;
-    let entries =
-        content_rows::get_content_entries(&scope.content_set_id, &state.pool)
-            .await?;
-    let files =
-        content_rows::get_instance_files(&scope.instance.id, &state.pool)
-            .await?
-            .into_iter()
-            .map(|file| (file.id.clone(), file))
-            .collect::<std::collections::HashMap<_, _>>();
+    let (entries, files) = {
+        let mut connection = state.pool.acquire().await?;
+        let entries = content_rows::get_content_entries(
+            &scope.content_set_id,
+            &mut *connection,
+        )
+        .await?;
+        let files = content_rows::get_instance_files(
+            &scope.instance.id,
+            &mut *connection,
+        )
+        .await?
+        .into_iter()
+        .map(|file| (file.id.clone(), file))
+        .collect::<std::collections::HashMap<_, _>>();
+        (entries, files)
+    };
 
     let mut output = Vec::new();
     for entry in entries {

@@ -2045,10 +2045,13 @@ pub async fn fetch_official(
     semaphore: &FetchSemaphore,
     exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<Bytes> {
+    let method = Method::GET;
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, exec).await?;
     let client = configured_client().await?;
-    fetch_advanced_with_client_and_progress(
-        Method::GET,
-        url,
+    fetch_advanced_with_credentials(
+        method,
+        &url,
         sha1,
         None,
         None,
@@ -2056,7 +2059,8 @@ pub async fn fetch_official(
         None,
         uri_path,
         semaphore,
-        exec,
+        requires_auth,
+        credentials,
         &client,
         Some(crate::state::DownloadSourceMode::OfficialOnly),
         None,
@@ -2074,12 +2078,15 @@ pub(crate) async fn fetch_metadata<T>(
     exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<T> {
     let validate = |bytes: &Bytes| parse(bytes).map(|_| ());
+    let method = Method::GET;
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, None, exec).await?;
     let client = configured_client().await?;
     let bytes = tokio::time::timeout(
         METADATA_REQUEST_TIMEOUT,
-        fetch_advanced_with_client_and_progress(
-            Method::GET,
-            url,
+        fetch_advanced_with_credentials(
+            method,
+            &url,
             None,
             None,
             None,
@@ -2087,7 +2094,8 @@ pub(crate) async fn fetch_metadata<T>(
             None,
             None,
             semaphore,
-            exec,
+            requires_auth,
+            credentials,
             &client,
             None,
             None,
@@ -2124,10 +2132,12 @@ where
             .map(|_| ())
             .map_err(Into::into)
     };
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, exec).await?;
     let client = configured_client().await?;
-    let result = fetch_advanced_with_client_and_progress(
+    let result = fetch_advanced_with_credentials(
         method,
-        url,
+        &url,
         sha1,
         json_body,
         None,
@@ -2135,7 +2145,8 @@ where
         None,
         uri_path,
         semaphore,
-        exec,
+        requires_auth,
+        credentials,
         &client,
         None,
         None,
@@ -2177,10 +2188,12 @@ where
             .map(|_| ())
             .map_err(Into::into)
     };
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, None, uri_path, exec).await?;
     let client = configured_client().await?;
-    let result = fetch_advanced_with_client_and_progress(
+    let result = fetch_advanced_with_credentials(
         method,
-        url,
+        &url,
         sha1,
         json_body,
         None,
@@ -2188,7 +2201,8 @@ where
         None,
         uri_path,
         semaphore,
-        exec,
+        requires_auth,
+        credentials,
         &client,
         None,
         None,
@@ -2288,6 +2302,75 @@ async fn fetch_advanced_with_client_and_progress(
     >,
     attempt_budget: usize,
 ) -> crate::Result<Bytes> {
+    let (url, requires_auth, credentials) =
+        request_auth_context(&method, url, header, uri_path, exec).await?;
+    fetch_advanced_with_credentials(
+        method,
+        &url,
+        sha1,
+        json_body,
+        header,
+        download_meta,
+        loading_bar,
+        uri_path,
+        semaphore,
+        requires_auth,
+        credentials,
+        client,
+        source_mode,
+        progress,
+        response_validator,
+        attempt_budget,
+    )
+    .await
+}
+
+async fn request_auth_context(
+    method: &Method,
+    url: &str,
+    header: Option<(&str, &str)>,
+    uri_path: Option<&'static str>,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+) -> crate::Result<(String, bool, Option<crate::state::ModrinthCredentials>)> {
+    let url = retired_sources::normalize(url)?.into_owned();
+    let is_api_url = url.starts_with(env!("MODRINTH_API_URL"))
+        || url.starts_with(env!("MODRINTH_API_URL_V3"));
+    let requires_auth =
+        is_api_url && requires_modrinth_auth(method, header, uri_path);
+    let credentials = if requires_auth
+        && header
+            .as_ref()
+            .is_none_or(|header| !is_sensitive_header(header.0))
+    {
+        crate::state::ModrinthCredentials::get_active(exec).await?
+    } else {
+        None
+    };
+
+    Ok((url, requires_auth, credentials))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fetch_advanced_with_credentials(
+    method: Method,
+    url: &str,
+    sha1: Option<&str>,
+    json_body: Option<serde_json::Value>,
+    header: Option<(&str, &str)>,
+    download_meta: Option<&DownloadMeta>,
+    loading_bar: Option<(&LoadingBarId, f64)>,
+    uri_path: Option<&'static str>,
+    semaphore: &FetchSemaphore,
+    requires_auth: bool,
+    credentials: Option<crate::state::ModrinthCredentials>,
+    client: &reqwest::Client,
+    source_mode: Option<crate::state::DownloadSourceMode>,
+    progress: Option<&mut FetchProgressFn<'_>>,
+    response_validator: Option<
+        &(dyn Fn(&Bytes) -> crate::Result<()> + Send + Sync),
+    >,
+    attempt_budget: usize,
+) -> crate::Result<Bytes> {
     super::download::proxy_context::with_clients(fetch_advanced_inner(
         method,
         url,
@@ -2298,7 +2381,8 @@ async fn fetch_advanced_with_client_and_progress(
         loading_bar,
         uri_path,
         semaphore,
-        exec,
+        requires_auth,
+        credentials,
         client,
         source_mode,
         progress,
@@ -2319,7 +2403,8 @@ async fn fetch_advanced_inner(
     loading_bar: Option<(&LoadingBarId, f64)>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    requires_auth: bool,
+    creds: Option<crate::state::ModrinthCredentials>,
     client: &reqwest::Client,
     source_mode: Option<crate::state::DownloadSourceMode>,
     mut progress: Option<&mut FetchProgressFn<'_>>,
@@ -2328,8 +2413,6 @@ async fn fetch_advanced_inner(
     >,
     attempt_budget: usize,
 ) -> crate::Result<Bytes> {
-    let normalized_url = retired_sources::normalize(url)?;
-    let url = normalized_url.as_ref();
     let resource = infer_resource_class(url);
     let mode =
         source_mode.unwrap_or_else(|| source_mode_for_resource(resource));
@@ -2337,17 +2420,6 @@ async fn fetch_advanced_inner(
     let modrinth_request_kind = modrinth_request_kind(url);
     let is_mrpack_download =
         modrinth_request_kind == Some(FETCH_CDN) && is_mrpack_url(url);
-    let is_api_url = url.starts_with(env!("MODRINTH_API_URL"))
-        || url.starts_with(env!("MODRINTH_API_URL_V3"));
-    let requires_auth =
-        is_api_url && requires_modrinth_auth(&method, header, uri_path);
-    let creds = if requires_auth
-        && header.as_ref().is_none_or(|x| !is_sensitive_header(x.0))
-    {
-        crate::state::ModrinthCredentials::get_active(exec).await?
-    } else {
-        None
-    };
     if method != Method::GET
         || header
             .as_ref()

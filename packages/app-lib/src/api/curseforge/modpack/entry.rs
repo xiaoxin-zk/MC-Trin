@@ -394,11 +394,14 @@ async fn install_modpack_inner(
             .into());
     }
 
-    let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+    let content_set = {
+        let mut connection = state.pool.acquire().await?;
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
             &request.instance_id,
-            &state.pool,
+            &mut *connection,
         )
         .await?
+    }
         .ok_or_else(|| {
             ErrorKind::InputError(
                 "Instance has no applied content set".to_string(),
@@ -433,17 +436,24 @@ async fn install_modpack_inner(
         .collect::<Vec<_>>();
     let file_meta = get_modpack_files(file_ids).await?;
     let existing_relative_paths = Arc::new(
-        crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
-            &request.instance_id,
-            &state.pool,
-        )
-        .await?
+        {
+            let mut connection = state.pool.acquire().await?;
+            crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
+                &request.instance_id,
+                &mut *connection,
+            )
+            .await?
+        }
         .into_iter()
         .map(|file| file.relative_path)
         .collect::<HashSet<_>>(),
     );
-    let prefer_localized_names =
-        Settings::get(&state.pool).await?.resource_chinese_filenames;
+    let prefer_localized_names = {
+        let mut connection = state.pool.acquire().await?;
+        Settings::get_with_connection(&mut connection)
+            .await?
+            .resource_chinese_filenames
+    };
     let content_total_bytes = selected_files
         .iter()
         .map(|file| {
@@ -625,15 +635,18 @@ async fn install_modpack_inner(
             },
             )
             .await?;
-            let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-            &request.instance_id,
-            &state.pool,
-        )
-        .await?
-        .ok_or_else(|| {
-            ErrorKind::InputError(
-                "Instance has no applied content set".to_string(),
-            )
+            let content_set = {
+                let mut connection = state.pool.acquire().await?;
+                crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+                    &request.instance_id,
+                    &mut *connection,
+                )
+                .await?
+            }
+            .ok_or_else(|| {
+                ErrorKind::InputError(
+                    "Instance has no applied content set".to_string(),
+                )
             })?;
             crate::state::sync_content_files(&request.instance_id, &state)
                 .await?;

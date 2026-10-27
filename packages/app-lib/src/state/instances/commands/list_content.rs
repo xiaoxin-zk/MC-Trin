@@ -1259,14 +1259,19 @@ async fn resolve_content_scope_with_instance(
             })?;
     let content_set = match content_set_id {
         Some(content_set_id) => {
-            let content_set =
-                sqlite::content_rows::get_content_set(content_set_id, &pool)
-                    .await?
-                    .ok_or_else(|| {
-                        crate::ErrorKind::InputError(format!(
-                            "Unknown content set {content_set_id}"
-                        ))
-                    })?;
+            let content_set = {
+                let mut connection = pool.acquire().await?;
+                sqlite::content_rows::get_content_set(
+                    content_set_id,
+                    &mut *connection,
+                )
+                .await?
+            }
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(format!(
+                    "Unknown content set {content_set_id}"
+                ))
+            })?;
 
             if content_set.instance_id != instance.id {
                 return Err(crate::ErrorKind::InputError(format!(
@@ -1279,15 +1284,19 @@ async fn resolve_content_scope_with_instance(
             content_set
         }
         None => {
-            sqlite::content_rows::get_applied_content_set(&instance.id, &pool)
-                .await?
-                .ok_or_else(|| {
-                    crate::ErrorKind::InputError(format!(
-                        "Instance {} has no applied content set",
-                        instance.id
-                    ))
-                })?
+            let mut connection = pool.acquire().await?;
+            sqlite::content_rows::get_applied_content_set(
+                &instance.id,
+                &mut *connection,
+            )
+            .await?
         }
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError(format!(
+                "Instance {} has no applied content set",
+                instance.id
+            ))
+        })?,
     };
 
     Ok(ResolvedContentScope {
