@@ -234,8 +234,8 @@ pub(crate) async fn prepare_curseforge_content_change_action(
             });
         let prepared =
             crate::state::instances::commands::prepare_version_download(
-                &instance_id,
-                &fallback.version_id,
+                instance_id.clone(),
+                fallback.version_id.clone(),
                 crate::util::fetch::DownloadReason::Dependency,
                 None,
                 &state,

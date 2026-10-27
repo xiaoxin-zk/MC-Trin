@@ -806,7 +806,7 @@ async fn import_via_launcher(
                 split_generic_game_dir_and_version(instance_path);
             generic::import_generic(
                 game_dir,
-                instance_id,
+                instance_id.to_string(),
                 reporter.clone(),
                 details,
                 *symlink,
@@ -820,7 +820,7 @@ async fn import_via_launcher(
                 split_generic_game_dir_and_version(instance_path);
             generic::import_generic(
                 game_dir,
-                instance_id,
+                instance_id.to_string(),
                 reporter.clone(),
                 details,
                 *symlink,
@@ -845,7 +845,7 @@ async fn import_via_launcher(
                 split_generic_game_dir_and_version(instance_path);
             generic::import_generic(
                 game_dir,
-                instance_id,
+                instance_id.to_string(),
                 reporter.clone(),
                 details,
                 *symlink,
@@ -867,7 +867,7 @@ async fn import_unknown_launcher(job: ImportJob) -> crate::Result<()> {
         split_generic_game_dir_and_version(&job.instance_path);
     generic::import_generic(
         game_dir,
-        &job.instance_id,
+        job.instance_id,
         job.reporter.clone(),
         InstallPhaseDetails::Import {
             launcher_type: ImportLauncherType::Unknown,
@@ -1423,7 +1423,7 @@ fn dir_has_game_content(root: &Path) -> bool {
 }
 
 pub(crate) async fn finish_import(
-    instance_id: &str,
+    instance_id: String,
     dotminecraft: PathBuf,
     io_semaphore: &IoSemaphore,
     reporter: InstallProgressReporter,
@@ -1442,7 +1442,7 @@ pub(crate) async fn finish_import(
     let existing_override = {
         let mut connection = pool.acquire().await?;
         instance_rows::get_instance_path_and_game_dir_override_by_id(
-            instance_id,
+            &instance_id,
             &mut *connection,
         )
         .await?
@@ -1457,7 +1457,7 @@ pub(crate) async fn finish_import(
         let game_root = resolve_import_game_root(&dotminecraft);
         if game_root != dotminecraft {
             crate::state::edit_instance(
-                instance_id,
+                &instance_id,
                 crate::state::EditInstance {
                     game_dir_override: Some(Some(
                         game_root.to_string_lossy().to_string(),
@@ -1475,7 +1475,7 @@ pub(crate) async fn finish_import(
         let relative_path = {
             let mut connection = state.pool.acquire().await?;
             instance_rows::get_instance_path_by_id(
-                instance_id,
+                &instance_id,
                 &mut *connection,
             )
             .await?
@@ -1524,7 +1524,7 @@ pub(crate) async fn finish_import(
                     .await
             {
                 watch_instance_folder(
-                    instance_id,
+                    &instance_id,
                     &relative_path,
                     &instance_path,
                     &state.file_watcher,
@@ -1537,7 +1537,7 @@ pub(crate) async fn finish_import(
             {
                 let _ = io::rename_or_move(&backup_path, &instance_path).await;
                 watch_instance_folder(
-                    instance_id,
+                    &instance_id,
                     &relative_path,
                     &instance_path,
                     &state.file_watcher,
@@ -1547,7 +1547,7 @@ pub(crate) async fn finish_import(
             }
             let _ = io::remove_dir_all(&backup_path).await;
             watch_instance_folder(
-                instance_id,
+                &instance_id,
                 &relative_path,
                 &instance_path,
                 &state.file_watcher,
@@ -1559,7 +1559,7 @@ pub(crate) async fn finish_import(
 
         let pool = state.pool.clone();
         crate::state::edit_instance(
-            instance_id,
+            &instance_id,
             crate::state::EditInstance {
                 symlink_target: Some(Some(
                     dotminecraft.to_string_lossy().to_string(),
@@ -1571,7 +1571,7 @@ pub(crate) async fn finish_import(
         .await?;
     } else {
         copy_dotminecraft_with_reporter(
-            instance_id,
+            &instance_id,
             dotminecraft,
             io_semaphore,
             reporter.clone(),
@@ -1581,7 +1581,7 @@ pub(crate) async fn finish_import(
     }
 
     crate::launcher::install_minecraft_for_instance_id_with_local_source(
-        instance_id,
+        &instance_id,
         local_source,
         false,
         Some(reporter),
@@ -1589,7 +1589,7 @@ pub(crate) async fn finish_import(
     )
     .await?;
 
-    let recognition_instance_id = instance_id.to_string();
+    let recognition_instance_id = instance_id;
     tokio::spawn(async move {
         if let Err(error) = crate::api::curseforge::recognize_instance_files(
             &recognition_instance_id,

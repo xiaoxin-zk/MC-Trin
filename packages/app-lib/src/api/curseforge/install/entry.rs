@@ -245,7 +245,7 @@ pub(crate) async fn install_file_with_metrics(
     let mut fallback_parents = HashSet::new();
     let installed_project_ids =
         crate::state::get_installed_project_ids_for_instance(
-            &request.instance_id,
+            request.instance_id.clone(),
             None,
             &state,
         )

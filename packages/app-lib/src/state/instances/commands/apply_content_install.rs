@@ -193,7 +193,7 @@ async fn cached_modrinth_projects(
 }
 
 async fn cached_modrinth_project(
-    project_id: &ModrinthProjectId,
+    project_id: ModrinthProjectId,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Option<Project>> {
     let values = CachedEntry::get_resource_values(
@@ -289,7 +289,7 @@ pub(crate) async fn resolve_install_plan(
     state: &State,
 ) -> crate::Result<ResolveContentPlan> {
     resolve_install_plan_with_cache(
-        instance_id,
+        instance_id.to_string(),
         request,
         Some(CacheBehaviour::MustRevalidate),
         DependencyPolicy::IncludeOptional,
@@ -304,7 +304,7 @@ pub(crate) async fn resolve_update_plan(
     state: &State,
 ) -> crate::Result<ResolveContentPlan> {
     resolve_install_plan_with_cache(
-        instance_id,
+        instance_id.to_string(),
         request,
         Some(CacheBehaviour::MustRevalidate),
         DependencyPolicy::RequiredOnly,
@@ -314,7 +314,7 @@ pub(crate) async fn resolve_update_plan(
 }
 
 async fn resolve_install_plan_with_cache(
-    instance_id: &str,
+    instance_id: String,
     request: InstanceInstallProjectRequest,
     cache_behaviour: Option<CacheBehaviour>,
     dependency_policy: DependencyPolicy,
@@ -323,7 +323,7 @@ async fn resolve_install_plan_with_cache(
     let pool = state.pool.clone();
     let content_set = {
         let mut connection = pool.acquire().await?;
-        content_rows::get_applied_content_set(instance_id, &mut *connection)
+        content_rows::get_applied_content_set(&instance_id, &mut *connection)
             .await?
     }
     .ok_or_else(|| {
@@ -333,7 +333,7 @@ async fn resolve_install_plan_with_cache(
     })?;
     let existing_project_ids =
         crate::state::get_installed_project_ids_for_instance(
-            instance_id,
+            instance_id.clone(),
             None,
             state,
         )
@@ -722,7 +722,7 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         .map(ContentType::from)
         .unwrap_or(ContentType::Mod);
     let plan = resolve_install_plan_with_cache(
-        &instance_id,
+        instance_id.clone(),
         InstanceInstallProjectRequest {
             project_id: version.project_id.clone(),
             version_id: Some(version.id.clone()),
@@ -756,9 +756,9 @@ pub(crate) async fn prepare_modrinth_content_change_action(
     })?;
     action.final_relative_path = Some(
         configured_update_relative_path(
-            current_path,
-            current_provider_file_name.as_deref(),
-            &target_provider_file_name,
+            current_path.to_string(),
+            current_provider_file_name.clone(),
+            target_provider_file_name.clone(),
             pool.clone(),
         )
         .await?,
@@ -773,8 +773,8 @@ pub(crate) async fn prepare_modrinth_content_change_action(
         .enumerate()
     {
         let prepared = prepare_version_download(
-            &instance_id,
-            &resolved.version_id,
+            instance_id.clone(),
+            resolved.version_id.clone(),
             if index == 0 {
                 DownloadReason::Update
             } else {
@@ -890,26 +890,26 @@ pub(crate) fn preserved_update_relative_path(
 }
 
 async fn configured_update_relative_path(
-    current_path: &str,
-    old_name: Option<&str>,
-    new_name: &str,
+    current_path: String,
+    old_name: Option<String>,
+    new_name: String,
     pool: sqlx::SqlitePool,
 ) -> crate::Result<String> {
     let mut connection = pool.acquire().await?;
     let settings =
         crate::state::Settings::get_with_connection(&mut connection).await?;
-    let current_name = current_path.rsplit('/').next().unwrap_or(current_path);
+    let current_name = current_path.rsplit('/').next().unwrap_or(&current_path);
     let current_name = current_name
         .strip_suffix(".disabled")
         .unwrap_or(current_name);
     preserved_update_relative_path(
-        current_path,
+        &current_path,
         if settings.resource_preserve_filenames {
-            old_name
+            old_name.as_deref()
         } else {
             Some(current_name)
         },
-        new_name,
+        &new_name,
     )
 }
 
@@ -922,9 +922,9 @@ pub(crate) async fn finalize_updated_project_path(
     state: &State,
 ) -> crate::Result<String> {
     let desired_path = configured_update_relative_path(
-        old_path,
-        old_provider_file_name,
-        new_provider_file_name,
+        old_path.to_string(),
+        old_provider_file_name.map(str::to_string),
+        new_provider_file_name.to_string(),
         state.pool.clone(),
     )
     .await?;
@@ -1239,15 +1239,26 @@ pub(crate) async fn resolve_content_scope(
     content_set_id: Option<&str>,
     state: &State,
 ) -> crate::Result<ContentScope> {
-    let pool = state.pool.clone();
-    let instance = instance_rows::get_instance_by_id_with_pool(
+    resolve_content_scope_with_owned_id(
         instance_id.to_string(),
-        pool.clone(),
+        content_set_id.map(str::to_string),
+        state,
     )
-    .await?
-    .ok_or_else(|| {
-        crate::ErrorKind::InputError("Unknown instance".to_string())
-    })?;
+    .await
+}
+
+async fn resolve_content_scope_with_owned_id(
+    instance_id: String,
+    content_set_id: Option<String>,
+    state: &State,
+) -> crate::Result<ContentScope> {
+    let pool = state.pool.clone();
+    let instance =
+        instance_rows::get_instance_by_id_with_pool(instance_id, pool.clone())
+            .await?
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError("Unknown instance".to_string())
+            })?;
     let content_set_id = match content_set_id {
         Some(id) => id.to_string(),
         None => instance.applied_content_set_id.clone().ok_or_else(|| {
@@ -1395,8 +1406,8 @@ async fn download_project_version_with_reporting(
     state: &State,
 ) -> crate::Result<DownloadedProjectVersion> {
     let prepared = prepare_version_download(
-        instance_id,
-        version_id,
+        instance_id.to_string(),
+        version_id.to_string(),
         reason,
         dependent_on_version_id,
         state,
@@ -1527,14 +1538,15 @@ pub(crate) struct PreparedVersionDownload {
 /// Resolves the content scope and version metadata for a download and
 /// validates the target path, without touching the network.
 pub(crate) async fn prepare_version_download(
-    instance_id: &str,
-    version_id: &str,
+    instance_id: String,
+    version_id: String,
     reason: DownloadReason,
     dependent_on_version_id: Option<String>,
     state: &State,
 ) -> crate::Result<PreparedVersionDownload> {
     let pool = state.pool.clone();
-    let scope = resolve_content_scope(instance_id, None, state).await?;
+    let scope =
+        resolve_content_scope_with_owned_id(instance_id, None, state).await?;
     let content_set = {
         let mut connection = pool.acquire().await?;
         content_rows::get_content_set(&scope.content_set_id, &mut *connection)
@@ -1547,7 +1559,7 @@ pub(crate) async fn prepare_version_download(
         ))
     })?;
     let version = cached_modrinth_version(
-        &ModrinthVersionId::new(version_id.to_string())?,
+        &ModrinthVersionId::new(version_id.clone())?,
         None,
     )
     .await?
@@ -1614,13 +1626,13 @@ pub(crate) async fn prepare_version_download(
 /// installed. Paths already recorded for this instance always win, so repeat
 /// installs never duplicate a project across naming preference changes.
 pub(crate) async fn resolve_content_install_relative_path(
-    instance_id: &str,
+    instance_id: String,
     original_relative_path: String,
     localized_candidate: Option<String>,
     pool: sqlx::SqlitePool,
 ) -> crate::Result<String> {
     if content_rows::get_instance_file_by_relative_path(
-        instance_id,
+        &instance_id,
         &original_relative_path,
         &pool,
     )
@@ -1633,7 +1645,7 @@ pub(crate) async fn resolve_content_install_relative_path(
         return Ok(original_relative_path);
     };
     if content_rows::get_instance_file_by_relative_path(
-        instance_id,
+        &instance_id,
         &localized_candidate,
         &pool,
     )
@@ -1657,12 +1669,12 @@ pub(crate) async fn resolve_content_install_relative_path(
 /// Builds the `[中文名]` file-name candidate for a Modrinth project file by
 /// resolving the project's slug from cache. Any failure disables the naming.
 async fn modrinth_chinese_file_name_candidate(
-    project_id: &str,
-    file_name: &str,
-    state: &State,
+    project_id: String,
+    file_name: String,
+    pool: sqlx::SqlitePool,
 ) -> Option<String> {
     let use_chinese_names = {
-        let mut connection = state.pool.acquire().await.ok()?;
+        let mut connection = pool.acquire().await.ok()?;
         crate::state::Settings::get_with_connection(&mut connection)
             .await
             .ok()?
@@ -1671,14 +1683,12 @@ async fn modrinth_chinese_file_name_candidate(
     if !use_chinese_names {
         return None;
     }
-    let project = cached_modrinth_project(
-        &ModrinthProjectId::new(project_id.to_string()).ok()?,
-        None,
-    )
-    .await
-    .ok()??;
+    let project =
+        cached_modrinth_project(ModrinthProjectId::new(project_id).ok()?, None)
+            .await
+            .ok()??;
     let title = chinese_file_title_for_modrinth_slug(&project.slug?)?;
-    localized_content_file_name(file_name, &title)
+    localized_content_file_name(&file_name, &title)
 }
 
 pub(crate) async fn add_downloaded_project_version(
@@ -1709,14 +1719,16 @@ pub(crate) async fn add_downloaded_project_version(
     let localized_candidate = if project_type == ProjectType::Mod {
         None
     } else {
-        modrinth_chinese_file_name_candidate(&project_id, &file_name, state)
-            .await
-            .map(|file_name| {
-                format!("{}/{}", project_type.get_folder(), file_name)
-            })
+        modrinth_chinese_file_name_candidate(
+            project_id.clone(),
+            file_name.clone(),
+            state.pool.clone(),
+        )
+        .await
+        .map(|file_name| format!("{}/{}", project_type.get_folder(), file_name))
     };
     let relative_path = resolve_content_install_relative_path(
-        instance_id,
+        instance_id.to_string(),
         format!("{}/{}", project_type.get_folder(), file_name),
         localized_candidate,
         state.pool.clone(),
@@ -1921,9 +1933,9 @@ pub(crate) async fn materialize_project_download_batch(
             None
         } else {
             modrinth_chinese_file_name_candidate(
-                &download.project_id,
-                &download.file_name,
-                state,
+                download.project_id.clone(),
+                download.file_name.clone(),
+                state.pool.clone(),
             )
             .await
             .map(|name| {
@@ -1931,7 +1943,7 @@ pub(crate) async fn materialize_project_download_batch(
             })
         };
         let relative_path = resolve_content_install_relative_path(
-            instance_id,
+            instance_id.to_string(),
             format!(
                 "{}/{}",
                 download.project_type.get_folder(),

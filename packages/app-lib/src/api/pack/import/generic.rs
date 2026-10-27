@@ -22,7 +22,7 @@ use crate::{
 /// (or symlink) the files into the profile.
 pub async fn import_generic(
     instance_folder: PathBuf,
-    instance_id: &str,
+    instance_id: String,
     reporter: InstallProgressReporter,
     details: InstallPhaseDetails,
     symlink: bool,
@@ -49,7 +49,7 @@ pub async fn import_generic(
     };
 
     let info = detect_instance_info(&json_path, overrides).await?;
-    register_instance(instance_id, &name, &info).await?;
+    register_instance(instance_id.clone(), &name, &info).await?;
     copy_instance_files(instance_id, &dotminecraft, reporter, details, symlink)
         .await
 }
@@ -151,7 +151,7 @@ async fn detect_instance_info(
 /// Stage 3 — register the instance metadata (name, game version, loaders)
 /// with the app database.
 async fn register_instance(
-    instance_id: &str,
+    instance_id: String,
     name: &str,
     info: &instance_json::InstanceInfo,
 ) -> crate::Result<()> {
@@ -167,7 +167,7 @@ async fn register_instance(
         override_title: Some(name.to_string()),
         project_id: None,
         version_id: None,
-        instance_id: instance_id.to_string(),
+        instance_id: instance_id.clone(),
         source_filename: None,
     };
     let dependencies = build_dependencies(info).await?;
@@ -177,7 +177,7 @@ async fn register_instance(
         dependencies
     );
     install_from::set_instance_information(
-        instance_id.to_string(),
+        instance_id,
         &description,
         "Imported from folder",
         None,
@@ -326,7 +326,7 @@ async fn resolve_loader_version(
 
 /// Stage 4 — copy (or symlink) the source files into the instance profile.
 async fn copy_instance_files(
-    instance_id: &str,
+    instance_id: String,
     dotminecraft: &Path,
     reporter: InstallProgressReporter,
     details: InstallPhaseDetails,

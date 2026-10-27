@@ -209,7 +209,7 @@ pub async fn import_instance(
 
     let state = State::get().await?;
     finish_import(
-        instance_id,
+        instance_id.to_string(),
         source,
         &state.io_semaphore,
         reporter,

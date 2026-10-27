@@ -183,7 +183,7 @@ pub async fn preview_install_file(
         Vec::new()
     } else {
         crate::state::get_installed_project_ids_for_instance(
-            &request.instance_id,
+            request.instance_id.clone(),
             None,
             &state,
         )

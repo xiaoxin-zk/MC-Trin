@@ -77,7 +77,7 @@ pub(crate) async fn import_axolotl(
             );
             return generic::import_generic(
                 source_path,
-                instance_id,
+                instance_id.to_string(),
                 reporter,
                 details,
                 symlink,
@@ -104,7 +104,7 @@ pub(crate) async fn import_axolotl(
         );
         return generic::import_generic(
             source_path,
-            instance_id,
+            instance_id.to_string(),
             reporter,
             details,
             symlink,
@@ -170,7 +170,7 @@ pub(crate) async fn import_axolotl(
     .await?;
 
     finish_import(
-        instance_id,
+        instance_id.to_string(),
         source_path,
         &state.io_semaphore,
         reporter,

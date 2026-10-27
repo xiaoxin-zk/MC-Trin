@@ -351,7 +351,7 @@ pub(super) async fn install_manual_download(
             .map(|file_name| format!("{target_folder}/{file_name}"))
     };
     let relative_path = crate::state::resolve_content_install_relative_path(
-        instance_id,
+        instance_id.to_string(),
         format!("{target_folder}/{file_name}"),
         localized_candidate,
         state.pool.clone(),

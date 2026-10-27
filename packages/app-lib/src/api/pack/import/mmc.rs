@@ -368,7 +368,7 @@ async fn import_mmc_unmanaged(
     // Moves .minecraft folder over (ie: overrides such as resourcepacks, mods, etc)
     let state = State::get().await?;
     finish_import(
-        instance_id,
+        instance_id.to_string(),
         minecraft_folder,
         &state.io_semaphore,
         reporter,

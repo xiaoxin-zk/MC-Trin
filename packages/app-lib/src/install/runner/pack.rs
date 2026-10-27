@@ -442,7 +442,7 @@ async fn install_local_pack_file(
 
             crate::api::pack::import::generic::import_generic(
                 scratch,
-                &instance_id,
+                instance_id,
                 reporter,
                 details,
                 false,

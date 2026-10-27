@@ -49,7 +49,7 @@ pub async fn get_installed_project_ids(
 ) -> crate::Result<Vec<String>> {
     let state = State::get().await?;
     crate::state::get_installed_project_ids_for_instance(
-        instance_id,
+        instance_id.to_string(),
         None,
         &state,
     )

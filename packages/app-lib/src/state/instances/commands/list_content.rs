@@ -152,8 +152,8 @@ pub(crate) async fn get_content_projects(
     state: &State,
 ) -> crate::Result<DashMap<String, ContentFile>> {
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
-        content_set_id,
+        instance_id.to_string(),
+        content_set_id.map(str::to_string),
         state.pool.clone(),
     )
     .await?;
@@ -169,8 +169,8 @@ pub(crate) async fn get_content_projects(
 }
 
 pub(crate) async fn get_installed_project_ids_for_instance(
-    instance_id: &str,
-    content_set_id: Option<&str>,
+    instance_id: String,
+    content_set_id: Option<String>,
     state: &State,
 ) -> crate::Result<Vec<String>> {
     let pool = state.pool.clone();
@@ -321,8 +321,8 @@ pub(crate) async fn list_content(
     state: &State,
 ) -> crate::Result<Vec<ContentItem>> {
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
-        content_set_id,
+        instance_id.to_string(),
+        content_set_id.map(str::to_string),
         state.pool.clone(),
     )
     .await?;
@@ -398,7 +398,7 @@ pub(crate) async fn list_all_content_from_files(
     state: &State,
 ) -> crate::Result<Vec<ContentItem>> {
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
+        instance_id.to_string(),
         None,
         state.pool.clone(),
     )
@@ -437,7 +437,7 @@ pub(crate) async fn list_content_by_paths(
     }
 
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
+        instance_id.to_string(),
         None,
         state.pool.clone(),
     )
@@ -482,8 +482,8 @@ pub(crate) async fn list_linked_modpack_content(
     state: &State,
 ) -> crate::Result<Vec<ContentItem>> {
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
-        content_set_id,
+        instance_id.to_string(),
+        content_set_id.map(str::to_string),
         state.pool.clone(),
     )
     .await?;
@@ -581,8 +581,8 @@ pub(crate) async fn get_linked_modpack_info(
     state: &State,
 ) -> crate::Result<Option<LinkedModpackInfo>> {
     let resolved = resolve_content_scope_with_instance(
-        instance_id,
-        content_set_id,
+        instance_id.to_string(),
+        content_set_id.map(str::to_string),
         state.pool.clone(),
     )
     .await?;
@@ -1262,12 +1262,12 @@ pub(crate) async fn dependencies_to_content_items(
 }
 
 async fn resolve_content_scope_with_instance(
-    instance_id: &str,
-    content_set_id: Option<&str>,
+    instance_id: String,
+    content_set_id: Option<String>,
     pool: SqlitePool,
 ) -> crate::Result<ResolvedContentScope> {
     let instance = sqlite::instance_rows::get_instance_by_id_with_pool(
-        instance_id.to_string(),
+        instance_id.clone(),
         pool.clone(),
     )
     .await?
@@ -1279,7 +1279,7 @@ async fn resolve_content_scope_with_instance(
             let content_set = {
                 let mut connection = pool.acquire().await?;
                 sqlite::content_rows::get_content_set(
-                    content_set_id,
+                    &content_set_id,
                     &mut *connection,
                 )
                 .await?
@@ -3021,7 +3021,7 @@ mod tests {
         let mut ids = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             get_installed_project_ids_for_instance(
-                &resolved.instance.id,
+                resolved.instance.id.clone(),
                 None,
                 &state,
             ),

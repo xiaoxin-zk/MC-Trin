@@ -218,7 +218,7 @@ pub async fn import_curseforge(
     // Copy in contained folders as overrides
     let state = State::get().await?;
     finish_import(
-        instance_id,
+        instance_id.to_string(),
         curseforge_instance_folder,
         &state.io_semaphore,
         reporter,

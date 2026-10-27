@@ -190,7 +190,7 @@ pub(crate) async fn download_installed_file(
         Some(path) => path.to_string(),
         None => {
             crate::state::resolve_content_install_relative_path(
-                instance_id,
+                instance_id.to_string(),
                 format!("{folder}/{file_name}"),
                 localized_candidate,
                 state.pool.clone(),
