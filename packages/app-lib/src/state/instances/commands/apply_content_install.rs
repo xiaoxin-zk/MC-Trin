@@ -1274,7 +1274,7 @@ async fn resolve_content_scope_with_pool(
                 crate::ErrorKind::InputError("Unknown instance".to_string())
             })?;
     let content_set_id = match content_set_id {
-        Some(id) => id.to_string(),
+        Some(id) => id,
         None => instance.applied_content_set_id.clone().ok_or_else(|| {
             crate::ErrorKind::InputError(format!(
                 "Instance {} has no applied content set",

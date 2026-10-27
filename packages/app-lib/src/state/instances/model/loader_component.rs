@@ -1,3 +1,5 @@
+#![allow(clippy::should_implement_trait)]
+
 use crate::state::ModLoader;
 use serde::{Deserialize, Serialize};
 

@@ -88,6 +88,9 @@ pub(super) async fn run(
     Ok(())
 }
 
+// Spawned preparation futures must own their inputs instead of borrowing the
+// mutable action slice across await points.
+#[allow(clippy::needless_collect)]
 async fn prepare_actions(
     job_state: &mut InstallJobState,
     instance_id: &str,

@@ -2036,6 +2036,7 @@ pub async fn fetch(
 }
 
 /// Downloads a file from its official source without applying mirror routes.
+#[cfg_attr(not(test), allow(dead_code))]
 #[tracing::instrument(skip_all)]
 pub async fn fetch_official(
     url: &str,
@@ -2104,6 +2105,7 @@ pub(crate) async fn fetch_official_with_pool(
     .await
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[tracing::instrument(skip_all)]
 pub(crate) async fn fetch_metadata<T>(
     url: &str,
@@ -2317,6 +2319,7 @@ pub(crate) async fn fetch_with_pool(
 /// synced (e.g. `tag/game_version`). Treating that as a valid response would
 /// poison the cache with an empty collection, so collection fetches validate
 /// that the response actually contains data and fall back to the next source.
+#[cfg_attr(not(test), allow(dead_code))]
 #[tracing::instrument(skip_all)]
 pub async fn fetch_json_nonempty<T>(
     method: Method,
@@ -4915,7 +4918,7 @@ async fn ensure_task_routes_probed(
 
 pub(crate) async fn prepare_native_download_routes(
     request: &DownloadRequest,
-    routes: &mut Vec<DownloadRoute>,
+    routes: &mut [DownloadRoute],
     semaphore: &FetchSemaphore,
 ) {
     crate::util::download::native_reputation::load_if_needed().await;
@@ -6363,6 +6366,7 @@ fn error_chain(error: &crate::Error) -> String {
 
 /// Streams a download to a sibling `.part` file, verifies it, then atomically
 /// moves it into place.
+#[cfg_attr(not(test), allow(dead_code))]
 #[tracing::instrument(skip(semaphore, _exec, progress, request, destination))]
 pub async fn download_to_path(
     request: DownloadRequest,

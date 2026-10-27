@@ -3,6 +3,8 @@
     windows_subsystem = "windows"
 )]
 #![recursion_limit = "256"]
+// Tauri emits this generated construction outside the source tree.
+#![allow(clippy::default_constructed_unit_structs)]
 
 use native_dialog::{DialogBuilder, MessageLevel};
 use serde::Serialize;

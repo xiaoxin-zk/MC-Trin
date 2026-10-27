@@ -1,3 +1,5 @@
+#![allow(clippy::should_implement_trait)]
+
 use crate::state::ProjectType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

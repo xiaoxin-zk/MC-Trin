@@ -1,3 +1,5 @@
+#![allow(clippy::should_implement_trait)]
+
 use serde::{Deserialize, Serialize};
 
 use super::unknown_value;
