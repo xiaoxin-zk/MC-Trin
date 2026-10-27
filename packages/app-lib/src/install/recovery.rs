@@ -1120,7 +1120,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn b10_restores_existing_pack_files_and_database_state() {
+    async fn b10_restores_existing_pack_state_after_download_and_database_failures() {
         crate::event::EventState::init().await.unwrap();
         let root = tempfile::tempdir().unwrap().keep();
         let state = State::init_for_test(root.to_string_lossy().to_string())
@@ -1254,6 +1254,30 @@ mod tests {
         );
         assert_eq!(original_members.len(), 2);
 
+        crate::util::io::write(
+            instance_base.join("mods/old-a.jar"),
+            b"user-edited-old-a",
+        )
+        .await
+        .unwrap();
+        crate::util::io::remove_file(instance_base.join("mods/old-b.jar"))
+            .await
+            .unwrap();
+        let edited_override = instance_base.join("config/user.toml");
+        let deleted_override = instance_base.join("config/deleted.toml");
+        crate::util::io::create_dir_all(edited_override.parent().unwrap())
+            .await
+            .unwrap();
+        crate::util::io::write(&edited_override, b"user configuration")
+            .await
+            .unwrap();
+        crate::util::io::write(&deleted_override, b"user deleted this")
+            .await
+            .unwrap();
+        crate::util::io::remove_file(&deleted_override)
+            .await
+            .unwrap();
+
         let request = InstallRequest::InstallPackToExistingInstance {
             instance_id: instance_id.clone(),
             location: CreatePackLocation::FromFile {
@@ -1284,7 +1308,10 @@ mod tests {
             job_id,
             &mut job_state,
             &state,
-            Vec::new(),
+            vec![
+                "config/user.toml".to_string(),
+                "config/deleted.toml".to_string(),
+            ],
         )
         .await
         .unwrap();
@@ -1300,6 +1327,8 @@ mod tests {
             .clone();
         assert!(!instance_base.join("mods/old-a.jar").exists());
         assert!(!instance_base.join("mods/old-b.jar").exists());
+        assert!(!edited_override.exists());
+        assert!(!deleted_override.exists());
         assert!(instance_base.join("B10_KEEP_ME.txt").exists());
         let entries_after_remove = content_rows::get_content_entries(
             &original.applied_content_set.id,
@@ -1366,6 +1395,12 @@ mod tests {
         crate::util::io::write(&untracked_new_path, b"partial-config")
             .await
             .unwrap();
+        crate::util::io::write(&edited_override, b"new pack config")
+            .await
+            .unwrap();
+        crate::util::io::write(&deleted_override, b"reintroduced config")
+            .await
+            .unwrap();
         job_state
             .rollback
             .as_mut()
@@ -1374,7 +1409,51 @@ mod tests {
             .as_mut()
             .unwrap()
             .replacement_paths
-            .push("config/new-pack.cfg".to_string());
+            .extend([
+                "config/new-pack.cfg".to_string(),
+                "config/user.toml".to_string(),
+                "config/deleted.toml".to_string(),
+                "mods/database-failure.jar".to_string(),
+            ]);
+
+        let database_failure_path = instance_base.join("mods/database-failure.jar");
+        crate::util::io::write(&database_failure_path, b"partial database file")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TRIGGER b10_fail_instance_file_insert
+             BEFORE INSERT ON instance_files
+             WHEN NEW.relative_path = 'mods/database-failure.jar'
+             BEGIN
+                 SELECT RAISE(ABORT, 'injected content database failure');
+             END",
+        )
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        let (_, database_failure_sha1) =
+            crate::util::fetch::sha1_file_async(&database_failure_path)
+                .await
+                .unwrap();
+        let database_write = crate::state::record_project_file_atomic(
+            &instance_id,
+            "mods/database-failure.jar",
+            &database_failure_sha1,
+            b"partial database file".len() as u64,
+            ProjectType::Mod,
+            ContentSourceKind::ImportedModpack,
+            ContentOwnershipKind::PackManaged,
+            None,
+            false,
+            None,
+            &state,
+        )
+        .await;
+        assert!(database_write.is_err());
+        sqlx::query("DROP TRIGGER b10_fail_instance_file_insert")
+            .execute(&state.pool)
+            .await
+            .unwrap();
 
         apply_cleanup(&mut job_state, &state).await.unwrap();
         apply_cleanup(&mut job_state, &state).await.unwrap();
@@ -1391,16 +1470,17 @@ mod tests {
             crate::util::io::read(instance_base.join("mods/old-a.jar"))
                 .await
                 .unwrap(),
-            b"old-a-content"
+            b"user-edited-old-a"
         );
+        assert!(!instance_base.join("mods/old-b.jar").exists());
         assert_eq!(
-            crate::util::io::read(instance_base.join("mods/old-b.jar"))
-                .await
-                .unwrap(),
-            b"old-b-content"
+            crate::util::io::read(&edited_override).await.unwrap(),
+            b"user configuration"
         );
+        assert!(!deleted_override.exists());
         assert!(!new_path.exists());
         assert!(!untracked_new_path.exists());
+        assert!(!database_failure_path.exists());
         assert_eq!(
             crate::util::io::read(instance_base.join("B10_KEEP_ME.txt"))
                 .await

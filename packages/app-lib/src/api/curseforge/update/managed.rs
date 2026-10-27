@@ -4,10 +4,10 @@ use crate::api::curseforge::archive::{loader_type, looks_like_game_version};
 use crate::api::curseforge::catalog::get_file;
 use crate::api::curseforge::dto::{
     CurseForgeInstallResult, CurseForgeInstalledFile,
-    CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
+    CurseForgeManualDownload, CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
 };
 use crate::api::curseforge::modpack::{
-    get_modpack_expected_members_with_reporter,
+    CurseForgePackExpectedMember, get_modpack_expected_members_with_reporter,
     install_managed_modpack_with_reporter,
 };
 use crate::api::curseforge::selection::persist_manual_download;
@@ -26,7 +26,6 @@ pub async fn update_managed_modpack(
 ) -> crate::Result<CurseForgeModpackInstallResult> {
     update_managed_modpack_with_reporter(instance_id, file_id, None).await
 }
-
 pub(crate) async fn update_managed_modpack_with_reporter(
     instance_id: &str,
     file_id: u32,
@@ -89,31 +88,8 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         .or_else(|| {
             Some(metadata.applied_content_set.loader.as_str().to_string())
         });
-    let installed_releases = members
-        .iter()
-        .filter(|member| {
-            member.materialization_state
-                == crate::state::instances::PackMemberMaterializationState::Present
-        })
-        .filter_map(|member| {
-            Some((
-                member.provider_project_id.clone()?,
-                member.provider_release_id.clone()?,
-            ))
-        })
-        .collect::<HashSet<_>>();
-    let manual_downloads = expected
-        .members
-        .iter()
-        .filter(|member| member.required)
-        .filter(|member| {
-            !installed_releases.contains(&(
-                member.project_id.to_string(),
-                member.file_id.to_string(),
-            ))
-        })
-        .filter_map(|member| member.manual_download.clone())
-        .collect::<Vec<_>>();
+    let manual_downloads =
+        required_manual_pack_downloads(&expected.members, &members);
     if !manual_downloads.is_empty() {
         for download in &manual_downloads {
             persist_manual_download(instance_id, download).await?;
@@ -386,6 +362,56 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         return Err(error);
     }
     Ok(result)
+}
+
+fn required_manual_pack_downloads(
+    expected: &[CurseForgePackExpectedMember],
+    members: &[crate::state::instances::PackMember],
+) -> Vec<CurseForgeManualDownload> {
+    use crate::state::instances::{
+        PackMemberMaterializationState, PackMemberOverrideKind,
+    };
+
+    let preserved_projects = members
+        .iter()
+        .filter(|member| {
+            member.provider == Some(crate::state::ContentProvider::CurseForge)
+                && matches!(
+                    member.override_kind,
+                    PackMemberOverrideKind::Removed | PackMemberOverrideKind::Version
+                )
+        })
+        .filter_map(|member| member.provider_project_id.clone())
+        .collect::<HashSet<_>>();
+    let installed_releases = members
+        .iter()
+        .filter(|member| {
+            member.provider == Some(crate::state::ContentProvider::CurseForge)
+                && member.materialization_state
+                    == PackMemberMaterializationState::Present
+        })
+        .filter_map(|member| {
+            Some((
+                member.provider_project_id.clone()?,
+                member.provider_release_id.clone()?,
+            ))
+        })
+        .collect::<HashSet<_>>();
+
+    expected
+        .iter()
+        .filter(|member| member.required)
+        .filter(|member| {
+            !preserved_projects.contains(&member.project_id.to_string())
+        })
+        .filter(|member| {
+            !installed_releases.contains(&(
+                member.project_id.to_string(),
+                member.file_id.to_string(),
+            ))
+        })
+        .filter_map(|member| member.manual_download.clone())
+        .collect()
 }
 
 async fn restore_managed_curseforge_metadata(
@@ -662,4 +688,111 @@ pub(super) async fn rollback_curseforge_update(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::instances::{
+        PackMember, PackMemberMaterializationState, PackMemberOverrideKind,
+    };
+    use crate::state::{ContentOwnershipKind, ContentProvider, ProjectType};
+
+    fn expected_member(project_id: u32, file_id: u32) -> CurseForgePackExpectedMember {
+        CurseForgePackExpectedMember {
+            project_id,
+            file_id,
+            project_type: ProjectType::Mod,
+            expected_relative_path: format!("mods/{project_id}.jar"),
+            required: true,
+            expected_sha1: None,
+            expected_size: None,
+            expected_fingerprint: None,
+            manual_download: Some(CurseForgeManualDownload {
+                project_id,
+                file_id,
+                file_name: format!("{project_id}.jar"),
+                ownership_kind: ContentOwnershipKind::PackManaged,
+                operation_kind:
+                    crate::state::instances::ManualDownloadOperationKind::PackUpdate,
+                website_url: None,
+                project_type: "mod".to_string(),
+                project_slug: format!("project-{project_id}"),
+                target_folder: "mods".to_string(),
+                hashes: Vec::new(),
+                file_length: 0,
+                file_fingerprint: 0,
+            }),
+        }
+    }
+
+    fn pack_member(
+        project_id: u32,
+        release_id: u32,
+        override_kind: PackMemberOverrideKind,
+        materialization_state: PackMemberMaterializationState,
+    ) -> PackMember {
+        let now = chrono::Utc::now();
+        PackMember {
+            id: uuid::Uuid::new_v4().to_string(),
+            content_set_id: "test-content-set".to_string(),
+            content_entry_id: None,
+            member_key: format!("curseforge:{project_id}:mod"),
+            project_type: ProjectType::Mod,
+            expected_relative_path: format!("mods/{project_id}.jar"),
+            provider: Some(ContentProvider::CurseForge),
+            provider_project_id: Some(project_id.to_string()),
+            provider_release_id: Some(release_id.to_string()),
+            required: true,
+            expected_sha1: None,
+            expected_size: None,
+            expected_fingerprint: None,
+            materialization_state,
+            override_kind,
+            reconciled: true,
+            created_at: now,
+            modified_at: now,
+        }
+    }
+
+    #[test]
+    fn removed_and_pinned_pack_members_do_not_request_manual_downloads() {
+        let expected = vec![
+            expected_member(1, 101),
+            expected_member(2, 201),
+            expected_member(3, 303),
+            expected_member(4, 404),
+        ];
+        let members = vec![
+            pack_member(
+                1,
+                100,
+                PackMemberOverrideKind::Removed,
+                PackMemberMaterializationState::Removed,
+            ),
+            pack_member(
+                2,
+                200,
+                PackMemberOverrideKind::Version,
+                PackMemberMaterializationState::Present,
+            ),
+            pack_member(
+                3,
+                303,
+                PackMemberOverrideKind::None,
+                PackMemberMaterializationState::Present,
+            ),
+        ];
+
+        let manual_downloads =
+            required_manual_pack_downloads(&expected, &members);
+
+        assert_eq!(
+            manual_downloads
+                .iter()
+                .map(|download| (download.project_id, download.file_id))
+                .collect::<Vec<_>>(),
+            vec![(4, 404)]
+        );
+    }
 }

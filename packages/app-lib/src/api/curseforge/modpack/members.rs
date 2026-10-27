@@ -571,3 +571,109 @@ pub(crate) async fn retry_modpack_file_install(
     }
     (installed_result, failed_result, failure_reason)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::curseforge::dto::{
+        CurseForgeManifestFile, CurseForgeManifestMinecraft,
+    };
+    use crate::state::instances::{
+        PackMember, PackMemberMaterializationState, PackMemberOverrideKind,
+    };
+    use crate::state::{ContentProvider, ProjectType};
+    use std::collections::HashSet;
+
+    fn member(
+        project_id: u32,
+        release_id: u32,
+        override_kind: PackMemberOverrideKind,
+        materialization_state: PackMemberMaterializationState,
+    ) -> PackMember {
+        let now = chrono::Utc::now();
+        PackMember {
+            id: uuid::Uuid::new_v4().to_string(),
+            content_set_id: "test-content-set".to_string(),
+            content_entry_id: None,
+            member_key: format!("curseforge:{project_id}:mod"),
+            project_type: ProjectType::Mod,
+            expected_relative_path: format!("mods/{project_id}.jar"),
+            provider: Some(ContentProvider::CurseForge),
+            provider_project_id: Some(project_id.to_string()),
+            provider_release_id: Some(release_id.to_string()),
+            required: true,
+            expected_sha1: None,
+            expected_size: None,
+            expected_fingerprint: None,
+            materialization_state,
+            override_kind,
+            reconciled: true,
+            created_at: now,
+            modified_at: now,
+        }
+    }
+
+    #[test]
+    fn update_keeps_removed_and_pinned_members_out_of_the_manifest_queue() {
+        let manifest = crate::api::curseforge::dto::CurseForgeModpackManifest {
+            minecraft: CurseForgeManifestMinecraft {
+                version: "1.21.1".to_string(),
+                mod_loaders: Vec::new(),
+            },
+            files: vec![
+                CurseForgeManifestFile {
+                    project_id: 1,
+                    file_id: 101,
+                    required: true,
+                },
+                CurseForgeManifestFile {
+                    project_id: 2,
+                    file_id: 201,
+                    required: true,
+                },
+                CurseForgeManifestFile {
+                    project_id: 3,
+                    file_id: 301,
+                    required: true,
+                },
+                CurseForgeManifestFile {
+                    project_id: 4,
+                    file_id: 401,
+                    required: true,
+                },
+            ],
+            overrides: "overrides".to_string(),
+            name: None,
+            version: None,
+        };
+        let members = vec![
+            member(
+                1,
+                100,
+                PackMemberOverrideKind::Removed,
+                PackMemberMaterializationState::Removed,
+            ),
+            member(
+                2,
+                200,
+                PackMemberOverrideKind::Version,
+                PackMemberMaterializationState::Present,
+            ),
+            member(
+                3,
+                300,
+                PackMemberOverrideKind::Disabled,
+                PackMemberMaterializationState::Present,
+            ),
+        ];
+
+        let (selected, disabled) =
+            select_modpack_manifest_files(&manifest, &members, false);
+
+        assert_eq!(
+            selected.iter().map(|file| file.project_id).collect::<Vec<_>>(),
+            vec![3, 4]
+        );
+        assert_eq!(disabled, HashSet::from(["3".to_string()]));
+    }
+}

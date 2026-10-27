@@ -895,6 +895,191 @@ mod tests {
     use futures::future::poll_fn;
     use http::{Response, StatusCode};
     use sha1_smol::Sha1;
+    use std::sync::atomic::AtomicUsize;
+
+    struct H2RangeFixture {
+        connection: Arc<SharedH2Connection>,
+        requests: Arc<Mutex<Vec<(u64, u64)>>>,
+        server: tokio::task::JoinHandle<()>,
+        driver: tokio::task::JoinHandle<()>,
+    }
+
+    struct H2RangeReply {
+        status: StatusCode,
+        content_range: Option<String>,
+        body: Vec<u8>,
+        reset_after_bytes: Option<usize>,
+    }
+
+    async fn start_h2_range_fixture<F>(
+        route: &DownloadRoute,
+        reply_for: F,
+    ) -> H2RangeFixture
+    where
+        F: Fn(u64, u64, usize) -> H2RangeReply + Send + Sync + 'static,
+    {
+        let (client_io, server_io) = tokio::io::duplex(256 * 1024);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let request_ranges = requests.clone();
+        let request_index = Arc::new(AtomicUsize::new(0));
+        let server_request_index = request_index.clone();
+        let reply_for = Arc::new(reply_for);
+        let server_reply_for = reply_for.clone();
+        let server = tokio::spawn(async move {
+            let mut connection = h2::server::handshake(server_io).await.unwrap();
+            while let Some(Ok((request, mut respond))) = connection.accept().await
+            {
+                let request_ranges = request_ranges.clone();
+                let request_index = server_request_index.clone();
+                let reply_for = server_reply_for.clone();
+                tokio::spawn(async move {
+                    let range = request
+                        .headers()
+                        .get(http::header::RANGE)
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .strip_prefix("bytes=")
+                        .unwrap()
+                        .to_string();
+                    let (start, end) = range.split_once('-').unwrap();
+                    let start = start.parse::<u64>().unwrap();
+                    let end = end.parse::<u64>().unwrap();
+                    request_ranges.lock().push((start, end));
+                    let index = request_index.fetch_add(1, Ordering::Relaxed);
+                    let reply = reply_for(start, end, index);
+                    let declared_length = reply.body.len() as u64;
+                    let mut response = Response::builder()
+                        .status(reply.status)
+                        .header(
+                            http::header::CONTENT_LENGTH,
+                            declared_length.to_string(),
+                        );
+                    if let Some(content_range) = reply.content_range {
+                        response = response
+                            .header(http::header::CONTENT_RANGE, content_range);
+                    }
+                    let response = response.body(()).unwrap();
+                    let end_stream = reply.body.is_empty()
+                        && reply.reset_after_bytes.is_none();
+                    let Ok(mut stream) =
+                        respond.send_response(response, end_stream)
+                    else {
+                        return;
+                    };
+                    if let Some(reset_after_bytes) = reply.reset_after_bytes {
+                        let count = reset_after_bytes.min(reply.body.len());
+                        if count > 0
+                            && stream
+                                .send_data(
+                                    Bytes::copy_from_slice(&reply.body[..count]),
+                                    false,
+                                )
+                                .is_err()
+                        {
+                            return;
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        stream.send_reset(h2::Reason::CANCEL);
+                    } else if !reply.body.is_empty() {
+                        let _ = stream.send_data(Bytes::from(reply.body), true);
+                    }
+                });
+            }
+        });
+        let (sender, driver) = h2::client::handshake(client_io).await.unwrap();
+        let driver = tokio::spawn(driver);
+        let connection = SharedH2Connection::cache_for_test(route, sender).await;
+        H2RangeFixture {
+            connection,
+            requests,
+            server,
+            driver,
+        }
+    }
+
+    struct Http1RangeFixture {
+        url: String,
+        requests: Arc<Mutex<Vec<(u64, u64)>>>,
+        server: tokio::task::JoinHandle<()>,
+    }
+
+    async fn start_http1_range_fixture(data: Arc<Vec<u8>>) -> Http1RangeFixture {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let server_requests = requests.clone();
+        let server_data = data.clone();
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                let data = server_data.clone();
+                let requests = server_requests.clone();
+                tokio::spawn(async move {
+                    let mut request = Vec::new();
+                    let mut buffer = [0_u8; 1024];
+                    loop {
+                        let Ok(read) = stream.read(&mut buffer).await else {
+                            return;
+                        };
+                        if read == 0 {
+                            return;
+                        }
+                        request.extend_from_slice(&buffer[..read]);
+                        if request
+                            .windows(4)
+                            .any(|window| window == b"\r\n\r\n")
+                        {
+                            break;
+                        }
+                    }
+                    let request = String::from_utf8_lossy(&request)
+                        .to_ascii_lowercase();
+                    let Some(range) = request
+                        .lines()
+                        .find_map(|line| line.strip_prefix("range: bytes="))
+                    else {
+                        return;
+                    };
+                    let Some((start, end)) = range.split_once('-') else {
+                        return;
+                    };
+                    let (Ok(start), Ok(end)) =
+                        (start.parse::<u64>(), end.parse::<u64>())
+                    else {
+                        return;
+                    };
+                    requests.lock().push((start, end));
+                    let Some(body) = data.get(start as usize..=end as usize)
+                    else {
+                        return;
+                    };
+                    let headers = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nConnection: close\r\n\r\n",
+                        body.len(),
+                        data.len(),
+                    );
+                    if stream.write_all(headers.as_bytes()).await.is_err()
+                        || stream.write_all(body).await.is_err()
+                    {
+                        return;
+                    }
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+        Http1RangeFixture {
+            url: format!("http://{address}/file"),
+            requests,
+            server,
+        }
+    }
 
     struct SlowRangeTransport {
         bytes: Arc<Vec<u8>>,
@@ -1406,6 +1591,383 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn actual_h2_rejects_incompatible_range_responses_and_preserves_destination()
+     {
+        let data = b"verified h2 range payload".to_vec();
+        let size = data.len() as u64;
+        let cases = vec![
+            (
+                "ignored-range",
+                StatusCode::OK,
+                None,
+                data.clone(),
+                H2DownloadFailure::RangeUnsupported,
+            ),
+            (
+                "range-416",
+                StatusCode::RANGE_NOT_SATISFIABLE,
+                Some(format!("bytes */{size}")),
+                Vec::new(),
+                H2DownloadFailure::RangeUnsupported,
+            ),
+            (
+                "missing-content-range",
+                StatusCode::PARTIAL_CONTENT,
+                None,
+                Vec::new(),
+                H2DownloadFailure::RangeUnsupported,
+            ),
+            (
+                "wrong-content-range",
+                StatusCode::PARTIAL_CONTENT,
+                Some(format!("bytes 1-{}/{size}", size - 1)),
+                Vec::new(),
+                H2DownloadFailure::RangeUnsupported,
+            ),
+        ];
+
+        for (name, status, content_range, body, expected_failure) in cases {
+            let url = format!("https://h2-{name}.test/file");
+            let request = DownloadRequest::new(&url, fetch::ResourceClass::Other)
+                .with_integrity(
+                    fetch::Integrity::sha1(Sha1::from(&data).hexdigest())
+                        .with_size(size),
+                );
+            let route = DownloadRoute {
+                url: request.url.clone(),
+                source: fetch::DownloadRouteSource::Official,
+                is_mirror: false,
+                allow_sensitive_headers: true,
+                supports_range: true,
+                proxy: fetch::ProxyPolicy::Direct,
+            };
+            let reply_body = body.clone();
+            let reply_range = content_range.clone();
+            let fixture = start_h2_range_fixture(
+                &route,
+                move |_start, _end, _index| H2RangeReply {
+                    status,
+                    content_range: reply_range.clone(),
+                    body: reply_body.clone(),
+                    reset_after_bytes: None,
+                },
+            )
+            .await;
+            let directory = tempfile::tempdir().unwrap();
+            let destination = directory.path().join("installed-pack.zip");
+            let part = directory.path().join("installed-pack.zip.part");
+            tokio::fs::write(&destination, b"previous installation")
+                .await
+                .unwrap();
+            let uri = route.url.parse().unwrap();
+
+            let outcome = download(
+                &fixture.connection,
+                &uri,
+                &request,
+                &route,
+                &destination,
+                &part,
+                size,
+                1,
+                None,
+            )
+            .await;
+
+            assert!(matches!(
+                outcome,
+                H2DownloadOutcome::Fallback {
+                    failure,
+                    preserve_partial: false
+                } if failure == expected_failure
+            ));
+            assert!(!part.exists(), "case {name} left a sparse part file");
+            assert!(
+                !super::super::range_journal::path(&part).exists(),
+                "case {name} left a range journal"
+            );
+            assert_eq!(
+                tokio::fs::read(&destination).await.unwrap(),
+                b"previous installation",
+                "case {name} replaced the installed destination"
+            );
+            assert_eq!(
+                *fixture.requests.lock(),
+                vec![(0, size - 1)],
+                "case {name} did not issue one bounded Range request"
+            );
+            fixture.driver.abort();
+            fixture.server.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn actual_h2_integrity_failure_discards_partial_and_keeps_destination()
+     {
+        let expected = b"the expected archive contents".to_vec();
+        let corrupt = vec![0x5a; expected.len()];
+        let size = expected.len() as u64;
+        let url = "https://h2-range-corrupt.test/file".to_string();
+        let request = DownloadRequest::new(&url, fetch::ResourceClass::Modpack)
+            .with_integrity(
+                fetch::Integrity::sha1(Sha1::from(&expected).hexdigest())
+                    .with_size(size),
+            );
+        let route = DownloadRoute {
+            url: request.url.clone(),
+            source: fetch::DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: fetch::ProxyPolicy::Direct,
+        };
+        let response_body = Arc::new(corrupt);
+        let fixture = start_h2_range_fixture(&route, move |start, end, _| {
+            H2RangeReply {
+                status: StatusCode::PARTIAL_CONTENT,
+                content_range: Some(format!("bytes {start}-{end}/{size}")),
+                body: response_body[start as usize..=end as usize].to_vec(),
+                reset_after_bytes: None,
+            }
+        })
+        .await;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("pack.mrpack");
+        let part = directory.path().join("pack.mrpack.part");
+        tokio::fs::write(&destination, b"previous valid pack")
+            .await
+            .unwrap();
+        let uri = route.url.parse().unwrap();
+
+        let outcome = download(
+            &fixture.connection,
+            &uri,
+            &request,
+            &route,
+            &destination,
+            &part,
+            size,
+            1,
+            None,
+        )
+        .await;
+
+        assert!(matches!(
+            outcome,
+            H2DownloadOutcome::Fallback {
+                failure: H2DownloadFailure::Integrity,
+                preserve_partial: false
+            }
+        ));
+        assert!(!part.exists());
+        assert!(!super::super::range_journal::path(&part).exists());
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"previous valid pack"
+        );
+        fixture.driver.abort();
+        fixture.server.abort();
+    }
+
+    #[tokio::test]
+    async fn actual_h2_stream_resets_keep_checkpoints_and_resume_only_the_tail()
+     {
+        let data = Arc::new(
+            (0..256 * 1024)
+                .map(|index| (index % 239) as u8)
+                .collect::<Vec<_>>(),
+        );
+        let http1_fixture = start_http1_range_fixture(data.clone()).await;
+        let url = http1_fixture.url.clone();
+        let request = DownloadRequest::new(&url, fetch::ResourceClass::Other)
+            .with_integrity(
+                fetch::Integrity::sha1(Sha1::from(&data[..]).hexdigest())
+                    .with_size(data.len() as u64),
+            );
+        let route = DownloadRoute {
+            url: request.url.clone(),
+            source: fetch::DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: fetch::ProxyPolicy::Direct,
+        };
+        let reset_prefix = 16 * 1024;
+        let h2_data = data.clone();
+        let fixture = start_h2_range_fixture(&route, move |start, end, index| {
+            H2RangeReply {
+                status: StatusCode::PARTIAL_CONTENT,
+                content_range: Some(format!(
+                    "bytes {start}-{end}/{}",
+                    h2_data.len()
+                )),
+                body: h2_data[start as usize..=end as usize].to_vec(),
+                reset_after_bytes: (index < H2_RANGE_RETRY_ATTEMPTS)
+                    .then_some(reset_prefix),
+            }
+        })
+        .await;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("resumed.bin");
+        let part = directory.path().join("resumed.bin.part");
+        tokio::fs::write(&destination, b"previous valid file")
+            .await
+            .unwrap();
+        let uri = route.url.parse().unwrap();
+
+        let interrupted = tokio::time::timeout(
+            Duration::from_secs(10),
+            download(
+                &fixture.connection,
+                &uri,
+                &request,
+                &route,
+                &destination,
+                &part,
+                data.len() as u64,
+                1,
+                None,
+            ),
+        )
+        .await
+        .expect("repeated H2 stream resets should reach the fallback boundary");
+
+        assert!(matches!(
+            interrupted,
+            H2DownloadOutcome::Fallback {
+                failure: H2DownloadFailure::StreamReset,
+                preserve_partial: true
+            }
+        ));
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"previous valid file"
+        );
+        let journal = RangeJournal::load(&part, &request.integrity, data.len() as u64)
+            .await
+            .unwrap()
+            .expect("recoverable Range resets must preserve a validated journal");
+        let checkpoints = journal.ranges().await;
+        assert_eq!(
+            checkpoints[0].written,
+            reset_prefix as u64 * H2_RANGE_RETRY_ATTEMPTS as u64
+        );
+
+        let semaphore = fetch::FetchSemaphore(tokio::sync::Semaphore::new(8));
+        let resumed = resume_http1(
+            &request,
+            &route,
+            &destination,
+            &part,
+            &semaphore,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert!(matches!(resumed, H2DownloadOutcome::Completed(_)));
+        assert_eq!(tokio::fs::read(&destination).await.unwrap(), *data);
+        let h2_ranges = fixture.requests.lock().clone();
+        let http1_ranges = http1_fixture.requests.lock().clone();
+        let mut ranges = h2_ranges;
+        ranges.extend(http1_ranges);
+        assert_eq!(ranges.len(), H2_RANGE_RETRY_ATTEMPTS + 1);
+        assert_eq!(
+            ranges.iter().map(|(start, _)| *start).collect::<Vec<_>>(),
+            (0..=H2_RANGE_RETRY_ATTEMPTS)
+                .map(|attempt| reset_prefix as u64 * attempt as u64)
+                .collect::<Vec<_>>()
+        );
+        assert!(!part.exists());
+        assert!(!super::super::range_journal::path(&part).exists());
+        fixture.driver.abort();
+        fixture.server.abort();
+        http1_fixture.server.abort();
+    }
+
+    #[tokio::test]
+    async fn h2_resume_uses_saved_checkpoints_without_refetching_completed_prefix()
+     {
+        let data = Arc::new(
+            (0..512 * 1024)
+                .map(|index| (index % 239) as u8)
+                .collect::<Vec<_>>(),
+        );
+        let url = "https://h2-range-resume.test/file".to_string();
+        let request = DownloadRequest::new(&url, fetch::ResourceClass::Modpack)
+            .with_integrity(
+                fetch::Integrity::sha1(Sha1::from(&data[..]).hexdigest())
+                    .with_size(data.len() as u64),
+            );
+        let route = DownloadRoute {
+            url: request.url.clone(),
+            source: fetch::DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: fetch::ProxyPolicy::Direct,
+        };
+        let h2_data = data.clone();
+        let fixture = start_h2_range_fixture(&route, move |start, end, _| {
+            H2RangeReply {
+                status: StatusCode::PARTIAL_CONTENT,
+                content_range: Some(format!(
+                    "bytes {start}-{end}/{}",
+                    h2_data.len()
+                )),
+                body: h2_data[start as usize..=end as usize].to_vec(),
+                reset_after_bytes: None,
+            }
+        })
+        .await;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("resumed-pack.mrpack");
+        let part = directory.path().join("resumed-pack.mrpack.part");
+        tokio::fs::write(&part, &data[..]).await.unwrap();
+        let prefix = 16 * 1024;
+        let journal = RangeJournal::new(
+            &part,
+            &request.integrity,
+            data.len() as u64,
+            2,
+        );
+        journal
+            .checkpoint(
+                0,
+                prefix as u64,
+                &sha2::Sha256::new_with_prefix(&data[..prefix]),
+            )
+            .await
+            .unwrap();
+        journal.persist().await.unwrap();
+        let semaphore = fetch::FetchSemaphore(tokio::sync::Semaphore::new(8));
+
+        let outcome = resume_http1(
+            &request,
+            &route,
+            &destination,
+            &part,
+            &semaphore,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert!(matches!(outcome, H2DownloadOutcome::Completed(_)));
+        assert_eq!(tokio::fs::read(&destination).await.unwrap(), *data);
+        assert!(fixture
+            .requests
+            .lock()
+            .iter()
+            .any(|(start, _)| *start == prefix as u64));
+        assert!(fixture.requests.lock().iter().all(|(start, _)| *start != 0));
+        assert!(!part.exists());
+        assert!(!super::super::range_journal::path(&part).exists());
+        fixture.driver.abort();
+        fixture.server.abort();
+    }
+
+    #[tokio::test]
     async fn downloads_one_file_over_eight_h2_range_streams() {
         let data = Arc::new(
             (0..2 * 1024 * 1024)
@@ -1551,6 +2113,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let destination = directory.path().join("pack.zip");
         let part_path = directory.path().join("pack.zip.part");
+        tokio::fs::write(&destination, b"previous installed pack")
+            .await
+            .unwrap();
         let cancellation = tokio_util::sync::CancellationToken::new();
         let mut request = DownloadRequest::new(
             "https://h2-range-cancel.test/pack.zip",
@@ -1604,7 +2169,10 @@ mod tests {
 
         assert!(matches!(outcome, H2DownloadOutcome::Canceled));
         assert!(!part_path.exists());
-        assert!(!destination.exists());
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"previous installed pack"
+        );
         client_driver.abort();
         server.abort();
     }
