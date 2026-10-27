@@ -2043,7 +2043,7 @@ pub async fn fetch_official(
     download_meta: Option<&DownloadMeta>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    exec: &sqlx::SqlitePool,
 ) -> crate::Result<Bytes> {
     let method = Method::GET;
     let (url, requires_auth, credentials) =
@@ -2075,7 +2075,7 @@ pub(crate) async fn fetch_metadata<T>(
     url: &str,
     parse: impl Fn(&Bytes) -> crate::Result<T> + Send + Sync,
     semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    exec: &sqlx::SqlitePool,
 ) -> crate::Result<T> {
     let validate = |bytes: &Bytes| parse(bytes).map(|_| ());
     let method = Method::GET;
@@ -2122,7 +2122,7 @@ pub async fn fetch_json<T>(
     json_body: Option<serde_json::Value>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    exec: &sqlx::SqlitePool,
 ) -> crate::Result<T>
 where
     T: DeserializeOwned,
@@ -2171,7 +2171,7 @@ pub async fn fetch_json_nonempty<T>(
     json_body: Option<serde_json::Value>,
     uri_path: Option<&'static str>,
     semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    exec: &sqlx::SqlitePool,
 ) -> crate::Result<T>
 where
     T: DeserializeOwned,
@@ -2302,8 +2302,10 @@ async fn fetch_advanced_with_client_and_progress(
     >,
     attempt_budget: usize,
 ) -> crate::Result<Bytes> {
-    let (url, requires_auth, credentials) =
-        request_auth_context(&method, url, header, uri_path, exec).await?;
+    let (url, requires_auth, credentials) = request_auth_context_with_executor(
+        &method, url, header, uri_path, exec,
+    )
+    .await?;
     fetch_advanced_with_credentials(
         method,
         &url,
@@ -2326,6 +2328,32 @@ async fn fetch_advanced_with_client_and_progress(
 }
 
 async fn request_auth_context(
+    method: &Method,
+    url: &str,
+    header: Option<(&str, &str)>,
+    uri_path: Option<&'static str>,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<(String, bool, Option<crate::state::ModrinthCredentials>)> {
+    let url = retired_sources::normalize(url)?.into_owned();
+    let is_api_url = url.starts_with(env!("MODRINTH_API_URL"))
+        || url.starts_with(env!("MODRINTH_API_URL_V3"));
+    let requires_auth =
+        is_api_url && requires_modrinth_auth(method, header, uri_path);
+    let credentials = if requires_auth
+        && header
+            .as_ref()
+            .is_none_or(|header| !is_sensitive_header(header.0))
+    {
+        let mut connection = pool.acquire().await?;
+        crate::state::ModrinthCredentials::get_active(&mut *connection).await?
+    } else {
+        None
+    };
+
+    Ok((url, requires_auth, credentials))
+}
+
+async fn request_auth_context_with_executor(
     method: &Method,
     url: &str,
     header: Option<(&str, &str)>,
