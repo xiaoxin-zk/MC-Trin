@@ -2247,4 +2247,106 @@ mod tests {
             );
         }
     }
+
+    /// Java archives come from a vendor feed, so extraction is exercised
+    /// against archives that try to write outside the staging directory.
+
+    fn write_zip(path: &Path, entries: &[(&str, Option<&[u8]>)]) {
+        use std::io::Write as _;
+
+        let file = std::fs::File::create(path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, contents) in entries {
+            match contents {
+                Some(bytes) => {
+                    writer.start_file(*name, options).unwrap();
+                    writer.write_all(bytes).unwrap();
+                }
+                None => writer.add_directory(*name, options).unwrap(),
+            }
+        }
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn archive_file_name_validation_rejects_escapes() {
+        assert!(validate_archive_file_name(Path::new("jdk-21")).is_ok());
+
+        for name in ["", ".", "..", "a/b", "/absolute"] {
+            assert!(
+                validate_archive_file_name(Path::new(name)).is_err(),
+                "{name:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn archive_extraction_rejects_traversal_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let staging = temp.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+        let outside = temp.path().join("evil.txt");
+
+        // The inferred install directory itself escapes the staging root.
+        let escaped_root = temp.path().join("escaped-root.zip");
+        write_zip(&escaped_root, &[("../evil.txt", Some(b"evil"))]);
+        assert!(extract_azul_archive(&escaped_root, &staging).is_err());
+        assert!(!outside.exists(), "nothing may be written outside staging");
+
+        // A valid install directory, but one entry climbs out of it.
+        let nested = temp.path().join("nested.zip");
+        write_zip(
+            &nested,
+            &[
+                ("jdk-21/", None),
+                ("jdk-21/bin/java", Some(b"binary")),
+                ("jdk-21/../evil.txt", Some(b"evil")),
+            ],
+        );
+        assert!(extract_azul_archive(&nested, &staging).is_err());
+        assert!(!outside.exists(), "nothing may be written outside staging");
+    }
+
+    #[test]
+    fn archive_extraction_rejects_missing_root_and_corrupt_archives() {
+        let temp = tempfile::tempdir().unwrap();
+        let staging = temp.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let empty = temp.path().join("empty.zip");
+        write_zip(&empty, &[]);
+        assert!(
+            extract_azul_archive(&empty, &staging).is_err(),
+            "an archive without an install directory is unusable"
+        );
+
+        let corrupt = temp.path().join("corrupt.zip");
+        std::fs::write(&corrupt, b"not a zip archive").unwrap();
+        assert!(
+            extract_azul_archive(&corrupt, &staging).is_err(),
+            "a truncated download must fail instead of extracting garbage"
+        );
+    }
+
+    #[test]
+    fn archive_extraction_unpacks_a_valid_runtime() {
+        let temp = tempfile::tempdir().unwrap();
+        let staging = temp.path().join("staging");
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let archive = temp.path().join("runtime.zip");
+        write_zip(
+            &archive,
+            &[("jdk-21/", None), ("jdk-21/bin/java", Some(b"binary"))],
+        );
+
+        let root = extract_azul_archive(&archive, &staging).unwrap();
+
+        assert_eq!(root, PathBuf::from("jdk-21"));
+        assert_eq!(
+            std::fs::read(staging.join(&root).join("bin/java")).unwrap(),
+            b"binary"
+        );
+    }
 }
