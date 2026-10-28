@@ -514,6 +514,7 @@ pub async fn scan_storage_with_progress(
     let tree = scan_with_directories_progress(
         &directories,
         &backup,
+        &crate::state::component_root_path(),
         crate::api::instance::list().await?,
         progress,
     )
@@ -548,13 +549,23 @@ async fn scan_with_directories(
     backup: &Path,
     instances: Vec<crate::state::InstanceMetadata>,
 ) -> crate::Result<StorageTree> {
-    scan_with_directories_progress(directories, backup, instances, &|_| {})
-        .await
+    // Keep tests off the ambient component root: a real data directory on the
+    // machine would be scanned into the totals.
+    let components = directories.config_dir.join("components");
+    scan_with_directories_progress(
+        directories,
+        backup,
+        &components,
+        instances,
+        &|_| {},
+    )
+    .await
 }
 
 async fn scan_with_directories_progress(
     directories: &DirectoryInfo,
     backup: &Path,
+    components_root: &Path,
     instances: Vec<crate::state::InstanceMetadata>,
     progress: &(dyn Fn(StorageScanEvent) + Send + Sync),
 ) -> crate::Result<StorageTree> {
@@ -607,7 +618,6 @@ async fn scan_with_directories_progress(
             1,
         ),
     ];
-    let components_root = crate::state::component_root_path();
     for name in ["hongshi", "terracotta", "mctier"] {
         let path = components_root.join(name);
         if !targets.iter().any(|(existing, _, _)| {
