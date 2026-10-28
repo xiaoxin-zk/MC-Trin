@@ -42,6 +42,26 @@ static BACKFILL_TASKS: std::sync::LazyLock<
     tokio::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
 > = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
 
+/// Registers `handle` as the running backfill for an instance and cancels the
+/// backfill that was still running for it, if any.
+async fn replace_backfill_task(
+    instance_id: &str,
+    handle: tokio::task::JoinHandle<()>,
+) {
+    if let Some(previous) = BACKFILL_TASKS
+        .lock()
+        .await
+        .insert(instance_id.to_string(), handle)
+    {
+        previous.abort();
+    }
+}
+
+/// Drops the registry entry for an instance once its backfill has finished.
+async fn forget_backfill_task(instance_id: &str) {
+    BACKFILL_TASKS.lock().await.remove(instance_id);
+}
+
 /// Clears the instance entry when its backfill ends, including the early returns
 /// that bail out before writing anything.
 struct BackfillGuard(String);
@@ -53,7 +73,7 @@ impl Drop for BackfillGuard {
         // in which case there is nothing left to clean up.
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
-                BACKFILL_TASKS.lock().await.remove(&key);
+                forget_backfill_task(&key).await;
             });
         }
     }
@@ -590,11 +610,7 @@ async fn get_content_snapshot_inner(
         // Replace any backfill still running for this instance: its snapshot was
         // taken from an older content set, so letting both write would
         // interleave revisions.
-        if let Some(previous) =
-            BACKFILL_TASKS.lock().await.insert(task_key, handle)
-        {
-            previous.abort();
-        }
+        replace_backfill_task(&task_key, handle).await;
     }
 
     attach_dependency_info(&mut items, &entries, &content_set.id, state)
@@ -1654,5 +1670,63 @@ mod tests {
         assert_eq!(item.provider, Some(ContentProvider::Modrinth));
         assert_eq!(item.provider_project_id.as_deref(), Some("AANobbMI"));
         assert_eq!(item.provider_release_id.as_deref(), Some("vf7UgZpC"));
+    }
+
+    #[tokio::test]
+    async fn a_newer_backfill_cancels_the_one_that_is_still_running() {
+        let instance = "backfill-replaced";
+        let finished =
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let older = {
+            let finished = finished.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                finished.store(true, std::sync::atomic::Ordering::SeqCst);
+            })
+        };
+        // Give the older task a chance to start before it is replaced.
+        tokio::task::yield_now().await;
+        replace_backfill_task(instance, older).await;
+
+        let newer = tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        });
+        replace_backfill_task(instance, newer).await;
+
+        assert!(
+            BACKFILL_TASKS.lock().await.contains_key(instance),
+            "the newest backfill must be registered"
+        );
+        assert!(
+            !finished.load(std::sync::atomic::Ordering::SeqCst),
+            "the replaced backfill must be cancelled before it writes"
+        );
+        forget_backfill_task(instance).await;
+        assert!(!BACKFILL_TASKS.lock().await.contains_key(instance));
+    }
+
+    #[tokio::test]
+    async fn a_finished_backfill_forgets_its_registry_entry() {
+        let instance = "backfill-finished";
+        let key = instance.to_string();
+        let (release, wait) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            let _guard = BackfillGuard(key);
+            let _ = wait.await;
+        });
+        // Register first, then let the task end, so the cleanup cannot race the
+        // registry write that this test performs.
+        replace_backfill_task(instance, task).await;
+        release.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if !BACKFILL_TASKS.lock().await.contains_key(instance) {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("a finished backfill must not stay registered");
     }
 }
