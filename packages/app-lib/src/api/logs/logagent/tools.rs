@@ -1308,14 +1308,11 @@ mod tests {
     }
 
     #[cfg(not(feature = "tauri"))]
-    async fn ensure_assistant_state() -> &'static tokio::sync::Mutex<()> {
-        static ASSISTANT_STATE_LOCK: tokio::sync::OnceCell<
+    async fn ensure_assistant_state() -> tokio::sync::MutexGuard<'static, ()> {
+        static ASSISTANT_STATE_LOCK: std::sync::LazyLock<
             tokio::sync::Mutex<()>,
-        > = tokio::sync::OnceCell::const_new();
-        let lock = ASSISTANT_STATE_LOCK
-            .get_or_init(|| tokio::sync::Mutex::new(()))
-            .lock()
-            .await;
+        > = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+        let guard = ASSISTANT_STATE_LOCK.lock().await;
         crate::event::EventState::init().await.unwrap();
         // The global state initializes once per process; the identifier is
         // ignored when it already exists.
@@ -1325,7 +1322,7 @@ mod tests {
         ))
         .await
         .unwrap();
-        lock
+        guard
     }
 
     #[cfg(not(feature = "tauri"))]
