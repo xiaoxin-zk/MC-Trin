@@ -83,6 +83,7 @@ async fn scan_reports_completed_areas_and_cache_retains_stale_results_for_displa
     let mut tree = scan_with_directories_progress(
         &directories,
         &temp.path().join("backups"),
+        &directories.config_dir.join("components"),
         vec![],
         &|event| events.lock().unwrap().push(event),
     )
