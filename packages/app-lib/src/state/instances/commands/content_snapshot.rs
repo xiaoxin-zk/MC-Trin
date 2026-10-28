@@ -27,6 +27,32 @@ use crate::state::{
     ContentRequirement, ContentSourceKind,
 };
 
+/// In-flight dependency backfills keyed by instance id.
+///
+/// A remote refresh starts a metadata backfill. Switching pages quickly used to
+/// stack one scan per visit, so a newer backfill for the same instance now
+/// replaces the previous one and the older task is cancelled.
+static BACKFILL_TASKS: std::sync::LazyLock<
+    tokio::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
+> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
+
+/// Clears the instance entry when its backfill ends, including the early returns
+/// that bail out before writing anything.
+struct BackfillGuard(String);
+
+impl Drop for BackfillGuard {
+    fn drop(&mut self) {
+        let key = self.0.clone();
+        // Drop can run outside a runtime (for example while a test shuts down),
+        // in which case there is nothing left to clean up.
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                BACKFILL_TASKS.lock().await.remove(&key);
+            });
+        }
+    }
+}
+
 pub(crate) async fn get_content_snapshot(
     instance_id: &str,
     refresh_remote: bool,
@@ -439,7 +465,10 @@ async fn get_content_snapshot_inner(
         let refs_by_entry = refs_by_entry.clone();
         let content_set = content_set.clone();
         let local_metadata_by_entry = local_metadata_by_entry.clone();
-        tokio::spawn(async move {
+        let task_key = instance_id.clone();
+        let guard_key = task_key.clone();
+        let handle = tokio::spawn(async move {
+            let _guard = BackfillGuard(guard_key);
             let state = match State::get().await {
                 Ok(state) => state,
                 Err(error) => {
@@ -538,6 +567,15 @@ async fn get_content_snapshot_inner(
                 );
             }
         });
+
+        // Replace any backfill still running for this instance: its snapshot was
+        // taken from an older content set, so letting both write would
+        // interleave revisions.
+        if let Some(previous) =
+            BACKFILL_TASKS.lock().await.insert(task_key, handle)
+        {
+            previous.abort();
+        }
     }
 
     attach_dependency_info(&mut items, &entries, &content_set.id, state)
