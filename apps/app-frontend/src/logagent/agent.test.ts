@@ -929,7 +929,7 @@ test('a failing approved write never claims success and keeps the failure visibl
                                 {
                                     id: 'rename-fails',
                                     name: 'rename_instance',
-                                    args: { instance_id: 'inst-1', new_name: 'Renamed' },
+                                    args: { instance_id: 'inst-1', instance_name: 'Renamed' },
                                 },
                             ],
                         }
