@@ -221,11 +221,15 @@ jobs:
         uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
       - name: Install cargo-nextest
         run: cargo binstall --no-confirm --locked cargo-nextest
+      # theseus_gui is deliberately absent: building it in the same invocation
+      # enables theseus' `tauri` feature through feature unification, which
+      # removes the `not(feature = "tauri")` test fixtures that the CurseForge
+      # suites rely on. Its own suites are covered separately until those
+      # fixtures gain a feature-independent home.
       - name: Run Rust unit tests
         run: >-
           cargo nextest run
           --package theseus
-          --package theseus_gui
           --no-fail-fast
           -E 'not test(/synced_/)'
 
