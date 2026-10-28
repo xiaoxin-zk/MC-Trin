@@ -359,8 +359,7 @@ struct AutoConcurrencySample {
 /// load the instance first and write those rows later. Without serialization a
 /// concurrent delete can commit between the load and the write, surfacing as a
 /// raw `SQLITE_CONSTRAINT_FOREIGNKEY` (code 787) error. The lock is reentrant
-/// for the task that already holds it, since commands compose (update →
-/// check → sync → record), while concurrent tasks are serialized per instance.
+/// for the task that already holds it, since commands compose (update 鈫?/// check 鈫?sync 鈫?record), while concurrent tasks are serialized per instance.
 #[derive(Default)]
 pub(crate) struct InstanceLockManager {
     locks: DashMap<String, Arc<AsyncMutex<()>>>,
@@ -741,7 +740,7 @@ impl State {
     ///
     /// The wait is bounded. Frontend commands routinely race `initialize_state`
     /// so waiting is correct, but a caller that arrives before initialization
-    /// ever starts — a test, or a boot path that failed earlier — must not
+    /// ever starts 鈥?a test, or a boot path that failed earlier 鈥?must not
     /// occupy a task forever. Callers already treat an error here as "settings
     /// unavailable", so returning one is the intended behaviour.
     pub async fn get() -> crate::Result<Arc<Self>> {
@@ -1598,6 +1597,57 @@ mod instance_lock_tests {
     use super::*;
     use std::time::Duration;
 
+    async fn state_with_content_lock() -> (tempfile::TempDir, Arc<State>) {
+        let temp = tempfile::tempdir().unwrap();
+        let directories = DirectoryInfo {
+            settings_dir: temp.path().join("settings"),
+            config_dir: temp.path().join("config"),
+            app_identifier: "content-lock-test".into(),
+        };
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let state = test_state(directories, pool).await.unwrap();
+        (temp, state)
+    }
+
+    #[tokio::test]
+    async fn a_held_content_lock_times_out_instead_of_waiting_forever() {
+        let (_temp, state) = state_with_content_lock().await;
+        let held = state.lock_instance_content("inst-lock").await;
+        let started = std::time::Instant::now();
+        let result = state
+            .lock_instance_content_with_timeout(
+                "inst-lock",
+                Duration::from_millis(50),
+            )
+            .await;
+        let error = match result {
+            Ok(_) => panic!("a held content lock must time out"),
+            Err(error) => error,
+        };
+        assert!(
+            format!("{error:#}").contains("Timed out waiting"),
+            "unexpected error: {error:#}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "the bounded lock wait must give up quickly"
+        );
+
+        drop(held);
+        state
+            .lock_instance_content_with_timeout(
+                "inst-lock",
+                Duration::from_millis(50),
+            )
+            .await
+            .expect("the lock must be free once the holder is dropped");
+    }
+
     #[tokio::test]
     async fn canceled_archive_writer_does_not_wait_for_busy_instance() {
         let manager = Arc::new(InstanceLockManager::default());
@@ -1742,61 +1792,5 @@ mod instance_lock_tests {
             .await
             .expect("cleanup can acquire the lock after the writer exits");
         drop(guard);
-    }
-}
-
-#[cfg(test)]
-mod instance_lock_tests {
-    use super::*;
-
-    async fn lock_test_state() -> (tempfile::TempDir, Arc<State>) {
-        let temp = tempfile::tempdir().unwrap();
-        let directories = DirectoryInfo {
-            settings_dir: temp.path().join("settings"),
-            config_dir: temp.path().join("config"),
-            app_identifier: "content-lock-test".into(),
-        };
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!().run(&pool).await.unwrap();
-        let state = test_state(directories, pool).await.unwrap();
-        (temp, state)
-    }
-
-    #[tokio::test]
-    async fn a_held_content_lock_times_out_instead_of_waiting_forever() {
-        let (_temp, state) = lock_test_state().await;
-        let held = state.lock_instance_content("inst-lock").await;
-        let started = std::time::Instant::now();
-        let result = state
-            .lock_instance_content_with_timeout(
-                "inst-lock",
-                std::time::Duration::from_millis(50),
-            )
-            .await;
-        let error = match result {
-            Ok(_) => panic!("a held content lock must time out"),
-            Err(error) => error,
-        };
-        assert!(
-            format!("{error:#}").contains("Timed out waiting"),
-            "unexpected error: {error:#}"
-        );
-        assert!(
-            started.elapsed() < std::time::Duration::from_secs(5),
-            "the bounded lock wait must give up quickly"
-        );
-
-        drop(held);
-        state
-            .lock_instance_content_with_timeout(
-                "inst-lock",
-                std::time::Duration::from_millis(50),
-            )
-            .await
-            .expect("the lock must be free once the holder is dropped");
     }
 }
