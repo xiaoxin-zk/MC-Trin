@@ -161,7 +161,7 @@ pub async fn device_login_begin() -> crate::Result<MinecraftDeviceLoginFlow> {
     );
     let res = auth_retry(|| {
         authentication_client()
-            .post(&devicecode_endpoint)
+            .post(devicecode_endpoint.as_ref())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -203,7 +203,7 @@ pub async fn device_login_poll(
     let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(&token_endpoint)
+            .post(token_endpoint.as_ref())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1472,7 +1472,7 @@ async fn oauth_token(
     let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(&token_endpoint)
+            .post(token_endpoint.as_ref())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1520,7 +1520,7 @@ async fn oauth_refresh(
     let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(&token_endpoint)
+            .post(token_endpoint.as_ref())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1568,7 +1568,7 @@ async fn xbox_live_authorize(
     let xbl_endpoint =
         auth_endpoint_url("https://user.auth.xboxlive.com/user/authenticate");
     send_xbox_json_request(
-        &xbl_endpoint,
+        xbl_endpoint.as_ref(),
         json!({
             "Properties": {
                 "AuthMethod": "RPS",
@@ -1590,7 +1590,7 @@ async fn xsts_authorize_xbl(
     let xsts_endpoint =
         auth_endpoint_url("https://xsts.auth.xboxlive.com/xsts/authorize");
     send_xbox_json_request(
-        &xsts_endpoint,
+        xsts_endpoint.as_ref(),
         json!({
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT",
@@ -2142,6 +2142,7 @@ fn generate_oauth_challenge() -> String {
 #[cfg(all(test, not(feature = "tauri")))]
 mod microsoft_chain_tests {
     use super::*;
+    use serde_json::Value;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn uhs_claims() -> Value {
