@@ -126,6 +126,14 @@ pub async fn execute_assistant(
     request: &ToolRequest,
     cancel: &CancellationToken,
 ) -> crate::Result<Value> {
+    // An aborted run must not touch the launcher at all, even for read-only
+    // tools: the frontend drops the tool result when the run is over.
+    if cancel.is_cancelled() {
+        return Err(crate::ErrorKind::InputError(
+            "The assistant run was cancelled".to_string(),
+        )
+        .as_error());
+    }
     match request.name.as_str() {
         "get_instance_overview" => {
             let instances = crate::api::instance::list().await?;
@@ -1246,6 +1254,214 @@ mod tests {
         assert_eq!(
             required_text(Some("  My World  "), "name required", 10).unwrap(),
             "My World"
+        );
+    }
+
+    // Real write chains: these drive the launcher's own instance and settings
+    // APIs against a globally initialized, temp-directory state, so they prove
+    // the operations actually happen rather than only that arguments validate.
+
+    #[cfg(not(feature = "tauri"))]
+    async fn assistant_test_request(name: &str, fields: Value) -> ToolRequest {
+        let mut request = ToolRequest {
+            name: name.into(),
+            file_id: String::new(),
+            start_line: None,
+            end_line: None,
+            query: None,
+            context: None,
+            instance_id: None,
+            instance_name: None,
+            game_version: None,
+            loader: None,
+            loader_version: None,
+            patch: None,
+            java_version: None,
+            vendor: None,
+            source: None,
+            project_id: None,
+            version_id: None,
+            resource_type: None,
+            job_id: None,
+            plan_id: None,
+            plan_revision: None,
+            content_id: None,
+            enabled: None,
+            install_dependencies: None,
+        };
+        if let Some(value) = fields.get("instance_id") {
+            request.instance_id = value.as_str().map(str::to_string);
+        }
+        if let Some(value) = fields.get("instance_name") {
+            request.instance_name = value.as_str().map(str::to_string);
+        }
+        if let Some(value) = fields.get("game_version") {
+            request.game_version = value.as_str().map(str::to_string);
+        }
+        if let Some(value) = fields.get("loader") {
+            request.loader = value.as_str().map(str::to_string);
+        }
+        if let Some(value) = fields.get("patch") {
+            request.patch = Some(value.clone());
+        }
+        request
+    }
+
+    #[cfg(not(feature = "tauri"))]
+    async fn ensure_assistant_state() -> &'static tokio::sync::Mutex<()> {
+        static ASSISTANT_STATE_LOCK: tokio::sync::OnceCell<
+            tokio::sync::Mutex<()>,
+        > = tokio::sync::OnceCell::const_new();
+        let lock = ASSISTANT_STATE_LOCK
+            .get_or_init(|| tokio::sync::Mutex::new(()))
+            .lock()
+            .await;
+        crate::event::EventState::init().await.unwrap();
+        // The global state initializes once per process; the identifier is
+        // ignored when it already exists.
+        crate::state::State::init_for_test(format!(
+            "assistant-tools-{}",
+            Uuid::new_v4()
+        ))
+        .await
+        .unwrap();
+        lock
+    }
+
+    #[cfg(not(feature = "tauri"))]
+    #[tokio::test]
+    async fn assistant_write_tools_drive_the_real_instance_chain() {
+        let _guard = ensure_assistant_state().await;
+        let cancel = CancellationToken::new();
+
+        let create = execute_assistant(
+            &assistant_test_request(
+                "create_instance",
+                json!({
+                    "instance_name": format!("Assistant {}", Uuid::new_v4()),
+                    "game_version": "1.20.1",
+                    "loader": "vanilla",
+                }),
+            )
+            .await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        let id = create["id"].as_str().unwrap().to_string();
+        assert!(!id.is_empty(), "the created instance must return its id");
+
+        let overview = execute_assistant(
+            &assistant_test_request("get_instance_overview", json!({})).await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert!(
+            overview["instances"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["id"] == create["id"]),
+            "the created instance must appear in the real overview"
+        );
+
+        let renamed = format!("Renamed {}", Uuid::new_v4());
+        execute_assistant(
+            &assistant_test_request(
+                "rename_instance",
+                json!({ "instance_id": id, "instance_name": renamed }),
+            )
+            .await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        let overview = execute_assistant(
+            &assistant_test_request("get_instance_overview", json!({})).await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        let entry = overview["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == create["id"])
+            .unwrap()
+            .clone();
+        assert_eq!(entry["name"], renamed, "the rename must be visible");
+
+        execute_assistant(
+            &assistant_test_request(
+                "delete_instance",
+                json!({ "instance_id": id }),
+            )
+            .await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        let overview = execute_assistant(
+            &assistant_test_request("get_instance_overview", json!({})).await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert!(
+            !overview["instances"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["id"] == create["id"]),
+            "the deleted instance must be gone"
+        );
+    }
+
+    #[cfg(not(feature = "tauri"))]
+    #[tokio::test]
+    async fn assistant_settings_write_round_trips_through_the_real_store() {
+        let _guard = ensure_assistant_state().await;
+        let cancel = CancellationToken::new();
+
+        let maximum = 4096
+            + (chrono::Utc::now().timestamp_subsec_nanos() % 64) as u32 * 128;
+        let updated = execute_assistant(
+            &assistant_test_request(
+                "update_launcher_settings",
+                json!({ "patch": { "maximum_megabytes": maximum } }),
+            )
+            .await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated["memory"]["maximum_megabytes"], maximum);
+
+        let read_back = execute_assistant(
+            &assistant_test_request("get_launcher_settings", json!({})).await,
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert_eq!(read_back["memory"]["maximum_megabytes"], maximum);
+    }
+
+    #[cfg(not(feature = "tauri"))]
+    #[tokio::test]
+    async fn a_cancelled_assistant_tool_never_reaches_the_launcher() {
+        let _guard = ensure_assistant_state().await;
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+
+        let outcome = execute_assistant(
+            &assistant_test_request("get_instance_overview", json!({})).await,
+            &cancel,
+        )
+        .await;
+        assert!(
+            outcome.is_err(),
+            "a cancelled run must not call the launcher"
         );
     }
 }
