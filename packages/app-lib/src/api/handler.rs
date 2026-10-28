@@ -605,12 +605,28 @@ async fn external_scheme_allowed() -> bool {
 pub async fn parse_command(
     command_string: &str,
 ) -> crate::Result<CommandPayload> {
+    parse_command_with(command_string, None).await
+}
+
+/// Parses a command, taking the external-link policy from settings unless the
+/// caller supplies one.
+///
+/// The policy is a parameter so parsing can be exercised without reading
+/// settings, which would otherwise require a booted launcher state.
+async fn parse_command_with(
+    command_string: &str,
+    external_links: Option<bool>,
+) -> crate::Result<CommandPayload> {
     tracing::debug!("Parsing command: {}", &command_string);
     if let Some(sublink) = command_string
         .strip_prefix("axolotl://")
         .or_else(|| command_string.strip_prefix("mctrin://"))
     {
-        if !external_scheme_allowed().await {
+        let allowed = match external_links {
+            Some(allowed) => allowed,
+            None => external_scheme_allowed().await,
+        };
+        if !allowed {
             emit_warning("External links are disabled in settings").await?;
             return Err(crate::ErrorKind::InputError(
                 "External links are disabled in settings".to_string(),
@@ -648,6 +664,28 @@ pub async fn parse_and_emit_command(command_string: &str) -> crate::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Shadows [`super::parse_command`] for tests: these cases assert URL
+    /// mapping, not the settings gate, so they inject the policy instead of
+    /// waiting on launcher initialization.
+    async fn parse_command(command: &str) -> crate::Result<CommandPayload> {
+        parse_command_with(command, Some(true)).await
+    }
+
+    #[tokio::test]
+    async fn external_link_policy_is_applied_before_parsing() {
+        assert!(
+            parse_command_with("axolotl://project/sodium", Some(true))
+                .await
+                .is_ok()
+        );
+        assert!(
+            parse_command_with("axolotl://project/sodium", Some(false))
+                .await
+                .is_err(),
+            "a disabled external-link policy must reject the command"
+        );
+    }
 
     #[tokio::test]
     async fn parses_launch_query_command() {

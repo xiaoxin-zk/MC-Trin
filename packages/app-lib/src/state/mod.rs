@@ -737,16 +737,32 @@ impl State {
             .cloned()
     }
 
-    /// Get the current launcher state, waiting for initialization
+    /// Get the current launcher state, waiting for initialization.
+    ///
+    /// The wait is bounded. Frontend commands routinely race `initialize_state`
+    /// so waiting is correct, but a caller that arrives before initialization
+    /// ever starts — a test, or a boot path that failed earlier — must not
+    /// occupy a task forever. Callers already treat an error here as "settings
+    /// unavailable", so returning one is the intended behaviour.
     pub async fn get() -> crate::Result<Arc<Self>> {
         if !LAUNCHER_STATE.initialized() {
-            // Frontend commands routinely race initialize_state; wait instead of
-            // treating the first poll as a hard error.
             tracing::debug!(
                 "State not ready yet; waiting for launcher initialization before serving command"
             );
-            while !LAUNCHER_STATE.initialized() {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            const INIT_WAIT: std::time::Duration =
+                std::time::Duration::from_secs(60);
+            let ready = async {
+                while !LAUNCHER_STATE.initialized() {
+                    tokio::time::sleep(std::time::Duration::from_millis(100))
+                        .await;
+                }
+            };
+            if tokio::time::timeout(INIT_WAIT, ready).await.is_err() {
+                return Err(crate::ErrorKind::OtherError(
+                    "Launcher state did not finish initializing within 60 seconds"
+                        .to_string(),
+                )
+                .into());
             }
         }
 
