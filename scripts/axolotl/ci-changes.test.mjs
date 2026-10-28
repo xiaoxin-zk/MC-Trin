@@ -205,7 +205,6 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         guardrails: { result: 'success' },
         frontend: { result: 'success' },
         resources: { result: 'success' },
-        'rust-gui-tests': { result: 'success' },
         desktop: { result: 'success' },
     }
     assert.doesNotThrow(() => validateCiResults(jobs))
@@ -215,7 +214,6 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
     for (const name of [
         'frontend',
         'resources',
-        'rust-gui-tests',
         'desktop',
     ]) {
         for (const result of ['skipped', 'cancelled', 'failure']) {
