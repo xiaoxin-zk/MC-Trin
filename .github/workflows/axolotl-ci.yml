@@ -230,6 +230,10 @@ jobs:
         run: >-
           cargo nextest run
           --package theseus
+          --package content-management
+          --package daedalus
+          --package ariadne
+          --package path-util
           --no-fail-fast
           -E 'not test(/synced_/)'
 

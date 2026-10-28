@@ -2188,4 +2188,63 @@ mod tests {
         assert_eq!(automatic_memory_max_mb(8 * GIB, 100, true), 5836);
         assert_eq!(automatic_memory_max_mb(0, 300, true), 2560);
     }
+
+    // Runtime manifests come from a remote feed and drive file extraction, so a
+    // traversal entry must be rejected before anything is written outside the
+    // install directory.
+
+    #[test]
+    fn runtime_paths_reject_traversal_and_absolute_entries() {
+        let root = Path::new("/runtime/jre-21");
+
+        for relative in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "bin/../../outside",
+            "/etc/passwd",
+            "bin/./java",
+        ] {
+            assert!(
+                safe_runtime_path(root, relative).is_err(),
+                "{relative:?} must be rejected"
+            );
+        }
+
+        assert_eq!(
+            safe_runtime_path(root, "bin/java").unwrap(),
+            root.join("bin/java")
+        );
+        assert_eq!(
+            safe_runtime_path(root, "jre.bundle/Contents/Home/bin/java")
+                .unwrap(),
+            root.join("jre.bundle/Contents/Home/bin/java")
+        );
+    }
+
+    #[test]
+    fn runtime_link_targets_cannot_escape_the_install_directory() {
+        // `..` climbs out of `bin`, which is still inside the install root.
+        assert_eq!(
+            resolved_runtime_link_target("bin/java", "../lib/jli/libjli.so")
+                .unwrap(),
+            PathBuf::from("lib/jli/libjli.so")
+        );
+        // Redundant current-directory components collapse instead of escaping.
+        assert_eq!(
+            resolved_runtime_link_target("./bin/java", "./jre/bin/java")
+                .unwrap(),
+            PathBuf::from("bin/jre/bin/java")
+        );
+
+        for (link, target) in
+            [("bin/java", "../../outside"), ("bin/java", "/etc/passwd")]
+        {
+            assert!(
+                resolved_runtime_link_target(link, target).is_err(),
+                "{target:?} must not escape the install directory"
+            );
+        }
+    }
 }

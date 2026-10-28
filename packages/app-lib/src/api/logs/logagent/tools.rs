@@ -1133,4 +1133,119 @@ mod tests {
             0
         );
     }
+
+    // The assistant's write tools are only as safe as the validation in front
+    // of them, so the rejections are pinned here: credentials, paths and proxy
+    // settings must never reach a write through `update_launcher_settings`.
+
+    #[test]
+    fn settings_patch_rejects_sensitive_or_unknown_fields() {
+        for key in [
+            "proxy",
+            "proxy_url",
+            "telemetry_enabled",
+            "launcher_path",
+            "deeplx_api_key",
+            "hooks",
+        ] {
+            let patch = serde_json::json!({ key: true });
+
+            assert!(
+                validate_settings_patch(&patch).is_err(),
+                "{key} must not be writable through the assistant"
+            );
+        }
+    }
+
+    #[test]
+    fn settings_patch_rejects_out_of_range_values() {
+        for patch in [
+            serde_json::json!({ "theme": "midnight" }),
+            serde_json::json!({ "accent_color": "custom:#12345" }),
+            serde_json::json!({ "accent_color": "custom:#12345g" }),
+            serde_json::json!({ "max_concurrent_downloads": 0 }),
+            serde_json::json!({ "max_concurrent_writes": 257 }),
+            serde_json::json!({ "memory": { "maximum": 255 } }),
+            serde_json::json!({ "memory": { "maximum": 1_048_577 } }),
+            serde_json::json!({ "memory": { "unknown": 1 } }),
+            serde_json::json!({ "modrinth_source": "fastest" }),
+            serde_json::json!({ "locale": "zh\nCN" }),
+        ] {
+            assert!(
+                validate_settings_patch(&patch).is_err(),
+                "{patch} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn settings_patch_accepts_the_documented_surface() {
+        let patch = serde_json::json!({
+            "locale": "zh-CN",
+            "theme": "oled",
+            "accent_color": "custom:#1a2b3c",
+            "collapsed_navigation": true,
+            "memory": {
+                "automatic": false,
+                "maximum": 8192,
+                "optimize_before_launch": true,
+            },
+            "max_concurrent_downloads": 8,
+        });
+
+        assert!(validate_settings_patch(&patch).is_ok());
+    }
+
+    #[test]
+    fn memory_alias_is_normalized_and_conflicts_are_rejected() {
+        let mut patch =
+            serde_json::json!({ "memory": { "maximum_megabytes": 8192 } });
+
+        normalize_settings_patch(&mut patch).unwrap();
+
+        assert_eq!(patch["memory"]["maximum"], 8192);
+        assert!(patch["memory"].get("maximum_megabytes").is_none());
+        assert!(validate_settings_patch(&patch).is_ok());
+
+        let mut conflicting = serde_json::json!({
+            "memory": { "maximum": 1024, "maximum_megabytes": 8192 },
+        });
+
+        assert!(normalize_settings_patch(&mut conflicting).is_err());
+    }
+
+    #[test]
+    fn settings_patch_rejects_empty_and_oversized_patches() {
+        assert!(validate_settings_patch(&serde_json::json!({})).is_err());
+
+        // Every field below is individually valid, so the patch is rejected
+        // purely for exceeding the eight-field budget.
+        let patch = serde_json::json!({
+            "locale": "zh-CN",
+            "theme": "dark",
+            "accent_color": "blue",
+            "collapsed_navigation": true,
+            "toggle_sidebar": true,
+            "auto_concurrent_downloads": true,
+            "max_concurrent_downloads": 8,
+            "max_concurrent_writes": 4,
+            "memory": { "maximum": 4096 },
+        });
+
+        assert!(validate_settings_patch(&patch).is_err());
+    }
+
+    #[test]
+    fn required_text_rejects_blank_control_and_oversized_values() {
+        assert!(required_text(None, "name required", 10).is_err());
+        assert!(required_text(Some("   "), "name required", 10).is_err());
+        assert!(required_text(Some("a\u{0}b"), "name required", 10).is_err());
+        assert!(
+            required_text(Some(&"x".repeat(11)), "name required", 10).is_err()
+        );
+        assert_eq!(
+            required_text(Some("  My World  "), "name required", 10).unwrap(),
+            "My World"
+        );
+    }
 }
