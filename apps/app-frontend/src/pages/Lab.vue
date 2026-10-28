@@ -14,12 +14,12 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import commandGeneratorToolCover from '@/assets/lab/command-generator-tool-cover.png'
-import gradientTextToolCover from '@/assets/lab/gradient-text-tool-cover.png'
-import modTranslationCover from '@/assets/lab/mod-translation-cover.png'
-import recipeGeneratorToolCover from '@/assets/lab/recipe-generator-tool-cover.png'
-import schematicPreviewToolCover from '@/assets/lab/schematic-preview-cover.png'
-import seedMapToolCover from '@/assets/lab/seed-map-tool-cover.png'
-import skinEditorToolCover from '@/assets/lab/skin-editor-tool-cover.png'
+import gradientTextToolCover from '@/assets/lab/gradient-text-tool-cover.webp'
+import modTranslationCover from '@/assets/lab/mod-translation-cover.webp'
+import recipeGeneratorToolCover from '@/assets/lab/recipe-generator-tool-cover.webp'
+import schematicPreviewToolCover from '@/assets/lab/schematic-preview-cover.webp'
+import seedMapToolCover from '@/assets/lab/seed-map-tool-cover.webp'
+import skinEditorToolCover from '@/assets/lab/skin-editor-tool-cover.webp'
 import {
     getLabCategoryFilter,
     getLabFavoriteFilter,

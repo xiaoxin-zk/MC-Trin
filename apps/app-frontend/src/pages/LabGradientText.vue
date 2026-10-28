@@ -36,8 +36,8 @@ import {
     watch,
 } from 'vue'
 
-import minecraftPreviewFont from '@/assets/lab/Minecraft_AE.ttf'
-import minecraftPreviewBackground from '@/assets/lab/minecraft-preview.png'
+import minecraftPreviewFont from '@/assets/lab/Minecraft_AE.woff2'
+import minecraftPreviewBackground from '@/assets/lab/minecraft-preview.webp'
 import {
     type GradientPreset,
     loadGradientTextState,
@@ -1034,7 +1034,8 @@ function formatAdapterName(adapterId: GradientFormatId): string {
     font-family: 'axolotl-lab-minecraft';
     font-style: normal;
     font-weight: 400;
-    src: url(v-bind(minecraftPreviewFont)) format('truetype');
+    font-display: swap;
+    src: url(v-bind(minecraftPreviewFont)) format('woff2');
 }
 
 .lab-workbench {
