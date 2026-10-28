@@ -204,6 +204,15 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
         }
         "join" if first.is_empty() && !extra => {
             let (id, server, world) = launch_params(query_part);
+            if server.is_none() && world.is_none() {
+                // Invite links carry the room in the query string instead of a
+                // server address. They open the rooms page, which keeps the
+                // query intact and presents it as an explicit join action.
+                return open_route(
+                    "/multiplayer/rooms".to_string(),
+                    (!query_part.is_empty()).then_some(query_part),
+                );
+            }
             return join_payload(id, server, world).await;
         }
         "join" if !extra => {
@@ -334,15 +343,6 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
             };
             return open_route(
                 path,
-                (!query_part.is_empty()).then_some(query_part),
-            );
-        }
-        "join" if first.is_empty() && !extra => {
-            // MCTier invites use the launcher deep-link scheme so clicking a
-            // generated invite opens the rooms page. The rooms UI keeps the
-            // query intact and presents it as an explicit join action.
-            return open_route(
-                "/multiplayer/rooms".to_string(),
                 (!query_part.is_empty()).then_some(query_part),
             );
         }
@@ -722,6 +722,19 @@ mod tests {
         ));
         assert!(matches!(
             parse_command("axolotl://launch/instance/my-pack?server=example.org").await.unwrap(),
+            CommandPayload::LaunchInstance { id, server: Some(server), .. }
+                if id == "my-pack" && server == "example.org"
+        ));
+    }
+
+    #[tokio::test]
+    async fn join_with_a_server_still_launches_the_instance() {
+        assert!(matches!(
+            parse_command(
+                "mctrin://join?instance_id=my-pack&server=example.org"
+            )
+            .await
+            .unwrap(),
             CommandPayload::LaunchInstance { id, server: Some(server), .. }
                 if id == "my-pack" && server == "example.org"
         ));

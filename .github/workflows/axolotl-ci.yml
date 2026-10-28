@@ -315,7 +315,6 @@ jobs:
             --skip storage::tests::nested_roots_and_external_backup \
             --skip state::auto_concurrency_tests::sustained_pressure_steps_down \
             --skip state::auto_concurrency_tests::unproductive_probe_reverts \
-            --skip api::handler::tests::parses_unified_commands \
             --skip api::instance::backup::tests::cancellation_is_rejected \
             --skip api::instance::backup::tests::rejects_paths_outside \
             --skip install::missing_content::tests::same_path_same_size \

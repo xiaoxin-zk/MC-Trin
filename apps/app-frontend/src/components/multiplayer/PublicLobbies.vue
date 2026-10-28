@@ -164,8 +164,36 @@ function playerCount(lobby: PublicLobby) {
     })
 }
 
-onMounted(() => void refresh())
-onUnmounted(() => request.abort())
+// The lobby list goes stale quickly, so poll while the page is visible. The
+// timer pauses while the window is hidden and is cleared on unmount; the
+// in-flight request is aborted at the same time.
+const POLL_INTERVAL_MS = 10_000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopPolling() {
+    if (pollTimer !== null) {
+        clearInterval(pollTimer)
+        pollTimer = null
+    }
+}
+
+function onVisibilityChange() {
+    if (document.visibilityState === 'visible') void refresh()
+}
+
+onMounted(() => {
+    void refresh()
+    pollTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') void refresh()
+    }, POLL_INTERVAL_MS)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+onUnmounted(() => {
+    stopPolling()
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    request.abort()
+})
 </script>
 
 <template>
