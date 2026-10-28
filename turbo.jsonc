@@ -13,20 +13,7 @@
         "DEV",
         "MODRINTH_URL",
         "MODRINTH_API_BASE_URL",
-        "MODRINTH_ARCHON_BASE_URL",
-        "VITE_STRIPE_PUBLISHABLE_KEY",
-        "TELEMETRY_ADMIN_MOCK_AUTH",
-        "TELEMETRY_ADMIN_MOCK_SCENARIO",
-        "TELEMETRY_ADMIN_REMOTE_BINDINGS",
-        "VERCEL"
-    ],
-    "globalPassThroughEnv": [
-        "CLOUDFLARE_ACCOUNT_ID",
-        "CLOUDFLARE_API_TOKEN",
-        "CLOUDFLARE_D1_DATABASE_ID",
-        "CLOUDFLARE_R2_ACCESS_KEY_ID",
-        "CLOUDFLARE_R2_BUCKET_NAME",
-        "CLOUDFLARE_R2_SECRET_ACCESS_KEY"
+        "MODRINTH_ARCHON_BASE_URL"
     ],
     "tasks": {
         "build": {
@@ -35,26 +22,8 @@
             "outputs": [".nuxt/**", "dist/**", ".output/**"],
             "env": [
                 "NODE_ENV",
-                "SITE_URL",
-                "BASE_URL",
-                "PREVIEW",
-                "BUILD_ENV",
-                "FLAG_OVERRIDES",
-                "BROWSER_BASE_URL",
-                "RATE_LIMIT_IGNORE_KEY",
-                "VERCEL_*",
-                "CF_PAGES_*",
-                "HEROKU_APP_NAME",
-                "STRIPE_PUBLISHABLE_KEY",
-                "INTERCOM_APP_ID",
-                "INTERCOM_IDENTITY_SECRET",
-                "PYRO_BASE_URL",
-                "PROD_OVERRIDE",
-                "PYRO_MASTER_KEY",
                 "PORT",
-                "FORCE_COLOR",
-                "BUILD_ENV",
-                "PREVIEW"
+                "FORCE_COLOR"
             ],
             "passThroughEnv": [
                 "SCCACHE_*",

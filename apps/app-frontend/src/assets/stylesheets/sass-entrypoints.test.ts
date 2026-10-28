@@ -60,12 +60,3 @@ test('desktop styles keep the Tailwind, launcher and shared style cascade', () =
     )
     assert.match(css, /html\.dark-mode,\s*html\.oled-mode\s*\{/)
 })
-
-test('website styles keep component rules and animation extensions after global rules', () => {
-    const css = compileStylesheet('apps/website/src/assets/styles/global.scss')
-    const globalRule = css.indexOf('kbd {')
-    const componentRule = css.indexOf('.base-card')
-    const finalRule = css.indexOf('.qc-cmp2-close-tooltip')
-    assert.ok(globalRule >= 0 && componentRule > globalRule && finalRule > componentRule)
-    assert.match(css, /[^{}]*\.button-base[^{}]*\{[^{}]*transition:[^{}]*\}/)
-})

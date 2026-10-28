@@ -13,9 +13,7 @@ import {
     loadAnnouncement,
     publishDiscordRelease,
     releaseImage,
-    updateServerDownloadUrl,
     uploadLimit,
-    waitForUpdateServer,
 } from './publish-discord-release.mjs'
 import { assetDownloadUrl, githubRepository } from './release-utils.mjs'
 
@@ -93,7 +91,7 @@ const historical = (overrides = {}) => ({
     ...overrides,
 })
 
-test('one notification contains bilingual text and both direct links for every installer architecture', () => {
+test('one notification contains bilingual text and direct GitHub links for every installer', () => {
     const notification = plan()
     assert.deepEqual(
         notification.installers.map((asset) => asset.id),
@@ -108,23 +106,16 @@ test('one notification contains bilingual text and both direct links for every i
     assert.match(embed.description, /中文说明\nEnglish notes/)
     assert.equal(embed.fields.length, 4)
     for (const [index, field] of embed.fields.entries()) {
-        assert.ok(
-            field.value.includes(updateServerDownloadUrl(tag, notification.installers[index].name)),
+        assert.equal(
+            field.value,
+            `[GitHub](${notification.installers[index].browser_download_url})`,
         )
-        assert.ok(field.value.includes(notification.installers[index].browser_download_url))
     }
     assert.equal(
         notification.payload.components[0].components[0].url,
         `https://github.com/${repository}/releases/tag/${tag}`,
     )
     assert.doesNotMatch(embed.footer.text, /axolotl-release:/)
-})
-
-test('mirror links follow the website route, omit v and encode filenames', () => {
-    assert.equal(
-        updateServerDownloadUrl(tag, 'Axolotl x64.deb'),
-        'https://update.axlmc.org/dist/2.3.4-beta.1/Axolotl%20x64.deb',
-    )
 })
 
 test('only Modern Windows installers are uploaded or linked; NSIS and legacy EXEs are excluded', async () => {
@@ -154,20 +145,6 @@ test('only Modern Windows installers are uploaded or linked; NSIS and legacy EXE
                 ],
             }),
         /Modern Windows/,
-    )
-    await waitForUpdateServer(
-        { ...release, assets: [...release.assets, ...excluded] },
-        {
-            attempts: 1,
-            fetchImpl: async () =>
-                Response.json({
-                    status: 'published',
-                    artifacts: notification.installers.map((asset) => ({
-                        filename: asset.name,
-                        size: asset.size,
-                    })),
-                }),
-        },
     )
 })
 
@@ -332,7 +309,7 @@ test('sends one message with all attachments and mentions only update-notify at 
     assert.equal(payload.attachments.length, files.length)
 })
 
-test('large files use mirror and GitHub links in the same text message without downloading', async () => {
+test('large files keep direct GitHub links in the text message without downloading', async () => {
     const mock = mockDiscord()
     await send(mock, {
         maxUploadBytes: 5,
@@ -345,9 +322,8 @@ test('large files use mirror and GitHub links in the same text message without d
     assert.equal(mock.sent.length, 1)
     assert.equal(mock.sent[0].files.length, 0)
     assert.ok(
-        mock.sent[0].payload.embeds[0].fields.every(
-            (field) =>
-                field.value.includes('update.axlmc.org') && field.value.includes('github.com'),
+        mock.sent[0].payload.embeds[0].fields.every((field) =>
+            field.value.includes('github.com'),
         ),
     )
 })
@@ -429,7 +405,6 @@ test('reruns paginate history and skip the delivered text before downloading', a
     assert.deepEqual(
         await send(mock, {
             download: () => assert.fail('Must not download'),
-            beforeSend: () => assert.fail('Must not wait'),
         }),
         { sent: 0, skipped: 1 },
     )
@@ -504,37 +479,6 @@ test('channel role and member overwrites take precedence over invite permissions
     assert.equal(
         channelPermissions(channel, [{ id: guildId, permissions: '8' }], member, botId) & required,
         required,
-    )
-})
-
-test('waits for matching published mirror artifacts and bounds incomplete-publication retries', async () => {
-    const delays = []
-    let calls = 0
-    await waitForUpdateServer(release, {
-        attempts: 3,
-        sleep: async (delay) => delays.push(delay),
-        fetchImpl: async (url) => {
-            assert.equal(url, 'https://update.axlmc.org/api/versions/2.3.4-beta.1')
-            calls++
-            if (calls === 1) return new Response('', { status: 404 })
-            if (calls === 2) return Response.json({ status: 'pending', artifacts: [] })
-            return Response.json({
-                status: 'published',
-                artifacts: release.assets.map((asset) => ({
-                    filename: asset.name,
-                    size: asset.size,
-                })),
-            })
-        },
-    })
-    assert.deepEqual(delays, [10000, 10000])
-    await assert.rejects(
-        waitForUpdateServer(release, {
-            attempts: 2,
-            sleep: async () => {},
-            fetchImpl: async () => Response.json({ status: 'published', artifacts: [] }),
-        }),
-        /not ready/,
     )
 })
 

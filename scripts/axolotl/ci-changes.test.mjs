@@ -133,24 +133,18 @@ test('cancelled desktop push followed by docs retains desktop scope; successful 
     const pushEnv = { ...env, CHANGE_BASE: desktop }
     assert.deepEqual(detectChanges({ env: pushEnv, run, log }), {
         desktop: true,
-        website: false,
-        worker: false,
         frontend: true,
     })
     baseline = git(['rev-parse', 'HEAD'])
     commit('README.md', 'more docs')
     assert.deepEqual(detectChanges({ env: pushEnv, run, log }), {
         desktop: false,
-        website: false,
-        worker: false,
         frontend: false,
     })
     commit('apps/website/page.vue', 'website')
     assert.deepEqual(detectChanges({ env: pushEnv, run, log }), {
         desktop: false,
-        website: true,
-        worker: false,
-        frontend: true,
+        frontend: false,
     })
     // PRs retain the cumulative base and must not query Actions.
     const prRun = (program, args) => {
@@ -163,7 +157,7 @@ test('cancelled desktop push followed by docs retains desktop scope; successful 
             run: prRun,
             log,
         }),
-        { desktop: true, website: true, worker: false, frontend: true },
+        { desktop: true, frontend: true },
     )
     const neverRun = () => assert.fail('No commands expected')
     assert.deepEqual(
@@ -172,14 +166,12 @@ test('cancelled desktop push followed by docs retains desktop scope; successful 
             run: neverRun,
             log,
         }),
-        { desktop: true, website: true, worker: true, frontend: true },
+        { desktop: true, frontend: true },
     )
     // Repo checks share the detector but keep their existing per-push behavior.
     assert.deepEqual(detectChanges({ env: { CHANGE_BASE: baseline }, run: prRun, log }), {
         desktop: false,
-        website: true,
-        worker: false,
-        frontend: true,
+        frontend: false,
     })
     // Renaming a Rust file into docs must include its removed source path.
     baseline = git(['rev-parse', 'HEAD'])
@@ -192,7 +184,7 @@ test('lookup/diff failures force all scopes rather than using the last push as f
     const run = () => {
         throw new Error('unavailable')
     }
-    const all = { desktop: true, website: true, worker: true, frontend: true }
+    const all = { desktop: true, frontend: true }
     assert.deepEqual(detectChanges({ env, run, log }), all)
     assert.deepEqual(
         detectChanges({ env, run: () => JSON.stringify({ workflow_runs: [] }), log }),
@@ -208,7 +200,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
     const jobs = {
         changes: {
             result: 'success',
-            outputs: { desktop: 'true', frontend: 'true', website: 'false', worker: 'false' },
+            outputs: { desktop: 'true', frontend: 'true' },
         },
         guardrails: { result: 'success' },
         frontend: { result: 'success' },
@@ -216,26 +208,9 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         'rust-unit-tests': { result: 'success' },
         'rust-gui-tests': { result: 'success' },
         desktop: { result: 'success' },
-        website: { result: 'skipped' },
-        worker: { result: 'skipped' },
     }
     assert.doesNotThrow(() => validateCiResults(jobs))
 
-    // Selecting the worker scope makes its suite part of the gate.
-    const workerSelected = {
-        ...jobs,
-        changes: {
-            ...jobs.changes,
-            outputs: { ...jobs.changes.outputs, worker: 'true' },
-        },
-    }
-    assert.doesNotThrow(() =>
-        validateCiResults({ ...workerSelected, worker: { result: 'success' } }),
-    )
-    assert.throws(
-        () => validateCiResults({ ...workerSelected, worker: { result: 'skipped' } }),
-        /worker: expected success/,
-    )
     // Every job that is selected for this push must fail the gate when it does
     // not succeed, not just the desktop matrix.
     for (const name of [

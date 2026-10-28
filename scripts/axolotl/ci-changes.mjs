@@ -56,11 +56,7 @@ export function detectChanges({ env = process.env, run = command, log = console.
                 shared(name) ||
                 /^(apps\/(app|app-frontend|installer-ui)\/|third-party\/|\.gitmodules$)/.test(name),
         )
-    const website = !names || names.some((name) => shared(name) || name.startsWith('apps/website/'))
-    const worker =
-        !names ||
-        names.some((name) => shared(name) || name.startsWith('apps/telemetry-worker/'))
-    return { desktop, website, worker, frontend: desktop || website }
+    return { desktop, frontend: desktop }
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

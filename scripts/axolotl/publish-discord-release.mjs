@@ -37,10 +37,6 @@ export async function loadAnnouncement(source, tag) {
     return announcement
 }
 
-export function updateServerDownloadUrl(tag, filename) {
-    return `https://update.axlmc.org/dist/${encodeURIComponent(releaseVersion(tag))}/${encodeURIComponent(filename)}`
-}
-
 function isDiscordInstaller(asset) {
     return /\.(dmg|deb)$/i.test(asset.name) || /_modern-setup\.exe$/i.test(asset.name)
 }
@@ -157,7 +153,7 @@ export function buildReleaseNotification(
         ) {
             throw new Error(`Invalid installer metadata: ${asset.name}`)
         }
-        const value = `[更新服务器](${updateServerDownloadUrl(tag, asset.name)}) · [GitHub](${asset.browser_download_url})`
+        const value = `[GitHub](${asset.browser_download_url})`
         if (value.length > 1024) throw new Error('Installer filename is too long for Discord')
         return {
             name: `${installerLabel(asset.name)} · ${(asset.size / MiB).toFixed(1)} MiB`,
@@ -328,7 +324,6 @@ export async function publishDiscordRelease({
     api,
     maxUploadBytes = uploadLimit(),
     download = downloadInstaller,
-    beforeSend = async () => {},
     notifyRoleId,
     notifyRoleName = 'update-notify',
 }) {
@@ -392,7 +387,6 @@ export async function publishDiscordRelease({
         before = `&before=${oldest.id}`
     } while (true)
 
-    await beforeSend()
     const files = [...notification.textFiles]
     let totalBytes = files.reduce((total, file) => total + file.bytes.length, 0)
     if (
@@ -440,40 +434,6 @@ export async function publishDiscordRelease({
         await api(endpoint, { method, payload: content, files: notification.textFiles })
     }
     return { sent: 1, skipped: 0 }
-}
-
-export async function waitForUpdateServer(
-    release,
-    { fetchImpl = fetch, sleep = setTimeout, attempts = 24 } = {},
-) {
-    const version = releaseVersion(release.tag_name)
-    const installers = release.assets.filter(isDiscordInstaller)
-    for (let attempt = 0; attempt < attempts; attempt++) {
-        try {
-            const response = await fetchImpl(
-                `https://update.axlmc.org/api/versions/${encodeURIComponent(version)}`,
-                { signal: AbortSignal.timeout(15000) },
-            )
-            if (response.ok) {
-                const published = await response.json()
-                if (
-                    published.status === 'published' &&
-                    installers.every((asset) =>
-                        published.artifacts?.some(
-                            (file) => file.filename === asset.name && file.size === asset.size,
-                        ),
-                    )
-                )
-                    return
-            }
-        } catch {
-            // Publication can be accepted before the mirror finishes downloading all files.
-        }
-        if (attempt < attempts - 1) await sleep(10000)
-    }
-    throw new Error(
-        `Update Server installers for ${version} are not ready; retry the Discord notification after mirroring completes`,
-    )
 }
 
 if (isMain(import.meta.url)) {
@@ -530,7 +490,6 @@ if (isMain(import.meta.url)) {
             channelId: process.env.DISCORD_CHANNEL_ID,
             api: discordClient(process.env.DISCORD_BOT_TOKEN),
             maxUploadBytes,
-            beforeSend: () => waitForUpdateServer(release),
             notifyRoleId: process.env.DISCORD_NOTIFY_ROLE_ID || undefined,
         })
         console.log(

@@ -66,8 +66,7 @@ jobs:
           node --test scripts/axolotl/release-policy.test.mjs
           node --test scripts/axolotl/aliyunoss-release.test.mjs
           node --test scripts/axolotl/set-version.test.mjs
-          node --test scripts/axolotl/update-manifest.test.mjs scripts/axolotl/finalize-github-release.test.mjs scripts/axolotl/publish-update-server.test.mjs scripts/axolotl/cnb-release.test.mjs scripts/axolotl/gitlink-release.test.mjs scripts/axolotl/create-website-release-metadata.test.mjs
-          node scripts/axolotl/create-update-server-catalog.test.mjs
+          node --test scripts/axolotl/update-manifest.test.mjs scripts/axolotl/finalize-github-release.test.mjs scripts/axolotl/cnb-release.test.mjs scripts/axolotl/gitlink-release.test.mjs
           node scripts/axolotl/check-migrations.mjs --release
           node scripts/axolotl/brand-guard.mjs
           node scripts/axolotl/i18n-check.mjs
@@ -312,7 +311,7 @@ jobs:
 
   notify-discord:
     name: Notify Discord
-    needs: [verify-and-publish, notify-update-server]
+    needs: verify-and-publish
     if: false
     permissions:
       contents: read
@@ -321,144 +320,6 @@ jobs:
       tag: ${{ inputs.tag || github.ref_name }}
     secrets:
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-
-  notify-update-server:
-    name: Notify Update Server
-    needs: verify-and-publish
-    timeout-minutes: 45
-    if: false
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.sha }}
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: .nvmrc
-      - name: Download published release metadata
-        uses: ./.github/actions/download-run-artifact
-        with:
-          name: published-release-metadata
-          path: release-check
-      - name: Notify Update Server to publish release assets
-        env:
-          UPDATE_SERVER_URL: ${{ secrets.UPDATE_SERVER_URL }}
-          UPDATE_SERVER_WEBHOOK_SECRET: ${{ secrets.UPDATE_SERVER_WEBHOOK_SECRET }}
-          UPDATE_SERVER_FORCE_UPDATE: 'false'
-        run: |
-          node scripts/axolotl/publish-update-server.mjs \
-            release-check/update-server-catalog.json \
-            release-check/release.json \
-            "${RELEASE_TAG}"
-
-  publish-website:
-    name: Build and deploy website to Cloudflare Pages
-    needs: verify-and-publish
-    if: false
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      actions: read
-    concurrency:
-      group: website-production
-      cancel-in-progress: false
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_PAGES_ACCOUNT_ID }}
-      CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-    steps:
-      - name: Check Cloudflare Pages deployment configuration
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
-        run: |
-          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_PAGES_PROJECT_NAME" ]]; then
-            echo '::error::Configure the CLOUDFLARE_PAGES_API_TOKEN secret and CLOUDFLARE_PAGES_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT_NAME variables. See apps/website/README.md.'
-            exit 1
-          fi
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.sha }}
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: .nvmrc
-      - name: Download published release metadata
-        uses: ./.github/actions/download-run-artifact
-        with:
-          name: published-release-metadata
-          path: release-check
-      - name: Checkout website publication branch
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: main
-          path: website-publish
-      - name: Setup pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
-      - name: Generate website release data from the release tag
-        run: |
-          if [[ "${RELEASE_TAG}" != *-* ]]; then
-            node scripts/axolotl/create-website-release-metadata.mjs \
-              release-check/release.json \
-              website-publish/apps/website/releases/latest.json
-          fi
-
-          node scripts/axolotl/create-website-release-catalog.mjs \
-            website-publish/apps/website/releases/catalog.json \
-            website-publish/apps/app-frontend/src/announcements/catalog.ts
-
-      - name: Install website dependencies
-        working-directory: website-publish
-        run: pnpm install --frozen-lockfile --filter @axolotl/website...
-      - name: Build website
-        working-directory: website-publish
-        run: pnpm --filter @axolotl/website build
-      - name: Verify prerendered release notes
-        working-directory: website-publish
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict'
-          import fs from 'node:fs'
-          const version = process.env.RELEASE_TAG.replace(/^v/, '')
-          const catalog = JSON.parse(fs.readFileSync('apps/website/releases/catalog.json', 'utf8'))
-          assert(catalog.announcements.some((entry) => entry.version === version), `Missing catalog entry: ${version}`)
-          const html = fs.readFileSync('apps/website/.output/public/changelog/index.html', 'utf8')
-          assert(html.includes(version), `Release ${version} was not prerendered`)
-          assert(fs.existsSync('apps/website/.output/public/index.html'), 'Missing website homepage')
-          NODE
-      - name: Save static website artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: website-static-${{ env.RELEASE_TAG }}
-          path: website-publish/apps/website/.output/public/
-          retention-days: 7
-          if-no-files-found: error
-      - name: Sync generated release data to main
-        run: |
-          git -C website-publish config user.name "Axolotl Release Bot"
-          git -C website-publish config user.email "release@axolotl.local"
-          git -C website-publish add apps/website/releases/latest.json apps/website/releases/catalog.json
-          if git -C website-publish diff --cached --quiet; then
-            echo "Website release data is unchanged"
-          else
-            git -C website-publish commit -m "chore(website): update release data for ${RELEASE_TAG} [skip ci]"
-            git -C website-publish push origin main
-          fi
-      - name: Deploy prebuilt website to Cloudflare Pages
-        working-directory: website-publish
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
-        run: |
-          pnpm --package=wrangler@4.152.0 dlx wrangler pages deploy \
-            apps/website/.output/public \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
-            --branch main \
-            --commit-message "Launcher ${RELEASE_TAG} (GitHub Actions ${GITHUB_RUN_ID})"
 
   mirror-cnb:
     name: Mirror release to CNB

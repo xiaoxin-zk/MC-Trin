@@ -144,4 +144,3 @@ All i18n utilities come from `@modrinth/ui`:
 ## Reference Examples
 
 - Variables and plurals: `apps/app-frontend/src/components/home/HomeDailyChallenge.vue`
-- Rich-text with link tags: `apps/website/src/pages/index.vue`

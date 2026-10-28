@@ -1,6 +1,6 @@
 # Architecture
 
-The shared UI package used by both `apps/website` (Nuxt 3) and `apps/app-frontend` (Vue 3 + Tauri). Components here must be platform-agnostic — use dependency injection for platform-specific behavior.
+The shared UI package used by `apps/app-frontend` (Vue 3 + Tauri). Components here must be platform-agnostic — use dependency injection for platform-specific behavior. The separate `apps/website` Nuxt scaffold currently does not consume this package.
 
 ## Folder Structure
 

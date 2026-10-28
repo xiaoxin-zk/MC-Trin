@@ -1,6 +1,6 @@
 # Axolotl Launcher Monorepo
 
-Axolotl contains a Vue 3 / Nuxt 3 website, a Vue 3 desktop frontend, and a Rust / Tauri shell. Turborepo (`turbo.jsonc`) and pnpm workspaces (`pnpm-workspace.yaml`) coordinate the packages. Frontend styling uses Tailwind CSS v3. Use spaces, never tabs.
+MC-Trin contains a Nuxt 4 website scaffold, a Vue 3 desktop frontend, and a Rust / Tauri shell. Turborepo (`turbo.jsonc`) and pnpm workspaces (`pnpm-workspace.yaml`) coordinate the packages. Frontend styling uses Tailwind CSS v3. Use spaces, never tabs.
 
 ## Instruction Routing
 
@@ -19,7 +19,7 @@ Read the applicable instruction files before editing, even when your session sta
 
 ## Repository Map
 
-- `apps/app-frontend`: desktop Vue frontend; `apps/app`: Tauri shell; `apps/website`: official website.
+- `apps/app-frontend`: desktop Vue frontend; `apps/app`: Tauri shell; `apps/website`: Nuxt scaffold for future site work.
 - `packages/ui`, `assets`, `utils`: shared components, theme assets and utilities.
 - `packages/api-client`: public content-service API client; `packages/app-lib`: desktop runtime library.
 - `packages/content-management`: provider-neutral resource and installation models.

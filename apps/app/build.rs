@@ -854,7 +854,6 @@ fn main() {
                         "settings_patch",
                         "privacy_get",
                         "privacy_set",
-                        "telemetry_set",
                         "discord_rpc_set",
                         "cancel_directory_change",
                         "proxy_get",
@@ -1174,14 +1173,6 @@ fn main() {
                         "add_friend",
                         "remove_friend",
                     ])
-                    .default_permission(
-                        DefaultPermissionRule::AllowAllCommands,
-                    ),
-            )
-            .plugin(
-                "telemetry",
-                InlinedPlugin::new()
-                    .commands(&["notify_online"])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
