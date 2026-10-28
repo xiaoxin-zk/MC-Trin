@@ -285,7 +285,7 @@ jobs:
             --package path-util \
             --package async-minecraft-ping \
             --no-fail-fast \
-            -- --skip synced_
+            -- --skip synced_ --test-threads=1
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
