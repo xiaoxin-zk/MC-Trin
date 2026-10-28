@@ -161,7 +161,7 @@ jobs:
 
   resources:
     name: Prepare build resources
-    needs: [changes, guardrails]
+    needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -196,7 +196,7 @@ jobs:
   # desktop job because it needs serialized execution.
   rust-unit-tests:
     name: Run Rust unit tests
-    needs: [changes]
+    needs: [changes, resources]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45

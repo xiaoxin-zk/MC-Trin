@@ -209,6 +209,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         guardrails: { result: 'success' },
         frontend: { result: 'success' },
         resources: { result: 'success' },
+        'rust-unit-tests': { result: 'success' },
         desktop: { result: 'success' },
         website: { result: 'skipped' },
     }
