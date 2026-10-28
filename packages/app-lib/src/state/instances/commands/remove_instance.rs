@@ -142,13 +142,19 @@ mod delete_target_tests {
 
     #[test]
     fn versions_children_are_isolated() {
-        for path in [
-            "/mc/versions/1.20.1",
-            "versions/1.20.1",
-            r"D:\mc\versions\fabric-1.20.1",
-        ] {
+        for path in ["/mc/versions/1.20.1", "versions/1.20.1"] {
             assert!(is_version_isolated_game_dir(Path::new(path)), "{path:?}");
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_versions_children_are_isolated() {
+        // `\` is only a separator on Windows, so this path shape is asserted on
+        // Windows alone; on Unix it is a single file name.
+        assert!(is_version_isolated_game_dir(Path::new(
+            r"D:\mc\versions\fabric-1.20.1"
+        )));
     }
 
     #[test]

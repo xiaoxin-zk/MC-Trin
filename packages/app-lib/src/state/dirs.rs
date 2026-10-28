@@ -78,13 +78,30 @@ fn launcher_dir_if_writable() -> Option<PathBuf> {
         .clone()
 }
 
-/// Reports whether `dir` accepts a new file. A probe file is written and then
-/// removed, so a writable directory is left exactly as it was found.
+/// Reports whether `dir` accepts a new file.
+///
+/// The probe name is unique and opened with `create_new`, so an existing file
+/// can never be truncated and then deleted by the probe itself. The probe file
+/// is removed afterwards, leaving the directory as it was found.
 fn probe_dir_writable(dir: &Path) -> bool {
-    let probe = dir.join(".mctrin-write-probe");
-    if std::fs::write(&probe, b"").is_err() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let probe = dir.join(format!(
+        ".mctrin-write-probe-{}-{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed),
+    ));
+
+    let opened = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe);
+    if opened.is_err() {
         return false;
     }
+    drop(opened);
+
     let _ = std::fs::remove_file(&probe);
     true
 }
@@ -922,5 +939,19 @@ mod component_root_tests {
         let dir = tempfile::tempdir().unwrap();
 
         assert!(!probe_dir_writable(&dir.path().join("absent")));
+    }
+
+    #[test]
+    fn probe_never_touches_a_file_that_already_uses_the_probe_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let existing = dir.path().join(".mctrin-write-probe");
+        std::fs::write(&existing, b"user data").unwrap();
+
+        assert!(probe_dir_writable(dir.path()));
+        assert_eq!(
+            std::fs::read(&existing).unwrap(),
+            b"user data",
+            "the writability probe must not truncate or delete an existing file"
+        );
     }
 }
