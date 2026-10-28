@@ -1398,8 +1398,12 @@ pub async fn cancel_backup(operation_id: Uuid) -> crate::Result<bool> {
     let token = operation.token.clone();
     drop(operation);
     token.cancel();
-    if State::initialized() {
-        update_cancel_requested(operation_id).await?;
+    if State::initialized()
+        && let Err(error) = update_cancel_requested(operation_id).await
+    {
+        // The cancellation is already in effect in this process; failing to
+        // persist it must not report the cancel as unsuccessful.
+        tracing::warn!(%error, "Backup cancel request could not be persisted");
     }
     Ok(true)
 }
