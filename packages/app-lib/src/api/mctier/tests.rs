@@ -795,12 +795,11 @@ async fn a_dropped_signaling_connection_ends_the_room_and_releases_the_kernel()
         .unwrap()
         .unwrap()
         .expect_err("a lost signaling link must end the room");
-    // A clean close frame surfaces as "signaling disconnected"; an abruptly
-    // reset socket surfaces as the platform's connection IO error. Both mean
-    // the same thing here: the control link is gone.
+    // The disconnect message names the cause and how to rejoin; an abruptly
+    // reset socket also surfaces it through the underlying IO error.
     let message = format!("{error:#}").to_lowercase();
     assert!(
-        message.contains("signaling disconnected")
+        message.contains("lost the connection to the mctier signaling server")
             || message.contains("connection")
             || message.contains("os error"),
         "unexpected error: {error:#}"

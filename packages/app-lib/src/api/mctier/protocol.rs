@@ -333,12 +333,16 @@ pub fn parse_players(value: &Value) -> eyre::Result<Vec<Player>> {
         .collect()
 }
 
+/// Shown verbatim in the room UI when the signaling link dies, so it must name
+/// the cause and the way back in rather than sounding like a dead button.
+pub const SIGNALING_DISCONNECTED: &str = "Lost the connection to the MCTier signaling server. The room has ended - check your connection and start or join the room again (the default server is wss://mctier.pmhs.top/signaling; a self-hosted or alternate address can be set in the room request).";
+
 pub async fn next_message(socket: &mut Socket) -> eyre::Result<Value> {
     loop {
         let message = socket
             .next()
             .await
-            .ok_or_else(|| eyre::eyre!("signaling disconnected"))??;
+            .ok_or_else(|| eyre::eyre!(SIGNALING_DISCONNECTED))??;
         match message {
             Message::Text(text) => {
                 if text.len() > MAX_SIGNAL_FRAME_BYTES {
@@ -350,7 +354,7 @@ pub async fn next_message(socket: &mut Socket) -> eyre::Result<Value> {
             Message::Binary(bytes) if bytes.len() > MAX_SIGNAL_FRAME_BYTES => {
                 bail!("signaling frame is too large");
             }
-            Message::Close(_) => bail!("signaling disconnected"),
+            Message::Close(_) => bail!(SIGNALING_DISCONNECTED),
             Message::Ping(data) => socket.send(Message::Pong(data)).await?,
             _ => {}
         }
