@@ -1426,7 +1426,7 @@ mod tests {
         let updated = execute_assistant(
             &assistant_test_request(
                 "update_launcher_settings",
-                json!({ "patch": { "maximum_megabytes": maximum } }),
+                json!({ "patch": { "memory": { "maximum_megabytes": maximum } } }),
             )
             .await,
             &cancel,
