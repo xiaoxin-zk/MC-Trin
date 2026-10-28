@@ -33,10 +33,18 @@ pub struct DirectoryInfo {
 /// `config_dir`. A portable install already keeps everything inside the program
 /// folder, so its `config_dir` is used as-is instead of climbing one level up.
 pub fn component_root_path() -> PathBuf {
-    resolve_component_root(
-        &configured_component_root(),
-        launcher_dir_if_writable().as_deref(),
-    )
+    let configured = configured_component_root();
+
+    // Under `cargo test` the executable is the test harness inside
+    // `target/<profile>/deps`, which is writable but has nothing to do with the
+    // launcher install. Probing it would make storage scans pick up the build
+    // directory, so tests always use the configured data directory. The layout
+    // rules themselves are covered by `component_root_tests`.
+    if cfg!(test) {
+        return configured;
+    }
+
+    resolve_component_root(&configured, launcher_dir_if_writable().as_deref())
 }
 
 /// Picks the component root from the configured data directory and the

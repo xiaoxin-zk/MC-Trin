@@ -4435,9 +4435,17 @@ mod tests {
 
     #[test]
     fn rejects_paths_outside_the_instance() {
-        for path in ["", ".", "..", "../saves", "/saves", "C:\\saves"] {
+        for path in ["", ".", "..", "../saves", "/saves"] {
             assert!(normalize_relative_directory(path).is_err(), "{path}");
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_drive_qualified_paths_outside_the_instance() {
+        // A drive-qualified path only parses as absolute on Windows; on Unix it
+        // is a single file name, so the assertion stays Windows-only.
+        assert!(normalize_relative_directory("C:\\saves").is_err());
     }
 
     #[tokio::test]

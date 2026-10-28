@@ -554,24 +554,49 @@ mod tests {
         );
     }
 
+    /// Platform key and native classifier matching the test binary's target.
+    /// Native resolution derives the platform from the build target, so the
+    /// fixture must agree with it instead of assuming Windows.
+    fn native_platform() -> (&'static str, &'static str) {
+        if cfg!(target_os = "windows") {
+            ("windows", "natives-windows")
+        } else if cfg!(target_os = "macos") {
+            ("osx", "natives-macos")
+        } else {
+            ("linux", "natives-linux")
+        }
+    }
+
     #[test]
     fn modern_native_resolution_does_not_fallback_to_unverified_maven_artifact()
     {
         let root = tempfile::tempdir().unwrap();
         let libraries_dir = root.path().join("libraries");
         let caches_dir = root.path().join("caches");
-        let classified = libraries_dir
-            .join("org/lwjgl/lwjgl/3.2.2/lwjgl-3.2.2-natives-windows.jar");
+        let (os_key, classifier) = native_platform();
+        let classified = libraries_dir.join(format!(
+            "org/lwjgl/lwjgl/3.2.2/lwjgl-3.2.2-{classifier}.jar"
+        ));
         std::fs::create_dir_all(classified.parent().unwrap()).unwrap();
         write_archive(&classified, &[("lwjgl.dll", b"wrong")]);
-        let library: Library = serde_json::from_value(serde_json::json!({
-            "name": "org.lwjgl:lwjgl:3.2.2",
-            "natives": {"windows": "natives-windows"},
-            "downloads": {"classifiers": {"natives-windows": {
+        let mut natives = serde_json::Map::new();
+        natives.insert(
+            os_key.to_string(),
+            serde_json::Value::String(classifier.to_string()),
+        );
+        let mut classifiers = serde_json::Map::new();
+        classifiers.insert(
+            classifier.to_string(),
+            serde_json::json!({
                 "sha1": "05359f3aa50d36352815fc662ea73e1c00d22170",
                 "size": 279593,
                 "url": "https://libraries.minecraft.net/native.jar"
-            }}}
+            }),
+        );
+        let library: Library = serde_json::from_value(serde_json::json!({
+            "name": "org.lwjgl:lwjgl:3.2.2",
+            "natives": natives,
+            "downloads": {"classifiers": classifiers}
         }))
         .unwrap();
 

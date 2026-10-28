@@ -4637,7 +4637,7 @@ mod tests {
         assert_eq!(
             translation,
             (
-                "google".to_string(),
+                "bilibili".to_string(),
                 String::new(),
                 String::new(),
                 String::new(),
@@ -4746,7 +4746,7 @@ mod tests {
         assert_eq!(
             translation,
             (
-                "google".to_string(),
+                "bilibili".to_string(),
                 String::new(),
                 String::new(),
                 "https://api.openai.com/v1".to_string(),

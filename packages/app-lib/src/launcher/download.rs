@@ -3751,19 +3751,39 @@ mod tests {
         writer.finish().unwrap();
     }
 
+    /// Platform key and native classifier matching the test binary's target.
+    /// Native resolution derives the platform from the build target, so the
+    /// fixtures must agree with it instead of assuming Windows.
+    fn native_platform() -> (&'static str, &'static str) {
+        if cfg!(target_os = "windows") {
+            ("windows", "natives-windows")
+        } else if cfg!(target_os = "macos") {
+            ("osx", "natives-macos")
+        } else {
+            ("linux", "natives-linux")
+        }
+    }
+
     fn modern_native_library(sha1: &str) -> Library {
+        let (os_key, classifier) = native_platform();
+        let mut natives = serde_json::Map::new();
+        natives.insert(
+            os_key.to_string(),
+            serde_json::Value::String(classifier.to_string()),
+        );
+        let mut classifiers = serde_json::Map::new();
+        classifiers.insert(
+            classifier.to_string(),
+            serde_json::json!({
+                "sha1": sha1,
+                "size": 64,
+                "url": "https://example.com/natives.jar"
+            }),
+        );
         serde_json::from_value(serde_json::json!({
             "name": "org.lwjgl:lwjgl-platform:3.2.1",
-            "natives": { "windows": "natives-windows" },
-            "downloads": {
-                "classifiers": {
-                    "natives-windows": {
-                        "sha1": sha1,
-                        "size": 64,
-                        "url": "https://example.com/natives.jar"
-                    }
-                }
-            }
+            "natives": natives,
+            "downloads": { "classifiers": classifiers }
         }))
         .unwrap()
     }
@@ -3965,9 +3985,10 @@ mod tests {
         let natives_root = directory.path().join("natives");
         let libraries_dir = directory.path().join("libraries");
         let caches_dir = directory.path().join("caches");
-        let archive = libraries_dir.join(
-            "org/lwjgl/lwjgl-platform/3.2.1/lwjgl-platform-3.2.1-natives-windows.jar",
-        );
+        let (_, classifier) = native_platform();
+        let archive = libraries_dir.join(format!(
+            "org/lwjgl/lwjgl-platform/3.2.1/lwjgl-platform-3.2.1-{classifier}.jar"
+        ));
         std::fs::create_dir_all(archive.parent().unwrap()).unwrap();
         write_native_archive(&archive, &[("lwjgl.dll", b"from-libraries")]);
 
@@ -3997,9 +4018,10 @@ mod tests {
         let natives_root = directory.path().join("natives");
         let libraries_dir = directory.path().join("libraries");
         let caches_dir = directory.path().join("caches");
-        let archive = libraries_dir.join(
-            "org/lwjgl/lwjgl/lwjgl-platform/2.9.0/lwjgl-platform-2.9.0-natives-windows.jar",
-        );
+        let (_, classifier) = native_platform();
+        let archive = libraries_dir.join(format!(
+            "org/lwjgl/lwjgl/lwjgl-platform/2.9.0/lwjgl-platform-2.9.0-{classifier}.jar"
+        ));
         std::fs::create_dir_all(archive.parent().unwrap()).unwrap();
         write_native_archive(&archive, &[("lwjgl.dll", b"legacy-binary")]);
 

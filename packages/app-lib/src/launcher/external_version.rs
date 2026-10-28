@@ -1030,7 +1030,13 @@ mod tests {
         let mut info = version_info();
         info.libraries = serde_json::from_value(json!([{
             "name": "com.mojang:text2speech:1.10.3",
-            "natives": {"windows": "natives-windows"},
+            // Every platform maps to the same classifier so the fixture does
+            // not depend on the target the tests are built for.
+            "natives": {
+                "windows": "natives-windows",
+                "linux": "natives-windows",
+                "osx": "natives-windows"
+            },
             "downloads": {
                 "artifact": {"path": "com/mojang/text2speech/1.10.3/text2speech-1.10.3.jar", "sha1": "", "size": 0, "url": ""},
                 "classifiers": {"natives-windows": {"path": "com/mojang/text2speech/1.10.3/text2speech-1.10.3-natives-windows.jar", "sha1": native_sha1, "size": native_bytes.len(), "url": "https://libraries.minecraft.net/com/mojang/text2speech/1.10.3/text2speech-1.10.3-natives-windows.jar"}}

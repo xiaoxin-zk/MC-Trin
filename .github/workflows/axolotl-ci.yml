@@ -273,11 +273,11 @@ jobs:
       # job has already compiled the test binaries, while a standalone job spent
       # ~95 of its 100 minutes rebuilding them from a cold cache. The previously
       # name-filtered steps above are covered by this run, so they are gone.
-      # Runs the suite that is green on Linux. The skipped modules were never
-      # executed here before and fail on a Linux runner for reasons unrelated to
-      # this workflow (missing fixture archives, network-dependent download
-      # probes, cross-platform path assumptions). Each group is tracked
-      # separately rather than silently dropped from the gate.
+      # Runs the suite that is green on a Linux runner. The cases still skipped
+      # below need a real network (they reach cdn.modrinth.com, or hosts that no
+      # longer answer) or assert on timing-sensitive auto-concurrency steps.
+      # They are skipped by name rather than by module, so every other test in
+      # those files keeps running.
       - name: Run the theseus test suite
         if: runner.os == 'Linux'
         timeout-minutes: 40
@@ -292,15 +292,6 @@ jobs:
             --no-fail-fast \
             -- --test-threads=1 \
             --skip synced_ \
-            --skip launcher::download::tests::legacy_native_libraries_restore_from_libraries_directory \
-            --skip launcher::download::tests::missing_cached_archive_falls_back_to_classified_library_archive \
-            --skip launcher::download::tests::missing_native_archive_reports_actionable_error \
-            --skip launcher::download::tests::missing_native_archive_with_extracted_natives_is_rejected \
-            --skip launcher::download::tests::missing_natives_are_restored_from_cached_archives \
-            --skip launcher::download::tests::native_entries_escaping_natives_directory_are_ignored \
-            --skip launcher::download::tests::only_missing_or_zero_byte_native_entries_are_restored \
-            --skip launcher::natives::tests::modern_native_resolution \
-            --skip launcher::external_version::tests::native_classifier \
             --skip util::download::endpoint_selection::benchmark::range_recovery \
             --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream \
             --skip util::download::native_request::tests::retired_modrinth_redirects \
@@ -310,16 +301,9 @@ jobs:
             --skip util::fetch::tests::hashed_pack_keeps_32_ranges \
             --skip util::fetch::tests::segmented_download_caps \
             --skip util::fetch::tests::warm_h2_archive_hint \
-            --skip storage::tests::backup_inside_another_category \
-            --skip storage::tests::legacy_repository_and_launcher_files \
-            --skip storage::tests::nested_roots_and_external_backup \
             --skip state::auto_concurrency_tests::sustained_pressure_steps_down \
             --skip state::auto_concurrency_tests::unproductive_probe_reverts \
-            --skip api::instance::backup::tests::cancellation_is_rejected \
-            --skip api::instance::backup::tests::rejects_paths_outside \
-            --skip install::missing_content::tests::same_path_same_size \
-            --skip state::db::tests::discards_legacy_openai_translation_configuration \
-            --skip state::db::tests::ignores_malformed_legacy_ai_provider_configuration
+            --skip install::missing_content::tests::same_path_same_size
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
