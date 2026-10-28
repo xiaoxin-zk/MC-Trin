@@ -214,6 +214,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         frontend: { result: 'success' },
         resources: { result: 'success' },
         'rust-unit-tests': { result: 'success' },
+        'rust-gui-tests': { result: 'success' },
         desktop: { result: 'success' },
         website: { result: 'skipped' },
         worker: { result: 'skipped' },
@@ -237,7 +238,13 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
     )
     // Every job that is selected for this push must fail the gate when it does
     // not succeed, not just the desktop matrix.
-    for (const name of ['frontend', 'resources', 'rust-unit-tests', 'desktop']) {
+    for (const name of [
+        'frontend',
+        'resources',
+        'rust-unit-tests',
+        'rust-gui-tests',
+        'desktop',
+    ]) {
         for (const result of ['skipped', 'cancelled', 'failure']) {
             assert.throws(
                 () => validateCiResults({ ...jobs, [name]: { result } }),

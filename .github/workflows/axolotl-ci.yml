@@ -109,6 +109,8 @@ jobs:
         run: node --test scripts/axolotl/create-release-notes.test.mjs
       - name: Check Discord release notifications
         run: node --test scripts/axolotl/publish-discord-release.test.mjs
+      - name: Check ICU message contracts
+        run: node --test scripts/i18n-icu-contract.test.ts
       - name: Check formatting of Rust code
         run: cargo fmt --all --check
 
@@ -149,6 +151,8 @@ jobs:
       - name: Install Playwright browser for visual tests
         timeout-minutes: 10
         run: pnpm --filter @modrinth/ui exec playwright install --with-deps chromium
+      - name: Test server package
+        run: pnpm --filter @modrinth/server test
       - name: Test shared UI package
         run: pnpm --filter @modrinth/ui test
       - name: Test desktop frontend
@@ -259,6 +263,49 @@ jobs:
           --package path-util
           --no-fail-fast
           -E 'not test(/synced_/)'
+
+      # async-minecraft-ping sits outside the root workspace, so it needs its
+      # own invocation instead of a `--package` flag.
+      - name: Run async-minecraft-ping tests
+        run: >-
+          cargo nextest run
+          --manifest-path packages/async-minecraft-ping/Cargo.toml
+          --no-fail-fast
+
+  # The GUI crate ships ~147 tests (updater, auth, window frame, seed map, mod
+  # translation) that only ever reached `cargo check`. They live in their own
+  # job because building theseus' test target in the same invocation would add
+  # the `tauri` feature and strip the `not(feature = "tauri")` fixtures.
+  rust-gui-tests:
+    name: Run Rust GUI tests
+    needs: [changes, resources]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SQLX_OFFLINE: true
+      RUST_MIN_STACK: 16777216
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+      - name: Setup desktop build
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          profile: ci
+          save-cache: false
+      - name: Build frontend
+        run: pnpm turbo run build --filter=@modrinth/app-frontend
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
+      - name: Install cargo-nextest
+        run: cargo binstall --no-confirm --locked cargo-nextest
+      - name: Run Rust GUI tests
+        run: >-
+          cargo nextest run
+          --package theseus_gui
+          --no-fail-fast
 
   desktop:
     name: Build and test desktop application
@@ -451,6 +498,7 @@ jobs:
         worker,
         resources,
         rust-unit-tests,
+        rust-gui-tests,
         desktop,
         website,
       ]

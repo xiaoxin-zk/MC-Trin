@@ -19,6 +19,7 @@ export function validateCiResults(jobs) {
         ['frontend', 'frontend'],
         ['resources', 'desktop'],
         ['rust-unit-tests', 'desktop'],
+        ['rust-gui-tests', 'desktop'],
         ['desktop', 'desktop'],
         ['website', 'website'],
         ['worker', 'worker'],
