@@ -434,6 +434,9 @@ pub struct InstanceGroupsChangedPayload {
 #[serde(tag = "event")]
 pub enum FriendPayload {
     FriendRequest { from: UserId },
+    FriendRequestRejected { from: UserId },
+    FriendSocketListening { user: UserId, socket: Uuid },
+    FriendSocketStoppedListening { user: UserId },
     UserOffline { id: UserId },
     StatusUpdate { user_status: UserStatus },
     StatusSync,

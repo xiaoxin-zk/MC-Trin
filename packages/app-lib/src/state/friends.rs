@@ -187,10 +187,18 @@ impl FriendsSocket {
                                             ServerToClientMessage::FriendRequest { from } => {
                                                 let _ = emit_friend(FriendPayload::FriendRequest { from }).await;
                                             }
-                                            ServerToClientMessage::FriendRequestRejected { .. } => {}, // TODO
-
-                                            ServerToClientMessage::FriendSocketListening { .. } => {}, // TODO
-                                            ServerToClientMessage::FriendSocketStoppedListening { .. } => {}, // TODO
+                                            ServerToClientMessage::FriendRequestRejected { from } => {
+                                                let _ = emit_friend(FriendPayload::FriendRequestRejected { from }).await;
+                                            }
+                                            ServerToClientMessage::FriendSocketListening { user, socket } => {
+                                                // Listening notifications only describe a friend's tunnel
+                                                // endpoint; the local port to reach it is opened by the user.
+                                                tracing::debug!(%user, %socket, "Friend started listening on a tunnel socket");
+                                                let _ = emit_friend(FriendPayload::FriendSocketListening { user, socket }).await;
+                                            }
+                                            ServerToClientMessage::FriendSocketStoppedListening { user } => {
+                                                let _ = emit_friend(FriendPayload::FriendSocketStoppedListening { user }).await;
+                                            }
 
                                             ServerToClientMessage::SocketConnected { to_socket, new_socket } => {
                                                 let connected_to = sockets.lock().get(&to_socket).cloned();
