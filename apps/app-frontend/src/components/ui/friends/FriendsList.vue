@@ -26,7 +26,8 @@ import type { ModrinthCredentials } from '@/helpers/mr_auth'
 
 const { formatMessage } = useVIntl()
 
-const { handleError } = injectNotificationManager()
+const notificationManager = injectNotificationManager()
+const { handleError } = notificationManager
 const formatRelativeTime = useRelativeTime()
 
 const props = defineProps<{
@@ -156,7 +157,20 @@ watch(
     { immediate: true },
 )
 
-const unlisten = await friend_listener(() => loadFriends())
+const unlisten = await friend_listener((event) => {
+    // The backend only emits this channel for friend-specific state changes;
+    // anything that changes the roster is followed by a reload below.
+    if (event?.event === 'friend_request_rejected') {
+        notificationManager.addNotification({
+            title: formatMessage(messages.friendRequestRejectedTitle),
+            text: formatMessage(messages.friendRequestRejected, {
+                user: event.from ?? '',
+            }),
+            type: 'info',
+        })
+    }
+    void loadFriends()
+})
 onUnmounted(() => {
     disposed = true
     clearTimeout(retryTimer)
@@ -165,6 +179,14 @@ onUnmounted(() => {
 })
 
 const messages = defineMessages({
+    friendRequestRejectedTitle: {
+        id: 'friends.event.friend-request-rejected.title',
+        defaultMessage: 'Friend request declined',
+    },
+    friendRequestRejected: {
+        id: 'friends.event.friend-request-rejected',
+        defaultMessage: '{user} declined your friend request.',
+    },
     addFriend: {
         id: 'friends.action.add-friend',
         defaultMessage: 'Add a friend',

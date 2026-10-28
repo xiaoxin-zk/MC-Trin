@@ -15197,6 +15197,12 @@
   "friends.add-friend.username.description": {
     "message": "这可能与对方的 Minecraft 用户名不同！"
   },
+  "friends.event.friend-request-rejected": {
+    "message": "{user} 拒绝了你的好友请求。"
+  },
+  "friends.event.friend-request-rejected.title": {
+    "message": "好友请求被拒绝"
+  },
   "friends.add-friend.username.placeholder": {
     "message": "输入 Modrinth 用户名……"
   },

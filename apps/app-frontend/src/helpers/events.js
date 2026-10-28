@@ -125,6 +125,22 @@ export async function warning_listener(callback) {
     return await listen('warning', (event) => callback(event.payload))
 }
 
+/**
+ * Payload emitted on the `friend` channel by the launcher backend
+ * (theseus `FriendPayload`, tagged with `event`).
+ *
+ * @typedef {object} FriendEvent
+ * @property {'friend_request'|'friend_request_rejected'|'friend_socket_listening'|'friend_socket_stopped_listening'|'user_offline'|'status_update'|'status_sync'} event
+ * @property {string} [from] Sender of a friend request or its rejection.
+ * @property {string} [id] User that went offline.
+ * @property {string} [user] Friend whose tunnel endpoint changed.
+ * @property {string} [socket] Friend's tunnel socket id.
+ * @property {{user_id: string, profile_name: string | null, last_update: string}} [user_status]
+ */
+
+/**
+ * @param {(event: FriendEvent) => void} callback
+ */
 export async function friend_listener(callback) {
     return await listen('friend', (event) => callback(event.payload))
 }

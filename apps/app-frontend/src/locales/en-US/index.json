@@ -14225,6 +14225,12 @@
   "friends.add-friend.username.description": {
     "message": "It may be different from their Minecraft username!"
   },
+  "friends.event.friend-request-rejected": {
+    "message": "{user} declined your friend request."
+  },
+  "friends.event.friend-request-rejected.title": {
+    "message": "Friend request declined"
+  },
   "friends.add-friend.username.placeholder": {
     "message": "Enter Modrinth username..."
   },
