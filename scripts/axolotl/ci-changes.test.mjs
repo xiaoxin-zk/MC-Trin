@@ -205,7 +205,6 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         guardrails: { result: 'success' },
         frontend: { result: 'success' },
         resources: { result: 'success' },
-        'rust-unit-tests': { result: 'success' },
         'rust-gui-tests': { result: 'success' },
         desktop: { result: 'success' },
     }
@@ -216,7 +215,6 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
     for (const name of [
         'frontend',
         'resources',
-        'rust-unit-tests',
         'rust-gui-tests',
         'desktop',
     ]) {

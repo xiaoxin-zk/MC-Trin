@@ -18,7 +18,6 @@ export function validateCiResults(jobs) {
     for (const [name, scope] of [
         ['frontend', 'frontend'],
         ['resources', 'desktop'],
-        ['rust-unit-tests', 'desktop'],
         ['rust-gui-tests', 'desktop'],
         ['desktop', 'desktop'],
     ]) {

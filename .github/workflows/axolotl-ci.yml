@@ -188,59 +188,6 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
-  # The desktop job runs a handful of name-filtered suites, which left most of
-  # the theseus test suite executed by developers only. This job runs the whole
-  # suite on a single runner so those tests act as a gate instead of a
-  # local-only asset. The `synced_` group keeps its own filtered step in the
-  # desktop job because it needs serialized execution.
-  rust-unit-tests:
-    name: Run Rust unit tests
-    needs: [changes, resources]
-    if: needs.changes.outputs.desktop == 'true'
-    runs-on: ubuntu-24.04
-    # Measured on this suite: ~10 min cached build plus ~40 min of tests. Two
-    # parallel partitions were slower than one job because each partition
-    # rebuilt the test binary and competed for the same runner CPU, so the
-    # budget stays on a single job with enough headroom to finish.
-    timeout-minutes: 100
-    env:
-      SQLX_OFFLINE: true
-      # Same worker-stack reasoning as the desktop job: deep install pipelines
-      # overflow the 2 MiB default test thread stack.
-      RUST_MIN_STACK: 16777216
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          submodules: recursive
-      - name: Setup desktop build
-        uses: ./.github/actions/setup-desktop-build
-        with:
-          profile: ci
-          save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      - name: Build frontend
-        run: pnpm turbo run build --filter=@modrinth/app-frontend
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
-      - name: Install cargo-nextest
-        run: cargo binstall --no-confirm --locked cargo-nextest
-      # theseus_gui is deliberately absent: building it in the same invocation
-      # enables theseus' `tauri` feature through feature unification, which
-      # removes the `not(feature = "tauri")` test fixtures that the CurseForge
-      # suites rely on. Its own suites are covered separately until those
-      # fixtures gain a feature-independent home.
-      - name: Run Rust unit tests
-        run: >-
-          cargo nextest run
-          --package theseus
-          --package content-management
-          --package daedalus
-          --package ariadne
-          --package path-util
-          --package async-minecraft-ping
-          --no-fail-fast
-          -E 'not test(/synced_/)'
-
   # The GUI crate ships ~147 tests (updater, auth, window frame, seed map, mod
   # translation) that only ever reached `cargo check`. They live in their own
   # job because building theseus' test target in the same invocation would add
@@ -322,32 +269,27 @@ jobs:
         run: node scripts/axolotl/check-dead-utilities.mjs
       - name: Test version metadata writes
         run: cargo test --package theseus writing_version_info_creates_missing_parent_directory
-      # Runs the CurseForge content pipeline suites (recognition, dependency
-      # selection, install, verification, manual downloads, reconciliation).
-      # Linux only: the code is platform independent and this keeps the matrix
-      # cost to one extra test binary run.
-      - name: Test CurseForge content pipeline
+      # The whole theseus suite runs here rather than in a dedicated job: this
+      # job has already compiled the test binaries, while a standalone job spent
+      # ~95 of its 100 minutes rebuilding them from a cold cache. The previously
+      # name-filtered steps above are covered by this run, so they are gone.
+      - name: Install cargo-binstall
         if: runner.os == 'Linux'
-        run: cargo test --package theseus curseforge
-      # Provider-neutral resource layer: catalog, plans, execution, providers.
-      # Hermetic (in-memory sqlite + temp dirs); Linux only for matrix cost.
-      - name: Test provider-neutral resource layer
+        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
+      - name: Run the full theseus test suite
         if: runner.os == 'Linux'
-        run: cargo test --package theseus resources
-      - name: Test HTTP/2 range recovery and resume
-        if: runner.os == 'Linux'
-        timeout-minutes: 10
-        run: cargo test --package theseus h2_range -- --test-threads=1 --nocapture
-      - name: Test existing modpack rollback after download and database failures
-        if: runner.os == 'Linux'
-        timeout-minutes: 15
-        run: cargo test --package theseus b10_restores_existing_pack_state_after_download_and_database_failures -- --test-threads=1 --nocapture
-      - name: Test modpack game settings source detection
-        if: runner.os == 'Linux'
-        run: cargo test --package theseus pack_options_source
-      - name: Test CurseForge game settings archive detection
-        if: runner.os == 'Linux'
-        run: cargo test --package theseus curseforge_game_options_source
+        timeout-minutes: 30
+        run: |
+          cargo binstall --no-confirm --locked cargo-nextest
+          cargo nextest run \
+            --package theseus \
+            --package content-management \
+            --package daedalus \
+            --package ariadne \
+            --package path-util \
+            --package async-minecraft-ping \
+            --no-fail-fast \
+            -E 'not test(/synced_/)'
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
@@ -440,7 +382,6 @@ jobs:
         guardrails,
         frontend,
         resources,
-        rust-unit-tests,
         rust-gui-tests,
         desktop,
       ]
