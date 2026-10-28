@@ -296,21 +296,15 @@ async fn format_terracotta_exit(
     }
 }
 
-#[cfg(test)]
-fn reported_terracotta_port(output: &str) -> Option<u16> {
-    output.lines().find_map(|line| {
-        let (_, port) = line.rsplit_once("port = ")?;
-        port.trim().parse().ok()
-    })
-}
-
-#[cfg(test)]
-fn terracotta_startup_arguments(target_os: &str) -> &'static [&'static str] {
-    if target_os == "macos" {
-        &["--daemon"]
-    } else {
-        &[]
-    }
+/// Reads the port the daemon reported through its handshake file.
+///
+/// The daemon writes JSON and may still be in the middle of that write when the
+/// launcher polls, so a malformed file returns `None` and the caller keeps
+/// waiting instead of aborting startup.
+fn parse_terracotta_port_file(contents: &str) -> Option<u16> {
+    serde_json::from_str::<TerracottaPortInfo>(contents)
+        .ok()
+        .map(|info| info.port)
 }
 
 async fn get_latest_terracotta_version() -> eyre::Result<String> {
@@ -1052,15 +1046,11 @@ pub async fn start_terracotta(
 
         match std::fs::read_to_string(&port_file) {
             Ok(contents) => {
-                match serde_json::from_str::<TerracottaPortInfo>(&contents) {
-                    Ok(info) => {
-                        let _ = std::fs::remove_file(&port_file);
-                        break info.port;
-                    }
-                    Err(e) => {
-                        warn!("failed to parse terracotta port file: {}", e);
-                    }
+                if let Some(port) = parse_terracotta_port_file(&contents) {
+                    let _ = std::fs::remove_file(&port_file);
+                    break port;
                 }
+                warn!("terracotta port file is not readable yet");
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 if is_macos {
@@ -1529,18 +1519,46 @@ mod tests {
     }
 
     #[test]
-    fn parses_port_reported_by_an_existing_daemon() {
-        let output =
-            "stdout: [Lock]: Successfully join the global mutex, port = 57924";
-        assert_eq!(reported_terracotta_port(output), Some(57924));
+    fn reads_the_port_from_the_daemon_handshake_file() {
+        assert_eq!(
+            parse_terracotta_port_file(r#"{"port":57924}"#),
+            Some(57924)
+        );
+        assert_eq!(
+            parse_terracotta_port_file(r#"{"port":25565,"pid":42}"#),
+            Some(25565)
+        );
     }
 
     #[test]
-    fn only_macos_uses_the_daemon_startup_argument() {
-        assert_eq!(terracotta_startup_arguments("macos"), &["--daemon"]);
-        assert!(terracotta_startup_arguments("windows").is_empty());
-        assert!(terracotta_startup_arguments("linux").is_empty());
-        assert!(terracotta_startup_arguments("freebsd").is_empty());
+    fn ignores_incomplete_or_invalid_handshake_files() {
+        // The daemon may still be writing the file when the launcher polls,
+        // so a partially written document must not abort startup.
+        for contents in [
+            "",
+            "{",
+            r#"{"port":}"#,
+            r#"{"port":"57924"}"#,
+            r#"{"port":70000}"#,
+            "[]",
+        ] {
+            assert_eq!(
+                parse_terracotta_port_file(contents),
+                None,
+                "{contents:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn derives_the_server_port_from_the_returned_address() {
+        assert_eq!(
+            terracotta_server_port(Some("127.0.0.1:25565")),
+            Some(25565)
+        );
+        assert_eq!(terracotta_server_port(Some("[::1]:25565")), Some(25565));
+        assert_eq!(terracotta_server_port(None), None);
+        assert_eq!(terracotta_server_port(Some("not-an-address")), None);
     }
 
     #[test]

@@ -589,3 +589,268 @@ test('does not treat tool output or unfinished tool calls as a final diagnosis',
         /content: reasoning/,
     )
 })
+
+// The assistant exists to read and change launcher state on the user's behalf,
+// so the write path (create / rename / delete / settings / content) is covered
+// here rather than only the read-only diagnostics path.
+
+test('write tools refuse to run without an approval handler', async () => {
+    let turns = 0
+    let toolCalls = 0
+    let refusal = ''
+    const output = await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'delete-1',
+                                name: 'delete_instance',
+                                args: { instance_id: 'inst-1' },
+                            },
+                        ],
+                    }
+                refusal = turn.messages.find((message) => message.role === 'tool')?.content ?? ''
+                return { role: 'assistant', content: 'I need your approval before deleting it.' }
+            },
+            tool: async () => {
+                toolCalls += 1
+                return {}
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+    )
+
+    assert.equal(toolCalls, 0, 'the launcher must not be touched without an approval handler')
+    assert.match(refusal, /require an explicit user approval/)
+    assert.equal(output, 'I need your approval before deleting it.')
+})
+
+test('a declined write keeps the instance untouched and tells the model', async () => {
+    let turns = 0
+    let toolCalls = 0
+    let refusal = ''
+    await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'delete-2',
+                                name: 'delete_instance',
+                                args: { instance_id: 'inst-2' },
+                            },
+                        ],
+                    }
+                refusal = turn.messages.find((message) => message.role === 'tool')?.content ?? ''
+                return { role: 'assistant', content: 'Deletion cancelled.' }
+            },
+            tool: async () => {
+                toolCalls += 1
+                return {}
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async () => false,
+    )
+
+    assert.equal(toolCalls, 0, 'a declined write must not reach the launcher')
+    assert.match(refusal, /did not approve/)
+})
+
+test('an approved write forwards the exact request to the launcher', async () => {
+    let turns = 0
+    const forwarded: Record<string, unknown>[] = []
+    const output = await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'create-1',
+                                name: 'create_instance',
+                                args: {
+                                    instance_name: '我的整合包',
+                                    game_version: '1.21.1',
+                                    loader: 'fabric',
+                                },
+                            },
+                        ],
+                    }
+                assert.match(
+                    turn.messages.find((message) => message.role === 'tool')?.content ?? '',
+                    /new-instance/,
+                )
+                return { role: 'assistant', content: 'Created the instance.' }
+            },
+            tool: async (request) => {
+                forwarded.push(request)
+                return { instance_id: 'new-instance' }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async () => true,
+    )
+
+    assert.deepEqual(forwarded, [
+        {
+            name: 'create_instance',
+            instance_name: '我的整合包',
+            game_version: '1.21.1',
+            loader: 'fabric',
+        },
+    ])
+    assert.equal(output, 'Created the instance.')
+})
+
+test('write approval shows the tool name, its description and the write permission', async () => {
+    let turns = 0
+    const approvals: { name: string; description: string; permission: string }[] = []
+    let approvalArgs: Record<string, unknown> = {}
+    await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async () => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'settings-2',
+                                name: 'update_launcher_settings',
+                                args: { patch: { maximum_megabytes: 8192 } },
+                            },
+                        ],
+                    }
+                return { role: 'assistant', content: 'Memory raised to 8192 MB.' }
+            },
+            tool: async () => ({ ok: true }),
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async (approval, args) => {
+            approvals.push(approval)
+            approvalArgs = args
+            return true
+        },
+    )
+
+    assert.equal(approvals.length, 1)
+    assert.equal(approvals[0].name, 'update_launcher_settings')
+    assert.equal(approvals[0].permission, 'write')
+    assert.ok(
+        approvals[0].description.length > 0,
+        'the approval prompt needs a human readable description',
+    )
+    assert.deepEqual(approvalArgs, { patch: { maximum_megabytes: 8192 } })
+})
+
+test('read-only tools run without an approval handler', async () => {
+    let turns = 0
+    const forwarded: string[] = []
+    await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async () => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [{ id: 'overview-1', name: 'get_instance_overview', args: {} }],
+                    }
+                return { role: 'assistant', content: 'You have one instance.' }
+            },
+            tool: async (request) => {
+                forwarded.push(request.name)
+                return { instances: [{ id: 'inst-1', name: 'Vanilla' }] }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+    )
+
+    assert.deepEqual(forwarded, ['get_instance_overview'])
+})
+
+test('invalid write arguments never reach the launcher', async () => {
+    let turns = 0
+    let toolCalls = 0
+    try {
+        await runLocalAgent(
+            { ...session, context: 'Launcher assistant session.' },
+            {
+                modelTurn: async () => {
+                    if (++turns === 1)
+                        return {
+                            role: 'assistant',
+                            content: '',
+                            tool_calls: [
+                                {
+                                    id: 'create-2',
+                                    name: 'create_instance',
+                                    args: { instance_name: '', game_version: '1.21.1' },
+                                },
+                            ],
+                        }
+                    return { role: 'assistant', content: 'That name is not usable.' }
+                },
+                tool: async () => {
+                    toolCalls += 1
+                    return {}
+                },
+            },
+            new AbortController().signal,
+            () => {},
+            undefined,
+            undefined,
+            undefined,
+            'assistant',
+            '',
+            async () => true,
+        )
+    } catch {
+        // A schema failure may surface as an error or as a tool error message;
+        // either way the launcher must not run the write.
+    }
+
+    assert.equal(toolCalls, 0, 'invalid arguments must be rejected before the write')
+})
