@@ -5,7 +5,7 @@ import { AIMessage, ToolMessage } from '@langchain/core/messages'
 
 import { diagnosticText, runLocalAgent } from './agent.ts'
 import { LogAgentModel, readableMessageContent } from './model.ts'
-import type { AgentGateway, ModelTurn } from './types.ts'
+import type { AgentGateway, LocalProgress, ModelTurn } from './types.ts'
 
 const session = {
     run_id: 'test',
@@ -853,4 +853,322 @@ test('invalid write arguments never reach the launcher', async () => {
     }
 
     assert.equal(toolCalls, 0, 'invalid arguments must be rejected before the write')
+})
+
+test('cancelling during a tool call stops the run without reporting a finished tool', async () => {
+    const controller = new AbortController()
+    const progresses: LocalProgress[] = []
+    let turns = 0
+    await assert.rejects(
+        runLocalAgent(
+            { ...session, context: 'Launcher assistant session.' },
+            {
+                modelTurn: async () => {
+                    turns += 1
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'install-cancelled',
+                                name: 'install_java_runtime',
+                                args: { java_version: 21, vendor: 'temurin' },
+                            },
+                        ],
+                    }
+                },
+                tool: async () => {
+                    controller.abort()
+                    return { job_id: 'java-job-1' }
+                },
+            },
+            controller.signal,
+            () => {},
+            (event) => progresses.push(event),
+            undefined,
+            undefined,
+            'assistant',
+            '',
+            async () => true,
+        ),
+        (error: unknown) => {
+            const candidate = error as { name?: string; message?: string }
+            return candidate?.name === 'AbortError' || /abort/i.test(candidate?.message ?? '')
+        },
+    )
+
+    assert.equal(turns, 1, 'an aborted tool call must not start another model turn')
+    assert.equal(
+        progresses.filter((event) => event.event_type === 'tool').length,
+        1,
+        'the cancelled tool should still be announced to the user',
+    )
+    assert.deepEqual(
+        progresses.filter((event) => event.event_type === 'tool_result'),
+        [],
+        'a cancelled tool must not report a finished result',
+    )
+})
+
+test('a failing approved write never claims success and keeps the failure visible', async () => {
+    let turns = 0
+    let toolFailure = ''
+    const progresses: LocalProgress[] = []
+    let caught: unknown
+    let output = ''
+    try {
+        output = await runLocalAgent(
+            { ...session, context: 'Launcher assistant session.' },
+            {
+                modelTurn: async (turn) => {
+                    if (++turns === 1)
+                        return {
+                            role: 'assistant',
+                            content: '',
+                            tool_calls: [
+                                {
+                                    id: 'rename-fails',
+                                    name: 'rename_instance',
+                                    args: { instance_id: 'inst-1', new_name: 'Renamed' },
+                                },
+                            ],
+                        }
+                    toolFailure = turn.messages
+                        .filter((message) => message.role === 'tool')
+                        .map((message) => message.content)
+                        .join('\n')
+                    return {
+                        role: 'assistant',
+                        content: 'The rename failed; nothing changed.',
+                    }
+                },
+                tool: async () => {
+                    throw new Error('instance is locked by a running game')
+                },
+            },
+            new AbortController().signal,
+            () => {},
+            (event) => progresses.push(event),
+            undefined,
+            undefined,
+            'assistant',
+            '',
+            async () => true,
+        )
+    } catch (error) {
+        caught = error
+    }
+
+    // The graph may hand the failure back to the model or abort the run; either
+    // way the launcher must never report that the write finished.
+    if (caught) {
+        assert.match(String((caught as Error)?.message ?? caught), /instance is locked/)
+    } else {
+        assert.match(toolFailure, /instance is locked/)
+        assert.match(output, /nothing changed/)
+    }
+    assert.ok(
+        progresses.some(
+            (event) => event.event_type === 'tool_result' && event.data.failed === true,
+        ),
+        'the failed write must be reported as a failure',
+    )
+})
+
+test('a Java install job can be cancelled by the id it returned', async () => {
+    let turns = 0
+    const forwarded: string[] = []
+    const jobIds: unknown[] = []
+    const approvals: string[] = []
+    const output = await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async () => {
+                turns += 1
+                if (turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'install-1',
+                                name: 'install_java_runtime',
+                                args: { java_version: 21, vendor: 'temurin' },
+                            },
+                        ],
+                    }
+                if (turns === 2)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'cancel-1',
+                                name: 'cancel_install_job',
+                                args: { job_id: 'java-job-9' },
+                            },
+                        ],
+                    }
+                return {
+                    role: 'assistant',
+                    content: 'The Java download was cancelled.',
+                }
+            },
+            tool: async (request) => {
+                forwarded.push(request.name)
+                jobIds.push(request.job_id)
+                if (request.name === 'install_java_runtime')
+                    return { job_id: 'java-job-9', status: 'queued' }
+                return { job_id: 'java-job-9', status: 'cancelled' }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async (approval) => {
+            approvals.push(approval.name)
+            return true
+        },
+    )
+
+    assert.deepEqual(forwarded, ['install_java_runtime', 'cancel_install_job'])
+    assert.equal(jobIds[1], 'java-job-9', 'the exact job id has to reach the launcher')
+    assert.deepEqual(approvals, ['install_java_runtime', 'cancel_install_job'])
+    assert.match(output, /cancelled/)
+})
+
+test('a prepared resource plan can be queued and its job status followed', async () => {
+    let turns = 0
+    const forwarded: string[] = []
+    const statuses: string[] = []
+    const output = await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async () => {
+                turns += 1
+                if (turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'prepare-1',
+                                name: 'prepare_resource_install',
+                                args: {
+                                    instance_id: 'inst-1',
+                                    source: 'modrinth',
+                                    project_id: 'sodium',
+                                    resource_type: 'mod',
+                                },
+                            },
+                        ],
+                    }
+                if (turns === 2)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'queue-1',
+                                name: 'queue_resource_install',
+                                args: { plan_id: 'plan-1', plan_revision: 3 },
+                            },
+                        ],
+                    }
+                if (turns === 3)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'status-1',
+                                name: 'get_install_job',
+                                args: { job_id: 'job-1' },
+                            },
+                        ],
+                    }
+                return { role: 'assistant', content: 'Sodium is installed.' }
+            },
+            tool: async (request) => {
+                forwarded.push(request.name)
+                if (request.name === 'prepare_resource_install')
+                    return { plan_id: 'plan-1', revision: 3, entries: [{ project_id: 'sodium' }] }
+                if (request.name === 'queue_resource_install')
+                    return { job_id: 'job-1', status: 'queued' }
+                const status = 'installed'
+                statuses.push(status)
+                return { job_id: 'job-1', status, progress: 1 }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async () => true,
+    )
+
+    assert.deepEqual(forwarded, [
+        'prepare_resource_install',
+        'queue_resource_install',
+        'get_install_job',
+    ])
+    assert.deepEqual(statuses, ['installed'], 'the final job status has to be observed')
+    assert.match(output, /Sodium is installed/)
+})
+
+test('queueing a plan that was not prepared in this session never reaches approval', async () => {
+    let turns = 0
+    let planError = ''
+    const forwarded: string[] = []
+    const approvals: string[] = []
+    await runLocalAgent(
+        { ...session, context: 'Launcher assistant session.' },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'queue-unknown',
+                                name: 'queue_resource_install',
+                                args: { plan_id: 'unknown-plan', plan_revision: 1 },
+                            },
+                        ],
+                    }
+                planError = turn.messages
+                    .filter((message) => message.role === 'tool')
+                    .map((message) => message.content)
+                    .join('\n')
+                return { role: 'assistant', content: 'That plan has to be prepared first.' }
+            },
+            tool: async (request) => {
+                forwarded.push(request.name)
+                return { job_id: 'job-1' }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        'assistant',
+        '',
+        async (approval) => {
+            approvals.push(approval.name)
+            return true
+        },
+    )
+
+    assert.deepEqual(forwarded, [], 'an unprepared plan must never reach the launcher')
+    assert.deepEqual(approvals, [], 'the user must not be asked to approve an unprepared plan')
+    assert.match(planError, /Prepare this resource plan/)
 })

@@ -745,4 +745,443 @@ mod tests {
         assert_eq!(account.login, "player@example.com");
         assert_eq!(account.client_token, "client-token");
     }
+
+    /// Minimal Yggdrasil service that answers from a routing table on loopback.
+    struct MockYggdrasil {
+        base: String,
+        requests: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    }
+
+    impl MockYggdrasil {
+        async fn start(routes: Vec<(String, u16, serde_json::Value)>) -> Self {
+            let listener =
+                tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let requests =
+                std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let recorded = requests.clone();
+            let routes = std::sync::Arc::new(routes);
+            tokio::spawn(async move {
+                loop {
+                    let Ok((mut stream, _)) = listener.accept().await else {
+                        return;
+                    };
+                    let recorded = recorded.clone();
+                    let routes = routes.clone();
+                    tokio::spawn(async move {
+                        let Some((path, body)) =
+                            read_http_request(&mut stream).await
+                        else {
+                            return;
+                        };
+                        recorded.lock().unwrap().push((path.clone(), body));
+                        let (status, payload) = routes
+                            .iter()
+                            .find(|(route, _, _)| *route == path)
+                            .map(|(_, status, body)| (*status, body.clone()))
+                            .unwrap_or((404, json!({"error": "not found"})));
+                        write_http_response(&mut stream, status, &payload)
+                            .await;
+                    });
+                }
+            });
+            Self {
+                base: format!("http://{address}"),
+                requests,
+            }
+        }
+
+        fn body(&self, path: &str) -> Option<serde_json::Value> {
+            self.requests
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(recorded, _)| recorded == path)
+                .and_then(|(_, body)| serde_json::from_str(body).ok())
+        }
+    }
+
+    async fn read_http_request(
+        stream: &mut tokio::net::TcpStream,
+    ) -> Option<(String, String)> {
+        use tokio::io::AsyncReadExt;
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let head_end = loop {
+            let count = stream.read(&mut chunk).await.ok()?;
+            if count == 0 {
+                return None;
+            }
+            buffer.extend_from_slice(&chunk[..count]);
+            if let Some(index) =
+                buffer.windows(4).position(|window| window == b"\r\n\r\n")
+            {
+                break index + 4;
+            }
+            if buffer.len() > 65536 {
+                return None;
+            }
+        };
+        let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
+        let path = head
+            .split_whitespace()
+            .nth(1)?
+            .split('?')
+            .next()?
+            .to_string();
+        let content_length = head
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())?
+            })
+            .unwrap_or(0);
+        let mut body = buffer[head_end..].to_vec();
+        while body.len() < content_length {
+            let count = stream.read(&mut chunk).await.ok()?;
+            if count == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..count]);
+        }
+        Some((path, String::from_utf8_lossy(&body).to_string()))
+    }
+
+    async fn write_http_response(
+        stream: &mut tokio::net::TcpStream,
+        status: u16,
+        payload: &serde_json::Value,
+    ) {
+        use tokio::io::AsyncWriteExt;
+        let payload = serde_json::to_vec(payload).unwrap();
+        let head = format!(
+            "HTTP/1.1 {status} Mock\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            payload.len()
+        );
+        let _ = stream.write_all(head.as_bytes()).await;
+        let _ = stream.write_all(&payload).await;
+        let _ = stream.flush().await;
+    }
+
+    async fn auth_test_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        pool
+    }
+
+    fn account_id(profile: &YggdrasilProfile) -> String {
+        profile.id.simple().to_string()
+    }
+
+    fn profile(name: &str) -> YggdrasilProfile {
+        YggdrasilProfile {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+        }
+    }
+
+    fn metadata_root(server: &MockYggdrasil) -> YggdrasilMetadata {
+        YggdrasilMetadata {
+            api_root: server.base.clone(),
+            server_name: "Mock Yggdrasil".to_string(),
+            raw: "{}".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn yggdrasil_login_stores_the_selected_profile_and_server_name() {
+        let player = profile("MockPlayer");
+        let server = MockYggdrasil::start(vec![
+            (
+                "/".to_string(),
+                200,
+                json!({"meta": {"serverName": "Mock Yggdrasil"}}),
+            ),
+            (
+                "/authserver/authenticate".to_string(),
+                200,
+                json!({
+                    "accessToken": "access-1",
+                    "clientToken": "client-1",
+                    "selectedProfile": {"id": account_id(&player), "name": player.name},
+                    "availableProfiles": [{"id": account_id(&player), "name": player.name}],
+                }),
+            ),
+        ])
+        .await;
+        let pool = auth_test_pool().await;
+
+        let result = begin_yggdrasil_login(
+            &server.base,
+            "player@example.com",
+            "secret",
+            &pool,
+        )
+        .await
+        .unwrap();
+        let YggdrasilLoginResult::Complete { credentials } = result else {
+            panic!("a selected profile should complete the login");
+        };
+        assert_eq!(credentials.access_token, "access-1");
+        assert_eq!(credentials.offline_profile.id, player.id);
+        assert_eq!(credentials.offline_profile.name, "MockPlayer");
+        let account = credentials.yggdrasil.clone().unwrap();
+        assert_eq!(account.server_name, "Mock Yggdrasil");
+        assert_eq!(account.api_root, server.base);
+
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "access-1");
+        assert_eq!(stored.offline_profile.id, player.id);
+
+        let request = server.body("/authserver/authenticate").unwrap();
+        assert_eq!(request["username"], "player@example.com");
+        assert_eq!(request["agent"]["name"], "Minecraft");
+        assert_eq!(request["password"], "secret");
+    }
+
+    #[tokio::test]
+    async fn yggdrasil_login_surfaces_service_errors_without_storing_credentials()
+     {
+        let server = MockYggdrasil::start(vec![
+            ("/".to_string(), 200, json!({"meta": {"serverName": "Mock"}})),
+            (
+                "/authserver/authenticate".to_string(),
+                403,
+                json!({
+                    "error": "ForbiddenOperationException",
+                    "errorMessage": "Invalid credentials. Invalid username or password.",
+                }),
+            ),
+        ])
+        .await;
+        let pool = auth_test_pool().await;
+
+        let error = begin_yggdrasil_login(
+            &server.base,
+            "player@example.com",
+            "hunter2",
+            &pool,
+        )
+        .await
+        .expect_err("invalid credentials must fail the login");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("Invalid credentials"),
+            "unexpected error: {message}"
+        );
+        assert!(
+            !message.contains("hunter2"),
+            "the failure must not echo the password"
+        );
+        assert!(
+            Credentials::get_all_without_refresh(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn selecting_a_profile_completes_the_login_with_a_refreshed_token() {
+        let first = profile("First");
+        let second = profile("Second");
+        let server = MockYggdrasil::start(vec![
+            ("/".to_string(), 200, json!({"meta": {"serverName": "Mock"}})),
+            (
+                "/authserver/authenticate".to_string(),
+                200,
+                json!({
+                    "accessToken": "access-before",
+                    "clientToken": "client-before",
+                    "availableProfiles": [
+                        {"id": account_id(&first), "name": first.name},
+                        {"id": account_id(&second), "name": second.name},
+                    ],
+                }),
+            ),
+            (
+                "/authserver/refresh".to_string(),
+                200,
+                json!({
+                    "accessToken": "access-selected",
+                    "clientToken": "client-selected",
+                    "selectedProfile": {"id": account_id(&second), "name": second.name},
+                }),
+            ),
+        ])
+        .await;
+        let pool = auth_test_pool().await;
+
+        let result = begin_yggdrasil_login(
+            &server.base,
+            "player@example.com",
+            "secret",
+            &pool,
+        )
+        .await
+        .unwrap();
+        let YggdrasilLoginResult::SelectProfile { flow_id, profiles } = result
+        else {
+            panic!("two profiles should require a selection");
+        };
+        assert_eq!(profiles.len(), 2);
+
+        let credentials = finish_yggdrasil_login(flow_id, second.id, &pool)
+            .await
+            .unwrap();
+        assert_eq!(credentials.offline_profile.id, second.id);
+        assert_eq!(credentials.offline_profile.name, "Second");
+        assert_eq!(credentials.access_token, "access-selected");
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "access-selected");
+
+        let request = server.body("/authserver/refresh").unwrap();
+        assert_eq!(request["accessToken"], "access-before");
+        assert_eq!(request["selectedProfile"]["id"], account_id(&second));
+    }
+
+    #[tokio::test]
+    async fn expired_yggdrasil_tokens_refresh_and_persist_the_new_identity() {
+        let original = profile("OldName");
+        let renamed = profile("NewName");
+        let server = MockYggdrasil::start(vec![
+            (
+                "/authserver/validate".to_string(),
+                403,
+                json!({"error": "ForbiddenOperationException"}),
+            ),
+            (
+                "/authserver/refresh".to_string(),
+                200,
+                json!({
+                    "accessToken": "access-2",
+                    "clientToken": "client-2",
+                    "selectedProfile": {"id": account_id(&renamed), "name": renamed.name},
+                }),
+            ),
+        ])
+        .await;
+        let pool = auth_test_pool().await;
+        let mut credentials = create_credentials(
+            original.clone(),
+            "access-1".to_string(),
+            "client-1".to_string(),
+            metadata_root(&server),
+            "player@example.com",
+        );
+        credentials.expires = Utc::now() - Duration::minutes(1);
+        credentials.upsert(&pool).await.unwrap();
+
+        refresh_yggdrasil_credentials(&mut credentials, &pool)
+            .await
+            .unwrap();
+
+        assert_eq!(credentials.access_token, "access-2");
+        assert_eq!(credentials.offline_profile.id, renamed.id);
+        assert_eq!(credentials.offline_profile.name, "NewName");
+        assert!(credentials.expires > Utc::now());
+        assert_eq!(
+            credentials.yggdrasil.clone().unwrap().client_token,
+            "client-2"
+        );
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "access-2");
+        assert_eq!(stored.offline_profile.id, renamed.id);
+
+        let request = server.body("/authserver/refresh").unwrap();
+        assert_eq!(request["accessToken"], "access-1");
+        assert_eq!(request["selectedProfile"]["id"], account_id(&original));
+    }
+
+    #[tokio::test]
+    async fn rejected_yggdrasil_refresh_keeps_the_stored_credentials() {
+        let player = profile("Player");
+        let server = MockYggdrasil::start(vec![
+            (
+                "/authserver/validate".to_string(),
+                403,
+                json!({"error": "ForbiddenOperationException"}),
+            ),
+            (
+                "/authserver/refresh".to_string(),
+                403,
+                json!({
+                    "error": "ForbiddenOperationException",
+                    "errorMessage": "Invalid token.",
+                }),
+            ),
+        ])
+        .await;
+        let pool = auth_test_pool().await;
+        let mut credentials = create_credentials(
+            player.clone(),
+            "access-1".to_string(),
+            "client-1".to_string(),
+            metadata_root(&server),
+            "player@example.com",
+        );
+        credentials.expires = Utc::now() - Duration::minutes(1);
+        credentials.upsert(&pool).await.unwrap();
+
+        let error = refresh_yggdrasil_credentials(&mut credentials, &pool)
+            .await
+            .expect_err("a rejected refresh must fail");
+        assert!(format!("{error:#}").contains("Invalid token"));
+
+        assert_eq!(credentials.access_token, "access-1");
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "access-1");
+        assert_eq!(stored.offline_profile.id, player.id);
+        assert!(server.body("/authserver/refresh").is_some());
+    }
+
+    #[tokio::test]
+    async fn rate_limited_yggdrasil_validation_keeps_the_token_without_refreshing()
+     {
+        let player = profile("Player");
+        let server = MockYggdrasil::start(vec![(
+            "/authserver/validate".to_string(),
+            429,
+            json!({"error": "TooManyRequests"}),
+        )])
+        .await;
+        let pool = auth_test_pool().await;
+        let mut credentials = create_credentials(
+            player.clone(),
+            "access-1".to_string(),
+            "client-1".to_string(),
+            metadata_root(&server),
+            "player@example.com",
+        );
+        credentials.expires = Utc::now() - Duration::minutes(1);
+        credentials.upsert(&pool).await.unwrap();
+
+        refresh_yggdrasil_credentials(&mut credentials, &pool)
+            .await
+            .unwrap();
+
+        assert_eq!(credentials.access_token, "access-1");
+        assert!(credentials.expires > Utc::now());
+        assert!(
+            server.body("/authserver/refresh").is_none(),
+            "a rate limited validation must not force a refresh"
+        );
+    }
 }
