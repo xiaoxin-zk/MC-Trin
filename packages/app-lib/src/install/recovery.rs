@@ -930,9 +930,14 @@ async fn clean_replacement_files(
         .filter_map(|entry| entry.file_id.as_deref())
         .filter_map(|id| paths_by_id.get(id).copied())
         .collect::<HashSet<_>>();
+    // Only paths that existed before the install count as old files. A path the
+    // failed install created itself carries `existed == false`, so treating it
+    // as an old file would skip its cleanup and leave a stray file behind after
+    // the rollback.
     let old_paths = snapshot
         .files
         .iter()
+        .filter(|file| file.existed)
         .map(|file| file.relative_path.as_str())
         .collect::<HashSet<_>>();
     let cleanup_paths = rollback_paths
