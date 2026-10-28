@@ -198,7 +198,14 @@ jobs:
     needs: [changes, resources]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
+    strategy:
+      # One runner cannot finish the whole suite inside the timeout, and raising
+      # the limit further just delays the result, so the suite is partitioned
+      # across two jobs instead.
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
     env:
       SQLX_OFFLINE: true
       # Same worker-stack reasoning as the desktop job: deep install pipelines
@@ -236,6 +243,7 @@ jobs:
           --package async-minecraft-ping
           --no-fail-fast
           -E 'not test(/synced_/)'
+          --partition count:${{ matrix.partition }}/2
 
   # The GUI crate ships ~147 tests (updater, auth, window frame, seed map, mod
   # translation) that only ever reached `cargo check`. They live in their own
