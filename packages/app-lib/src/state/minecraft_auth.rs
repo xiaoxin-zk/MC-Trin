@@ -158,7 +158,7 @@ pub async fn device_login_begin() -> crate::Result<MinecraftDeviceLoginFlow> {
 
     let res = auth_retry(|| {
         authentication_client()
-            .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
+            .post(auth_endpoint_url("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode").as_str())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -199,7 +199,7 @@ pub async fn device_login_poll(
 
     let res = auth_retry(|| {
         authentication_client()
-            .post(MICROSOFT_TOKEN_URL)
+            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -307,12 +307,17 @@ async fn finish_microsoft_login(
 
     credentials.upsert(exec).await?;
 
-    crate::anti_piracy::mark_official_login().await.map_err(|error| {
-        tracing::warn!(%error, "Could not persist official Minecraft login proof");
-        crate::ErrorKind::InputError(
-            "Your Minecraft account was saved, but its official login record could not be saved. Offline account access was not unlocked. Please sign in again to retry.".to_string(),
-        ).as_error()
-    })?;
+    if let Err(error) = crate::anti_piracy::mark_official_login().await {
+        // The account itself is already saved and playable; only the offline
+        // unlock stays locked. Blocking the whole sign-in on a credential
+        // store that may be unavailable (for example a headless Linux
+        // session without a secret service) turned a degraded state into a
+        // failed login.
+        tracing::warn!(
+            %error,
+            "Could not persist official Minecraft login proof; offline account access stays locked"
+        );
+    }
 
     Ok(credentials)
 }
@@ -1386,6 +1391,34 @@ const MICROSOFT_TOKEN_URL: &str =
 const REQUESTED_SCOPE: &str = "XboxLive.signin offline_access";
 pub const MINECRAFT_SERVICES_USER_AGENT: &str = "MC-Trin";
 
+#[cfg(test)]
+static TEST_AUTH_ENDPOINTS: std::sync::LazyLock<
+    std::sync::Mutex<Option<crate::util::mojang::TestAuthEndpoints>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
+/// Resolves a Microsoft authentication URL. Tests install an override so the
+/// whole OAuth-to-Xbox-to-Minecraft chain can be exercised against a loopback
+/// mock; production always uses the real endpoints.
+fn auth_endpoint_url(default: &str) -> String {
+    #[cfg(test)]
+    if let Some(endpoints) = TEST_AUTH_ENDPOINTS.lock().unwrap().as_ref() {
+        return endpoints.rewrite(default);
+    }
+    let _ = default;
+    default.to_string()
+}
+
+#[cfg(test)]
+async fn with_test_auth_endpoints<T>(
+    endpoints: crate::util::mojang::TestAuthEndpoints,
+    run: impl std::future::Future<Output = T>,
+) -> T {
+    *TEST_AUTH_ENDPOINTS.lock().unwrap() = Some(endpoints);
+    let result = run.await;
+    *TEST_AUTH_ENDPOINTS.lock().unwrap() = None;
+    result
+}
+
 pub struct RequestWithDate<T> {
     pub date: DateTime<Utc>,
     pub value: T,
@@ -1433,7 +1466,7 @@ async fn oauth_token(
 
     let res = auth_retry(|| {
         authentication_client()
-            .post(MICROSOFT_TOKEN_URL)
+            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1480,7 +1513,7 @@ async fn oauth_refresh(
 
     let res = auth_retry(|| {
         authentication_client()
-            .post(MICROSOFT_TOKEN_URL)
+            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1526,7 +1559,8 @@ async fn xbox_live_authorize(
     access_token: &str,
 ) -> Result<RequestWithDate<XboxLiveToken>, MinecraftAuthenticationError> {
     send_xbox_json_request(
-        "https://user.auth.xboxlive.com/user/authenticate",
+        auth_endpoint_url("https://user.auth.xboxlive.com/user/authenticate")
+            .as_str(),
         json!({
             "Properties": {
                 "AuthMethod": "RPS",
@@ -1546,7 +1580,8 @@ async fn xsts_authorize_xbl(
     xbl_token: &str,
 ) -> Result<RequestWithDate<DeviceToken>, MinecraftAuthenticationError> {
     send_xbox_json_request(
-        "https://xsts.auth.xboxlive.com/xsts/authorize",
+        auth_endpoint_url("https://xsts.auth.xboxlive.com/xsts/authorize")
+            .as_str(),
         json!({
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT",
@@ -1615,7 +1650,7 @@ async fn minecraft_token(
     let token = token.token;
 
     let url = mojang_service_url(
-        "https://api.minecraftservices.com/launcher/login",
+        &auth_endpoint_url("https://api.minecraftservices.com/launcher/login"),
         should_use_mojang_mirror(),
     );
     let res = auth_retry(|| {
@@ -1848,7 +1883,9 @@ async fn minecraft_profile(
     token: &str,
 ) -> Result<MinecraftProfile, MinecraftAuthenticationError> {
     let url = mojang_service_url(
-        "https://api.minecraftservices.com/minecraft/profile",
+        &auth_endpoint_url(
+            "https://api.minecraftservices.com/minecraft/profile",
+        ),
         should_use_mojang_mirror(),
     );
     let res = auth_retry(|| {
@@ -1911,7 +1948,10 @@ async fn minecraft_entitlements(
     token: &str,
 ) -> Result<MinecraftEntitlements, MinecraftAuthenticationError> {
     let request_url = format!(
-        "https://api.minecraftservices.com/entitlements/license?requestId={}",
+        "{}?requestId={}",
+        auth_endpoint_url(
+            "https://api.minecraftservices.com/entitlements/license"
+        ),
         Uuid::new_v4()
     );
     let url = mojang_service_url(&request_url, should_use_mojang_mirror());
@@ -2091,6 +2131,356 @@ fn generate_oauth_challenge() -> String {
 
     let bytes: Vec<u8> = (0..64).map(|_| rng.r#gen::<u8>()).collect();
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(all(test, not(feature = "tauri")))]
+mod microsoft_chain_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn uhs_claims() -> Value {
+        json!({ "xui": [{ "uhs": "uhs-1" }] })
+    }
+
+    /// Loopback mock for the full Microsoft-to-Minecraft identity chain.
+    struct MockChain {
+        base: String,
+        requests: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+        xsts_reject: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl MockChain {
+        async fn start(pending_token_responses: usize) -> Self {
+            let listener =
+                tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let requests =
+                std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let recorded = requests.clone();
+            let remaining_pending = std::sync::Arc::new(
+                std::sync::atomic::AtomicUsize::new(pending_token_responses),
+            );
+            let xsts_reject =
+                std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let pending = remaining_pending.clone();
+            tokio::spawn(async move {
+                loop {
+                    let Ok((mut stream, _)) = listener.accept().await else {
+                        return;
+                    };
+                    let recorded = recorded.clone();
+                    let pending = pending.clone();
+                    let xsts_reject = xsts_reject.clone();
+                    tokio::spawn(async move {
+                        let Some((path, body)) =
+                            read_http_request(&mut stream).await
+                        else {
+                            return;
+                        };
+                        recorded.lock().unwrap().push((path.clone(), body));
+                        let payload = match path.as_str() {
+                            "/consumers/oauth2/v2.0/devicecode" => json!({
+                                "device_code": "DC-1",
+                                "user_code": "ABCD-1234",
+                                "verification_uri": "https://microsoft.com/link",
+                                "expires_in": 900,
+                                "interval": 5,
+                            }),
+                            "/consumers/oauth2/v2.0/token" => {
+                                token_response(&pending)
+                            }
+                            "/user/authenticate" => json!({
+                                "Token": "xbl-token",
+                                "DisplayClaims": uhs_claims(),
+                            }),
+                            "/xsts/authorize" => {
+                                if xsts_reject
+                                    .load(std::sync::atomic::Ordering::SeqCst)
+                                {
+                                    json!({
+                                        "Identity": "0",
+                                        "XErr": 2148916238,
+                                        "Code": "Unauthorized",
+                                        "Message": "The account does not have Xbox",
+                                    })
+                                } else {
+                                    json!({
+                                        "Token": "xsts-token",
+                                        "IssueInstant": "2024-01-01T00:00:00Z",
+                                        "NotAfter": "2024-01-02T00:00:00Z",
+                                        "DisplayClaims": uhs_claims(),
+                                    })
+                                }
+                            }
+                            "/launcher/login" => {
+                                json!({ "access_token": "mc-access" })
+                            }
+                            p if p.starts_with("/entitlements/license") => {
+                                json!({ "items": [{"name": "product_minecraft"}] })
+                            }
+                            "/minecraft/profile" => json!({
+                                "id": "069a79f444e94726a5befca90e38aaf5",
+                                "name": "MockPlayer",
+                                "skins": [],
+                                "capes": [],
+                            }),
+                            _ => json!({ "error": "not found" }),
+                        };
+                        write_http_response(&mut stream, 200, &payload).await;
+                    });
+                }
+            });
+            Self {
+                base: format!("http://{address}"),
+                requests,
+                xsts_reject,
+            }
+        }
+
+        fn body(&self, path: &str) -> Option<Value> {
+            self.requests
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(recorded, _)| recorded == path)
+                .and_then(|(_, body)| serde_json::from_str(body).ok())
+        }
+    }
+
+    /// The token endpoint first reports the pending device flow, then issues
+    /// the tokens.
+    fn token_response(pending: &std::sync::atomic::AtomicUsize) -> Value {
+        if pending
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |left| if left > 0 { Some(left - 1) } else { None },
+            )
+            .is_ok()
+        {
+            json!({ "error": "authorization_pending" })
+        } else {
+            json!({
+                "token_type": "Bearer",
+                "expires_in": 86400,
+                "access_token": "oauth-access",
+                "refresh_token": "oauth-refresh",
+            })
+        }
+    }
+
+    async fn read_http_request(
+        stream: &mut tokio::net::TcpStream,
+    ) -> Option<(String, String)> {
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let head_end = loop {
+            let count = stream.read(&mut chunk).await.ok()?;
+            if count == 0 {
+                return None;
+            }
+            buffer.extend_from_slice(&chunk[..count]);
+            if let Some(index) =
+                buffer.windows(4).position(|window| window == b"\r\n\r\n")
+            {
+                break index + 4;
+            }
+            if buffer.len() > 65536 {
+                return None;
+            }
+        };
+        let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
+        let path = head
+            .split_whitespace()
+            .nth(1)?
+            .split('?')
+            .next()?
+            .to_string();
+        let content_length = head
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())?
+            })
+            .unwrap_or(0);
+        let mut body = buffer[head_end..].to_vec();
+        while body.len() < content_length {
+            let count = stream.read(&mut chunk).await.ok()?;
+            if count == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..count]);
+        }
+        Some((path, String::from_utf8_lossy(&body).to_string()))
+    }
+
+    async fn write_http_response(
+        stream: &mut tokio::net::TcpStream,
+        status: u16,
+        payload: &Value,
+    ) {
+        let payload = serde_json::to_vec(payload).unwrap();
+        let head = format!(
+            "HTTP/1.1 {status} Mock\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            payload.len()
+        );
+        let _ = stream.write_all(head.as_bytes()).await;
+        let _ = stream.write_all(&payload).await;
+        let _ = stream.flush().await;
+    }
+
+    fn endpoints(chain: &MockChain) -> crate::util::mojang::TestAuthEndpoints {
+        let base = Box::leak(chain.base.clone().into_boxed_str());
+        crate::util::mojang::TestAuthEndpoints {
+            token: base,
+            xbl: base,
+            xsts: base,
+            services: base,
+        }
+    }
+
+    async fn chain_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn the_device_login_chain_persists_microsoft_credentials() {
+        let chain = MockChain::start(1).await;
+        let pool = chain_pool().await;
+        let flow = with_test_auth_endpoints(endpoints(&chain), async {
+            device_login_begin().await.unwrap()
+        })
+        .await;
+        assert_eq!(flow.device_code, "DC-1");
+
+        let first = with_test_auth_endpoints(endpoints(&chain), async {
+            device_login_poll(&flow.device_code, &pool).await.unwrap()
+        })
+        .await;
+        assert!(matches!(
+            first,
+            MinecraftDeviceLoginPoll::Pending { slow_down: false }
+        ));
+
+        let credentials = with_test_auth_endpoints(endpoints(&chain), async {
+            device_login_poll(&flow.device_code, &pool).await.unwrap()
+        })
+        .await;
+        let MinecraftDeviceLoginPoll::Complete { credentials } = credentials
+        else {
+            panic!("the second poll should complete the login");
+        };
+        assert_eq!(credentials.access_token, "mc-access");
+        assert_eq!(credentials.refresh_token, "oauth-refresh");
+        assert_eq!(credentials.offline_profile.name, "MockPlayer");
+        assert_eq!(credentials.account_type, MinecraftAccountType::Microsoft);
+        assert!(credentials.account_id.is_some());
+
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "mc-access");
+        assert_eq!(stored.refresh_token, "oauth-refresh");
+        assert_eq!(stored.offline_profile.name, "MockPlayer");
+
+        // The token exchange must have sent the device code and the client id.
+        let token_request = chain.body("/consumers/oauth2/v2.0/token").unwrap();
+        assert_eq!(token_request["device_code"], "DC-1");
+        assert_eq!(token_request["client_id"], MICROSOFT_CLIENT_ID);
+    }
+
+    #[tokio::test]
+    async fn an_expired_microsoft_credential_refreshes_through_the_real_chain()
+    {
+        let chain = MockChain::start(0).await;
+        let pool = chain_pool().await;
+        let mut credentials = Credentials {
+            account_id: Some(
+                "microsoft:069a79f4-44e9-4726-a5be-fca90e38aaf5".into(),
+            ),
+            offline_profile: MinecraftProfile::default(),
+            account_type: MinecraftAccountType::Microsoft,
+            access_token: "stale-access".into(),
+            refresh_token: "oauth-refresh".into(),
+            expires: Utc::now() - Duration::minutes(10),
+            active: true,
+            yggdrasil: None,
+        };
+        credentials.upsert(&pool).await.unwrap();
+
+        with_test_auth_endpoints(endpoints(&chain), async {
+            credentials.refresh(&pool).await.unwrap();
+        })
+        .await;
+
+        assert_eq!(credentials.access_token, "mc-access");
+        assert_eq!(credentials.refresh_token, "oauth-refresh");
+        assert!(credentials.expires > Utc::now());
+
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "mc-access");
+
+        // The refresh must have walked Xbox and XSTS before the game token.
+        let xbl = chain.body("/user/authenticate").unwrap();
+        assert_eq!(xbl["Properties"]["RpsTicket"], "d=oauth-access");
+        let xsts = chain.body("/xsts/authorize").unwrap();
+        assert_eq!(xsts["Properties"]["UserTokens"][0], "xbl-token");
+        let login = chain.body("/launcher/login").unwrap();
+        assert_eq!(login["xtoken"], "XBL3.0 x=uhs-1;xsts-token");
+    }
+
+    #[tokio::test]
+    async fn a_stale_xsts_token_reports_an_error_and_keeps_the_stored_credentials()
+     {
+        let chain = MockChain::start(0).await;
+        let pool = chain_pool().await;
+        let mut credentials = Credentials {
+            account_id: Some(
+                "microsoft:069a79f4-44e9-4726-a5be-fca90e38aaf5".into(),
+            ),
+            offline_profile: MinecraftProfile::default(),
+            account_type: MinecraftAccountType::Microsoft,
+            access_token: "stale-access".into(),
+            refresh_token: "oauth-refresh".into(),
+            expires: Utc::now() - Duration::minutes(10),
+            active: true,
+            yggdrasil: None,
+        };
+        credentials.upsert(&pool).await.unwrap();
+
+        // XSTS rejects the session token: the refresh must fail without
+        // replacing the stored credentials with a partial state.
+        chain
+            .xsts_reject
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let outcome = with_test_auth_endpoints(endpoints(&chain), async {
+            credentials.refresh(&pool).await
+        })
+        .await;
+        assert!(
+            outcome.is_err(),
+            "a rejected XSTS token must fail the refresh"
+        );
+        assert_eq!(credentials.access_token, "stale-access");
+        assert_eq!(credentials.refresh_token, "oauth-refresh");
+        let stored = Credentials::get_active_without_refresh(&pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.access_token, "stale-access");
+        assert_eq!(stored.refresh_token, "oauth-refresh");
+    }
 }
 
 #[cfg(test)]

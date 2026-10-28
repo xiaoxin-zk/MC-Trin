@@ -37,6 +37,43 @@ pub fn should_use_mojang_mirror() -> bool {
         .is_some_and(|state| state.mojang_auth_use_mirror())
 }
 
+/// Loopback replacements for the Microsoft/Xbox/Minecraft authentication
+/// endpoints. Only tests install these, so the whole login chain can run
+/// against a local mock instead of the real identity services.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub struct TestAuthEndpoints {
+    pub token: &'static str,
+    pub xbl: &'static str,
+    pub xsts: &'static str,
+    pub services: &'static str,
+}
+
+#[cfg(test)]
+impl TestAuthEndpoints {
+    /// Maps a production endpoint to its mock counterpart, keeping the path
+    /// and any query string intact.
+    pub fn rewrite(&self, default: &str) -> String {
+        if let Some(rest) =
+            default.strip_prefix("https://login.microsoftonline.com")
+        {
+            return format!("{}{}", self.token, rest);
+        }
+        if default.starts_with("https://user.auth.xboxlive.com") {
+            return self.xbl.to_string();
+        }
+        if default.starts_with("https://xsts.auth.xboxlive.com") {
+            return self.xsts.to_string();
+        }
+        if let Some(rest) =
+            default.strip_prefix("https://api.minecraftservices.com")
+        {
+            return format!("{}{}", self.services, rest);
+        }
+        default.to_string()
+    }
+}
+
 pub(crate) fn auth_proxy_java_args(
     args: &[String],
     use_mirror: bool,
