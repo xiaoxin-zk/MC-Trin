@@ -156,9 +156,12 @@ pub async fn device_login_begin() -> crate::Result<MinecraftDeviceLoginFlow> {
     query.insert("client_id", MICROSOFT_CLIENT_ID);
     query.insert("scope", REQUESTED_SCOPE);
 
+    let devicecode_endpoint = auth_endpoint_url(
+        "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode",
+    );
     let res = auth_retry(|| {
         authentication_client()
-            .post(auth_endpoint_url("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode").as_str())
+            .post(&devicecode_endpoint)
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -197,9 +200,10 @@ pub async fn device_login_poll(
     query.insert("device_code", device_code);
     query.insert("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
 
+    let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
+            .post(&token_endpoint)
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1399,13 +1403,14 @@ static TEST_AUTH_ENDPOINTS: std::sync::LazyLock<
 /// Resolves a Microsoft authentication URL. Tests install an override so the
 /// whole OAuth-to-Xbox-to-Minecraft chain can be exercised against a loopback
 /// mock; production always uses the real endpoints.
-fn auth_endpoint_url(default: &str) -> String {
+fn auth_endpoint_url(default: &'static str) -> std::borrow::Cow<'static, str> {
     #[cfg(test)]
     if let Some(endpoints) = TEST_AUTH_ENDPOINTS.lock().unwrap().as_ref() {
-        return endpoints.rewrite(default);
+        return std::borrow::Cow::Owned(endpoints.rewrite(default));
     }
+    #[cfg(test)]
     let _ = default;
-    default.to_string()
+    std::borrow::Cow::Borrowed(default)
 }
 
 #[cfg(test)]
@@ -1464,9 +1469,10 @@ async fn oauth_token(
     query.insert("redirect_uri", redirect_uri);
     query.insert("scope", REQUESTED_SCOPE);
 
+    let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
+            .post(&token_endpoint)
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1511,9 +1517,10 @@ async fn oauth_refresh(
     query.insert("grant_type", "refresh_token");
     query.insert("scope", REQUESTED_SCOPE);
 
+    let token_endpoint = auth_endpoint_url(MICROSOFT_TOKEN_URL);
     let res = auth_retry(|| {
         authentication_client()
-            .post(auth_endpoint_url(MICROSOFT_TOKEN_URL).as_str())
+            .post(&token_endpoint)
             .header("Accept", "application/json")
             .form(&query)
             .send()
@@ -1558,9 +1565,10 @@ struct XboxLiveToken {
 async fn xbox_live_authorize(
     access_token: &str,
 ) -> Result<RequestWithDate<XboxLiveToken>, MinecraftAuthenticationError> {
+    let xbl_endpoint =
+        auth_endpoint_url("https://user.auth.xboxlive.com/user/authenticate");
     send_xbox_json_request(
-        auth_endpoint_url("https://user.auth.xboxlive.com/user/authenticate")
-            .as_str(),
+        &xbl_endpoint,
         json!({
             "Properties": {
                 "AuthMethod": "RPS",
@@ -1579,9 +1587,10 @@ async fn xbox_live_authorize(
 async fn xsts_authorize_xbl(
     xbl_token: &str,
 ) -> Result<RequestWithDate<DeviceToken>, MinecraftAuthenticationError> {
+    let xsts_endpoint =
+        auth_endpoint_url("https://xsts.auth.xboxlive.com/xsts/authorize");
     send_xbox_json_request(
-        auth_endpoint_url("https://xsts.auth.xboxlive.com/xsts/authorize")
-            .as_str(),
+        &xsts_endpoint,
         json!({
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT",
@@ -1649,10 +1658,9 @@ async fn minecraft_token(
 
     let token = token.token;
 
-    let url = mojang_service_url(
-        &auth_endpoint_url("https://api.minecraftservices.com/launcher/login"),
-        should_use_mojang_mirror(),
-    );
+    let login_endpoint =
+        auth_endpoint_url("https://api.minecraftservices.com/launcher/login");
+    let url = mojang_service_url(&login_endpoint, should_use_mojang_mirror());
     let res = auth_retry(|| {
         authentication_client()
             .post(url.as_ref())
@@ -1882,12 +1890,10 @@ impl Deref for MaybeOnlineMinecraftProfile<'_> {
 async fn minecraft_profile(
     token: &str,
 ) -> Result<MinecraftProfile, MinecraftAuthenticationError> {
-    let url = mojang_service_url(
-        &auth_endpoint_url(
-            "https://api.minecraftservices.com/minecraft/profile",
-        ),
-        should_use_mojang_mirror(),
+    let profile_endpoint = auth_endpoint_url(
+        "https://api.minecraftservices.com/minecraft/profile",
     );
+    let url = mojang_service_url(&profile_endpoint, should_use_mojang_mirror());
     let res = auth_retry(|| {
         authentication_client()
             .get(url.as_ref())
