@@ -108,6 +108,8 @@ jobs:
         run: node --test scripts/axolotl/publish-discord-release.test.mjs
       - name: Check ICU message contracts
         run: node --test scripts/i18n-icu-contract.test.ts
+      - name: Check seed map texture colours
+        run: node --test scripts/axolotl/seed-map-texture-colors.test.mjs
       - name: Check formatting of Rust code
         run: cargo fmt --all --check
 
@@ -231,16 +233,9 @@ jobs:
           --package daedalus
           --package ariadne
           --package path-util
+          --package async-minecraft-ping
           --no-fail-fast
           -E 'not test(/synced_/)'
-
-      # async-minecraft-ping sits outside the root workspace, so it needs its
-      # own invocation instead of a `--package` flag.
-      - name: Run async-minecraft-ping tests
-        run: >-
-          cargo nextest run
-          --manifest-path packages/async-minecraft-ping/Cargo.toml
-          --no-fail-fast
 
   # The GUI crate ships ~147 tests (updater, auth, window frame, seed map, mod
   # translation) that only ever reached `cargo check`. They live in their own
@@ -271,10 +266,13 @@ jobs:
         uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
       - name: Install cargo-nextest
         run: cargo binstall --no-confirm --locked cargo-nextest
+      # The updater ships behind its own feature, so its tests only compile when
+      # the feature is switched on.
       - name: Run Rust GUI tests
         run: >-
           cargo nextest run
           --package theseus_gui
+          --features updater
           --no-fail-fast
 
   desktop:
