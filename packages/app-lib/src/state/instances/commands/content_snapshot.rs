@@ -27,6 +27,12 @@ use crate::state::{
     ContentRequirement, ContentSourceKind,
 };
 
+/// Content operations share one per-instance lock. Waiting for it must be
+/// bounded: a stale holder would otherwise pin a background task, or a UI
+/// request, for the rest of the session.
+const CONTENT_LOCK_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(30);
+
 /// In-flight dependency backfills keyed by instance id.
 ///
 /// A remote refresh starts a metadata backfill. Switching pages quickly used to
@@ -499,8 +505,21 @@ async fn get_content_snapshot_inner(
                 return;
             }
 
-            let _instance_lock =
-                state.lock_instance_content(&instance_id).await;
+            let _instance_lock = match state
+                .lock_instance_content_with_timeout(
+                    &instance_id,
+                    CONTENT_LOCK_TIMEOUT,
+                )
+                .await
+            {
+                Ok(guard) => guard,
+                Err(error) => {
+                    tracing::warn!(
+                        "Content dependency backfill could not lock the instance content: {error}"
+                    );
+                    return;
+                }
+            };
             let mut tx = match state.pool.begin_with("BEGIN IMMEDIATE").await {
                 Ok(tx) => tx,
                 Err(error) => {
@@ -754,7 +773,9 @@ pub(crate) async fn reconcile_curseforge_members(
 ) -> crate::Result<()> {
     use chrono::Utc;
 
-    let _instance_lock = state.lock_instance_content(instance_id).await;
+    let _instance_lock = state
+        .lock_instance_content_with_timeout(instance_id, CONTENT_LOCK_TIMEOUT)
+        .await?;
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     let rows = sqlx::query(
         "SELECT entry.id AS entry_id, file.relative_path, entry.enabled,
@@ -1110,7 +1131,9 @@ async fn reconcile_curseforge_manual_downloads(
         return Ok(());
     }
 
-    let _instance_lock = state.lock_instance_content(instance_id).await;
+    let _instance_lock = state
+        .lock_instance_content_with_timeout(instance_id, CONTENT_LOCK_TIMEOUT)
+        .await?;
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     let member_rows = sqlx::query(
         "SELECT id, content_entry_id, provider_project_id,

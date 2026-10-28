@@ -1744,3 +1744,59 @@ mod instance_lock_tests {
         drop(guard);
     }
 }
+
+#[cfg(test)]
+mod instance_lock_tests {
+    use super::*;
+
+    async fn lock_test_state() -> (tempfile::TempDir, Arc<State>) {
+        let temp = tempfile::tempdir().unwrap();
+        let directories = DirectoryInfo {
+            settings_dir: temp.path().join("settings"),
+            config_dir: temp.path().join("config"),
+            app_identifier: "content-lock-test".into(),
+        };
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let state = test_state(directories, pool).await.unwrap();
+        (temp, state)
+    }
+
+    #[tokio::test]
+    async fn a_held_content_lock_times_out_instead_of_waiting_forever() {
+        let (_temp, state) = lock_test_state().await;
+        let held = state.lock_instance_content("inst-lock").await;
+        let started = std::time::Instant::now();
+        let result = state
+            .lock_instance_content_with_timeout(
+                "inst-lock",
+                std::time::Duration::from_millis(50),
+            )
+            .await;
+        let error = match result {
+            Ok(_) => panic!("a held content lock must time out"),
+            Err(error) => error,
+        };
+        assert!(
+            format!("{error:#}").contains("Timed out waiting"),
+            "unexpected error: {error:#}"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "the bounded lock wait must give up quickly"
+        );
+
+        drop(held);
+        state
+            .lock_instance_content_with_timeout(
+                "inst-lock",
+                std::time::Duration::from_millis(50),
+            )
+            .await
+            .expect("the lock must be free once the holder is dropped");
+    }
+}
