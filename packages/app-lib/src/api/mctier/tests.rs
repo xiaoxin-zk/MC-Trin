@@ -236,6 +236,200 @@ async fn signaling(reject: bool) -> (String, oneshot::Receiver<Value>) {
     (url, received)
 }
 
+/// Completes the registry handshake and the roster request that follows it,
+/// leaving a registered session on the given socket.
+async fn establish_session<S>(
+    socket: &mut async_tungstenite::WebSocketStream<S>,
+) -> (String, Value)
+where
+    S: futures::io::AsyncRead + futures::io::AsyncWrite + Unpin,
+{
+    socket
+        .send(Message::Text(
+            json!({"type":"server-challenge", "protocolVersion":3, "lobbyEntryModes":true, "challenge":"12".repeat(32)})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+    let registration: Value = serde_json::from_str(
+        socket
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_text()
+            .unwrap()
+            .as_ref(),
+    )
+    .unwrap();
+    let public = STANDARD
+        .decode(registration["identityPublicKey"].as_str().unwrap())
+        .unwrap();
+    let id: String = Sha256::digest(public)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let joining = registration["entryMode"] == "join";
+    let host_id = if joining { "a".repeat(64) } else { id.clone() };
+    socket
+        .send(Message::Text(
+            json!({
+                "type": "register-success", "clientId": id, "hostId": host_id,
+                "sessionGeneration": 1, "lobbyId": "test-lobby",
+                "chatToken": "not-exported", "chatTokenEpoch": 1,
+            })
+            .to_string()
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let mut players = vec![json!({
+        "playerId": id, "playerName": "Player",
+        "virtualIp": registration["virtualIp"], "sessionGeneration": 1,
+    })];
+    if joining {
+        players.push(json!({
+            "playerId": host_id, "playerName": "Host",
+            "virtualIp": "10.126.1.1", "sessionGeneration": 1,
+        }));
+    }
+    let roster = json!(players);
+    while let Some(Ok(message)) = socket.next().await {
+        let Ok(text) = message.into_text() else {
+            break;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+            break;
+        };
+        if value["type"] == "players-list-request" {
+            socket
+                .send(Message::Text(
+                    json!({"type":"players-list", "players": roster})
+                        .to_string()
+                        .into(),
+                ))
+                .await
+                .unwrap();
+            break;
+        }
+    }
+    (id, roster)
+}
+
+/// Registers a host, confirms its lobby visibility and then drops the control
+/// link, which is what a lost network path looks like from the client's view.
+async fn signaling_disconnecting_after_registration() -> String {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        let _ = establish_session(&mut socket).await;
+        // Let the room reach its running state first, so the drop interrupts an
+        // established session rather than the setup handshake.
+        while let Some(Ok(message)) = socket.next().await {
+            let Ok(text) = message.into_text() else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+                break;
+            };
+            if value["type"] == "set-lobby-options" {
+                socket
+                    .send(Message::Text(
+                        json!({
+                            "type": "lobby-options-changed",
+                            "isPublic": value["isPublic"],
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+        let _ = socket.close(None).await;
+    });
+    url
+}
+
+/// Registers a guest, then pushes one authentic voice offer from the host and
+/// one forged offer from a player outside the lobby.
+async fn signaling_with_voice_signals() -> String {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        let (id, _) = establish_session(&mut socket).await;
+        // The room confirms its lobby visibility before it starts reading voice
+        // traffic; without the echo these offers would be swallowed by that wait.
+        while let Some(Ok(message)) = socket.next().await {
+            let Ok(text) = message.into_text() else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+                break;
+            };
+            match value["type"].as_str() {
+                Some("set-lobby-options") => {
+                    socket
+                        .send(Message::Text(
+                            json!({
+                                "type": "lobby-options-changed",
+                                "isPublic": value["isPublic"],
+                            })
+                            .to_string()
+                            .into(),
+                        ))
+                        .await
+                        .unwrap();
+                    break;
+                }
+                Some("leave") => return,
+                _ => {}
+            }
+        }
+        socket
+            .send(Message::Text(
+                json!({
+                    "type": "offer", "from": "a".repeat(64), "to": id,
+                    "playerName": "Host",
+                    "offer": {"type": "offer", "sdp": "v=0\r\n"},
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .unwrap();
+        socket
+            .send(Message::Text(
+                json!({
+                    "type": "offer", "from": "c".repeat(64), "to": id,
+                    "offer": {"type": "offer", "sdp": "v=0\r\n"},
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .unwrap();
+        while let Some(Ok(message)) = socket.next().await {
+            let Ok(text) = message.into_text() else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+                break;
+            };
+            if value["type"] == "leave" {
+                return;
+            }
+        }
+    });
+    url
+}
+
 async fn collision_signaling(
     rejected_attempts: usize,
     total_attempts: usize,
@@ -557,4 +751,137 @@ async fn cancellation_interrupts_pending_kernel_start_and_releases_its_socket()
             .unwrap()["type"],
         "leave"
     );
+}
+
+/// A signaling link that dies mid-session must end the room and reap the
+/// EasyTier kernel instead of leaving a half-open room behind.
+#[tokio::test]
+async fn a_dropped_signaling_connection_ends_the_room_and_releases_the_kernel()
+{
+    let _serial = multiplayer::SESSION_TEST.lock().await;
+    let (directory, executable) = fixture();
+    let url = signaling_disconnecting_after_registration().await;
+    let mut input = request();
+    input.signaling_server = url;
+    input.game_port = minecraft().await;
+    let cancellation = CancellationToken::new();
+    let token = cancellation.clone();
+    let executable = executable.clone();
+    let (ready, established) = oneshot::channel();
+    let actor = tokio::spawn(async move {
+        runtime::run(
+            0,
+            input,
+            &executable,
+            &token,
+            tokio::sync::mpsc::channel(1).1,
+            std::sync::Arc::new(|_| {}),
+            &mut Some(ready),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(15), established)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let rpc: u16 = tokio::fs::read_to_string(directory.path().join("rpc-port"))
+        .await
+        .unwrap()
+        .parse()
+        .unwrap();
+    let error = tokio::time::timeout(Duration::from_secs(15), actor)
+        .await
+        .unwrap()
+        .unwrap()
+        .expect_err("a lost signaling link must end the room");
+    // A clean close frame surfaces as "signaling disconnected"; an abruptly
+    // reset socket surfaces as the platform's connection IO error. Both mean
+    // the same thing here: the control link is gone.
+    let message = format!("{error:#}").to_lowercase();
+    assert!(
+        message.contains("signaling disconnected")
+            || message.contains("connection")
+            || message.contains("os error"),
+        "unexpected error: {error:#}"
+    );
+    // The kernel child is gone, so its RPC port stops answering.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while TcpStream::connect((Ipv4Addr::LOCALHOST, rpc)).await.is_ok() {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the EasyTier kernel socket should be released");
+    assert!(directory.path().join("arguments").exists());
+    cancellation.cancel();
+}
+
+/// Voice signals are only forwarded for players the lobby actually holds: the
+/// host's offer reaches the renderer, the forged one is dropped and the room
+/// keeps running.
+#[tokio::test]
+async fn only_room_members_voice_signals_reach_the_renderer() {
+    let _serial = multiplayer::SESSION_TEST.lock().await;
+    let (directory, executable) = fixture();
+    let url = signaling_with_voice_signals().await;
+    let mut input = request();
+    input.mode = EntryMode::Join;
+    input.signaling_server = url;
+    input.game_port = minecraft().await;
+    let cancellation = CancellationToken::new();
+    let token = cancellation.clone();
+    let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let collected = received.clone();
+    let emitter: VoiceSignalEmitter =
+        std::sync::Arc::new(move |value| collected.lock().unwrap().push(value));
+    let (ready, established) = oneshot::channel();
+    let mut actor = tokio::spawn(async move {
+        runtime::run(
+            0,
+            input,
+            &executable,
+            &token,
+            tokio::sync::mpsc::channel(1).1,
+            emitter,
+            &mut Some(ready),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(15), established)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    // Wait for the offer, but surface an early room teardown instead of letting
+    // the wait time out without a diagnosis.
+    tokio::select! {
+        result = &mut actor => {
+            panic!("the room ended before the voice offer arrived: {result:?}")
+        }
+        waited = tokio::time::timeout(Duration::from_secs(10), async {
+            while received.lock().unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }) => {
+            waited.expect("the host's voice offer should reach the renderer");
+        }
+    }
+    // Give the forged offer time to be rejected instead of racing the assertion.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let signals = received.lock().unwrap().clone();
+    assert_eq!(signals.len(), 1, "unexpected signals: {signals:?}");
+    assert_eq!(signals[0]["type"], "offer");
+    assert_eq!(signals[0]["from"], "a".repeat(64));
+    assert!(
+        signals[0].get("playerName").is_none(),
+        "protocol metadata must not leak to the renderer"
+    );
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(5), actor)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let _ = directory;
 }
