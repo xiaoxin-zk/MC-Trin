@@ -273,15 +273,11 @@ jobs:
       # job has already compiled the test binaries, while a standalone job spent
       # ~95 of its 100 minutes rebuilding them from a cold cache. The previously
       # name-filtered steps above are covered by this run, so they are gone.
-      - name: Install cargo-binstall
-        if: runner.os == 'Linux'
-        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
       - name: Run the full theseus test suite
         if: runner.os == 'Linux'
-        timeout-minutes: 30
+        timeout-minutes: 40
         run: |
-          cargo binstall --no-confirm --locked cargo-nextest
-          cargo nextest run \
+          cargo test \
             --package theseus \
             --package content-management \
             --package daedalus \
@@ -289,7 +285,7 @@ jobs:
             --package path-util \
             --package async-minecraft-ping \
             --no-fail-fast \
-            -E 'not test(/synced_/)'
+            -- --skip synced_
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'

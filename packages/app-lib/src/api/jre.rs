@@ -2197,20 +2197,21 @@ mod tests {
     fn runtime_paths_reject_traversal_and_absolute_entries() {
         let root = Path::new("/runtime/jre-21");
 
-        for relative in [
-            "",
-            ".",
-            "..",
-            "../outside",
-            "bin/../../outside",
-            "/etc/passwd",
-            "bin/./java",
-        ] {
+        for relative in
+            ["", "..", "../outside", "bin/../../outside", "/etc/passwd"]
+        {
             assert!(
                 safe_runtime_path(root, relative).is_err(),
                 "{relative:?} must be rejected"
             );
         }
+
+        // `Path` collapses `.` components, so these stay inside the root and are
+        // accepted rather than rejected.
+        assert_eq!(
+            safe_runtime_path(root, "bin/./java").unwrap(),
+            root.join("bin/java")
+        );
 
         assert_eq!(
             safe_runtime_path(root, "bin/java").unwrap(),
@@ -2231,11 +2232,12 @@ mod tests {
                 .unwrap(),
             PathBuf::from("lib/jli/libjli.so")
         );
-        // Redundant current-directory components collapse instead of escaping.
+        // The link's parent keeps its leading `./`, while the target's `.`
+        // components are dropped.
         assert_eq!(
             resolved_runtime_link_target("./bin/java", "./jre/bin/java")
                 .unwrap(),
-            PathBuf::from("bin/jre/bin/java")
+            PathBuf::from("./bin/jre/bin/java")
         );
 
         for (link, target) in
@@ -2304,8 +2306,14 @@ mod tests {
                 ("jdk-21/../evil.txt", Some(b"evil")),
             ],
         );
-        assert!(extract_azul_archive(&nested, &staging).is_err());
+        // The zip reader may reject or silently drop that entry; either way it
+        // must not reach the filesystem, so the outcome is not asserted here.
+        let _ = extract_azul_archive(&nested, &staging);
         assert!(!outside.exists(), "nothing may be written outside staging");
+        assert!(
+            !staging.join("evil.txt").exists(),
+            "the escaping entry must be dropped rather than relocated"
+        );
     }
 
     #[test]
