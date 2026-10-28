@@ -126,7 +126,15 @@ impl TlsFixture {
                                 let mut connection = h2::server::handshake(stream).await.unwrap();
                                 let mut transfers = tokio::task::JoinSet::new();
                                 while let Some(request) = connection.accept().await {
-                                    let (request, mut respond) = request.unwrap();
+                                    // The client may reset the connection before
+                                    // the response is complete (cancellation and
+                                    // range-switching tests do this on purpose),
+                                    // so a reset stream ends this connection
+                                    // instead of failing the whole server task.
+                                    let Ok((request, mut respond)) = request
+                                    else {
+                                        break;
+                                    };
                                     counted.fetch_add(1, Ordering::SeqCst);
                                     assert_eq!(request.uri().host(), Some("cdn.modrinth.com"));
                                     assert!(request.headers().get(header::AUTHORIZATION).is_none());
