@@ -1617,7 +1617,17 @@ mod instance_lock_tests {
     #[tokio::test]
     async fn a_held_content_lock_times_out_instead_of_waiting_forever() {
         let (_temp, state) = state_with_content_lock().await;
-        let held = state.lock_instance_content("inst-lock").await;
+        // The content lock is reentrant within one task, so the holder has to be
+        // a different task for this test to observe a real wait.
+        let (acquired, held) = tokio::sync::oneshot::channel();
+        let holder_state = state.clone();
+        let holder = tokio::spawn(async move {
+            let _guard = holder_state.lock_instance_content("inst-lock").await;
+            let _ = acquired.send(());
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        held.await.unwrap();
+
         let started = std::time::Instant::now();
         let result = state
             .lock_instance_content_with_timeout(
@@ -1638,14 +1648,15 @@ mod instance_lock_tests {
             "the bounded lock wait must give up quickly"
         );
 
-        drop(held);
+        holder.abort();
+        let _ = holder.await;
         state
             .lock_instance_content_with_timeout(
                 "inst-lock",
-                Duration::from_millis(50),
+                Duration::from_secs(5),
             )
             .await
-            .expect("the lock must be free once the holder is dropped");
+            .expect("the lock must be free once the holder is gone");
     }
 
     #[tokio::test]

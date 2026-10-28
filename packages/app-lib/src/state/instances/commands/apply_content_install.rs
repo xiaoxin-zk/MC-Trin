@@ -1680,7 +1680,7 @@ pub(crate) async fn resolve_content_install_relative_path(
     Ok(original_relative_path)
 }
 
-/// Builds the `[涓枃鍚峕` file-name candidate for a Modrinth project file by
+/// Builds the `[中文名]` file-name candidate for a Modrinth project file by
 /// resolving the project's slug from cache. Any failure disables the naming.
 async fn modrinth_chinese_file_name_candidate(
     project_id: String,
@@ -1916,7 +1916,7 @@ pub(crate) async fn materialize_project_download(
             let _ = tokio::fs::rename(&backup, destination).await;
         }
         warn!(
-            "Failed to rename temporary file to destination 鈥?checking file lock"
+            "Failed to rename temporary file to destination — checking file lock"
         );
         return Err(crate::Error::from(io_error_with_lock_info(
             error,
@@ -2521,7 +2521,7 @@ async fn add_project_bytes_with_provider(
     // Minecraft only loads resource/shader pack ZIPs whose markers sit at
     // the archive root. Archives produced by zipping a pack folder wrap it
     // in one folder; extract the pack folder(s) directly so the result is
-    // usable as-is 鈥?no re-packing, no recompression.
+    // usable as-is — no re-packing, no recompression.
     if let Some(plan) = wrapped_pack_plan(&bytes, project_type) {
         if provider_ref.is_some() {
             return Err(crate::ErrorKind::InputError(

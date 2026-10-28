@@ -259,12 +259,12 @@ async fn content_writes_wait_for_the_existing_sqlite_writer() {
 fn update_filename_replaces_the_official_name_inside_custom_names() {
     assert_eq!(
         preserved_update_relative_path(
-            "mods/銆愪笘鐣岀敓鎴愩€慣erralith_v2.5.1.jar",
+            "mods/【世界生成】Terralith_v2.5.1.jar",
             Some("Terralith_v2.5.1.jar"),
             "Terralith_v2.6.1.jar",
         )
         .unwrap(),
-        "mods/銆愪笘鐣岀敓鎴愩€慣erralith_v2.6.1.jar"
+        "mods/【世界生成】Terralith_v2.6.1.jar"
     );
     assert_eq!(
         preserved_update_relative_path(
