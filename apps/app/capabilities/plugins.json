@@ -67,9 +67,6 @@
           "url": "https://api.purpurmc.org/*"
         },
         {
-          "url": "https://update.axlmc.org/*"
-        },
-        {
           "url": "https://*/*"
         },
         {
