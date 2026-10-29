@@ -812,6 +812,7 @@ mod tests {
             &"a".repeat(64),
             "tcp://127.0.0.1:11010",
             true,
+            None,
             &cancellation,
         )
         .await

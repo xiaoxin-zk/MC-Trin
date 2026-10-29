@@ -79,12 +79,14 @@ impl StartRequest {
         if self.is_public && self.mode != EntryMode::Create {
             bail!("only the room host can publish a lobby");
         }
-        if let Some(description) = &self.description {
-            if description.chars().count() > 200
-                || description.chars().any(char::is_control)
-            {
-                bail!("invalid lobby description");
-            }
+        let invalid_description = self.description.as_ref().is_some_and(
+            |description| {
+                description.chars().count() > 200
+                    || description.chars().any(char::is_control)
+            },
+        );
+        if invalid_description {
+            bail!("invalid lobby description");
         }
         if self.max_players.is_some_and(|players| players > 100) {
             bail!("the lobby player limit must not exceed 100");
