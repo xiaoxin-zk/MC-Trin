@@ -75,7 +75,10 @@ jobs:
           cp Cargo.toml Cargo.lock rust-toolchain.toml "$build_root/"
           cp -R .cargo "$build_root/"
           cd "$build_root"
-          args=(--recipe-path "$RUNNER_TEMP/desktop-recipe.json" --release --locked --target-dir "$target_dir")
+          # cargo-chef cooks a disposable workspace with generated manifests;
+          # that workspace may need to resolve its own lockfile. The actual
+          # desktop builds still use the repository lockfile with --locked.
+          args=(--recipe-path "$RUNNER_TEMP/desktop-recipe.json" --release --target-dir "$target_dir")
           if [ -n "$BUILD_TARGET" ]; then args+=(--target "$BUILD_TARGET"); fi
           cargo chef cook "${args[@]}" --package theseus_gui --features updater,tauri/custom-protocol
           if [ "$RUNNER_OS" = Windows ]; then
