@@ -2170,6 +2170,9 @@ mod microsoft_chain_tests {
             let xsts_reject =
                 std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let pending = remaining_pending.clone();
+            // The server task needs its own handle; the struct keeps the
+            // original so the test can flip the flag later.
+            let server_reject = xsts_reject.clone();
             tokio::spawn(async move {
                 loop {
                     let Ok((mut stream, _)) = listener.accept().await else {
@@ -2177,7 +2180,7 @@ mod microsoft_chain_tests {
                     };
                     let recorded = recorded.clone();
                     let pending = pending.clone();
-                    let xsts_reject = xsts_reject.clone();
+                    let xsts_reject = server_reject.clone();
                     tokio::spawn(async move {
                         let Some((path, body)) =
                             read_http_request(&mut stream).await
