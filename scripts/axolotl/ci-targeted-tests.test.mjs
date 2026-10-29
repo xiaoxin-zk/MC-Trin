@@ -65,23 +65,26 @@ test('runs the standalone Minecraft ping crate through its manifest', () => {
     ])
 })
 
-test('runs all workspace crates separately for workspace-wide changes', () => {
+test('checks all workspace crates separately for workspace-wide changes', () => {
     const plan = selectPlan(['Cargo.lock'])
     assert.equal(plan.reason, 'workspace-wide change')
     const commands = targetedCargoArgs(plan)
-    assert.deepEqual(commands, [['check', '--workspace', '--all-targets']])
+    assert(commands.some((args) => args[0] === 'check' && args.includes('theseus')))
+    assert(commands.some((args) => args[0] === 'check' && args.includes('theseus_gui')))
+    assert(commands.some((args) => args[0] === 'check' && args.includes('axolotl-installer-ui')))
+    assert(commands.some((args) => args[0] === 'check' && args.includes('content-management')))
 })
 
 test('unknown Rust workspace paths fall back to all known crates', () => {
     const plan = selectPlan(['packages/new-crate/src/lib.rs'])
     assert.equal(plan.reason, 'unmapped Rust crate')
-    assert.deepEqual(targetedCargoArgs(plan), [['check', '--workspace', '--all-targets']])
+    assert(targetedCargoArgs(plan).every((args) => args[0] === 'check'))
 })
 
 test('a missing baseline compiles all workspace targets instead of testing everything', () => {
     const plan = selectPlan(null)
     assert.equal(plan.reason, 'no baseline')
-    assert.deepEqual(targetedCargoArgs(plan), [['check', '--workspace', '--all-targets']])
+    assert(targetedCargoArgs(plan).every((args) => args[0] === 'check'))
 })
 
 test('does not run Rust tests for frontend-only changes', () => {

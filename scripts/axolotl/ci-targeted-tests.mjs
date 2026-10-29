@@ -54,7 +54,7 @@ function crateForFile(file) {
 }
 
 function workspaceCompilePlan(reason) {
-    return { crates: [], compileWorkspace: true, reason }
+    return { crates: CRATES, compileWorkspace: true, reason }
 }
 
 export function selectPlan(files) {
@@ -104,7 +104,13 @@ export function selectPlan(files) {
 
 export function targetedCargoArgs(plan) {
     if (plan.compileWorkspace) {
-        return [['check', '--workspace', '--all-targets']]
+        return plan.crates.map((crate) => {
+            const args = crate.manifest
+                ? ['check', '--manifest-path', crate.manifest, '--all-targets']
+                : ['check', '--package', crate.package, '--all-targets']
+            if (crate.features) args.push('--features', crate.features.join(','))
+            return args
+        })
     }
     return plan.crates.flatMap((crate) => {
         const base = crate.manifest
