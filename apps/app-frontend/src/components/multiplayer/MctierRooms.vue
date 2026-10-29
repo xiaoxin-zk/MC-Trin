@@ -84,8 +84,7 @@ const messages = defineMessages({
     },
     publicWithPasswordHint: {
         id: 'app.multiplayer.mctier.public-with-password-hint',
-        defaultMessage:
-            'Joining players must enter the room password or an invite code.',
+        defaultMessage: 'Joining players must enter the room password or an invite code.',
     },
     privatePasswordHint: {
         id: 'app.multiplayer.mctier.private-password-hint',
@@ -238,10 +237,7 @@ const randomAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
 function randomCode(length: number) {
     const bytes = new Uint8Array(length)
     crypto.getRandomValues(bytes)
-    return Array.from(
-        bytes,
-        (byte) => randomAlphabet[byte % randomAlphabet.length],
-    ).join('')
+    return Array.from(bytes, (byte) => randomAlphabet[byte % randomAlphabet.length]).join('')
 }
 function generateLobbyName() {
     lobbyName.value = `mc-${randomCode(6)}`
@@ -331,10 +327,7 @@ async function start(mode: 'create' | 'join', invite?: MctierInvite) {
                 mode === 'create' && lobbyDescription.value.trim()
                     ? lobbyDescription.value.trim()
                     : null,
-            max_players:
-                mode === 'create' && playerLimit.value !== null
-                    ? playerLimit.value
-                    : null,
+            max_players: mode === 'create' && playerLimit.value !== null ? playerLimit.value : null,
         })
     } catch (failure) {
         if (!stopping.value) error.value = multiplayerErrorText(failure)
@@ -751,10 +744,7 @@ function prefillInviteFromDeepLink() {
             /></label>
             <label class="flex flex-col gap-1 text-sm sm:col-span-2"
                 >{{ formatMessage(messages.lobbyDescription)
-                }}<StyledInput
-                    v-model="lobbyDescription"
-                    name="lobby-description"
-                    :maxlength="200"
+                }}<StyledInput v-model="lobbyDescription" name="lobby-description" :maxlength="200"
             /></label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.maxPlayers)

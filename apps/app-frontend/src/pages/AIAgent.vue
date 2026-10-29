@@ -991,10 +991,7 @@ function requestToolApproval(
     const endpoint = endpointOverride ?? mcpClient.value?.endpoint
     if (!endpoint) return Promise.resolve(false)
     if (permissionMode.value === 'full') return Promise.resolve(true)
-    if (
-        permissionMode.value === 'free' &&
-        !isDangerousTool(tool.name, endpoint === 'MC-Trin')
-    ) {
+    if (permissionMode.value === 'free' && !isDangerousTool(tool.name, endpoint === 'MC-Trin')) {
         return Promise.resolve(true)
     }
     return new Promise<boolean>((resolve) => {
@@ -1248,9 +1245,7 @@ onUnmounted(denyPendingApprovals)
                     <fieldset
                         class="assistant-permissions m-0 flex flex-col gap-2 rounded-md border border-solid border-surface-4 p-3"
                     >
-                        <legend
-                            class="px-1 text-sm font-semibold text-[var(--color-text-primary)]"
-                        >
+                        <legend class="px-1 text-sm font-semibold text-[var(--color-text-primary)]">
                             {{ formatMessage(messages.permissionModeTitle) }}
                         </legend>
                         <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
@@ -1644,10 +1639,7 @@ onUnmounted(denyPendingApprovals)
                 aria-modal="true"
                 aria-labelledby="assistant-full-access-title"
             >
-                <h2
-                    id="assistant-full-access-title"
-                    class="m-0 text-lg font-semibold text-red"
-                >
+                <h2 id="assistant-full-access-title" class="m-0 text-lg font-semibold text-red">
                     {{ formatMessage(messages.permissionModeFullWarningTitle) }}
                 </h2>
                 <p class="m-0 break-words text-sm text-[var(--color-text-primary)]">
