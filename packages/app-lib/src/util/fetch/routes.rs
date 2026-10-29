@@ -1,4 +1,3 @@
-use super::download::route_policy;
 use super::*;
 use crate::state::{CustomDownloadSource, CustomDownloadSourceKind};
 use crate::util::download::constants::{
@@ -14,6 +13,7 @@ use crate::util::download::constants::{
     ROUTE_POLICY_MAVEN_MINECRAFTFORGE_NET, ROUTE_POLICY_MAVEN_NEOFORGED_NET,
     ROUTE_POLICY_PISTON_META_MOJANG_COM,
 };
+use crate::util::download::route_policy;
 
 pub(super) fn is_mrpack_url(url: &str) -> bool {
     reqwest::Url::parse(url).ok().is_some_and(|url| {
@@ -113,7 +113,7 @@ fn custom_url_with_path(
     Some(target.into())
 }
 
-fn explicit_mirror_routes(
+pub(super) fn explicit_mirror_routes(
     url: &str,
     resource: ResourceClass,
 ) -> Vec<DownloadRoute> {

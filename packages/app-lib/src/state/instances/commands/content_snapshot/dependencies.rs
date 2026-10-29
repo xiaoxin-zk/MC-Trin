@@ -466,6 +466,7 @@ pub(super) async fn backfill_dependency_edges_from_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ContentRequirement;
     fn entry(id: &str) -> ContentEntry {
         ContentEntry {
             id: id.into(),

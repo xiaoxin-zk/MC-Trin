@@ -57,7 +57,7 @@ fn lowest_openai_reasoning_effort(model_id: &str) -> Option<&'static str> {
     }
 }
 
-fn insert_json_option(body: &mut Value, key: &str, value: Value) {
+pub(super) fn insert_json_option(body: &mut Value, key: &str, value: Value) {
     if let Some(object) = body.as_object_mut() {
         object.insert(key.to_string(), value);
     }
