@@ -1,29 +1,32 @@
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
-/// Turns a changed source file into the test-module filter that covers it, so
-/// the fast gate can run the affected unit tests instead of the whole suite.
-///
-/// The mapping mirrors the crate layout: `packages/app-lib/src/state/friends.rs`
-/// is the `state::friends` module, and a module's tests live either in that
-/// module or in a `tests` child (`.../friends/tests.rs`, `.../friends/tests.rs`
-/// after the split). Files that carry no tests return no filter.
+const CRATES = [
+    { root: 'apps/app', package: 'theseus_gui', features: ['updater'] },
+    { root: 'apps/installer-ui', package: 'axolotl-installer-ui' },
+    { root: 'packages/app-lib', package: 'theseus', moduleTests: true },
+    { root: 'packages/ariadne', package: 'ariadne' },
+    { root: 'packages/content-management', package: 'content-management' },
+    { root: 'packages/daedalus', package: 'daedalus' },
+    { root: 'packages/path-util', package: 'path-util' },
+    {
+        root: 'packages/async-minecraft-ping',
+        manifest: 'packages/async-minecraft-ping/Cargo.toml',
+    },
+]
+
+const WORKSPACE_FILES = /^(?:Cargo\.(?:toml|lock)|rust-toolchain\.toml|\.cargo\/.*)$/u
+const RUST_SOURCE_FILES = /(?:^|\/)(?:build\.rs|[^/]+\.rs|Cargo\.toml)$/u
+
 export function moduleFilter(relativePath) {
     const match = /^packages\/app-lib\/src\/(.+)\.rs$/.exec(relativePath)
     if (!match) return null
     let module = match[1]
-    // `mod.rs` and `<dir>/mod.rs` describe the containing module.
     module = module.replace(/(^|\/)mod$/u, '')
-    // A `tests` module belongs to its parent module.
     module = module.replace(/(^|\/)tests$/u, '')
-    // The crate root does not have a reliable test-name filter. A root change
-    // must force the caller to run the full suite instead of silently running
-    // zero tests with the filter `lib`.
     if (!module || module === 'lib') return null
     return module.replace(/\//gu, '::')
 }
-
-const RUST_PACKAGE_FILES = /^(?:apps|packages)\/[^/]+\/.*\.rs$|^(?:Cargo\.(?:toml|lock)|rust-toolchain\.toml|(?:apps|packages)\/[^/]+\/Cargo\.toml)$/u
 
 function changedFiles(base) {
     if (!base || /^0+$/u.test(base)) return null
@@ -37,84 +40,97 @@ function changedFiles(base) {
             ['diff', '--name-only', '--no-renames', `${resolved}...HEAD`],
             { encoding: 'utf8', timeout: 30000 },
         )
-        return output.split('\n').map((line) => line.trim()).filter(Boolean)
+        return output
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
     } catch {
-        // A shallow or missing baseline cannot describe the change; fall back
-        // to the full run rather than skipping the check.
         return null
     }
 }
 
-export function selectFilters(files) {
-    if (!files) return { filters: [], reason: 'no baseline' }
-    const filters = new Set()
-    let rustChanged = false
-    let unmappedRustChange = false
-    for (const file of files) {
-        if (!RUST_PACKAGE_FILES.test(file)) continue
-        rustChanged = true
-        const filter = moduleFilter(file)
-        if (filter) filters.add(filter)
-        else unmappedRustChange = true
-    }
-    if (!rustChanged) return { filters: [], reason: 'no Rust change' }
-    // A change to the crate manifest, the toolchain or the test harness can
-    // affect anything, so fall back to the full run rather than guessing.
-    const broad = files.some((file) =>
-        /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/u.test(file),
-    )
-    if (broad) return { filters: null, reason: 'crate-wide change' }
-    if (unmappedRustChange) {
-        return { filters: null, reason: 'unmapped Rust change' }
-    }
-    // A parent module already includes all of its child tests. Avoid running
-    // the same tests twice when both mod.rs and a child module changed.
-    const reduced = [...filters].filter(
-        (filter) => ![...filters].some(
-            (parent) => parent !== filter && filter.startsWith(`${parent}::`),
-        ),
-    )
-    return { filters: reduced.sort(), reason: 'changed modules' }
+function crateForFile(file) {
+    return CRATES.find((crate) => file.startsWith(`${crate.root}/`))
 }
 
-export function targetedCargoArgs(filters) {
-    const base = ['test', '--package', 'theseus', '--lib', '--no-fail-fast']
-    if (filters === null) return [...base, '--', '--test-threads=1']
-    if (filters.length === 0) return null
-    // cargo test takes a single filter, so run each module filter in turn.
-    return filters.map((filter) => [...base, filter, '--', '--test-threads=1'])
+function fullPackagePlan(reason) {
+    return {
+        crates: CRATES.map((crate) => ({
+            ...crate,
+            filters: [],
+            runWholePackage: true,
+        })),
+        reason,
+    }
+}
+
+export function selectPlan(files) {
+    if (!files) return fullPackagePlan('no baseline')
+    if (files.some((file) => WORKSPACE_FILES.test(file))) {
+        return fullPackagePlan('workspace-wide change')
+    }
+
+    const changed = new Map()
+    let unknownRustChange = false
+    for (const file of files) {
+        if (!RUST_SOURCE_FILES.test(file)) continue
+        const crate = crateForFile(file)
+        if (!crate) {
+            if (/^(?:apps|packages)\//u.test(file)) unknownRustChange = true
+            continue
+        }
+        let entry = changed.get(crate.package)
+        if (!entry) {
+            entry = { ...crate, filters: new Set(), runWholePackage: false }
+            changed.set(crate.package, entry)
+        }
+
+        const filter = crate.moduleTests ? moduleFilter(file) : null
+        if (filter) entry.filters.add(filter)
+        else entry.runWholePackage = true
+    }
+
+    if (unknownRustChange) return fullPackagePlan('unmapped Rust crate')
+    return {
+        crates: [...changed.values()].map((entry) => {
+            const filters = [...entry.filters].filter(
+                (filter) =>
+                    ![...entry.filters].some(
+                        (parent) => parent !== filter && filter.startsWith(`${parent}::`),
+                    ),
+            )
+            return {
+                ...entry,
+                filters: entry.runWholePackage ? [] : filters.sort(),
+            }
+        }),
+        reason: changed.size ? 'changed Rust crates' : 'no Rust change',
+    }
+}
+
+export function targetedCargoArgs(plan) {
+    return plan.crates.flatMap((crate) => {
+        const base = crate.manifest
+            ? ['test', '--manifest-path', crate.manifest, '--no-fail-fast']
+            : crate.moduleTests
+              ? ['test', '--package', crate.package, '--lib', '--no-fail-fast']
+              : ['test', '--package', crate.package, '--all-targets', '--no-fail-fast']
+        if (crate.features) base.push('--features', crate.features.join(','))
+        if (crate.filters.length > 0) {
+            return crate.filters.map((filter) => [...base, filter, '--', '--test-threads=1'])
+        }
+        return [[...base, '--', '--test-threads=1']]
+    })
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-    const files = changedFiles(process.env.CHANGE_BASE)
-    const { filters, reason } = selectFilters(files)
-    const commands = targetedCargoArgs(filters)
-    if (filters === null) {
-        console.log(`Targeted tests: full suite (${reason})`)
-        execFileSync('cargo', ['test', '--workspace', '--lib', '--no-fail-fast', '--', '--test-threads=1'], {
-            stdio: 'inherit',
-        })
-        process.exit(0)
-    }
-    if (commands === null) {
-        console.log(`Targeted tests: compile check only (${reason})`)
-        execFileSync('cargo', ['check', '--package', 'theseus', '--all-targets'], {
-            stdio: 'inherit',
-        })
-        process.exit(0)
-    }
+    const plan = selectPlan(changedFiles(process.env.CHANGE_BASE))
+    const commands = targetedCargoArgs(plan)
     if (commands.length === 0) {
-        // Nothing to target (no baseline or no Rust change). Still prove the
-        // test targets compile, which is the part that usually breaks.
-        console.log(`Targeted tests: compile check only (${reason})`)
-        execFileSync('cargo', ['check', '--package', 'theseus', '--all-targets'], {
-            stdio: 'inherit',
-        })
+        console.log(`Targeted tests: no Rust changes (${plan.reason})`)
         process.exit(0)
     }
-    console.log(
-        `Targeted tests: ${commands.length} module filter(s) (${reason})`,
-    )
+    console.log(`Targeted tests: ${commands.length} command(s) (${plan.reason})`)
     for (const args of commands) {
         console.log(`cargo ${args.join(' ')}`)
         execFileSync('cargo', args, { stdio: 'inherit' })

@@ -1,103 +1,96 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-    moduleFilter,
-    selectFilters,
-    targetedCargoArgs,
-} from './ci-targeted-tests.mjs'
+import { moduleFilter, selectPlan, targetedCargoArgs } from './ci-targeted-tests.mjs'
 
-test('maps a source file to its module path', () => {
-    assert.equal(
-        moduleFilter('packages/app-lib/src/state/friends.rs'),
-        'state::friends',
-    )
-    assert.equal(
-        moduleFilter('packages/app-lib/src/util/fetch/tests.rs'),
-        'util::fetch',
-    )
+test('maps Theseus source files to their module paths', () => {
+    assert.equal(moduleFilter('packages/app-lib/src/state/friends.rs'), 'state::friends')
+    assert.equal(moduleFilter('packages/app-lib/src/util/fetch/tests.rs'), 'util::fetch')
     assert.equal(moduleFilter('packages/app-lib/src/state/mod.rs'), 'state')
-    assert.equal(
-        moduleFilter('packages/app-lib/src/api/mctier/tests.rs'),
-        'api::mctier',
-    )
-})
-
-test('ignores files that are not crate sources', () => {
-    assert.equal(moduleFilter('apps/app-frontend/src/App.vue'), null)
+    assert.equal(moduleFilter('packages/app-lib/src/api/mctier/tests.rs'), 'api::mctier')
     assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
-    assert.equal(moduleFilter('README.md'), null)
 })
 
-test('selects one filter per changed module', () => {
-    const { filters, reason } = selectFilters([
-        'packages/app-lib/src/state/friends.rs',
+test('targets the changed workspace crate and its tests', () => {
+    const plan = selectPlan([
         'packages/app-lib/src/state/friends.rs',
         'packages/app-lib/src/api/mctier/protocol.rs',
-        'apps/app-frontend/src/App.vue',
-    ])
-    assert.equal(reason, 'changed modules')
-    assert.deepEqual(filters, ['api::mctier::protocol', 'state::friends'])
-})
-
-test('runs nothing when no crate source changed', () => {
-    const { filters, reason } = selectFilters(['apps/website/app.vue'])
-    assert.equal(reason, 'no Rust change')
-    assert.deepEqual(targetedCargoArgs(filters), null)
-})
-
-test('falls back to a compile check when there is no baseline', () => {
-    const { filters, reason } = selectFilters(null)
-    assert.equal(reason, 'no baseline')
-    assert.deepEqual(filters, [])
-    assert.deepEqual(targetedCargoArgs(filters), null)
-})
-
-test('falls back to the whole suite for crate-wide changes', () => {
-    const { filters, reason } = selectFilters(['Cargo.lock'])
-    assert.equal(reason, 'crate-wide change')
-    assert.equal(filters, null)
-    assert.deepEqual(targetedCargoArgs(filters), [
-        'test',
-        '--package',
-        'theseus',
-        '--lib',
-        '--no-fail-fast',
-        '--',
-        '--test-threads=1',
-    ])
-})
-
-test('falls back when a Rust file cannot map to a Theseus test module', () => {
-    const result = selectFilters([
-        'packages/app-lib/src/lib.rs',
         'apps/app/src/main.rs',
+        'packages/ariadne/src/networking/message.rs',
     ])
-    assert.equal(result.reason, 'unmapped Rust change')
-    assert.equal(result.filters, null)
-})
-
-test('removes child filters when the parent module is already selected', () => {
+    assert.equal(plan.reason, 'changed Rust crates')
     assert.deepEqual(
-        selectFilters([
-            'packages/app-lib/src/api/mod.rs',
-            'packages/app-lib/src/api/mctier.rs',
-        ]).filters,
-        ['api'],
+        plan.crates.map(({ package: packageName, filters }) => [packageName, filters]),
+        [
+            ['theseus', ['api::mctier::protocol', 'state::friends']],
+            ['theseus_gui', []],
+            ['ariadne', []],
+        ],
     )
-})
-
-test('emits one cargo command per module filter', () => {
-    const commands = targetedCargoArgs(['state::friends', 'api::mctier'])
-    assert.equal(commands.length, 2)
+    const commands = targetedCargoArgs(plan)
     assert.deepEqual(commands[0], [
         'test',
         '--package',
         'theseus',
         '--lib',
         '--no-fail-fast',
-        'state::friends',
+        'api::mctier::protocol',
         '--',
         '--test-threads=1',
     ])
+    assert(commands.some((args) => args.includes('theseus_gui')))
+    assert(commands.some((args) => args.includes('ariadne')))
+})
+
+test('runs the whole crate when its root, build script or manifest changes', () => {
+    for (const file of [
+        'packages/app-lib/src/lib.rs',
+        'packages/app-lib/build.rs',
+        'packages/app-lib/Cargo.toml',
+    ]) {
+        const plan = selectPlan([file])
+        assert.equal(plan.crates.length, 1, file)
+        assert.equal(plan.crates[0].package, 'theseus', file)
+        assert.deepEqual(plan.crates[0].filters, [], file)
+        assert.equal(targetedCargoArgs(plan)[0][0], 'test', file)
+    }
+})
+
+test('runs the standalone Minecraft ping crate through its manifest', () => {
+    const args = targetedCargoArgs(selectPlan(['packages/async-minecraft-ping/src/lib.rs']))[0]
+    assert.deepEqual(args.slice(0, 3), [
+        'test',
+        '--manifest-path',
+        'packages/async-minecraft-ping/Cargo.toml',
+    ])
+})
+
+test('runs all workspace crates separately for workspace-wide changes', () => {
+    const plan = selectPlan(['Cargo.lock'])
+    assert.equal(plan.reason, 'workspace-wide change')
+    const commands = targetedCargoArgs(plan)
+    assert(commands.some((args) => args.includes('theseus')))
+    assert(commands.some((args) => args.includes('theseus_gui')))
+    assert(commands.some((args) => args.includes('axolotl-installer-ui')))
+    assert(commands.some((args) => args.includes('content-management')))
+})
+
+test('unknown Rust workspace paths fall back to all known crates', () => {
+    const plan = selectPlan(['packages/new-crate/src/lib.rs'])
+    assert.equal(plan.reason, 'unmapped Rust crate')
+    assert.equal(plan.crates.length, 8)
+})
+
+test('does not run Rust tests for frontend-only changes', () => {
+    const plan = selectPlan(['apps/app-frontend/src/App.vue', 'README.md'])
+    assert.equal(plan.reason, 'no Rust change')
+    assert.deepEqual(targetedCargoArgs(plan), [])
+})
+
+test('deduplicates child filters when a parent module is selected', () => {
+    const filters = selectPlan([
+        'packages/app-lib/src/api/mod.rs',
+        'packages/app-lib/src/api/mctier.rs',
+    ]).crates[0].filters
+    assert.deepEqual(filters, ['api'])
 })
