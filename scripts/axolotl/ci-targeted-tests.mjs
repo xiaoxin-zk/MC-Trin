@@ -53,21 +53,14 @@ function crateForFile(file) {
     return CRATES.find((crate) => file.startsWith(`${crate.root}/`))
 }
 
-function fullPackagePlan(reason) {
-    return {
-        crates: CRATES.map((crate) => ({
-            ...crate,
-            filters: [],
-            runWholePackage: true,
-        })),
-        reason,
-    }
+function workspaceCompilePlan(reason) {
+    return { crates: [], compileWorkspace: true, reason }
 }
 
 export function selectPlan(files) {
-    if (!files) return fullPackagePlan('no baseline')
+    if (!files) return workspaceCompilePlan('no baseline')
     if (files.some((file) => WORKSPACE_FILES.test(file))) {
-        return fullPackagePlan('workspace-wide change')
+        return workspaceCompilePlan('workspace-wide change')
     }
 
     const changed = new Map()
@@ -90,7 +83,7 @@ export function selectPlan(files) {
         else entry.runWholePackage = true
     }
 
-    if (unknownRustChange) return fullPackagePlan('unmapped Rust crate')
+    if (unknownRustChange) return workspaceCompilePlan('unmapped Rust crate')
     return {
         crates: [...changed.values()].map((entry) => {
             const filters = [...entry.filters].filter(
@@ -104,11 +97,15 @@ export function selectPlan(files) {
                 filters: entry.runWholePackage ? [] : filters.sort(),
             }
         }),
+        compileWorkspace: false,
         reason: changed.size ? 'changed Rust crates' : 'no Rust change',
     }
 }
 
 export function targetedCargoArgs(plan) {
+    if (plan.compileWorkspace) {
+        return [['check', '--workspace', '--all-targets']]
+    }
     return plan.crates.flatMap((crate) => {
         const base = crate.manifest
             ? ['test', '--manifest-path', crate.manifest, '--no-fail-fast']

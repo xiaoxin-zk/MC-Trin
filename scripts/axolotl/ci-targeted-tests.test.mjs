@@ -69,16 +69,19 @@ test('runs all workspace crates separately for workspace-wide changes', () => {
     const plan = selectPlan(['Cargo.lock'])
     assert.equal(plan.reason, 'workspace-wide change')
     const commands = targetedCargoArgs(plan)
-    assert(commands.some((args) => args.includes('theseus')))
-    assert(commands.some((args) => args.includes('theseus_gui')))
-    assert(commands.some((args) => args.includes('axolotl-installer-ui')))
-    assert(commands.some((args) => args.includes('content-management')))
+    assert.deepEqual(commands, [['check', '--workspace', '--all-targets']])
 })
 
 test('unknown Rust workspace paths fall back to all known crates', () => {
     const plan = selectPlan(['packages/new-crate/src/lib.rs'])
     assert.equal(plan.reason, 'unmapped Rust crate')
-    assert.equal(plan.crates.length, 8)
+    assert.deepEqual(targetedCargoArgs(plan), [['check', '--workspace', '--all-targets']])
+})
+
+test('a missing baseline compiles all workspace targets instead of testing everything', () => {
+    const plan = selectPlan(null)
+    assert.equal(plan.reason, 'no baseline')
+    assert.deepEqual(targetedCargoArgs(plan), [['check', '--workspace', '--all-targets']])
 })
 
 test('does not run Rust tests for frontend-only changes', () => {
