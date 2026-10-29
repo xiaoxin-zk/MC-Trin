@@ -41,8 +41,8 @@ import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
 import { parseLogAgentInsight } from '@/logagent/result'
 import {
-    type AssistantPermissionMode,
     agentToolEnabled,
+    type AssistantPermissionMode,
     BUILT_IN_AGENT_TOOLS,
     DANGEROUS_AGENT_TOOLS,
     enabledAgentTools,
@@ -1258,11 +1258,11 @@ onUnmounted(denyPendingApprovals)
                         </p>
                         <div class="flex flex-wrap gap-2">
                             <label
-                                v-for="mode in permissionModes"
-                                :key="mode.value"
+                                v-for="option in permissionModes"
+                                :key="option.value"
                                 class="flex min-w-0 cursor-pointer items-start gap-2 rounded-md border border-solid p-2 text-sm"
                                 :class="
-                                    permissionMode === mode.value
+                                    permissionMode === option.value
                                         ? 'border-brand bg-surface-3'
                                         : 'border-surface-4'
                                 "
@@ -1271,18 +1271,18 @@ onUnmounted(denyPendingApprovals)
                                     type="radio"
                                     name="assistant-permission-mode"
                                     class="mt-0.5 h-4 w-4"
-                                    :checked="permissionMode === mode.value"
+                                    :checked="permissionMode === option.value"
                                     :disabled="agent.busy.value"
-                                    @change="setPermissionMode(mode.value)"
+                                    @change="setPermissionMode(option.value)"
                                 />
                                 <span class="min-w-0">
                                     <span
                                         class="block font-semibold text-[var(--color-text-primary)]"
-                                        >{{ formatMessage(mode.label) }}</span
+                                        >{{ formatMessage(option.label) }}</span
                                     >
                                     <span
                                         class="block text-xs font-normal text-[var(--color-text-tertiary)]"
-                                        >{{ formatMessage(mode.hint) }}</span
+                                        >{{ formatMessage(option.hint) }}</span
                                     >
                                 </span>
                             </label>
