@@ -79,12 +79,11 @@ impl StartRequest {
         if self.is_public && self.mode != EntryMode::Create {
             bail!("only the room host can publish a lobby");
         }
-        let invalid_description = self.description.as_ref().is_some_and(
-            |description| {
+        let invalid_description =
+            self.description.as_ref().is_some_and(|description| {
                 description.chars().count() > 200
                     || description.chars().any(char::is_control)
-            },
-        );
+            });
         if invalid_description {
             bail!("invalid lobby description");
         }
