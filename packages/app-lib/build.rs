@@ -18,7 +18,7 @@ const MODRINTH_ENV_DEFAULTS: &[(&str, &str)] = &[
         "https://launcher-meta.modrinth.com/",
     ),
     ("MODRINTH_URL", "https://modrinth.com/"),
-    ("MODRINTH_SOCKET_URL", "wss://disabled.invalid/"),
+    ("MODRINTH_SOCKET_URL", "wss://api.modrinth.com/"),
 ];
 
 fn main() {
