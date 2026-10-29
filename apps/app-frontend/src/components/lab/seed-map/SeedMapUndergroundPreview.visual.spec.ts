@@ -457,13 +457,18 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     const positionAfterUnlock = () =>
         wrapper?.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]
     let settled = positionAfterUnlock()
+    let stableSamples = 0
     await expect
         .poll(
             () => {
                 const current = positionAfterUnlock()
-                if (current === settled) return true
-                settled = current
-                return false
+                if (current === settled) {
+                    stableSamples += 1
+                } else {
+                    settled = current
+                    stableSamples = 0
+                }
+                return stableSamples >= 2
             },
             { timeout: 3000, interval: 100 },
         )
