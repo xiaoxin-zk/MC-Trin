@@ -87,7 +87,7 @@ const loading = ref(false)
 const loaded = ref(false)
 const failed = ref(false)
 const timedOut = ref(false)
-const request = new AbortController()
+let activeRequest: AbortController | null = null
 const selectedLobby = ref<PublicLobby | null>(null)
 const playerName = ref('Player')
 const gamePort = ref('25565')
@@ -140,17 +140,23 @@ async function joinSelected() {
 
 async function refresh() {
     if (loading.value) return
+    const request = new AbortController()
+    activeRequest = request
     loading.value = true
     failed.value = false
     timedOut.value = false
     try {
         lobbies.value = await fetchPublicLobbies(undefined, request.signal)
     } catch (error) {
+        if (request.signal.aborted) return
         failed.value = true
         timedOut.value = error instanceof Error && /timed out/i.test(error.message)
     } finally {
-        loaded.value = true
-        loading.value = false
+        if (activeRequest === request) {
+            activeRequest = null
+            loaded.value = true
+            loading.value = false
+        }
     }
 }
 
@@ -177,22 +183,40 @@ function stopPolling() {
     }
 }
 
+function cancelRefresh() {
+    activeRequest?.abort()
+    activeRequest = null
+    loading.value = false
+}
+
+function startPolling() {
+    stopPolling()
+    if (document.visibilityState !== 'visible') return
+    pollTimer = setInterval(() => void refresh(), POLL_INTERVAL_MS)
+}
+
 function onVisibilityChange() {
-    if (document.visibilityState === 'visible') void refresh()
+    if (document.visibilityState === 'visible') {
+        void refresh()
+        startPolling()
+    } else {
+        stopPolling()
+        cancelRefresh()
+    }
 }
 
 onMounted(() => {
-    void refresh()
-    pollTimer = setInterval(() => {
-        if (document.visibilityState === 'visible') void refresh()
-    }, POLL_INTERVAL_MS)
+    if (document.visibilityState === 'visible') {
+        void refresh()
+        startPolling()
+    }
     document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
     stopPolling()
     document.removeEventListener('visibilitychange', onVisibilityChange)
-    request.abort()
+    cancelRefresh()
 })
 </script>
 

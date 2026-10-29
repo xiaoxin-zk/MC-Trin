@@ -349,7 +349,7 @@ import { useQueryClient } from '@tanstack/vue-query'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import DependencyGraphModal from '@/components/instance/dependencies/DependencyGraphModal.vue'
@@ -359,6 +359,10 @@ import ResourceBackupsModal from '@/components/ui/ResourceBackupsModal.vue'
 import ResourceHistoryModal from '@/components/ui/ResourceHistoryModal.vue'
 import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import ResourceReleaseChangelog from '@/components/ui/ResourceReleaseChangelog.vue'
+import {
+    INSTANCE_CONTENT_EVENT_DEBOUNCE_MS as CONTENT_EVENT_DEBOUNCE_MS,
+    useInstanceContentEvents,
+} from '@/composables/useInstanceContentEvents'
 import { postUpgradeNoticeQueryKey, usePostUpgradeNotice } from '@/composables/usePostUpgradeNotice'
 import { useWorldDatapacks } from '@/composables/useWorldDatapacks'
 import { trackEvent } from '@/helpers/analytics'
@@ -380,7 +384,6 @@ import {
     getCurseForgeManualDownloadUrl,
 } from '@/helpers/curseforge-manual'
 import { getMissingContentScannerSettings } from '@/helpers/downloads-scanner'
-import { instance_listener } from '@/helpers/events.js'
 import { install_duplicate_instance, installJobInstanceId } from '@/helpers/install'
 import {
     add_project_from_path,
@@ -1865,7 +1868,7 @@ async function applyToggleDisableMod(mod: ContentItem, enabled: boolean) {
     operation.keys = [...operation.keys, ...optimisticKeys]
 
     try {
-        suppressSyncedUntil = Date.now() + CONTENT_EVENT_DEBOUNCE_MS * 4
+        contentEvents.suppressSyncedFor(CONTENT_EVENT_DEBOUNCE_MS * 4)
         const newPath = await toggle_content_entry(props.instance.id, contentId, enabled)
         const newFileName = fileNameFromPath(newPath)
         const actualEnabled = !newPath.endsWith('.disabled')
@@ -1941,7 +1944,7 @@ async function applyToggleDisableBatch(items: ContentItem[], enabled: boolean) {
     applyBatchToggleState(operations, enabled, undefined, false, true)
 
     try {
-        suppressSyncedUntil = Date.now() + CONTENT_EVENT_DEBOUNCE_MS * 4
+        contentEvents.suppressSyncedFor(CONTENT_EVENT_DEBOUNCE_MS * 4)
         const results = await toggle_content_entries(
             props.instance.id,
             operations.map((operation) => getStableContentId(operation.item)!),
@@ -1987,10 +1990,7 @@ async function applyToggleDisableBatch(items: ContentItem[], enabled: boolean) {
         activeContentOperationCount = Math.max(0, activeContentOperationCount - operations.length)
         if (activeContentOperationCount === 0) {
             isBulkOperating.value = false
-            if (pendingContentRefreshAfterBulk) {
-                pendingContentRefreshAfterBulk = false
-                void initProjects()
-            }
+            contentEvents.refreshAfterBulk()
         }
     }
 }
@@ -2731,7 +2731,7 @@ async function initProjects(cacheBehaviour?: CacheBehaviour): Promise<void> {
         const refresh = initProjectsInternal(cacheBehaviour)
         const wrappedRefresh = refresh.finally(() => {
             if (activeBypassRefresh === wrappedRefresh) activeBypassRefresh = null
-            suppressSyncedUntil = Date.now() + 1000
+            contentEvents.suppressSyncedFor(1000)
         })
         activeBypassRefresh = wrappedRefresh
         return wrappedRefresh
@@ -3256,10 +3256,6 @@ provideContentManager({
     },
 })
 
-type UnlistenFn = () => void
-
-void loadInitialContent()
-
 function getInstallRevision() {
     return installRevisionByInstance.value.get(props.instance.id) ?? 0
 }
@@ -3324,74 +3320,17 @@ async function loadInitialContent(): Promise<void> {
     await initProjects()
 }
 
-let unlistenInstances: UnlistenFn | null = null
-const CONTENT_EVENT_DEBOUNCE_MS = 180
-let contentEventTimer: ReturnType<typeof setTimeout> | null = null
-let pendingExternalContentSync = false
-let pendingContentChangedRevision: number | null = null
-let pendingContentRefreshAfterBulk = false
-let suppressSyncedUntil = 0
-
-function scheduleContentEventRefresh(event: { event: string; revision?: number }) {
-    if (event.event === 'synced') {
-        if (Date.now() < suppressSyncedUntil) return
-        pendingExternalContentSync = true
-    } else if (event.event === 'content_changed') {
-        if (
-            event.revision != null &&
-            contentSnapshot.value &&
-            event.revision <= contentSnapshot.value.revision
-        ) {
-            return
-        }
-        pendingContentChangedRevision = Math.max(
-            pendingContentChangedRevision ?? 0,
-            event.revision ?? 0,
-        )
-    } else {
-        return
-    }
-
-    if (contentEventTimer) return
-    contentEventTimer = setTimeout(() => {
-        contentEventTimer = null
-        const refreshFilesystem =
-            pendingExternalContentSync && pendingContentChangedRevision == null
-        pendingExternalContentSync = false
-        pendingContentChangedRevision = null
-        if (isBulkOperating.value) {
-            pendingContentRefreshAfterBulk = true
-            return
-        }
-        void initProjects(refreshFilesystem ? 'bypass' : undefined)
-    }, CONTENT_EVENT_DEBOUNCE_MS)
-}
-
-onMounted(() => {
-    void instance_listener((event: { event: string; instance_id: string; revision?: number }) => {
-        if (event.instance_id === props.instance.id && event.event === 'removed') {
-            invalidateContentRequests(true)
-            return
-        }
-        if (
-            props.instance &&
-            event.instance_id === props.instance.id &&
-            (event.event === 'synced' || event.event === 'content_changed') &&
-            props.instance.install_stage === 'installed'
-        ) {
-            scheduleContentEventRefresh(event)
-        }
-    })
-        .then((unlisten) => {
-            if (isUnmounted) {
-                unlisten()
-                return
-            }
-
-            unlistenInstances = unlisten
-        })
-        .catch(handleError)
+const contentEvents = useInstanceContentEvents({
+    instanceId: () => props.instance.id,
+    installStage: () => props.instance?.install_stage,
+    snapshotRevision: () => contentSnapshot.value?.revision ?? null,
+    isBulkOperating: () => isBulkOperating.value,
+    refresh: (cacheBehaviour) => initProjects(cacheBehaviour),
+    invalidate: (clearState) => invalidateContentRequests(clearState),
+    onError: (error) => handleError(error as Error),
 })
+
+void loadInitialContent()
 
 watch(
     () => props.instance?.install_stage,
@@ -3435,9 +3374,7 @@ watch(
 
 onUnmounted(() => {
     isUnmounted = true
-    if (contentEventTimer) clearTimeout(contentEventTimer)
     invalidateContentRequests()
-    unlistenInstances?.()
 })
 </script>
 

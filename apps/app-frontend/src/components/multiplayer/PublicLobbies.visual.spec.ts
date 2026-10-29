@@ -63,6 +63,7 @@ const sampleLobby: PublicLobby = {
 }
 
 let wrappers: VueWrapper[] = []
+let visibilityDescriptor: PropertyDescriptor | undefined
 
 function mountPage() {
     const wrapper = mount(PublicLobbies)
@@ -79,6 +80,13 @@ beforeEach(() => {
 afterEach(() => {
     wrappers.forEach((wrapper) => wrapper.unmount())
     wrappers = []
+    if (visibilityDescriptor) {
+        Object.defineProperty(document, 'visibilityState', visibilityDescriptor)
+        visibilityDescriptor = undefined
+    } else {
+        Reflect.deleteProperty(document, 'visibilityState')
+    }
+    vi.useRealTimers()
 })
 
 it('loads public rooms, opens a real join flow, and refreshes the listing', async () => {
@@ -144,6 +152,51 @@ it('disables refresh while loading and cancels the request when leaving', async 
     wrapper.unmount()
     wrappers = []
     expect(signal.aborted).toBe(true)
+})
+
+it('stops polling and aborts its request while hidden, then resumes when visible', async () => {
+    vi.useFakeTimers()
+    visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+    Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'visible',
+    })
+    fixture.fetch.mockImplementationOnce(
+        (_timeout, signal: AbortSignal) =>
+            new Promise((_, reject) => {
+                signal.addEventListener(
+                    'abort',
+                    () => reject(new DOMException('aborted', 'AbortError')),
+                    { once: true },
+                )
+            }),
+    )
+    fixture.fetch.mockResolvedValue([])
+
+    const wrapper = mountPage()
+    await nextTick()
+    const inFlightSignal = fixture.fetch.mock.calls[0][1] as AbortSignal
+
+    Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'hidden',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    expect(inFlightSignal.aborted).toBe(true)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(fixture.fetch).toHaveBeenCalledTimes(1)
+
+    Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        value: 'visible',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    expect(fixture.fetch).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('No public lobbies are available right now.')
 })
 
 it('validates the Minecraft port before starting a public lobby session', async () => {
