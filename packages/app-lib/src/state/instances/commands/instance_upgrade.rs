@@ -25,7 +25,7 @@ use crate::state::{
 
 mod solver;
 use solver::{
-    compare_minimal, compare_newest, select_upgrade_failure_issue,
+    assigned_key_for_requirement, compare_minimal, compare_newest,
     solve_upgrade_with_fixed_roots,
 };
 #[cfg(test)]
