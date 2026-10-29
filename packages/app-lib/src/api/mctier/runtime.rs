@@ -20,6 +20,11 @@ use super::{
 
 /// How many times a dropped signaling link is retried before the room ends.
 const RECONNECT_ATTEMPTS: u32 = 5;
+pub(super) const REGISTRATION_ATTEMPT_LIMIT: usize = 16;
+#[cfg(not(test))]
+const REGISTRATION_TIME_LIMIT: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const REGISTRATION_TIME_LIMIT: Duration = Duration::from_secs(2);
 /// Delay between reconnect attempts; it grows linearly per attempt. Tests use a
 /// much shorter budget so the reconnect path stays cheap to exercise.
 #[cfg(not(test))]
@@ -161,14 +166,18 @@ pub(super) async fn register_with_retry(
     let mut request = request.clone();
     let requested_name = request.lobby_name.clone();
     let mut renamed = false;
-    for attempt in 0..254 {
+    let deadline = tokio::time::Instant::now() + REGISTRATION_TIME_LIMIT;
+    for attempt in 0..REGISTRATION_ATTEMPT_LIMIT {
         identity.ip = identity.candidate_ip(attempt).ok_or_else(|| {
             eyre::eyre!("the signaling address pool is exhausted")
         })?;
         let result = tokio::select! {
             biased;
             _ = cancellation.cancelled() => bail!("lobby operation cancelled"),
-            result = protocol::register(&request, &identity) => result,
+            result = tokio::time::timeout_at(
+                deadline,
+                protocol::register(&request, &identity),
+            ) => result.wrap_err("MCTier registration exceeded its overall time limit")?,
         };
         match result {
             Ok(session) => return Ok((identity, session, request)),
@@ -186,7 +195,9 @@ pub(super) async fn register_with_retry(
             }
         }
     }
-    bail!("all 254 signaling virtual addresses are already in use")
+    bail!(
+        "all {REGISTRATION_ATTEMPT_LIMIT} MCTier virtual address attempts were rejected"
+    )
 }
 
 pub fn arguments(

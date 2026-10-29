@@ -8,6 +8,8 @@ test('maps Theseus source files to their module paths', () => {
     assert.equal(moduleFilter('packages/app-lib/src/util/fetch/tests.rs'), 'util::fetch')
     assert.equal(moduleFilter('packages/app-lib/src/state/mod.rs'), 'state')
     assert.equal(moduleFilter('packages/app-lib/src/api/mctier/tests.rs'), 'api::mctier')
+    assert.equal(moduleFilter('packages/app-lib/src/api/ai/catalog.rs'), 'api::ai')
+    assert.equal(moduleFilter('packages/app-lib/src/util/fetch/connection_budget.rs'), 'util::fetch')
     assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
 })
 

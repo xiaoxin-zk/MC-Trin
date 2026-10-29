@@ -682,8 +682,12 @@ async fn an_address_collision_retries_with_the_same_identity_and_a_new_ip() {
 }
 
 #[tokio::test]
-async fn registration_stops_after_the_entire_server_address_pool_is_rejected() {
-    let (url, attempts) = collision_signaling(254, 254).await;
+async fn registration_stops_after_the_attempt_limit_is_rejected() {
+    let (url, attempts) = collision_signaling(
+        runtime::REGISTRATION_ATTEMPT_LIMIT,
+        runtime::REGISTRATION_ATTEMPT_LIMIT,
+    )
+    .await;
     let mut input = request();
     input.signaling_server = url;
     let error = runtime::register_with_retry(
@@ -694,9 +698,9 @@ async fn registration_stops_after_the_entire_server_address_pool_is_rejected() {
     .await
     .err()
     .expect("all addresses should be rejected");
-    assert!(error.to_string().contains("all 254"));
+    assert!(error.to_string().contains("all 16 MCTier"));
     let attempts = attempts.await.unwrap();
-    assert_eq!(attempts.len(), 254);
+    assert_eq!(attempts.len(), runtime::REGISTRATION_ATTEMPT_LIMIT);
     let identity_keys: std::collections::HashSet<_> = attempts
         .iter()
         .map(|item| &item["identityPublicKey"])
@@ -704,7 +708,34 @@ async fn registration_stops_after_the_entire_server_address_pool_is_rejected() {
     let addresses: std::collections::HashSet<_> =
         attempts.iter().map(|item| &item["virtualIp"]).collect();
     assert_eq!(identity_keys.len(), 1);
-    assert_eq!(addresses.len(), 254);
+    assert_eq!(addresses.len(), runtime::REGISTRATION_ATTEMPT_LIMIT);
+}
+
+#[tokio::test]
+async fn registration_stops_when_the_signaling_server_never_answers() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let _socket = accept_async(stream).await.unwrap();
+        std::future::pending::<()>().await;
+    });
+
+    let mut input = request();
+    input.signaling_server = format!("ws://{address}");
+    let started = tokio::time::Instant::now();
+    let error = runtime::register_with_retry(
+        &input,
+        protocol::Identity::generate().unwrap(),
+        &CancellationToken::new(),
+    )
+    .await
+    .err()
+    .expect("registration should respect its overall deadline");
+
+    assert!(error.to_string().contains("overall time limit"));
+    assert!(started.elapsed() < Duration::from_secs(4));
+    server.abort();
 }
 
 #[tokio::test]

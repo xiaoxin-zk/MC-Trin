@@ -24,6 +24,8 @@ export function moduleFilter(relativePath) {
     module = module.replace(/(^|\/)mod$/u, '')
     module = module.replace(/(^|\/)tests$/u, '')
     if (!module || module === 'lib') return null
+    if (module === 'api/ai/catalog') return 'api::ai'
+    if (module === 'util/fetch/connection_budget') return 'util::fetch'
     return module.replace(/\//gu, '::')
 }
 

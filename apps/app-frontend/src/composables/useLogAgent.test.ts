@@ -151,6 +151,39 @@ test('prepares an assistant session without an instance and forwards the selecte
     scope.stop()
 })
 
+test('keeps structured Tauri provider errors readable for the assistant alert', async () => {
+    const providerError = {
+        field_name: 'Theseus',
+        message: 'AI_AUTHENTICATION_FAILED: DeepSeek returned HTTP 401 Unauthorized',
+    }
+    const scope = effectScope()
+    const agent = scope.run(() =>
+        useLogAgent({
+            prepare: async () => {
+                throw providerError
+            },
+            cancel: async () => {},
+            cloud: async () => {
+                throw new Error('Must not use cloud')
+            },
+            local: async () => 'unused',
+            gateway: () => ({
+                modelTurn: async () => {
+                    throw new Error('unused')
+                },
+                tool: async () => null,
+            }),
+        }),
+    )!
+
+    await agent.start('', 'assistant', null, () => {}, 'Why did authentication fail?')
+
+    assert.equal(agent.status.value, 'error')
+    assert.equal(agent.error.value, providerError.message)
+    assert.doesNotMatch(agent.error.value, /\[object Object\]/)
+    scope.stop()
+})
+
 test('a configured MCP tool reaches the real agent through the composable and asks for approval', async () => {
     let modelTurns = 0
     let approvals = 0

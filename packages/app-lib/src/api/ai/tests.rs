@@ -230,6 +230,47 @@ fn extracts_openai_chat_and_responses_text() {
     );
 }
 
+#[tokio::test]
+async fn checked_openai_responses_keep_authentication_and_rate_limit_errors() {
+    for (status, category) in [
+        (http::StatusCode::UNAUTHORIZED, "AI_AUTHENTICATION_FAILED"),
+        (http::StatusCode::TOO_MANY_REQUESTS, "AI_RATE_LIMITED"),
+    ] {
+        let response = reqwest::Response::from(
+            http::Response::builder()
+                .status(status)
+                .body(reqwest::Body::from(r#"{"error":"denied"}"#))
+                .unwrap(),
+        );
+        let error = checked_openai_response_stream(response, "OpenAI")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(category), "{error:#}");
+        assert!(
+            error
+                .to_string()
+                .contains(status.as_u16().to_string().as_str())
+        );
+    }
+}
+
+#[tokio::test]
+async fn checked_openai_responses_parse_server_sent_text_events() {
+    let response = reqwest::Response::from(http::Response::new(
+        reqwest::Body::from(concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"MC-\"}\n\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Trin\"}\n\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n",
+        )),
+    ));
+
+    let text = checked_openai_response_stream(response, "OpenAI")
+        .await
+        .unwrap();
+
+    assert_eq!(text, "MC-Trin");
+}
+
 #[test]
 fn model_fetch_parsers_are_protocol_specific() {
     assert_eq!(

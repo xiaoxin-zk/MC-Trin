@@ -9,20 +9,24 @@ import vm from 'node:vm'
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const CATALOG_PATH = resolve(REPOSITORY_ROOT, 'packages/app-lib/src/api/lobehub_text_models.json')
 const RUST_API_PATH = resolve(REPOSITORY_ROOT, 'packages/app-lib/src/api/ai.rs')
+const RUST_PROVIDER_CATALOG_PATH = resolve(
+	REPOSITORY_ROOT,
+	'packages/app-lib/src/api/ai/catalog.rs',
+)
 const SOURCE_PATTERN = /^LobeHub ([0-9a-f]{40}) model-bank chat models$/
 const RUST_SOURCE_PATTERN = /const CATALOG_SOURCE: &str = "LobeHub ([0-9a-f]{40})";/g
 
 // Sponsored providers are paid partner listings that must survive every
-// synchronization, even if a future rewrite of ai.rs drops upstream providers.
-// Keep this list in sync with SPONSORED_PROVIDERS in packages/app-lib/src/api/ai.rs.
+// synchronization, even if a future rewrite of catalog.rs drops upstream providers.
+// Keep this list in sync with SPONSORED_PROVIDERS in packages/app-lib/src/api/ai/catalog.rs.
 const SPONSORED_PROVIDER_IDS = ['codeflow']
 
-function assertSponsoredProvidersPreserved(rustSource) {
+function assertSponsoredProvidersPreserved(providerSource) {
 	for (const providerId of SPONSORED_PROVIDER_IDS) {
 		const pattern = new RegExp(`provider!\\s*\\(\\s*"${providerId}"`)
-		if (!pattern.test(rustSource)) {
+		if (!pattern.test(providerSource)) {
 			throw new Error(
-				`Sponsored provider ${providerId} is missing from ai.rs; refusing to rewrite it`,
+				`Sponsored provider ${providerId} is missing from ai/catalog.rs; refusing to rewrite the model catalog`,
 			)
 		}
 	}
@@ -259,11 +263,12 @@ function buildCatalog(models, currentProviders) {
 const options = parseArguments(process.argv.slice(2))
 const upstreamRoot = realpathSync(resolve(options.upstream))
 const commit = resolveCommit(upstreamRoot, options.commit)
-const [catalogText, rustSource] = await Promise.all([
+const [catalogText, rustSource, providerSource] = await Promise.all([
 	fs.readFile(CATALOG_PATH, 'utf8'),
 	fs.readFile(RUST_API_PATH, 'utf8'),
+	fs.readFile(RUST_PROVIDER_CATALOG_PATH, 'utf8'),
 ])
-assertSponsoredProvidersPreserved(rustSource)
+assertSponsoredProvidersPreserved(providerSource)
 const currentCatalog = JSON.parse(catalogText)
 const currentProviders = validateCurrentCatalog(currentCatalog, rustSource)
 const loadModels = createModelBankLoader(upstreamRoot)
@@ -292,7 +297,6 @@ const nextRustSource = rustSource.replace(
 	RUST_SOURCE_PATTERN,
 	`const CATALOG_SOURCE: &str = "LobeHub ${commit}";`,
 )
-assertSponsoredProvidersPreserved(nextRustSource)
 
 if (options.check) {
 	console.error(

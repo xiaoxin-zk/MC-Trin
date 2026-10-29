@@ -293,13 +293,7 @@ jobs:
             -- --test-threads=1 \
             --skip synced_ \
             --skip util::download::endpoint_selection::benchmark::range_recovery \
-            --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream \
-            --skip util::download::native_request::tests::retired_modrinth_redirects \
-            --skip util::download::native_request::tests::retired_modrinth_streamed \
-            --skip util::download::native_request::tests::tianpao_downloads \
-            --skip util::fetch::tests::custom_content_mirrors \
-            --skip util::fetch::tests::hashed_pack_keeps_32_ranges \
-            --skip util::fetch::tests::warm_h2_archive_hint
+            --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
