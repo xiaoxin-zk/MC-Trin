@@ -132,6 +132,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
+          # The targeted-test selector resolves CHANGE_BASE with git rev-parse,
+          # which fails in shallow checkouts and silently degrades to compile checks.
+          fetch-depth: 0
       - name: Setup desktop build
         uses: ./.github/actions/setup-desktop-build
         with:
