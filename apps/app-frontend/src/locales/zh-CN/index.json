@@ -302,11 +302,26 @@
   "app.multiplayer.mctier.voice.peer-volume": {
     "message": "{player} 的音量"
   },
-  "app.multiplayer.mctier.public-password-hint": {
-    "message": "公开房间不能设置密码。"
+  "app.multiplayer.mctier.lobby-description": {
+    "message": "房间描述"
+  },
+  "app.multiplayer.mctier.max-players": {
+    "message": "人数上限"
+  },
+  "app.multiplayer.mctier.open-private-hint": {
+    "message": "私密房间不会出现在公开大厅；不设置密码时，知道房间名的玩家都可以加入。"
   },
   "app.multiplayer.mctier.private-password-hint": {
-    "message": "请设置密码，确保只有收到邀请码的玩家可以加入私密房间。"
+    "message": "私密房间不会出现在公开大厅，加入需要填写房间密码。"
+  },
+  "app.multiplayer.mctier.public-with-password-hint": {
+    "message": "加入的玩家需要填写房间密码或邀请码。"
+  },
+  "app.multiplayer.mctier.random-name": {
+    "message": "随机房名"
+  },
+  "app.multiplayer.mctier.random-password": {
+    "message": "随机密码"
   },
   "app.multiplayer.mctier.invite-hint": {
     "message": "邀请码包含房间名称、网络节点，以及加密后的房间密码。"
@@ -18268,6 +18283,60 @@
   },
   "app.assistant.tools.approval-title": {
     "message": "确认本地写操作"
+  },
+  "app.assistant.permission-mode.title": {
+    "message": "权限模式"
+  },
+  "app.assistant.permission-mode.description": {
+    "message": "决定助手在执行操作前是否需要询问。模式立即生效；完全访问在页面刷新后总是重置。"
+  },
+  "app.assistant.permission-mode.default": {
+    "message": "每次更改都询问"
+  },
+  "app.assistant.permission-mode.default-hint": {
+    "message": "每次写入和每次 MCP 工具调用都会先请求批准。"
+  },
+  "app.assistant.permission-mode.free": {
+    "message": "自由模式"
+  },
+  "app.assistant.permission-mode.free-hint": {
+    "message": "常规操作不再询问。破坏性操作（删除实例、移除内容文件、修改启动器设置、安装运行时）和所有 MCP 工具仍会先询问。"
+  },
+  "app.assistant.permission-mode.full": {
+    "message": "完全访问"
+  },
+  "app.assistant.permission-mode.full-hint": {
+    "message": "助手执行任何工具都不再询问，包括破坏性操作和 MCP 工具。"
+  },
+  "app.assistant.permission-mode.full-warning-title": {
+    "message": "开启完全访问？"
+  },
+  "app.assistant.permission-mode.full-warning-body": {
+    "message": "助手将不再询问即可执行任何工具：它可以删除实例、移除内容文件、修改启动器设置、安装运行时，并调用你连接的 MCP 服务器上的任意工具。请仅在信任所配置的模型和 MCP 服务器时继续。"
+  },
+  "app.assistant.permission-mode.full-warning-confirm": {
+    "message": "开启完全访问"
+  },
+  "app.assistant.permission-mode.active-badge": {
+    "message": "完全访问已开启：工具执行不再询问。"
+  },
+  "app.assistant.usage-guide.title": {
+    "message": "使用说明"
+  },
+  "app.assistant.usage-guide.step-1": {
+    "message": "在 AI 设置中添加 OpenAI 兼容的提供商，配置端点与 API 密钥。"
+  },
+  "app.assistant.usage-guide.step-2": {
+    "message": "选择一个智能体配置为助手设定常驻指令，或保持默认。"
+  },
+  "app.assistant.usage-guide.step-3": {
+    "message": "启用需要的内置工具；连接 MCP 服务器以提供你自己的工具。"
+  },
+  "app.assistant.usage-guide.step-4": {
+    "message": "选择权限模式。建议先使用“每次更改都询问”，信任当前配置后再放宽。"
+  },
+  "app.assistant.usage-guide.step-5": {
+    "message": "与助手对话。读取启动器数据无需确认；执行操作时按权限模式决定是否询问。"
   },
   "app.browse.categories-failed": {
     "message": "无法加载 CurseForge 分类，请稍后重试。"

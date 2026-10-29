@@ -1,6 +1,9 @@
 export type AgentMode = 'assistant' | 'logs'
 export type AgentToolPermission = 'read' | 'write'
 
+/** How much the assistant may do without asking the user first. */
+export type AssistantPermissionMode = 'default' | 'free' | 'full'
+
 export type BuiltInToolDefinition = {
     id: string
     mode: AgentMode
@@ -10,9 +13,16 @@ export type BuiltInToolDefinition = {
 /**
  * The local tools are deliberately narrow. Read tools expose sanitized launcher
  * context; write tools are limited to launcher settings, Java installation,
- * resource jobs, and instance content lifecycle actions. Every write requires
- * an explicit approval before the call.
+ * resource jobs, and instance content lifecycle actions. Write tools require
+ * an explicit approval before the call unless the permission mode relaxes it.
  */
+export const DANGEROUS_AGENT_TOOLS: ReadonlySet<string> = new Set([
+    'delete_instance',
+    'remove_content',
+    'update_launcher_settings',
+    'install_java_runtime',
+    'queue_resource_install',
+])
 export const BUILT_IN_AGENT_TOOLS: BuiltInToolDefinition[] = [
     { id: 'get_instance_overview', mode: 'assistant', permission: 'read' },
     { id: 'get_launcher_settings', mode: 'assistant', permission: 'read' },

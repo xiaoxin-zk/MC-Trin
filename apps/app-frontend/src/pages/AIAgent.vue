@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { EditIcon, PlusIcon, SparklesIcon, TrashIcon } from '@modrinth/assets'
-import { Button, defineMessages, injectNotificationManager, useVIntl } from '@modrinth/ui'
+import {
+    Admonition,
+    Button,
+    defineMessages,
+    injectNotificationManager,
+    useVIntl,
+} from '@modrinth/ui'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
@@ -35,8 +41,10 @@ import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
 import { parseLogAgentInsight } from '@/logagent/result'
 import {
+    type AssistantPermissionMode,
     agentToolEnabled,
     BUILT_IN_AGENT_TOOLS,
+    DANGEROUS_AGENT_TOOLS,
     enabledAgentTools,
     resetAgentTools,
     setAgentToolEnabled,
@@ -140,6 +148,87 @@ const messages = defineMessages({
         id: 'app.assistant.tools.external',
         defaultMessage:
             'Need your own tools? Connect an MCP server below and its tools are offered to the assistant automatically.',
+    },
+    permissionModeTitle: {
+        id: 'app.assistant.permission-mode.title',
+        defaultMessage: 'Permission mode',
+    },
+    permissionModeDescription: {
+        id: 'app.assistant.permission-mode.description',
+        defaultMessage:
+            'Decides when the assistant must ask before acting. The mode applies immediately; full access always resets when this page is reloaded.',
+    },
+    permissionModeDefault: {
+        id: 'app.assistant.permission-mode.default',
+        defaultMessage: 'Confirm every change',
+    },
+    permissionModeDefaultHint: {
+        id: 'app.assistant.permission-mode.default-hint',
+        defaultMessage: 'Every write and every MCP tool call asks for approval first.',
+    },
+    permissionModeFree: {
+        id: 'app.assistant.permission-mode.free',
+        defaultMessage: 'Free mode',
+    },
+    permissionModeFreeHint: {
+        id: 'app.assistant.permission-mode.free-hint',
+        defaultMessage:
+            'Routine actions run without asking. Destructive actions (deleting instances, removing content files, changing launcher settings, installing runtimes) and every MCP tool still ask first.',
+    },
+    permissionModeFull: {
+        id: 'app.assistant.permission-mode.full',
+        defaultMessage: 'Full access',
+    },
+    permissionModeFullHint: {
+        id: 'app.assistant.permission-mode.full-hint',
+        defaultMessage:
+            'The assistant runs every tool without asking, including destructive and MCP tools.',
+    },
+    permissionModeFullWarningTitle: {
+        id: 'app.assistant.permission-mode.full-warning-title',
+        defaultMessage: 'Enable full access?',
+    },
+    permissionModeFullWarningBody: {
+        id: 'app.assistant.permission-mode.full-warning-body',
+        defaultMessage:
+            'The assistant will run every tool without asking: it can delete instances, remove content files, change launcher settings, install runtimes, and call any tool on the MCP servers you connected. Only continue if you trust the configured model and MCP servers.',
+    },
+    permissionModeFullWarningConfirm: {
+        id: 'app.assistant.permission-mode.full-warning-confirm',
+        defaultMessage: 'Enable full access',
+    },
+    permissionModeActiveBadge: {
+        id: 'app.assistant.permission-mode.active-badge',
+        defaultMessage: 'Full access is active: tools run without asking.',
+    },
+    usageGuideTitle: {
+        id: 'app.assistant.usage-guide.title',
+        defaultMessage: 'How to use the assistant',
+    },
+    usageStep1: {
+        id: 'app.assistant.usage-guide.step-1',
+        defaultMessage:
+            'Open the AI settings to add an OpenAI-compatible provider with its endpoint and API key.',
+    },
+    usageStep2: {
+        id: 'app.assistant.usage-guide.step-2',
+        defaultMessage:
+            'Pick an agent profile to give the assistant standing instructions, or keep the default.',
+    },
+    usageStep3: {
+        id: 'app.assistant.usage-guide.step-3',
+        defaultMessage:
+            'Enable the built-in tools you need; connect an MCP server to offer your own tools.',
+    },
+    usageStep4: {
+        id: 'app.assistant.usage-guide.step-4',
+        defaultMessage:
+            'Choose a permission mode. Start with confirm-every-change and relax it once you trust the setup.',
+    },
+    usageStep5: {
+        id: 'app.assistant.usage-guide.step-5',
+        defaultMessage:
+            'Chat with the assistant. Reading launcher data is free; acting is gated by your permission mode.',
     },
     toolInstanceName: {
         id: 'app.assistant.tools.instance.name',
@@ -552,6 +641,58 @@ type ToolApproval = {
 
 const pendingApprovals = ref<ToolApproval[]>([])
 const currentApproval = computed(() => pendingApprovals.value[0] ?? null)
+const PERMISSION_MODE_STORAGE_KEY = 'mctrin.assistant.permission-mode.v1'
+const permissionMode = ref<AssistantPermissionMode>('default')
+const fullAccessWarningOpen = ref(false)
+
+type AssistantModeMessage = { id: string; defaultMessage: string }
+const permissionModes: {
+    value: AssistantPermissionMode
+    label: AssistantModeMessage
+    hint: AssistantModeMessage
+}[] = [
+    {
+        value: 'default',
+        label: messages.permissionModeDefault,
+        hint: messages.permissionModeDefaultHint,
+    },
+    {
+        value: 'free',
+        label: messages.permissionModeFree,
+        hint: messages.permissionModeFreeHint,
+    },
+    {
+        value: 'full',
+        label: messages.permissionModeFull,
+        hint: messages.permissionModeFullHint,
+    },
+]
+
+function applyPermissionMode(mode: AssistantPermissionMode) {
+    permissionMode.value = mode
+    try {
+        // Full access never survives a reload: it must be re-enabled with
+        // the explicit warning once per session.
+        if (mode === 'full') sessionStorage.removeItem(PERMISSION_MODE_STORAGE_KEY)
+        else sessionStorage.setItem(PERMISSION_MODE_STORAGE_KEY, mode)
+    } catch {
+        // A blocked storage area keeps the choice for this session only.
+    }
+}
+
+function setPermissionMode(mode: AssistantPermissionMode) {
+    if (mode === permissionMode.value) return
+    if (mode === 'full') {
+        fullAccessWarningOpen.value = true
+        return
+    }
+    applyPermissionMode(mode)
+}
+
+function confirmFullAccess() {
+    fullAccessWarningOpen.value = false
+    applyPermissionMode('full')
+}
 const selectedAgentProfile = computed(
     () =>
         agentProfiles.value.find((profile) => profile.id === selectedAgentProfileId.value) ??
@@ -849,9 +990,22 @@ function requestToolApproval(
 ) {
     const endpoint = endpointOverride ?? mcpClient.value?.endpoint
     if (!endpoint) return Promise.resolve(false)
+    if (permissionMode.value === 'full') return Promise.resolve(true)
+    if (
+        permissionMode.value === 'free' &&
+        !isDangerousTool(tool.name, endpoint === 'MC-Trin')
+    ) {
+        return Promise.resolve(true)
+    }
     return new Promise<boolean>((resolve) => {
         pendingApprovals.value = [...pendingApprovals.value, { endpoint, tool, args, resolve }]
     })
+}
+
+function isDangerousTool(toolName: string, local: boolean) {
+    // Remote MCP tools run on servers this launcher does not control, so
+    // every mode below full access keeps asking before calling them.
+    return !local || DANGEROUS_AGENT_TOOLS.has(toolName)
 }
 
 function requestLocalToolApproval(tool: AgentToolApproval, args: Record<string, unknown>) {
@@ -877,6 +1031,14 @@ function cancelAgent() {
 
 onMounted(() => {
     syncToolStates()
+    // Only the free mode is restored; full access must be re-enabled with
+    // its warning once per session.
+    try {
+        permissionMode.value =
+            sessionStorage.getItem(PERMISSION_MODE_STORAGE_KEY) === 'free' ? 'free' : 'default'
+    } catch {
+        permissionMode.value = 'default'
+    }
     try {
         agentProfiles.value = getAgentProfiles(localStorage)
         selectedAgentProfileId.value = agentProfiles.value[0]?.id ?? DEFAULT_AI_AGENT_PROFILE.id
@@ -1038,6 +1200,25 @@ onUnmounted(denyPendingApprovals)
             </p>
 
             <details
+                class="assistant-usage max-w-4xl rounded-md border border-solid border-surface-4 bg-surface-2 p-3"
+            >
+                <summary
+                    class="cursor-pointer text-base font-semibold text-[var(--color-text-primary)]"
+                >
+                    {{ formatMessage(messages.usageGuideTitle) }}
+                </summary>
+                <ol
+                    class="mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm text-[var(--color-text-tertiary)]"
+                >
+                    <li>{{ formatMessage(messages.usageStep1) }}</li>
+                    <li>{{ formatMessage(messages.usageStep2) }}</li>
+                    <li>{{ formatMessage(messages.usageStep3) }}</li>
+                    <li>{{ formatMessage(messages.usageStep4) }}</li>
+                    <li>{{ formatMessage(messages.usageStep5) }}</li>
+                </ol>
+            </details>
+
+            <details
                 class="assistant-tools order-4 max-w-4xl rounded-md border border-solid border-surface-4 bg-surface-2 p-3"
             >
                 <summary
@@ -1064,6 +1245,66 @@ onUnmounted(denyPendingApprovals)
                     <p v-if="toolResetNotice" class="m-0 text-sm text-brand" role="status">
                         {{ formatMessage(messages.agentToolsReset) }}
                     </p>
+                    <fieldset
+                        class="assistant-permissions m-0 flex flex-col gap-2 rounded-md border border-solid border-surface-4 p-3"
+                    >
+                        <legend
+                            class="px-1 text-sm font-semibold text-[var(--color-text-primary)]"
+                        >
+                            {{ formatMessage(messages.permissionModeTitle) }}
+                        </legend>
+                        <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
+                            {{ formatMessage(messages.permissionModeDescription) }}
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <label
+                                v-for="mode in permissionModes"
+                                :key="mode.value"
+                                class="flex min-w-0 cursor-pointer items-start gap-2 rounded-md border border-solid p-2 text-sm"
+                                :class="
+                                    permissionMode === mode.value
+                                        ? 'border-brand bg-surface-3'
+                                        : 'border-surface-4'
+                                "
+                            >
+                                <input
+                                    type="radio"
+                                    name="assistant-permission-mode"
+                                    class="mt-0.5 h-4 w-4"
+                                    :checked="permissionMode === mode.value"
+                                    :disabled="agent.busy.value"
+                                    @change="setPermissionMode(mode.value)"
+                                />
+                                <span class="min-w-0">
+                                    <span
+                                        class="block font-semibold text-[var(--color-text-primary)]"
+                                        >{{ formatMessage(mode.label) }}</span
+                                    >
+                                    <span
+                                        class="block text-xs font-normal text-[var(--color-text-tertiary)]"
+                                        >{{ formatMessage(mode.hint) }}</span
+                                    >
+                                </span>
+                            </label>
+                        </div>
+                        <p
+                            v-if="permissionMode === 'full'"
+                            class="m-0 flex flex-wrap items-center gap-2 text-sm font-semibold text-red"
+                            role="status"
+                        >
+                            {{ formatMessage(messages.permissionModeActiveBadge) }}
+                            <button
+                                type="button"
+                                class="cursor-pointer text-xs font-normal underline"
+                                @click="applyPermissionMode('default')"
+                            >
+                                {{ formatMessage(messages.permissionModeDefault) }}
+                            </button>
+                        </p>
+                        <Admonition v-if="permissionMode === 'free'" type="warning">
+                            {{ formatMessage(messages.permissionModeFreeHint) }}
+                        </Admonition>
+                    </fieldset>
                     <ul class="m-0 flex flex-col gap-2 p-0">
                         <li
                             v-for="tool in agentTools"
@@ -1390,6 +1631,38 @@ onUnmounted(denyPendingApprovals)
                 </div>
             </section>
         </template>
+
+        <div
+            v-if="fullAccessWarningOpen"
+            class="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4"
+            role="presentation"
+            @click.self="fullAccessWarningOpen = false"
+        >
+            <section
+                class="flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-lg border border-solid border-surface-5 bg-surface-2 p-4 shadow-xl"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="assistant-full-access-title"
+            >
+                <h2
+                    id="assistant-full-access-title"
+                    class="m-0 text-lg font-semibold text-red"
+                >
+                    {{ formatMessage(messages.permissionModeFullWarningTitle) }}
+                </h2>
+                <p class="m-0 break-words text-sm text-[var(--color-text-primary)]">
+                    {{ formatMessage(messages.permissionModeFullWarningBody) }}
+                </p>
+                <div class="flex flex-wrap justify-end gap-2">
+                    <Button type="outlined" @click="fullAccessWarningOpen = false">
+                        {{ formatMessage(messages.agentProfileCancel) }}
+                    </Button>
+                    <Button type="colored" color="danger" @click="confirmFullAccess">
+                        {{ formatMessage(messages.permissionModeFullWarningConfirm) }}
+                    </Button>
+                </div>
+            </section>
+        </div>
 
         <div
             v-if="profileDialogOpen"
