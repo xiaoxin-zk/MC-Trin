@@ -448,12 +448,26 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
         .not.toBe(beforeMove)
     document.exitPointerLock()
     await expect.poll(() => document.pointerLockElement).toBe(null)
-    await new Promise((resolve) => setTimeout(resolve, 180))
-    const afterUnlock = wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]
+    // Leaving pointer lock must stop movement. Let the last queued frame land
+    // first (a single fixed delay raced it), then require the position to stay
+    // put.
+    const positionAfterUnlock = () =>
+        wrapper?.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]
+    let settled = positionAfterUnlock()
+    await expect
+        .poll(
+            () => {
+                const current = positionAfterUnlock()
+                if (current === settled) return true
+                settled = current
+                return false
+            },
+            { timeout: 3000, interval: 100 },
+        )
+        .toBe(true)
+    const afterUnlock = settled
     await new Promise((resolve) => setTimeout(resolve, 250))
-    expect(wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]).toBe(
-        afterUnlock,
-    )
+    expect(positionAfterUnlock()).toBe(afterUnlock)
     await userEvent.click(page.getByRole('checkbox', { name: 'Cave boundaries' }))
     expect((wrapper.findAll('input')[0].element as HTMLInputElement).checked).toBe(false)
     fail = true

@@ -59,11 +59,15 @@ impl TestAuthEndpoints {
         {
             return format!("{}{}", self.token, rest);
         }
-        if default.starts_with("https://user.auth.xboxlive.com") {
-            return self.xbl.to_string();
+        if let Some(rest) =
+            default.strip_prefix("https://user.auth.xboxlive.com")
+        {
+            return format!("{}{}", self.xbl, rest);
         }
-        if default.starts_with("https://xsts.auth.xboxlive.com") {
-            return self.xsts.to_string();
+        if let Some(rest) =
+            default.strip_prefix("https://xsts.auth.xboxlive.com")
+        {
+            return format!("{}{}", self.xsts, rest);
         }
         if let Some(rest) =
             default.strip_prefix("https://api.minecraftservices.com")
