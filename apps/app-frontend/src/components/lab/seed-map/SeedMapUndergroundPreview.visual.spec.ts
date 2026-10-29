@@ -446,6 +446,9 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     await expect
         .poll(() => wrapper?.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0])
         .not.toBe(beforeMove)
+    // Release the movement key: a held Space keeps moving the view even after
+    // pointer lock is dropped, which made the "stays put" check flaky.
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }))
     document.exitPointerLock()
     await expect.poll(() => document.pointerLockElement).toBe(null)
     // Leaving pointer lock must stop movement. Let the last queued frame land
