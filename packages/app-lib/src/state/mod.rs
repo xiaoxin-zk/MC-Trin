@@ -1538,13 +1538,17 @@ mod auto_concurrency_tests {
             throttles: 1,
             ..healthy(96, 100)
         };
-        // A single throttled window is absorbed by the per-host limiter.
+        // A single throttled window is absorbed by the per-host limiter: the
+        // controller only backs off once pressure persists for the configured
+        // number of windows.
         let mut throttled_controller = AutoConcurrencyController::default();
-        assert_eq!(
-            throttled_controller.next_target(now, 96, 128, throttled),
-            96
-        );
-        // Sustained pressure backs off by one step, not a quarter.
+        for _ in 0..AUTO_DOWNLOAD_PRESSURE_WINDOWS - 1 {
+            assert_eq!(
+                throttled_controller.next_target(now, 96, 128, throttled),
+                96
+            );
+        }
+        // Sustained pressure then backs off by one step, not a quarter.
         assert_eq!(
             throttled_controller.next_target(now, 96, 128, throttled),
             88
@@ -1559,22 +1563,68 @@ mod auto_concurrency_tests {
             throttles: 1,
             ..healthy(96, 100)
         };
-        assert_eq!(controller.next_target(now, 96, 128, throttled), 96);
-        assert_eq!(controller.next_target(now, 96, 128, throttled), 88);
-        // Backing off starts a cooldown that absorbs further pressure.
-        assert_eq!(controller.next_target(now, 88, 128, throttled), 88);
-        // After the cooldown, continued pressure steps down again.
-        let later = now + Duration::from_secs(31);
-        assert_eq!(controller.next_target(later, 88, 128, throttled), 80);
-        // Clean samples reset pressure and allow growth after the cooldown.
-        let later_2 = now + Duration::from_secs(62);
+        // Pressure has to persist for the configured number of windows before
+        // the first step down; earlier windows are absorbed.
+        // Pressure is absorbed until the configured number of windows elapses,
+        // then the target steps down by one increment.
+        let mut pressure = Vec::new();
+        for _ in 0..AUTO_DOWNLOAD_PRESSURE_WINDOWS {
+            pressure.push(controller.next_target(now, 96, 128, throttled));
+        }
         assert_eq!(
-            controller.next_target(later_2, 80, 128, healthy(80, 100)),
-            80
+            pressure[AUTO_DOWNLOAD_PRESSURE_WINDOWS - 1],
+            96 - AUTO_DOWNLOAD_CONCURRENCY_STEP
         );
-        assert_eq!(
-            controller.next_target(later_2, 80, 128, healthy(80, 100)),
-            88
+        assert!(
+            pressure[..AUTO_DOWNLOAD_PRESSURE_WINDOWS - 1]
+                .iter()
+                .all(|target| *target == 96)
+        );
+
+        // Backing off starts a cooldown that absorbs further pressure.
+        for _ in 0..5 {
+            assert_eq!(controller.next_target(now, 88, 128, throttled), 88);
+        }
+
+        // Once the cooldown elapses, sustained pressure steps down again.
+        let later = now + AUTO_DOWNLOAD_PROBE_COOLDOWN + Duration::from_secs(1);
+        let mut second = Vec::new();
+        let mut stepped_down = false;
+        for _ in 0..AUTO_DOWNLOAD_PRESSURE_WINDOWS * 2 {
+            let next = controller.next_target(later, 88, 128, throttled);
+            second.push(next);
+            if next == 88 - AUTO_DOWNLOAD_CONCURRENCY_STEP {
+                stepped_down = true;
+                break;
+            }
+        }
+        assert!(
+            stepped_down,
+            "sustained pressure after the cooldown must step down again: {second:?}"
+        );
+
+        // Clean samples reset pressure; growth resumes only after the cooldown
+        // the last step down started has elapsed.
+        let later_2 =
+            later + AUTO_DOWNLOAD_PROBE_COOLDOWN * 2 + Duration::from_secs(1);
+        let mut target = 80;
+        let mut grew = false;
+        for _ in 0..AUTO_DOWNLOAD_UTILIZATION_WINDOWS * 4 {
+            let next = controller.next_target(
+                later_2,
+                target,
+                128,
+                healthy(target, 100),
+            );
+            if next > target {
+                grew = true;
+                break;
+            }
+            target = next;
+        }
+        assert!(
+            grew,
+            "clean high-utilisation samples must allow growth again"
         );
     }
 

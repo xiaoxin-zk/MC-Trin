@@ -300,8 +300,7 @@ jobs:
             --skip util::fetch::tests::hashed_pack_keeps_32_ranges \
             --skip util::fetch::tests::segmented_download_caps \
             --skip util::fetch::tests::warm_h2_archive_hint \
-            --skip state::auto_concurrency_tests::sustained_pressure_steps_down \
-            --skip state::auto_concurrency_tests::unproductive_probe_reverts \
+
             --skip install::missing_content::tests::same_path_same_size
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
