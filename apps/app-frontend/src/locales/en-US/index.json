@@ -8204,6 +8204,9 @@
   "app.multiplayer.mctier.port": {
     "message": "Host Minecraft port"
   },
+  "app.multiplayer.mctier.private-password-hint": {
+    "message": "Set a password to keep this room private."
+  },
   "app.multiplayer.mctier.public-password-hint": {
     "message": "Public rooms cannot have a password."
   },
@@ -8248,6 +8251,45 @@
   },
   "app.multiplayer.mctier.voice.volume": {
     "message": "Output volume"
+  },
+  "app.multiplayer.mctier.voice.connected": {
+    "message": "{count, plural, one {Voice connected to # player} other {Voice connected to # players}}"
+  },
+  "app.multiplayer.mctier.voice.description": {
+    "message": "Peer-to-peer voice connects after you allow microphone access."
+  },
+  "app.multiplayer.mctier.voice.input-volume": {
+    "message": "Microphone volume"
+  },
+  "app.multiplayer.mctier.voice.mute": {
+    "message": "Mute microphone"
+  },
+  "app.multiplayer.mctier.voice.peer-volume": {
+    "message": "Volume for {player}"
+  },
+  "app.multiplayer.mctier.voice.permission-error": {
+    "message": "Microphone permission was denied. Allow access in system settings and try again."
+  },
+  "app.multiplayer.mctier.voice.start": {
+    "message": "Enable voice"
+  },
+  "app.multiplayer.mctier.voice.stop": {
+    "message": "Leave voice"
+  },
+  "app.multiplayer.mctier.voice.title": {
+    "message": "Room voice"
+  },
+  "app.multiplayer.mctier.voice.unavailable-error": {
+    "message": "Voice could not connect. Check the room network and microphone."
+  },
+  "app.multiplayer.mctier.voice.unmute": {
+    "message": "Unmute microphone"
+  },
+  "app.multiplayer.mctier.voice.unsupported-error": {
+    "message": "This webview does not support microphone capture."
+  },
+  "app.multiplayer.mctier.voice.waiting": {
+    "message": "Waiting for another player to connect voice."
   },
   "app.multiplayer.no-players": {
     "message": "No players in room"

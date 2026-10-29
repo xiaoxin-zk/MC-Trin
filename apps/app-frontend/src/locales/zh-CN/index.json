@@ -296,6 +296,12 @@
   "app.multiplayer.mctier.voice.volume": {
     "message": "输出音量"
   },
+  "app.multiplayer.mctier.voice.input-volume": {
+    "message": "麦克风音量"
+  },
+  "app.multiplayer.mctier.voice.peer-volume": {
+    "message": "{player} 的音量"
+  },
   "app.multiplayer.mctier.public-password-hint": {
     "message": "公开房间不能设置密码。"
   },
