@@ -70,6 +70,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node --test scripts/axolotl/ci-changes.test.mjs
+          node --test scripts/axolotl/ci-targeted-tests.test.mjs
           node --test scripts/axolotl/desktop-build-utils.test.mjs
           node --test scripts/axolotl/release-policy.test.mjs
           node --test scripts/axolotl/aliyunoss-release.test.mjs
@@ -113,12 +114,48 @@ jobs:
       - name: Check formatting of Rust code
         run: cargo fmt --all --check
 
-  # The frontend lint and test suites were previously never run in CI, so
-  # design-system regressions (duplicate components, boundary violations,
-  # broken tests) could merge silently.
+  # Fast gate: the checks most likely to fail on a bad edit, in a few minutes,
+  # so a mistake is reported long before the multi-platform build finishes.
+  # The heavy jobs depend on this one, so a red fast gate stops them early
+  # instead of burning a full cold compile per platform.
+  fast:
+    name: Fast gate (format, lint, types, targeted tests)
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SQLX_OFFLINE: true
+      RUST_MIN_STACK: 16777216
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+      - name: Setup desktop build
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          profile: ci
+          save-cache: false
+          resources: 'false'
+      - name: Reject unformatted Rust
+        run: cargo fmt --all --check
+      - name: Lint the runtime crate
+        run: cargo clippy --package theseus --all-targets -- -D warnings
+      - name: Type-check the desktop frontend
+        run: pnpm --filter @modrinth/app-frontend exec vue-tsc --noEmit
+      - name: Test the changed Rust modules
+        env:
+          CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/axolotl/ci-targeted-tests.mjs
+      - name: Unit-test the desktop frontend
+        run: pnpm --filter @modrinth/app-frontend test:unit
+
+  # The frontend lint, package tests and visual overlays still run in full, but
+  # only after the fast gate has accepted the change.
   frontend:
     name: Run frontend lint and tests
-    needs: changes
+    needs: [changes, fast]
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -190,7 +227,7 @@ jobs:
 
   desktop:
     name: Build and test desktop application
-    needs: [changes, guardrails, resources]
+    needs: [changes, guardrails, resources, fast]
     if: needs.changes.outputs.desktop == 'true'
     permissions:
       contents: read
@@ -377,6 +414,7 @@ jobs:
       [
         changes,
         guardrails,
+        fast,
         frontend,
         resources,
         desktop,

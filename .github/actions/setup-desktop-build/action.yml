@@ -13,6 +13,9 @@ inputs:
   package-only:
     description: Skip native dependency cache restore when only bundling binaries
     default: 'false'
+  resources:
+    description: Whether to download and prepare the shared build resources
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -83,10 +86,12 @@ runs:
     - shell: bash
       run: pnpm install --frozen-lockfile
     - uses: ./.github/actions/download-run-artifact
+      if: inputs.resources == 'true'
       with:
         name: desktop-resources
         path: target/build-resources
     - name: Use verified shared resources
+      if: inputs.resources == 'true'
       shell: bash
       run: |
         resources="$(node -p 'require("node:path").resolve("target/build-resources")')"

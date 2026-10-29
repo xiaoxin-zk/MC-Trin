@@ -203,6 +203,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
             outputs: { desktop: 'true', frontend: 'true' },
         },
         guardrails: { result: 'success' },
+        fast: { result: 'success' },
         frontend: { result: 'success' },
         resources: { result: 'success' },
         desktop: { result: 'success' },
@@ -212,6 +213,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
     // Every job that is selected for this push must fail the gate when it does
     // not succeed, not just the desktop matrix.
     for (const name of [
+        'fast',
         'frontend',
         'resources',
         'desktop',

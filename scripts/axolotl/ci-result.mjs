@@ -16,6 +16,7 @@ export function validateCiResults(jobs) {
             failures.push(`Invalid ${name} scope output: ${outputs[name]}`)
     }
     for (const [name, scope] of [
+        ['fast', 'desktop'],
         ['frontend', 'frontend'],
         ['resources', 'desktop'],
         ['desktop', 'desktop'],
