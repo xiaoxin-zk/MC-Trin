@@ -4,10 +4,9 @@ mod catalog;
 pub mod chat;
 mod credentials;
 pub use catalog::catalog;
-use catalog::{
-    BUILTIN_MODEL_CATALOG, PROVIDERS, SPONSORED_PROVIDERS, builtin_models,
-    provider_definition,
-};
+#[cfg(test)]
+use catalog::{BUILTIN_MODEL_CATALOG, SPONSORED_PROVIDERS};
+use catalog::{PROVIDERS, builtin_models, provider_definition};
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};

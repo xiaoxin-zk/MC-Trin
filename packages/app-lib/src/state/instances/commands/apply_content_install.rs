@@ -38,9 +38,11 @@ use zip::CompressionMethod;
 use zip::write::SimpleFileOptions;
 
 mod resolve;
+#[cfg(test)]
+use resolve::target_preferences;
 use resolve::{
     cached_modrinth_project, cached_modrinth_version,
-    resolve_install_plan_with_cache, target_preferences,
+    resolve_install_plan_with_cache,
 };
 pub(crate) use resolve::{
     resolve_install_plan, resolve_install_plan_for_target_with_policy,

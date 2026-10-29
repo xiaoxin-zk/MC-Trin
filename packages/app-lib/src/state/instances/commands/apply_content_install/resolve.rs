@@ -2,7 +2,9 @@ use super::*;
 
 use crate::state::{Dependency, DependencyType, Version};
 use async_trait::async_trait;
-use content_management::{ContentMetadataProvider, Error as ResolveError};
+use content_management::{
+    ContentMetadataProvider, Error as ResolveError, ResolveContentRequest,
+};
 
 struct CachedEntryContentProvider {
     cache_behaviour: Option<CacheBehaviour>,

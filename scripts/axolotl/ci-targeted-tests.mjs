@@ -32,6 +32,9 @@ export function moduleFilter(relativePath) {
     if (module === 'state/instances/commands/apply_content_install/resolve') {
         return 'state::instances::commands::apply_content_install'
     }
+    if (module === 'state/instances/commands/instance_upgrade/solver') {
+        return 'state::instances::commands::instance_upgrade'
+    }
     return module.replace(/\//gu, '::')
 }
 

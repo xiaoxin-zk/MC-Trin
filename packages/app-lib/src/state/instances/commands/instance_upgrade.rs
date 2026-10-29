@@ -30,8 +30,8 @@ use solver::{
 };
 #[cfg(test)]
 use solver::{
-    root_candidate_options, solve_for_strategy, solve_for_strategy_with_limit,
-    solve_upgrade,
+    root_candidate_options, select_upgrade_failure_issue, solve_for_strategy,
+    solve_for_strategy_with_limit, solve_upgrade,
 };
 
 const MAX_CANDIDATES_PER_PROJECT: usize = 6;

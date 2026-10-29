@@ -1185,7 +1185,7 @@ pub(crate) async fn acquire_native_validation_permit()
 
 mod h2_authority;
 
-pub use h2_authority::*;
+pub(crate) use h2_authority::*;
 
 fn reqwest_client_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()

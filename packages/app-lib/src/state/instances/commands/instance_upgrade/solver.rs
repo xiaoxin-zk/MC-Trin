@@ -1057,7 +1057,7 @@ fn candidates_for_requirement<'a>(
         .collect::<Vec<_>>()
 }
 
-fn assigned_key_for_requirement<'a>(
+pub(super) fn assigned_key_for_requirement<'a>(
     key: &NodeKey,
     assignments: &'a HashMap<NodeKey, UpgradeCandidate>,
     physical_assignments: &'a HashMap<String, NodeKey>,

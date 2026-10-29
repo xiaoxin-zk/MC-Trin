@@ -22,6 +22,12 @@ test('maps Theseus source files to their module paths', () => {
         ),
         'state::instances::commands::apply_content_install',
     )
+    assert.equal(
+        moduleFilter(
+            'packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs',
+        ),
+        'state::instances::commands::instance_upgrade',
+    )
     assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
 })
 
