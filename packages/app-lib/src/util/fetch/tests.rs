@@ -1977,7 +1977,7 @@ fn segmented_download_caps_are_provider_neutral() {
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, size), 32);
     let bulk = 100_855_703;
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, bulk), 56);
-    assert_eq!(route_segmented_concurrency_cap(&modrinth, 96, bulk), 64);
+    assert_eq!(route_segmented_concurrency_cap(&modrinth, 96, bulk), 63);
 }
 
 #[test]

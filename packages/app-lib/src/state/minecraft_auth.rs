@@ -2145,6 +2145,9 @@ mod microsoft_chain_tests {
     use serde_json::Value;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    static MICROSOFT_CHAIN_TEST_LOCK: tokio::sync::Mutex<()> =
+        tokio::sync::Mutex::const_new(());
+
     fn uhs_claims() -> Value {
         json!({ "xui": [{ "uhs": "uhs-1" }] })
     }
@@ -2226,7 +2229,7 @@ mod microsoft_chain_tests {
                                 json!({ "access_token": "mc-access" })
                             }
                             p if p.starts_with("/entitlements/license") => {
-                                json!({ "items": [{"name": "product_minecraft"}] })
+                                json!({ "items": [{"name": "game_minecraft"}] })
                             }
                             "/minecraft/profile" => json!({
                                 "id": "069a79f444e94726a5befca90e38aaf5",
@@ -2362,6 +2365,7 @@ mod microsoft_chain_tests {
 
     #[tokio::test]
     async fn the_device_login_chain_persists_microsoft_credentials() {
+        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(1).await;
         let pool = chain_pool().await;
         let flow = with_test_auth_endpoints(endpoints(&chain), async {
@@ -2410,6 +2414,7 @@ mod microsoft_chain_tests {
     #[tokio::test]
     async fn an_expired_microsoft_credential_refreshes_through_the_real_chain()
     {
+        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(0).await;
         let pool = chain_pool().await;
         let mut credentials = Credentials {
@@ -2453,6 +2458,7 @@ mod microsoft_chain_tests {
     #[tokio::test]
     async fn a_stale_xsts_token_reports_an_error_and_keeps_the_stored_credentials()
      {
+        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(0).await;
         let pool = chain_pool().await;
         let mut credentials = Credentials {

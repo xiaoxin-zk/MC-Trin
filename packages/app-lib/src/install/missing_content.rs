@@ -81,7 +81,12 @@ enum CandidateFileIdentity {
     #[cfg(windows)]
     Windows { volume_serial: u32, file_index: u64 },
     #[cfg(unix)]
-    Unix { device: u64, inode: u64 },
+    Unix {
+        device: u64,
+        inode: u64,
+        change_time: i64,
+        change_time_nsec: i64,
+    },
 }
 
 struct CandidateObservation {
@@ -581,6 +586,8 @@ fn candidate_file_identity(
     Some(CandidateFileIdentity::Unix {
         device: metadata.dev(),
         inode: metadata.ino(),
+        change_time: metadata.ctime(),
+        change_time_nsec: metadata.ctime_nsec(),
     })
 }
 
