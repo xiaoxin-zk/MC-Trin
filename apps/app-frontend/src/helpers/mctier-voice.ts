@@ -24,6 +24,9 @@ export type MctierVoiceSessionOptions = {
     iceServer?: string | null
     send: (signal: MctierVoiceSignal) => Promise<void>
     onPeerState?: (playerId: string, state: VoiceConnectionState) => void
+    /** Hands each remote playback stream to the caller (and null on detach)
+     * so speaking detection can attach analysers outside the session. */
+    onRemoteStream?: (playerId: string, stream: MediaStream | null) => void
 }
 
 const MAX_SIGNAL_BYTES = 256 * 1024
@@ -307,6 +310,7 @@ export class MctierVoiceSession {
                 document.body.append(audio)
             }
             peer.audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
+            this.options.onRemoteStream?.(playerId, peer.audio.srcObject)
             void peer.audio.play().catch(() => {})
         }
         connection.onconnectionstatechange = () =>
@@ -345,6 +349,7 @@ export class MctierVoiceSession {
 
     private closePeer(playerId: string, peer: PeerConnectionState) {
         this.peers.delete(playerId)
+        this.options.onRemoteStream?.(playerId, null)
         peer.connection.onicecandidate = null
         peer.connection.ontrack = null
         peer.connection.onconnectionstatechange = null

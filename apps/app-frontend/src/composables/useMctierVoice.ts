@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 
 import type { MctierState } from '@/helpers/mctier'
 
@@ -8,6 +8,7 @@ import {
     parseMctierVoiceSignal,
     type VoicePeer,
 } from '../helpers/mctier-voice'
+import { createVoiceActivityMonitor, type VoiceActivityMonitor } from '../helpers/voice-activity'
 
 type VoiceError = 'permission' | 'unsupported' | 'unavailable'
 type QueuedSignal = { signal: unknown; size: number }
@@ -25,6 +26,7 @@ type VoicePreferences = {
     peerVolumes: Record<string, number>
     inputDeviceId: string | null
     outputDeviceId: string | null
+    pushToTalk: boolean
 }
 
 const PREFERENCES_KEY = 'mctier.voice.preferences'
@@ -35,6 +37,7 @@ const DEFAULT_PREFERENCES: VoicePreferences = {
     peerVolumes: {},
     inputDeviceId: null,
     outputDeviceId: null,
+    pushToTalk: false,
 }
 
 function clampPeerVolumes(value: unknown): Record<string, number> {
@@ -72,6 +75,7 @@ function loadPreferences(): VoicePreferences {
                 typeof parsed.outputDeviceId === 'string' && parsed.outputDeviceId
                     ? parsed.outputDeviceId
                     : null,
+            pushToTalk: parsed.pushToTalk === true,
         }
     } catch {
         return { ...DEFAULT_PREFERENCES }
@@ -102,6 +106,10 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const peerMuted = ref<Record<string, boolean>>({})
     const error = ref<VoiceError | null>(null)
     const peerStates = ref<Record<string, string>>({})
+    const pushToTalk = ref(preferences.pushToTalk)
+    const pttHeld = ref(false)
+    const speakingPeers = ref<Set<string>>(new Set())
+    const inputLevel = ref(0)
     const connectedPeers = computed(
         () =>
             Object.values(peerStates.value).filter(
@@ -114,8 +122,40 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     let lastState: MctierState | null = null
     let startGeneration = 0
     let signalDelivery = Promise.resolve()
+    let monitor: VoiceActivityMonitor | null = null
+    let captureStream: MediaStream | null = null
     const pendingSignals: QueuedSignal[] = []
     let pendingSignalBytes = 0
+
+    function startMonitoring(localPlayerId: string) {
+        monitor?.stop()
+        monitor = createVoiceActivityMonitor({
+            onSpeaking: (id, speaking) => {
+                const next = new Set(speakingPeers.value)
+                if (speaking) next.add(id)
+                else next.delete(id)
+                speakingPeers.value = next
+            },
+            onLevel: (percent) => {
+                inputLevel.value = percent
+            },
+        })
+        monitor.watch(localPlayerId, captureStream, true)
+    }
+
+    function stopMonitoring() {
+        monitor?.stop()
+        monitor = null
+        captureStream = null
+        speakingPeers.value = new Set()
+        inputLevel.value = 0
+    }
+
+    /** The microphone transmits unless the master mute is on, and in
+     * push-to-talk mode only while the key or button is held. */
+    function applyMicrophoneState() {
+        session?.setMicrophoneEnabled(!muted.value && (!pushToTalk.value || pttHeld.value))
+    }
 
     function persistPreferences() {
         storePreferences({
@@ -125,6 +165,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             peerVolumes: peerVolumes.value,
             inputDeviceId: inputDeviceId.value,
             outputDeviceId: outputDeviceId.value,
+            pushToTalk: pushToTalk.value,
         })
     }
 
@@ -221,13 +262,18 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
                 onPeerState: (playerId, nextState) => {
                     peerStates.value = { ...peerStates.value, [playerId]: nextState }
                 },
+                onRemoteStream: (playerId, remoteStream) => {
+                    monitor?.watch(playerId, remoteStream)
+                },
             })
             session = startingSession
             sessionReady = false
             startingSession.setOutputVolume(outputVolume.value)
             startingSession.setInputVolume(inputVolume.value)
             if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
-            if (muted.value) startingSession.setMicrophoneEnabled(false)
+            startingSession.setMicrophoneEnabled(
+                !muted.value && (!pushToTalk.value || pttHeld.value),
+            )
             for (const [playerId, isMuted] of Object.entries(peerMuted.value)) {
                 if (isMuted) startingSession.setPeerMuted(playerId, true)
             }
@@ -241,6 +287,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             }
 
             active.value = true
+            captureStream = stream
+            startMonitoring(localPlayerId)
             const queued = pendingSignals.splice(0)
             pendingSignalBytes = 0
             sessionReady = true
@@ -287,7 +335,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     function toggleMute() {
         muted.value = !muted.value
         persistPreferences()
-        session?.setMicrophoneEnabled(!muted.value)
+        applyMicrophoneState()
     }
 
     function stop() {
@@ -299,6 +347,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         active.value = false
         peerStates.value = {}
         error.value = null
+        pttHeld.value = false
+        stopMonitoring()
         clearPendingSignals()
         signalDelivery = Promise.resolve()
     }
@@ -356,6 +406,62 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             .map((device) => ({ deviceId: device.deviceId, label: device.label }))
     }
 
+    /** Push-to-talk listens for a global F2 hold while a voice session is
+     * active, so the hotkey costs nothing when voice is off. */
+    const PTT_KEY = 'F2'
+    function pttTargetIsEditable(target: EventTarget | null) {
+        if (!(target instanceof HTMLElement)) return false
+        return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+    }
+    function onPttKeyDown(event: KeyboardEvent) {
+        if (event.code !== PTT_KEY || event.repeat || pttTargetIsEditable(event.target)) return
+        event.preventDefault()
+        pttHeld.value = true
+    }
+    function onPttKeyUp(event: KeyboardEvent) {
+        if (event.code !== PTT_KEY) return
+        event.preventDefault()
+        pttHeld.value = false
+    }
+    function onWindowBlur() {
+        pttHeld.value = false
+    }
+    function removePttListeners() {
+        window.removeEventListener('keydown', onPttKeyDown)
+        window.removeEventListener('keyup', onPttKeyUp)
+        window.removeEventListener('blur', onWindowBlur)
+    }
+
+    function setPushToTalk(enabled: boolean) {
+        pushToTalk.value = enabled
+        if (!enabled) pttHeld.value = false
+        persistPreferences()
+    }
+
+    function setPttHeld(held: boolean) {
+        if (!pushToTalk.value || pttHeld.value === held) return
+        pttHeld.value = held
+    }
+
+    watch(
+        [active, pushToTalk],
+        ([isActive, enabled]) => {
+            if (isActive && enabled) {
+                window.addEventListener('keydown', onPttKeyDown)
+                window.addEventListener('keyup', onPttKeyUp)
+                window.addEventListener('blur', onWindowBlur)
+            } else {
+                removePttListeners()
+                pttHeld.value = false
+            }
+        },
+        { immediate: true },
+    )
+    onScopeDispose(() => {
+        removePttListeners()
+        stopMonitoring()
+    })
+
     function syncRoom(state: MctierState | undefined) {
         if (!state || state.status === 'idle' || state.status === 'error') {
             roomLocalPlayerId = null
@@ -386,6 +492,10 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         inputDevices,
         outputDevices,
         peerMuted,
+        pushToTalk,
+        pttHeld,
+        speakingPeers,
+        inputLevel,
         start,
         syncRoom,
         receiveSignal,
@@ -396,6 +506,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         setPeerVolume,
         setInputDevice,
         setOutputDevice,
+        setPushToTalk,
+        setPttHeld,
         refreshDevices,
         stop,
     }

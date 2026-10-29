@@ -200,6 +200,22 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.unmute-player',
         defaultMessage: 'Unmute {player}',
     },
+    voiceMicLevel: {
+        id: 'app.multiplayer.mctier.voice.mic-level',
+        defaultMessage: 'Mic level (speak to test)',
+    },
+    voicePushToTalk: {
+        id: 'app.multiplayer.mctier.voice.push-to-talk',
+        defaultMessage: 'Push-to-talk',
+    },
+    voicePushToTalkHint: {
+        id: 'app.multiplayer.mctier.voice.push-to-talk-hint',
+        defaultMessage: 'Hold F2 or the button to transmit; the microphone stays muted otherwise.',
+    },
+    voicePushToTalkHold: {
+        id: 'app.multiplayer.mctier.voice.push-to-talk-hold',
+        defaultMessage: 'Hold to talk',
+    },
 })
 
 const lobbyName = ref('')
@@ -307,6 +323,12 @@ function onOutputDeviceChange(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLSelectElement)) return
     void voice.setOutputDevice(target.value || null)
+}
+
+function onPttToggle(event: Event) {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    voice.setPushToTalk(target.checked)
 }
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
@@ -598,6 +620,24 @@ function prefillInviteFromDeepLink() {
                             {{ Math.round(voice.inputVolume.value * 100) }}%
                         </span>
                     </label>
+                    <div class="flex min-w-0 items-center gap-2 text-sm">
+                        <span class="w-24 shrink-0">{{
+                            formatMessage(messages.voiceMicLevel)
+                        }}</span>
+                        <div
+                            class="h-1.5 min-w-0 flex-1 overflow-hidden rounded bg-surface-5"
+                            role="meter"
+                            :aria-valuenow="voice.inputLevel.value"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            :aria-label="formatMessage(messages.voiceMicLevel)"
+                        >
+                            <div
+                                class="h-full bg-brand"
+                                :style="{ width: `${voice.inputLevel.value}%` }"
+                            />
+                        </div>
+                    </div>
                     <label class="flex min-w-0 items-center gap-2 text-sm">
                         <span class="w-24 shrink-0">{{
                             formatMessage(messages.voiceMicrophone)
@@ -645,6 +685,40 @@ function prefillInviteFromDeepLink() {
                             </option>
                         </select>
                     </label>
+                    <div
+                        class="flex min-w-0 flex-col gap-2 border-t border-solid border-surface-4 pt-2"
+                    >
+                        <label class="flex min-w-0 items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                class="h-4 w-4"
+                                :checked="voice.pushToTalk.value"
+                                @change="onPttToggle"
+                            />
+                            <span>{{ formatMessage(messages.voicePushToTalk) }}</span>
+                            <span class="text-xs font-normal text-[var(--color-text-tertiary)]">
+                                F2
+                            </span>
+                        </label>
+                        <p
+                            v-if="voice.pushToTalk.value"
+                            class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                        >
+                            {{ formatMessage(messages.voicePushToTalkHint) }}
+                        </p>
+                        <button
+                            v-if="voice.pushToTalk.value"
+                            type="button"
+                            class="min-w-0 cursor-pointer select-none rounded-md border border-solid border-brand px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]"
+                            :class="voice.pttHeld.value ? 'bg-brand' : 'bg-surface-2'"
+                            @pointerdown.prevent="voice.setPttHeld(true)"
+                            @pointerup="voice.setPttHeld(false)"
+                            @pointerleave="voice.setPttHeld(false)"
+                            @pointercancel="voice.setPttHeld(false)"
+                        >
+                            {{ formatMessage(messages.voicePushToTalkHold) }}
+                        </button>
+                    </div>
                 </div>
                 <p v-if="voice.error.value" class="m-0 text-sm text-red" role="alert">
                     {{
@@ -665,7 +739,16 @@ function prefillInviteFromDeepLink() {
                     :key="player.playerId"
                     class="flex flex-wrap items-center justify-between gap-2 py-1 text-sm"
                 >
-                    <span class="min-w-0 truncate">{{ player.playerName }}</span>
+                    <span class="flex min-w-0 items-center gap-2">
+                        <span
+                            v-if="
+                                voice.active.value && voice.speakingPeers.value.has(player.playerId)
+                            "
+                            class="h-2 w-2 shrink-0 rounded-full bg-brand"
+                            aria-hidden="true"
+                        />
+                        <span class="min-w-0 truncate">{{ player.playerName }}</span>
+                    </span>
                     <span class="flex shrink-0 items-center gap-2">
                         <Button
                             v-if="voice.active.value && player.playerId !== state?.local_player_id"

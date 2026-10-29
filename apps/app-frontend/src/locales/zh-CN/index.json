@@ -359,6 +359,18 @@
   "app.multiplayer.mctier.voice.waiting": {
     "message": "等待其他玩家接入语音。"
   },
+  "app.multiplayer.mctier.voice.mic-level": {
+    "message": "麦克风电平（说话试音）"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk": {
+    "message": "按键说话"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hint": {
+    "message": "按住 F2 或按钮说话；其余时间麦克风保持静音。"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hold": {
+    "message": "按住说话"
+  },
   "app.multiplayer.mctier.voice.connected": {
     "message": "语音已连接 {count} 位玩家"
   },

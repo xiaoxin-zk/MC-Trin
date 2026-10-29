@@ -8306,6 +8306,18 @@
   "app.multiplayer.mctier.voice.waiting": {
     "message": "Waiting for another player to connect voice."
   },
+  "app.multiplayer.mctier.voice.mic-level": {
+    "message": "Mic level (speak to test)"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk": {
+    "message": "Push-to-talk"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hint": {
+    "message": "Hold F2 or the button to transmit; the microphone stays muted otherwise."
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hold": {
+    "message": "Hold to talk"
+  },
   "app.multiplayer.no-players": {
     "message": "No players in room"
   },
