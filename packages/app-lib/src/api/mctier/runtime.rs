@@ -544,13 +544,21 @@ pub async fn run(
                             _ = cancellation.cancelled() => return Ok(()),
                             _ = tokio::time::sleep(RECONNECT_BACKOFF * (attempt + 1)) => {}
                         }
-                        let result = tokio::time::timeout(
+                        let result = match tokio::time::timeout(
                             Duration::from_secs(10),
                             protocol::register(&request, &identity),
                         )
                         .await
-                        .map_err(|_| eyre::eyre!("MCTier reconnect timed out"))
-                        .and_then(|result| result);
+                        {
+                            Ok(result) => result,
+                            Err(_) => {
+                                tracing::warn!(
+                                    attempt,
+                                    "MCTier reconnect attempt timed out"
+                                );
+                                continue;
+                            }
+                        };
                         match result {
                             Ok(session) => {
                                 reconnected = Some(session);
