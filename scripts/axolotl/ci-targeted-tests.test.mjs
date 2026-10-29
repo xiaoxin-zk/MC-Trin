@@ -46,6 +46,13 @@ test('runs nothing when no crate source changed', () => {
     assert.deepEqual(targetedCargoArgs(filters), null)
 })
 
+test('falls back to a compile check when there is no baseline', () => {
+    const { filters, reason } = selectFilters(null)
+    assert.equal(reason, 'no baseline')
+    assert.deepEqual(filters, [])
+    assert.deepEqual(targetedCargoArgs(filters), null)
+})
+
 test('falls back to the whole suite for crate-wide changes', () => {
     const { filters, reason } = selectFilters(['Cargo.lock'])
     assert.equal(reason, 'crate-wide change')

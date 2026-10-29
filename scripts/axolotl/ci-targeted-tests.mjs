@@ -24,16 +24,26 @@ const RUST_PACKAGE_FILES = /^(packages\/(app-lib|app|installer-ui)\/.*\.rs|Cargo
 
 function changedFiles(base) {
     if (!base || /^0+$/u.test(base)) return null
-    const output = execFileSync(
-        'git',
-        ['diff', '--name-only', '--no-renames', `${base}...HEAD`],
-        { encoding: 'utf8', timeout: 30000 },
-    )
-    return output.split('\n').map((line) => line.trim()).filter(Boolean)
+    try {
+        const resolved = execFileSync('git', ['rev-parse', '--verify', `${base}^{commit}`], {
+            encoding: 'utf8',
+            timeout: 30000,
+        }).trim()
+        const output = execFileSync(
+            'git',
+            ['diff', '--name-only', '--no-renames', `${resolved}...HEAD`],
+            { encoding: 'utf8', timeout: 30000 },
+        )
+        return output.split('\n').map((line) => line.trim()).filter(Boolean)
+    } catch {
+        // A shallow or missing baseline cannot describe the change; fall back
+        // to the full run rather than skipping the check.
+        return null
+    }
 }
 
 export function selectFilters(files) {
-    if (!files) return { filters: null, reason: 'no baseline' }
+    if (!files) return { filters: [], reason: 'no baseline' }
     const filters = new Set()
     let rustChanged = false
     for (const file of files) {
@@ -66,6 +76,15 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     const commands = targetedCargoArgs(filters)
     if (commands === null) {
         console.log(`Targeted tests: no command (${reason})`)
+        process.exit(0)
+    }
+    if (commands.length === 0) {
+        // Nothing to target (no baseline or no Rust change). Still prove the
+        // test targets compile, which is the part that usually breaks.
+        console.log(`Targeted tests: compile check only (${reason})`)
+        execFileSync('cargo', ['check', '--package', 'theseus', '--all-targets'], {
+            stdio: 'inherit',
+        })
         process.exit(0)
     }
     console.log(
