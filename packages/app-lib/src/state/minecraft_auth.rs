@@ -1399,6 +1399,19 @@ pub const MINECRAFT_SERVICES_USER_AGENT: &str = "MC-Trin";
 static TEST_AUTH_ENDPOINTS: std::sync::LazyLock<
     std::sync::Mutex<Option<crate::util::mojang::TestAuthEndpoints>>,
 > = std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+#[cfg(test)]
+static TEST_AUTH_ENDPOINTS_LOCK: tokio::sync::Mutex<()> =
+    tokio::sync::Mutex::const_new(());
+
+#[cfg(test)]
+struct TestAuthEndpointsGuard;
+
+#[cfg(test)]
+impl Drop for TestAuthEndpointsGuard {
+    fn drop(&mut self) {
+        *TEST_AUTH_ENDPOINTS.lock().unwrap() = None;
+    }
+}
 
 /// Resolves a Microsoft authentication URL. Tests install an override so the
 /// whole OAuth-to-Xbox-to-Minecraft chain can be exercised against a loopback
@@ -1418,10 +1431,10 @@ async fn with_test_auth_endpoints<T>(
     endpoints: crate::util::mojang::TestAuthEndpoints,
     run: impl std::future::Future<Output = T>,
 ) -> T {
+    let _serial = TEST_AUTH_ENDPOINTS_LOCK.lock().await;
     *TEST_AUTH_ENDPOINTS.lock().unwrap() = Some(endpoints);
-    let result = run.await;
-    *TEST_AUTH_ENDPOINTS.lock().unwrap() = None;
-    result
+    let _guard = TestAuthEndpointsGuard;
+    run.await
 }
 
 pub struct RequestWithDate<T> {
@@ -2145,9 +2158,6 @@ mod microsoft_chain_tests {
     use serde_json::Value;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    static MICROSOFT_CHAIN_TEST_LOCK: tokio::sync::Mutex<()> =
-        tokio::sync::Mutex::const_new(());
-
     fn uhs_claims() -> Value {
         json!({ "xui": [{ "uhs": "uhs-1" }] })
     }
@@ -2258,6 +2268,11 @@ mod microsoft_chain_tests {
                 .find(|(recorded, _)| recorded == path)
                 .and_then(|(_, body)| serde_json::from_str(body).ok())
         }
+
+        /// Every request the mock answered, as (path, body) pairs.
+        fn requests(&self) -> Vec<(String, String)> {
+            self.requests.lock().unwrap().clone()
+        }
     }
 
     /// The token endpoint first reports the pending device flow, then issues
@@ -2365,7 +2380,6 @@ mod microsoft_chain_tests {
 
     #[tokio::test]
     async fn the_device_login_chain_persists_microsoft_credentials() {
-        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(1).await;
         let pool = chain_pool().await;
         let flow = with_test_auth_endpoints(endpoints(&chain), async {
@@ -2401,20 +2415,53 @@ mod microsoft_chain_tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(stored.access_token, "mc-access");
-        assert_eq!(stored.refresh_token, "oauth-refresh");
-        assert_eq!(stored.offline_profile.name, "MockPlayer");
+        assert_eq!(stored.access_token, "mc-access", "access");
+        assert_eq!(
+            stored.refresh_token, "oauth-refresh",
+            "refresh={}",
+            stored.refresh_token
+        );
+        assert_eq!(
+            stored.offline_profile.name, "MockPlayer",
+            "name={}",
+            stored.offline_profile.name
+        );
 
         // The token exchange must have sent the device code and the client id.
-        let token_request = chain.body("/consumers/oauth2/v2.0/token").unwrap();
-        assert_eq!(token_request["device_code"], "DC-1");
-        assert_eq!(token_request["client_id"], MICROSOFT_CLIENT_ID);
+        // The mock records the form body of every request it answered.
+        let token_requests: Vec<_> = chain
+            .requests()
+            .into_iter()
+            .filter(|(path, _)| path == "/consumers/oauth2/v2.0/token")
+            .collect();
+        assert!(
+            !token_requests.is_empty(),
+            "the token endpoint must have been called"
+        );
+        // The token endpoint takes a form body, not JSON.
+        let form_field = |body: &str, key: &str| -> Option<String> {
+            body.split('&').find_map(|pair| {
+                let (name, value) = pair.split_once('=')?;
+                (name == key).then(|| value.to_string())
+            })
+        };
+        let device_code_body = token_requests
+            .iter()
+            .find(|(_, body)| form_field(body, "device_code").is_some())
+            .expect("a device_code poll must reach the token endpoint");
+        assert_eq!(
+            form_field(&device_code_body.1, "device_code").unwrap(),
+            "DC-1"
+        );
+        assert_eq!(
+            form_field(&device_code_body.1, "client_id").unwrap(),
+            MICROSOFT_CLIENT_ID
+        );
     }
 
     #[tokio::test]
     async fn an_expired_microsoft_credential_refreshes_through_the_real_chain()
     {
-        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(0).await;
         let pool = chain_pool().await;
         let mut credentials = Credentials {
@@ -2432,7 +2479,10 @@ mod microsoft_chain_tests {
         credentials.upsert(&pool).await.unwrap();
 
         with_test_auth_endpoints(endpoints(&chain), async {
-            credentials.refresh(&pool).await.unwrap();
+            credentials
+                .refresh(&pool)
+                .await
+                .unwrap_or_else(|error| panic!("refresh failed: {error:#}"));
         })
         .await;
 
@@ -2458,7 +2508,6 @@ mod microsoft_chain_tests {
     #[tokio::test]
     async fn a_stale_xsts_token_reports_an_error_and_keeps_the_stored_credentials()
      {
-        let _serial = MICROSOFT_CHAIN_TEST_LOCK.lock().await;
         let chain = MockChain::start(0).await;
         let pool = chain_pool().await;
         let mut credentials = Credentials {
