@@ -2510,9 +2510,11 @@ mod microsoft_chain_tests {
      {
         let chain = MockChain::start(0).await;
         let pool = chain_pool().await;
+        // A distinct identity: the refresh coalescing cache is keyed by account
+        // id, and the success test must not inherit this test's failure entry.
         let mut credentials = Credentials {
             account_id: Some(
-                "microsoft:069a79f4-44e9-4726-a5be-fca90e38aaf5".into(),
+                "microsoft:069a79f4-44e9-4726-a5be-fca90e38aaf6".into(),
             ),
             offline_profile: MinecraftProfile::default(),
             account_type: MinecraftAccountType::Microsoft,
