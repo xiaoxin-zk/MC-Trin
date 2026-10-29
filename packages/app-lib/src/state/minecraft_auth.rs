@@ -2209,7 +2209,7 @@ mod microsoft_chain_tests {
                                 {
                                     json!({
                                         "Identity": "0",
-                                        "XErr": 2148916238,
+                                        "XErr": 2148916238i64,
                                         "Code": "Unauthorized",
                                         "Message": "The account does not have Xbox",
                                     })
