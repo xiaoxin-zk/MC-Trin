@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { EditIcon, PlusIcon, SparklesIcon, TrashIcon } from '@modrinth/assets'
-import {
-    Admonition,
-    Button,
-    defineMessages,
-    injectNotificationManager,
-    useVIntl,
-} from '@modrinth/ui'
+import { Button, defineMessages, injectNotificationManager, useVIntl } from '@modrinth/ui'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
@@ -1296,9 +1290,13 @@ onUnmounted(denyPendingApprovals)
                                 {{ formatMessage(messages.permissionModeDefault) }}
                             </button>
                         </p>
-                        <Admonition v-if="permissionMode === 'free'" type="warning">
+                        <p
+                            v-if="permissionMode === 'free'"
+                            class="m-0 rounded-md border border-solid border-brand bg-surface-2 p-3 text-sm text-[var(--color-text-primary)]"
+                            role="status"
+                        >
                             {{ formatMessage(messages.permissionModeFreeHint) }}
-                        </Admonition>
+                        </p>
                     </fieldset>
                     <ul class="m-0 flex flex-col gap-2 p-0">
                         <li
