@@ -48,6 +48,11 @@ pub(crate) use resolve::{
     resolve_install_plan, resolve_install_plan_for_target_with_policy,
     resolve_update_plan,
 };
+#[cfg(test)]
+use rollback::backup_relative_path_for_update;
+pub(crate) use rollback::{
+    archive_project_file, recover_legacy_rollbacks, rollback_project,
+};
 
 pub(crate) struct ContentScope {
     pub instance: Instance,
@@ -3379,10 +3384,6 @@ pub(crate) async fn remove_project(
 }
 
 mod rollback;
-pub(crate) use rollback::{
-    archive_project_file, backup_relative_path_for_update,
-    recover_legacy_rollbacks, rollback_project,
-};
 
 fn project_type_for_file_path(relative_path: &str) -> Option<ProjectType> {
     crate::state::instances::adapters::filesystem::project_type_from_relative_path(

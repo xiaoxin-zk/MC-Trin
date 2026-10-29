@@ -669,7 +669,7 @@ fn contradictory_exact_requirement_issue(
     ))
 }
 
-fn search_limit_issue(global_limit: bool) -> InstanceUpgradeIssue {
+pub(super) fn search_limit_issue(global_limit: bool) -> InstanceUpgradeIssue {
     issue(
         InstanceUpgradeIssueCode::SearchLimitReached,
         if global_limit {
@@ -1206,7 +1206,7 @@ fn extend_required_requirements(
     }
 }
 
-fn incompatible_with_assignments(
+pub(super) fn incompatible_with_assignments(
     candidate: &UpgradeCandidate,
     assignments: &HashMap<NodeKey, UpgradeCandidate>,
     physical_assignments: &HashMap<String, NodeKey>,

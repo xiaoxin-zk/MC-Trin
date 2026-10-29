@@ -30,7 +30,8 @@ use solver::{
 };
 #[cfg(test)]
 use solver::{
-    root_candidate_options, select_upgrade_failure_issue, solve_for_strategy,
+    incompatible_with_assignments, root_candidate_options, search_limit_issue,
+    select_upgrade_failure_issue, solve_for_strategy,
     solve_for_strategy_with_limit, solve_upgrade,
 };
 
