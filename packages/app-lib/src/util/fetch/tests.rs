@@ -286,10 +286,11 @@ async fn spawn_range_server(
                 }
                 let request =
                     String::from_utf8_lossy(&request).to_ascii_lowercase();
+                let is_head = request.starts_with("head ");
                 let requested_range = request
                     .lines()
                     .find_map(|line| line.strip_prefix("range: bytes="));
-                let (mut headers, body) = if let Some(range) =
+                let (mut headers, mut body) = if let Some(range) =
                     requested_range.filter(|_| !behavior.ignore_range)
                 {
                     let Some((start, end)) = range.split_once('-') else {
@@ -321,7 +322,7 @@ async fn spawn_range_server(
                         body,
                     )
                 } else {
-                    if requested_range.is_none() {
+                    if requested_range.is_none() && !is_head {
                         normal_requests.fetch_add(1, Ordering::Relaxed);
                     }
                     (
@@ -332,6 +333,9 @@ async fn spawn_range_server(
                         &data[..],
                     )
                 };
+                if is_head {
+                    body = &[];
+                }
                 if let Some(range) = requested_range
                     && (behavior.vary_range_validators
                         || (behavior.vary_mod_validators
@@ -852,8 +856,9 @@ async fn warm_h2_archive_hint_cannot_bypass_large_file_connections() {
     )
     .with_integrity(Integrity::sha1("expected").with_size(9_999_999))
     .with_h2_range_concurrency(16);
-    let route =
+    let mut route =
         direct_test_route(request.url.clone(), DownloadRouteSource::Official);
+    route.supports_range = true;
     let (client_io, server_io) = tokio::io::duplex(64 * 1024);
     let server = tokio::spawn(async move {
         let mut server = h2::server::handshake(server_io).await.unwrap();

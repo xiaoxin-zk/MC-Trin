@@ -810,12 +810,6 @@ fn explicit_mirror_routes(
             path.to_string(),
             DownloadRouteSource::Bmclapi,
         ),
-        CURSEFORGE_API_HOST => push_mirror(
-            &mut routes,
-            MCIM_BASE_URL,
-            format!("/curseforge{path}"),
-            DownloadRouteSource::Mcim,
-        ),
         _ => {}
     }
 
@@ -1032,8 +1026,15 @@ pub fn resolve_download_routes_for_with_sources(
     let mut routes =
         explicit_mirror_routes_with_custom(&url, resource, custom_sources);
     routes.push(official);
-    // Modrinth API calls are authenticated and remain official-only.
-    let mode = if is_modrinth_api_url(&url) {
+    // Provider APIs carry credentials and must not be sent to mirrors.
+    let official_only_api = is_modrinth_api_url(&url)
+        || Url::parse(&url).ok().is_some_and(|parsed| {
+            parsed.host_str() == Some(CURSEFORGE_API_HOST)
+        });
+    if official_only_api {
+        routes.retain(|route| !route.is_mirror);
+    }
+    let mode = if official_only_api {
         crate::state::DownloadSourceMode::OfficialOnly
     } else {
         mode
@@ -1383,16 +1384,25 @@ impl DownloadClients {
         system: &reqwest::Client,
         direct: &reqwest::Client,
     ) -> Self {
-        if let Some(mut clients) = super::download::proxy_context::clients() {
-            if std::ptr::eq(
-                system,
-                &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
-            ) {
-                clients.system = clients.http1_system.clone();
-                clients.direct = clients.http1_direct.clone();
-                clients.force_http1 = true;
+        let uses_shared_clients =
+            std::ptr::eq(system, &raw const *NO_REDIRECT_REQWEST_CLIENT)
+                || std::ptr::eq(
+                    system,
+                    &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
+                );
+        if uses_shared_clients {
+            if let Some(mut clients) = super::download::proxy_context::clients()
+            {
+                if std::ptr::eq(
+                    system,
+                    &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
+                ) {
+                    clients.system = clients.http1_system.clone();
+                    clients.direct = clients.http1_direct.clone();
+                    clients.force_http1 = true;
+                }
+                return clients;
             }
-            return clients;
         }
         Self {
             system_proxy_fingerprint:
@@ -1400,8 +1410,16 @@ impl DownloadClients {
             metadata: system.clone(),
             system: system.clone(),
             direct: direct.clone(),
-            http1_system: HTTP1_NO_REDIRECT_REQWEST_CLIENT.clone(),
-            http1_direct: HTTP1_DIRECT_REQWEST_CLIENT.clone(),
+            http1_system: if uses_shared_clients {
+                HTTP1_NO_REDIRECT_REQWEST_CLIENT.clone()
+            } else {
+                system.clone()
+            },
+            http1_direct: if uses_shared_clients {
+                HTTP1_DIRECT_REQWEST_CLIENT.clone()
+            } else {
+                direct.clone()
+            },
             proxy: crate::util::proxy::ProxyConfig::default(),
             ignore_ssl_errors: false,
             scope: FETCH_UNCONFIGURED.into(),
