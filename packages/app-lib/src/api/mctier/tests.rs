@@ -790,11 +790,13 @@ async fn a_dropped_signaling_connection_ends_the_room_and_releases_the_kernel()
         .unwrap()
         .parse()
         .unwrap();
-    let error = tokio::time::timeout(Duration::from_secs(15), actor)
+    // The runtime retries the link before giving up, so allow the full
+    // reconnect budget to elapse here.
+    let error = tokio::time::timeout(Duration::from_secs(20), actor)
         .await
         .unwrap()
         .unwrap()
-        .expect_err("a lost signaling link must end the room");
+        .expect_err("a link that cannot be re-established must end the room");
     // The disconnect message names the cause and how to rejoin; an abruptly
     // reset socket also surfaces it through the underlying IO error.
     let message = format!("{error:#}").to_lowercase();
@@ -878,6 +880,104 @@ async fn only_room_members_voice_signals_reach_the_renderer() {
     );
     cancellation.cancel();
     tokio::time::timeout(Duration::from_secs(5), actor)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let _ = directory;
+}
+
+/// Accepts the first session, drops it, then serves one more session on the
+/// same address so a reconnect can be observed.
+async fn signaling_reconnecting_once() -> String {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        // First session: established, then dropped mid-flight.
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        let _ = establish_session(&mut socket).await;
+        while let Some(Ok(message)) = socket.next().await {
+            let Ok(text) = message.into_text() else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+                break;
+            };
+            if value["type"] == "set-lobby-options" {
+                socket
+                    .send(Message::Text(
+                        json!({
+                            "type": "lobby-options-changed",
+                            "isPublic": value["isPublic"],
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+        let _ = socket.close(None).await;
+
+        // Second session: the reconnect must be able to register again.
+        let Ok((stream, _)) = listener.accept().await else {
+            return;
+        };
+        let mut socket = accept_async(stream).await.unwrap();
+        let _ = establish_session(&mut socket).await;
+        while let Some(Ok(message)) = socket.next().await {
+            let Ok(text) = message.into_text() else {
+                break;
+            };
+            let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
+                break;
+            };
+            if value["type"] == "leave" {
+                return;
+            }
+        }
+    });
+    url
+}
+
+#[tokio::test]
+async fn a_dropped_signaling_link_reconnects_instead_of_ending_the_room() {
+    let _serial = multiplayer::SESSION_TEST.lock().await;
+    let (directory, executable) = fixture();
+    let url = signaling_reconnecting_once().await;
+    let mut input = request();
+    input.signaling_server = url;
+    input.game_port = minecraft().await;
+    let cancellation = CancellationToken::new();
+    let token = cancellation.clone();
+    let (ready, established) = oneshot::channel();
+    let actor = tokio::spawn(async move {
+        runtime::run(
+            0,
+            input,
+            &executable,
+            &token,
+            tokio::sync::mpsc::channel(1).1,
+            std::sync::Arc::new(|_| {}),
+            &mut Some(ready),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(15), established)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    // The link drops here; the runtime should re-register rather than fail.
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    assert!(
+        !actor.is_finished(),
+        "the room must survive a signaling drop it can recover from"
+    );
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(10), actor)
         .await
         .unwrap()
         .unwrap()

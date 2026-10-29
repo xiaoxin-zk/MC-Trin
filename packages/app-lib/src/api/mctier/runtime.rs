@@ -18,6 +18,17 @@ use super::{
     VoiceSignalEmitter, binary, protocol, update,
 };
 
+/// How many times a dropped signaling link is retried before the room ends.
+const RECONNECT_ATTEMPTS: u32 = 5;
+/// Delay between reconnect attempts; it grows linearly per attempt. Tests use a
+/// much shorter budget so the reconnect path stays cheap to exercise.
+#[cfg(not(test))]
+const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
+#[cfg(test)]
+const RECONNECT_BACKOFF: Duration = Duration::from_millis(50);
+/// Final, user-facing explanation once reconnecting has failed.
+const SIGNALING_LOST: &str = "Lost the connection to the MCTier signaling server and could not reconnect. The room has ended - check your connection, then start or join the room again.";
+
 fn stun_binding_response(
     request: &[u8],
     source: std::net::SocketAddr,
@@ -511,8 +522,58 @@ pub async fn run(
                     let _ = response.send(result);
                 }
                 Event::Control(None) => controls_open = false,
-                Event::Message(message) => {
-                    let message = message?;
+                Event::Message(Err(error)) => {
+                    // The signaling link died mid-session. Try to re-register
+                    // with the same identity and address before giving up, so a
+                    // blip does not end the room.
+                    tracing::warn!(%error, "MCTier signaling link failed; reconnecting");
+                    update(generation, |state| {
+                        state.status = Status::Connecting;
+                        state.error_message = Some(
+                            "Reconnecting to the MCTier signaling server..."
+                                .to_string(),
+                        );
+                    })
+                    .await;
+                    let mut reconnected = None;
+                    for attempt in 0..RECONNECT_ATTEMPTS {
+                        if cancellation.is_cancelled() {
+                            return Ok(());
+                        }
+                        tokio::time::sleep(RECONNECT_BACKOFF * (attempt + 1))
+                            .await;
+                        match protocol::register(&request, &identity).await {
+                            Ok(session) => {
+                                reconnected = Some(session);
+                                break;
+                            }
+                            Err(error) => {
+                                tracing::warn!(
+                                    attempt,
+                                    %error,
+                                    "MCTier reconnect attempt failed"
+                                );
+                            }
+                        }
+                    }
+                    let Some(session) = reconnected else {
+                        bail!(SIGNALING_LOST);
+                    };
+                    registration = session;
+                    let players = registration.players.clone();
+                    update(generation, |state| {
+                        state.status = if request.mode == EntryMode::Create {
+                            Status::Hosting
+                        } else {
+                            Status::Joined
+                        };
+                        state.error_message = None;
+                        state.players = players;
+                    })
+                    .await;
+                    continue;
+                }
+                Event::Message(Ok(message)) => {
                     match message["type"].as_str() {
                         Some("players-list") => {
                             let players = protocol::parse_players(&message)?;
