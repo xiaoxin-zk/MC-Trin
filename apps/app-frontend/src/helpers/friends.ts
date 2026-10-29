@@ -35,6 +35,16 @@ export async function remove_friend(userId: string): Promise<void> {
     return await invoke('plugin:friends|remove_friend', { userId })
 }
 
+/** Share a local Minecraft LAN port with friends; resolves to the shared port. */
+export async function share_friend_port(port: number): Promise<number> {
+    return await invoke('plugin:friends|share_friend_port', { port })
+}
+
+/** Stop sharing every port; resolves to how many were withdrawn. */
+export async function stop_sharing_friend_ports(): Promise<number> {
+    return await invoke('plugin:friends|stop_sharing_friend_ports')
+}
+
 export type FriendWithUserData = {
     id: string
     friend_id: string | null

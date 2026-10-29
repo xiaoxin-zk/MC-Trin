@@ -42,6 +42,9 @@ pub struct FriendsSocket {
     write: WriteSocket,
     user_statuses: Arc<DashMap<UserId, UserStatus>>,
     tunnel_sockets: TunnelSockets,
+    /// Shared ports stay open until the owner stops them or the socket drops;
+    /// dropping a handle would silently stop sharing.
+    shared_ports: std::sync::Mutex<Vec<crate::state::TunnelSocket>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -64,6 +67,7 @@ impl FriendsSocket {
             write: Arc::new(RwLock::new(None)),
             user_statuses: Arc::new(DashMap::new()),
             tunnel_sockets: Arc::new(SocketRegistry::default()),
+            shared_ports: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -439,6 +443,35 @@ impl FriendsSocket {
         Ok(tunnel)
     }
 
+    /// Shares a local port with friends until the friend socket disconnects.
+    ///
+    /// The handle is retained here because dropping it would withdraw the
+    /// listener immediately.
+    pub async fn share_port(&self, port: u16) -> crate::Result<u16> {
+        let tunnel = self.open_port(port).await?;
+        self.shared_ports
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .push(tunnel);
+        Ok(port)
+    }
+
+    /// Stops sharing every port and reports how many were withdrawn.
+    pub async fn stop_shared_ports(&self) -> crate::Result<usize> {
+        let tunnels = {
+            let mut shared = self
+                .shared_ports
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            std::mem::take(&mut *shared)
+        };
+        let count = tunnels.len();
+        for tunnel in tunnels {
+            tunnel.shutdown().await?;
+        }
+        Ok(count)
+    }
+
     pub async fn is_connected(&self) -> bool {
         self.write.read().await.is_some()
     }
@@ -498,5 +531,18 @@ impl FriendsSocket {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod shared_port_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stopping_shared_ports_is_safe_when_nothing_is_shared() {
+        let socket = FriendsSocket::new();
+        assert_eq!(socket.stop_shared_ports().await.unwrap(), 0);
+        // A second stop must stay harmless rather than panicking on empty state.
+        assert_eq!(socket.stop_shared_ports().await.unwrap(), 0);
     }
 }

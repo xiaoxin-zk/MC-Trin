@@ -34,3 +34,27 @@ pub async fn remove_friend(user_id: &str) -> crate::Result<()> {
 
     Ok(())
 }
+
+/// Exposes one local Minecraft port to friends over the friend tunnel.
+///
+/// Returns the port now being shared so the caller can show it to the user.
+#[tracing::instrument]
+pub async fn share_port(port: u16) -> crate::Result<u16> {
+    let state = crate::State::get().await?;
+    if !state.friends_socket.is_connected().await {
+        return Err(crate::ErrorKind::InputError(
+            "Sharing a port needs an active friends connection".to_string(),
+        )
+        .as_error());
+    }
+
+    state.friends_socket.share_port(port).await
+}
+
+/// Withdraws every port currently shared with friends and returns how many
+/// were closed.
+#[tracing::instrument]
+pub async fn stop_sharing_ports() -> crate::Result<usize> {
+    let state = crate::State::get().await?;
+    state.friends_socket.stop_shared_ports().await
+}

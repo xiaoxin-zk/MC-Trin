@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { MailIcon, SearchIcon, SendIcon, UserIcon, UserPlusIcon, XIcon } from '@modrinth/assets'
+import {
+    MailIcon,
+    SearchIcon,
+    SendIcon,
+    ShareIcon,
+    UserIcon,
+    UserPlusIcon,
+    XIcon,
+} from '@modrinth/assets'
 import {
     Avatar,
     Button,
@@ -20,6 +28,8 @@ import {
     friends,
     type FriendWithUserData,
     remove_friend,
+    share_friend_port,
+    stop_sharing_friend_ports,
     transformFriends,
 } from '@/helpers/friends.ts'
 import type { ModrinthCredentials } from '@/helpers/mr_auth'
@@ -42,6 +52,56 @@ const friendInvitesModal = ref()
 
 const username = ref('')
 const addFriendModal = ref()
+
+const sharePortModal = ref()
+const sharePort = ref('')
+const sharing = ref(false)
+const sharedPort = ref<number | null>(null)
+
+function openSharePort() {
+    sharePort.value = '25565'
+    sharePortModal.value?.show()
+}
+
+async function submitSharePort() {
+    const port = Number.parseInt(sharePort.value, 10)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        notificationManager.addNotification({
+            title: formatMessage(messages.sharePortInvalidTitle),
+            text: formatMessage(messages.sharePortInvalid),
+            type: 'error',
+        })
+        return
+    }
+    sharing.value = true
+    try {
+        sharedPort.value = await share_friend_port(port)
+        sharePortModal.value?.hide()
+        notificationManager.addNotification({
+            title: formatMessage(messages.sharePortActiveTitle),
+            text: formatMessage(messages.sharePortActive, { port }),
+            type: 'success',
+        })
+    } catch (failure) {
+        handleError(failure)
+    } finally {
+        sharing.value = false
+    }
+}
+
+async function stopSharing() {
+    try {
+        const stopped = await stop_sharing_friend_ports()
+        sharedPort.value = null
+        notificationManager.addNotification({
+            title: formatMessage(messages.sharePortStoppedTitle),
+            text: formatMessage(messages.sharePortStopped, { count: stopped }),
+            type: 'info',
+        })
+    } catch (failure) {
+        handleError(failure)
+    }
+}
 async function addFriendFromModal() {
     addFriendModal.value.hide()
     await add_friend(username.value).catch(handleError)
@@ -190,6 +250,56 @@ const messages = defineMessages({
     addFriend: {
         id: 'friends.action.add-friend',
         defaultMessage: 'Add a friend',
+    },
+    sharePort: {
+        id: 'friends.action.share-port',
+        defaultMessage: 'Share a LAN port',
+    },
+    sharePortTitle: {
+        id: 'friends.share-port.title',
+        defaultMessage: 'Share a LAN port',
+    },
+    sharePortDescription: {
+        id: 'friends.share-port.description',
+        defaultMessage:
+            'Let your friends join a world you opened to LAN. Enter the port Minecraft is listening on.',
+    },
+    sharePortLabel: {
+        id: 'friends.share-port.label',
+        defaultMessage: 'Local port',
+    },
+    sharePortSubmit: {
+        id: 'friends.share-port.submit',
+        defaultMessage: 'Start sharing',
+    },
+    sharePortInvalidTitle: {
+        id: 'friends.share-port.invalid.title',
+        defaultMessage: 'That port is not usable',
+    },
+    sharePortInvalid: {
+        id: 'friends.share-port.invalid',
+        defaultMessage: 'Enter a port between 1 and 65535.',
+    },
+    sharePortActiveTitle: {
+        id: 'friends.share-port.active.title',
+        defaultMessage: 'Port shared',
+    },
+    sharePortActive: {
+        id: 'friends.share-port.active',
+        defaultMessage: 'Your friends can now join through port {port}.',
+    },
+    sharePortStoppedTitle: {
+        id: 'friends.share-port.stopped.title',
+        defaultMessage: 'Sharing stopped',
+    },
+    sharePortStopped: {
+        id: 'friends.share-port.stopped',
+        defaultMessage:
+            '{count, plural, =0 {No ports were being shared.} one {One shared port was closed.} other {# shared ports were closed.}}',
+    },
+    stopSharingPort: {
+        id: 'friends.share-port.stop',
+        defaultMessage: 'Stop sharing',
     },
     addingAFriend: {
         id: 'friends.add-friend.title',
@@ -349,6 +459,43 @@ const messages = defineMessages({
             </div>
         </div>
     </NewModal>
+    <NewModal ref="sharePortModal" :header="formatMessage(messages.sharePortTitle)">
+        <div class="flex flex-col gap-4">
+            <p class="m-0">
+                {{ formatMessage(messages.sharePortDescription) }}
+            </p>
+            <StyledInput
+                v-model="sharePort"
+                :label="formatMessage(messages.sharePortLabel)"
+                type="text"
+                inputmode="numeric"
+                @keyup.enter="submitSharePort"
+            />
+            <div class="flex justify-end gap-2">
+                <Button :disabled="sharing" @click="sharePortModal.hide">
+                    {{ formatMessage(messages.cancel) }}
+                </Button>
+                <Button type="colored" color="brand" :disabled="sharing" @click="submitSharePort"
+                    >{{ formatMessage(messages.sharePortSubmit) }}
+                </Button>
+            </div>
+        </div>
+    </NewModal>
+    <div
+        v-if="sharedPort !== null"
+        class="flex items-center justify-between gap-2 mb-3 rounded-lg border border-solid border-surface-5 px-3 py-2"
+    >
+        <span class="text-sm">
+            {{
+                formatMessage(messages.sharePortActive, {
+                    port: sharedPort,
+                })
+            }}
+        </span>
+        <Button size="small" @click="stopSharing">
+            {{ formatMessage(messages.stopSharingPort) }}
+        </Button>
+    </div>
     <div v-if="userCredentials && !loading" class="flex gap-1 items-center mb-3 -ml-1">
         <template v-if="sortedFriends.length > 0">
             <Button
@@ -359,6 +506,15 @@ const messages = defineMessages({
                 :aria-label="formatMessage(messages.addFriend)"
                 @click="addFriendModal.show"
                 ><UserPlusIcon />
+            </Button>
+            <Button
+                v-tooltip="formatMessage(messages.sharePort)"
+                type="quiet"
+                circular
+                icon-only
+                :aria-label="formatMessage(messages.sharePort)"
+                @click="openSharePort"
+                ><ShareIcon />
             </Button>
             <StyledInput
                 v-model="search"

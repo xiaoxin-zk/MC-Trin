@@ -14213,6 +14213,9 @@
   "friends.action.add-friend": {
     "message": "Add a friend"
   },
+  "friends.action.share-port": {
+    "message": "Share a LAN port"
+  },
   "friends.action.view-friend-requests": {
     "message": "{count} friend {count, plural, one {request} other {requests}}"
   },
@@ -14272,6 +14275,39 @@
   },
   "friends.requests.accept": {
     "message": "Accept"
+  },
+  "friends.share-port.active": {
+    "message": "Your friends can now join through port {port}."
+  },
+  "friends.share-port.active.title": {
+    "message": "Port shared"
+  },
+  "friends.share-port.description": {
+    "message": "Let your friends join a world you opened to LAN. Enter the port Minecraft is listening on."
+  },
+  "friends.share-port.invalid": {
+    "message": "Enter a port between 1 and 65535."
+  },
+  "friends.share-port.invalid.title": {
+    "message": "That port is not usable"
+  },
+  "friends.share-port.label": {
+    "message": "Local port"
+  },
+  "friends.share-port.stop": {
+    "message": "Stop sharing"
+  },
+  "friends.share-port.stopped": {
+    "message": "{count, plural, =0 {No ports were being shared.} one {One shared port was closed.} other {# shared ports were closed.}}"
+  },
+  "friends.share-port.stopped.title": {
+    "message": "Sharing stopped"
+  },
+  "friends.share-port.submit": {
+    "message": "Start sharing"
+  },
+  "friends.share-port.title": {
+    "message": "Share a LAN port"
   },
   "friends.requests.cancel": {
     "message": "Cancel"

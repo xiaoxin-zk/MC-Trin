@@ -7,7 +7,9 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
             friends,
             friend_statuses,
             add_friend,
-            remove_friend
+            remove_friend,
+            share_friend_port,
+            stop_sharing_friend_ports
         ])
         .build()
 }
@@ -30,4 +32,14 @@ pub async fn add_friend(user_id: &str) -> crate::api::Result<()> {
 #[tauri::command]
 pub async fn remove_friend(user_id: &str) -> crate::api::Result<()> {
     Ok(theseus::friends::remove_friend(user_id).await?)
+}
+
+#[tauri::command]
+pub async fn share_friend_port(port: u16) -> crate::api::Result<u16> {
+    Ok(theseus::friends::share_port(port).await?)
+}
+
+#[tauri::command]
+pub async fn stop_sharing_friend_ports() -> crate::api::Result<usize> {
+    Ok(theseus::friends::stop_sharing_ports().await?)
 }

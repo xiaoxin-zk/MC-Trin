@@ -15185,6 +15185,9 @@
   "friends.action.add-friend": {
     "message": "添加好友"
   },
+  "friends.action.share-port": {
+    "message": "共享局域网端口"
+  },
   "friends.action.view-friend-requests": {
     "message": "{count} 个好友请求"
   },
@@ -15244,6 +15247,39 @@
   },
   "friends.requests.accept": {
     "message": "接受"
+  },
+  "friends.share-port.active": {
+    "message": "好友现在可以通过端口 {port} 加入。"
+  },
+  "friends.share-port.active.title": {
+    "message": "端口已共享"
+  },
+  "friends.share-port.description": {
+    "message": "让你在游戏里对局域网开放的世界可被好友加入。请输入 Minecraft 正在监听的端口。"
+  },
+  "friends.share-port.invalid": {
+    "message": "请输入 1 到 65535 之间的端口。"
+  },
+  "friends.share-port.invalid.title": {
+    "message": "该端口不可用"
+  },
+  "friends.share-port.label": {
+    "message": "本地端口"
+  },
+  "friends.share-port.stop": {
+    "message": "停止共享"
+  },
+  "friends.share-port.stopped": {
+    "message": "{count, plural, =0 {当前没有共享中的端口。} other {已关闭 # 个共享端口。}}"
+  },
+  "friends.share-port.stopped.title": {
+    "message": "已停止共享"
+  },
+  "friends.share-port.submit": {
+    "message": "开始共享"
+  },
+  "friends.share-port.title": {
+    "message": "共享局域网端口"
   },
   "friends.requests.cancel": {
     "message": "取消"
