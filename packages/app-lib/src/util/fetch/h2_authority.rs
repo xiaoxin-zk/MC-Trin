@@ -2,10 +2,12 @@
 
 use super::*;
 
-pub(crate) static H2_FALLBACK_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-pub(crate) static HTTP1_PREFERENCE_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+pub(crate) static H2_FALLBACK_AUTHORITIES: LazyLock<
+    Mutex<HashMap<String, Instant>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
+pub(crate) static HTTP1_PREFERENCE_AUTHORITIES: LazyLock<
+    Mutex<HashMap<String, Instant>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(test)]
 pub(crate) fn authority_uses_http1_fallback(authority: &str) -> bool {
