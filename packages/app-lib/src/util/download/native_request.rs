@@ -488,6 +488,14 @@ mod tests {
         (client, task)
     }
 
+    fn clients_with_proxy(client: &reqwest::Client) -> DownloadClients {
+        let mut clients =
+            DownloadClients::build(&Default::default(), false, false).unwrap();
+        clients.system = client.clone();
+        clients.http1_system = client.clone();
+        clients
+    }
+
     #[tokio::test]
     async fn forgecdn_range_404_recovers_redirect_and_caches_target() {
         let listener =
@@ -655,7 +663,7 @@ mod tests {
             supports_range: true,
             proxy: ProxyPolicy::System,
         };
-        let clients = DownloadClients::for_request(&client, &client);
+        let clients = clients_with_proxy(&client);
         assert!(
             send_path_request_with_clients(
                 &route, None, None, None, None, None, &clients, None
@@ -687,7 +695,7 @@ mod tests {
                     supports_range: true,
                     proxy: ProxyPolicy::System,
                 };
-                let clients = DownloadClients::for_request(&client, &client);
+                let clients = clients_with_proxy(&client);
                 assert!(
                     send_path_request_with_clients(
                         &route, None, None, None, None, None, &clients, None
@@ -838,8 +846,7 @@ mod tests {
                             supports_range: true,
                             proxy: ProxyPolicy::System,
                         };
-                        let clients =
-                            DownloadClients::for_request(&client, &client);
+                        let clients = clients_with_proxy(&client);
                         assert!(
                             send_path_request_with_clients(
                                 &route, None, None, None, None, None, &clients,
@@ -896,7 +903,7 @@ mod tests {
                 supports_range: true,
                 proxy: ProxyPolicy::System,
             };
-            let clients = DownloadClients::for_request(&client, &client);
+            let clients = clients_with_proxy(&client);
             assert!(
                 send_path_request_with_clients(
                     &route, None, None, None, None, None, &clients, None

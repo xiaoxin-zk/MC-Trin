@@ -82,9 +82,9 @@ use crate::util::download::constants::{
     H2_FALLBACK_TTL, H2_SLOW_FALLBACK_TTL, HTTPS_SCHEME,
     INITIAL_SEGMENT_CONCURRENCY, JOB_PROBE_WINDOW, MAX_FAILURE_COOLDOWN,
     MAX_GLOBAL_TAIL_HEDGES, MAX_SEGMENT_CONCURRENCY, MAX_TAIL_HEDGES_PER_FILE,
-    MAX_TASK_PROBE_STATES, MCIM_BASE_URL, METADATA_ATTEMPT_BUDGET,
-    METADATA_HEDGE_DELAY, METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE,
-    MODRINTH_API_HOST, MODRINTH_CDN_HOST, MODRINTH_DATA_PREFIX,
+    MAX_TASK_PROBE_STATES, METADATA_ATTEMPT_BUDGET, METADATA_HEDGE_DELAY,
+    METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MODRINTH_API_HOST,
+    MODRINTH_CDN_HOST, MODRINTH_DATA_PREFIX,
     NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED, PARTIAL_FILE_SUFFIX,
     RANGE_IDLE_RECONNECT_TIMEOUT, REASSIGNABLE_FIRST_BYTE_TIMEOUT,
     RESOURCE_WAIT_TIMEOUT, RETIRED_SOURCES_MEDIA_FORGECDN_NET, RETRY_AFTER_CAP,
@@ -1384,25 +1384,16 @@ impl DownloadClients {
         system: &reqwest::Client,
         direct: &reqwest::Client,
     ) -> Self {
-        let uses_shared_clients =
-            std::ptr::eq(system, &raw const *NO_REDIRECT_REQWEST_CLIENT)
-                || std::ptr::eq(
-                    system,
-                    &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
-                );
-        if uses_shared_clients {
-            if let Some(mut clients) = super::download::proxy_context::clients()
-            {
-                if std::ptr::eq(
-                    system,
-                    &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
-                ) {
-                    clients.system = clients.http1_system.clone();
-                    clients.direct = clients.http1_direct.clone();
-                    clients.force_http1 = true;
-                }
-                return clients;
+        if let Some(mut clients) = super::download::proxy_context::clients() {
+            if std::ptr::eq(
+                system,
+                &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
+            ) {
+                clients.system = clients.http1_system.clone();
+                clients.direct = clients.http1_direct.clone();
+                clients.force_http1 = true;
             }
+            return clients;
         }
         Self {
             system_proxy_fingerprint:
@@ -1410,16 +1401,8 @@ impl DownloadClients {
             metadata: system.clone(),
             system: system.clone(),
             direct: direct.clone(),
-            http1_system: if uses_shared_clients {
-                HTTP1_NO_REDIRECT_REQWEST_CLIENT.clone()
-            } else {
-                system.clone()
-            },
-            http1_direct: if uses_shared_clients {
-                HTTP1_DIRECT_REQWEST_CLIENT.clone()
-            } else {
-                direct.clone()
-            },
+            http1_system: HTTP1_NO_REDIRECT_REQWEST_CLIENT.clone(),
+            http1_direct: HTTP1_DIRECT_REQWEST_CLIENT.clone(),
             proxy: crate::util::proxy::ProxyConfig::default(),
             ignore_ssl_errors: false,
             scope: FETCH_UNCONFIGURED.into(),

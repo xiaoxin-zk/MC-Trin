@@ -3289,14 +3289,21 @@ async fn hashed_pack_keeps_32_ranges_when_validators_differ() {
                 .with_size(size as u64),
             );
         let before = requests.load(Ordering::Relaxed);
+        let normal_before = normal_requests.load(Ordering::Relaxed);
         let result =
             download_benchmark_fixture(request, &destination, &semaphore).await;
         assert!(requests.load(Ordering::Relaxed) - before >= 32);
-        assert_eq!(normal_requests.load(Ordering::Relaxed), 0);
+        let normal_requests =
+            normal_requests.load(Ordering::Relaxed) - normal_before;
         if valid_hash {
+            assert_eq!(normal_requests, 0);
             assert_eq!(result.unwrap().size, size as u64);
             assert_eq!(tokio::fs::read(&destination).await.unwrap(), *data);
         } else {
+            assert_eq!(
+                normal_requests,
+                super::super::download::constants::DOWNLOAD_FAILURE_DIAGNOSTIC_ATTEMPTS,
+            );
             assert!(
                 result.is_err(),
                 "metadata tolerance must never publish content with the wrong hash"

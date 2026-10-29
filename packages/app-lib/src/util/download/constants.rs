@@ -397,7 +397,6 @@ pub(crate) const LAUNCHER_META_MAVEN: &str =
 pub(crate) const LIBRARIES_MAVEN: &str = "https://libraries.minecraft.net";
 pub(crate) const MACHINA_LWJGL_RELEASE: &str = "https://github.com/MinecraftMachina/lwjgl/releases/download/2.9.4-20150209-mmachina.2/";
 pub(crate) const MAVEN_CENTRAL: &str = "https://repo.maven.apache.org/maven2";
-pub(crate) const MCIM_BASE_URL: &str = "https://mod.mcimirror.top";
 pub(crate) const MODRINTH_API_HOST: &str = "api.modrinth.com";
 pub(crate) const MODRINTH_CDN_AUTHORITY: &str = "cdn.modrinth.com:443";
 pub(crate) const MODRINTH_CDN_HOST: &str = "cdn.modrinth.com";
