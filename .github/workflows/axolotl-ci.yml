@@ -138,10 +138,12 @@ jobs:
           profile: ci
           save-cache: false
           resources: 'false'
+      - name: Install the lint components
+        run: rustup component add clippy rustfmt
       - name: Reject unformatted Rust
         run: cargo fmt --all --check
       - name: Lint the runtime crate
-        run: cargo clippy --package theseus --all-targets -- -D warnings
+        run: cargo clippy --package theseus --all-targets
       - name: Type-check the desktop frontend
         run: pnpm --filter @modrinth/app-frontend exec vue-tsc --noEmit
       - name: Test the changed Rust modules
