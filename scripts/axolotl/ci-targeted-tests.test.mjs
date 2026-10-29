@@ -25,7 +25,7 @@ test('maps a source file to its module path', () => {
 
 test('ignores files that are not crate sources', () => {
     assert.equal(moduleFilter('apps/app-frontend/src/App.vue'), null)
-    assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), 'lib')
+    assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
     assert.equal(moduleFilter('README.md'), null)
 })
 
@@ -66,6 +66,25 @@ test('falls back to the whole suite for crate-wide changes', () => {
         '--',
         '--test-threads=1',
     ])
+})
+
+test('falls back when a Rust file cannot map to a Theseus test module', () => {
+    const result = selectFilters([
+        'packages/app-lib/src/lib.rs',
+        'apps/app/src/main.rs',
+    ])
+    assert.equal(result.reason, 'unmapped Rust change')
+    assert.equal(result.filters, null)
+})
+
+test('removes child filters when the parent module is already selected', () => {
+    assert.deepEqual(
+        selectFilters([
+            'packages/app-lib/src/api/mod.rs',
+            'packages/app-lib/src/api/mctier.rs',
+        ]).filters,
+        ['api'],
+    )
 })
 
 test('emits one cargo command per module filter', () => {

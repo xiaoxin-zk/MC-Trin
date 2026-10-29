@@ -44,7 +44,7 @@ pub struct FriendsSocket {
     tunnel_sockets: TunnelSockets,
     /// Shared ports stay open until the owner stops them or the socket drops;
     /// dropping a handle would silently stop sharing.
-    shared_ports: std::sync::Mutex<Vec<crate::state::TunnelSocket>>,
+    shared_ports: Arc<std::sync::Mutex<Vec<crate::state::TunnelSocket>>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -67,7 +67,7 @@ impl FriendsSocket {
             write: Arc::new(RwLock::new(None)),
             user_statuses: Arc::new(DashMap::new()),
             tunnel_sockets: Arc::new(SocketRegistry::default()),
-            shared_ports: std::sync::Mutex::new(Vec::new()),
+            shared_ports: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -115,6 +115,7 @@ impl FriendsSocket {
                     let write_handle = self.write.clone();
                     let statuses = self.user_statuses.clone();
                     let sockets = self.tunnel_sockets.clone();
+                    let shared_ports = self.shared_ports.clone();
 
                     tokio::spawn(async move {
                         let mut read_stream = read;
@@ -246,6 +247,10 @@ impl FriendsSocket {
 
                         let mut w = write_handle.write().await;
                         *w = None;
+                        shared_ports
+                            .lock()
+                            .unwrap_or_else(|poison| poison.into_inner())
+                            .clear();
                     });
                 }
                 Err(e) => {
@@ -319,6 +324,7 @@ impl FriendsSocket {
 
     #[tracing::instrument(skip(self))]
     pub async fn disconnect(&self) -> crate::Result<()> {
+        self.stop_shared_ports().await?;
         let mut write_lock = self.write.write().await;
         if let Some(ref mut write_half) = *write_lock {
             SinkExt::close(write_half).await?;
@@ -435,11 +441,15 @@ impl FriendsSocket {
             write: self.write.clone(),
             sockets: self.tunnel_sockets.clone(),
         };
-        Self::send_message(
+        if let Err(error) = Self::send_message(
             &self.write,
             ClientToServerMessage::SocketListen { socket: socket_id },
         )
-        .await?;
+        .await
+        {
+            let _ = take_sockets(&self.tunnel_sockets, socket_id);
+            return Err(error);
+        }
         Ok(tunnel)
     }
 
@@ -467,7 +477,11 @@ impl FriendsSocket {
         };
         let count = tunnels.len();
         for tunnel in tunnels {
-            tunnel.shutdown().await?;
+            // The control socket may already be gone. TunnelSocket performs
+            // local registry cleanup before attempting the remote close, so a
+            // failed remote notification must not leave the UI in a failed
+            // cleanup state.
+            let _ = tunnel.shutdown().await;
         }
         Ok(count)
     }
@@ -526,9 +540,13 @@ impl FriendsSocket {
         };
 
         let mut write_lock = write.write().await;
-        if let Some(ref mut write_half) = *write_lock {
-            write_half.send(serialized).await?;
-        }
+        let Some(write_half) = write_lock.as_mut() else {
+            return Err(crate::ErrorKind::OtherError(
+                "Friends service is not connected".to_string(),
+            )
+            .into());
+        };
+        write_half.send(serialized).await?;
 
         Ok(())
     }
@@ -544,5 +562,19 @@ mod shared_port_tests {
         assert_eq!(socket.stop_shared_ports().await.unwrap(), 0);
         // A second stop must stay harmless rather than panicking on empty state.
         assert_eq!(socket.stop_shared_ports().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn sharing_without_a_control_socket_fails_and_leaves_no_listener() {
+        let socket = FriendsSocket::new();
+        assert!(socket.share_port(25565).await.is_err());
+        assert!(socket.tunnel_sockets.lock().is_empty());
+        assert!(
+            socket
+                .shared_ports
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .is_empty()
+        );
     }
 }

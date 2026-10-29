@@ -540,9 +540,18 @@ pub async fn run(
                         if cancellation.is_cancelled() {
                             return Ok(());
                         }
-                        tokio::time::sleep(RECONNECT_BACKOFF * (attempt + 1))
-                            .await;
-                        match protocol::register(&request, &identity).await {
+                        tokio::select! {
+                            _ = cancellation.cancelled() => return Ok(()),
+                            _ = tokio::time::sleep(RECONNECT_BACKOFF * (attempt + 1)) => {}
+                        }
+                        let result = tokio::time::timeout(
+                            Duration::from_secs(10),
+                            protocol::register(&request, &identity),
+                        )
+                        .await
+                        .map_err(|_| eyre::eyre!("MCTier reconnect timed out"))
+                        .and_then(|result| result);
+                        match result {
                             Ok(session) => {
                                 reconnected = Some(session);
                                 break;

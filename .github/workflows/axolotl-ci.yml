@@ -296,8 +296,7 @@ jobs:
             --skip util::download::endpoint_selection::benchmark::range_recovery \
             --skip util::fetch::tests::custom_content_mirrors \
             --skip util::fetch::tests::hashed_pack_keeps_32_ranges \
-            --skip util::fetch::tests::warm_h2_archive_hint \
-
+            --skip util::fetch::tests::warm_h2_archive_hint
       - run: cargo check --package theseus_gui --features updater
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
