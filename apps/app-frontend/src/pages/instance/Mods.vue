@@ -371,6 +371,7 @@ import {
 } from '@/helpers/content-change-jobs'
 import { mergeContentItemMetadata } from '@/helpers/content-item-metadata'
 import { applyContentItemUpdates, matchesContentItem } from '@/helpers/content-item-state'
+import { withContentOperationTimeout as withTimeout } from '@/helpers/content-operation-timeout'
 import { contentProjectUrl } from '@/helpers/content-project-links'
 import { lookupContentWikiIds, translateContentItemTitles } from '@/helpers/content-search'
 import { type CurseForgeFile, getCurseForgeImageUrl } from '@/helpers/curseforge'
@@ -1061,30 +1062,14 @@ function handleViewDependencies() {
     dependencyGraphModal.value?.show(allDependencyGraphItems())
 }
 
-// TODO: Extract content operation and updater modal state into composables; this page currently owns file mutations, dependency installs, busy flags, and version selection flow.
 const updatingProject = ref<ContentItem | null>(null)
 const updatingProjectVersions = ref<Labrinth.Versions.v2.Version[]>([])
 const updaterReleaseRefs = new Map<string, SourceReleaseRef>()
 const loadingVersions = ref(false)
 const contentUpdateSubmitting = ref(false)
-const CONTENT_OPERATION_TIMEOUT_MS = 30_000
 
-async function withContentOperationTimeout<T>(operation: Promise<T>): Promise<T> {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    try {
-        return await Promise.race([
-            operation,
-            new Promise<T>((_, reject) => {
-                timeoutId = setTimeout(
-                    () => reject(new Error(formatMessage(messages.contentOperationTimedOut))),
-                    CONTENT_OPERATION_TIMEOUT_MS,
-                )
-            }),
-        ])
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId)
-    }
-}
+const withContentOperationTimeout = <T,>(operation: Promise<T>) =>
+    withTimeout(operation, formatMessage(messages.contentOperationTimedOut))
 const updatingModpack = ref(false)
 const pendingModpackUpdateVersion = ref<Labrinth.Versions.v2.Version | null>(null)
 const isModpackUpdateDowngrade = ref(false)
