@@ -26,6 +26,12 @@ export function moduleFilter(relativePath) {
     if (!module || module === 'lib') return null
     if (module === 'api/ai/catalog') return 'api::ai'
     if (module === 'util/fetch/connection_budget') return 'util::fetch'
+    if (module === 'state/instances/commands/instance_upgrade/solver') {
+        return 'state::instances::commands::instance_upgrade'
+    }
+    if (module === 'state/instances/commands/apply_content_install/resolve') {
+        return 'state::instances::commands::apply_content_install'
+    }
     return module.replace(/\//gu, '::')
 }
 

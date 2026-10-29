@@ -10,6 +10,18 @@ test('maps Theseus source files to their module paths', () => {
     assert.equal(moduleFilter('packages/app-lib/src/api/mctier/tests.rs'), 'api::mctier')
     assert.equal(moduleFilter('packages/app-lib/src/api/ai/catalog.rs'), 'api::ai')
     assert.equal(moduleFilter('packages/app-lib/src/util/fetch/connection_budget.rs'), 'util::fetch')
+    assert.equal(
+        moduleFilter(
+            'packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs',
+        ),
+        'state::instances::commands::instance_upgrade',
+    )
+    assert.equal(
+        moduleFilter(
+            'packages/app-lib/src/state/instances/commands/apply_content_install/resolve.rs',
+        ),
+        'state::instances::commands::apply_content_install',
+    )
     assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
 })
 
