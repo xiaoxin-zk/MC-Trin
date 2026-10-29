@@ -5,7 +5,6 @@ const CRATES = [
     { root: 'apps/app', package: 'theseus_gui', features: ['updater'] },
     { root: 'apps/installer-ui', package: 'axolotl-installer-ui' },
     { root: 'packages/app-lib', package: 'theseus', moduleTests: true },
-    { root: 'packages/ariadne', package: 'ariadne' },
     { root: 'packages/content-management', package: 'content-management' },
     { root: 'packages/daedalus', package: 'daedalus' },
     { root: 'packages/path-util', package: 'path-util' },

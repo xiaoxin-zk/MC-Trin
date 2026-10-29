@@ -287,7 +287,6 @@ jobs:
             --package theseus \
             --package content-management \
             --package daedalus \
-            --package ariadne \
             --package path-util \
             --package async-minecraft-ping \
             --no-fail-fast \

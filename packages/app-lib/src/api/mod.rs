@@ -72,7 +72,6 @@ pub mod data {
         Settings, ShaderRuntime, TeamMember, Theme, User, UserFriend, Version,
         WindowSize,
     };
-    pub use ariadne::users::UserStatus;
     pub use content_management::{
         ContentType, ResolutionPreferences, ResolveContentPlan,
         ResolveContentRequest,

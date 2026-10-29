@@ -126,34 +126,18 @@ const messages = defineMessages({
                     <div class="relative">
                         <Avatar
                             :src="friend.avatar"
-                            :class="{ grayscale: !friend.online && friend.accepted }"
                             class="w-12 h-12 rounded-full"
                             size="32px"
                             circle
                         />
-                        <span
-                            v-if="friend.online"
-                            aria-hidden="true"
-                            class="bottom-[2px] right-[-2px] absolute w-3 h-3 bg-brand border-2 border-black border-solid rounded-full"
-                        />
                     </div>
                     <div class="flex flex-col">
-                        <span
-                            class="text-sm m-0"
-                            :class="
-                                friend.online || !friend.accepted
-                                    ? 'text-[var(--color-text-primary)]'
-                                    : 'text-[var(--color-text-default)]'
-                            "
-                        >
+                        <span class="text-sm m-0 text-[var(--color-text-primary)]">
                             {{ friend.username }}
                         </span>
                         <span v-if="!friend.accepted" class="m-0 text-xs">
                             {{ formatMessage(messages.friendRequestSent) }}
                         </span>
-                        <span v-else-if="friend.status" class="m-0 text-xs">{{
-                            friend.status
-                        }}</span>
                     </div>
                     <OverflowMenu
                         v-if="friend.accepted"

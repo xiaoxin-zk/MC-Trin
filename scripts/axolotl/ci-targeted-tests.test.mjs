@@ -16,7 +16,6 @@ test('targets the changed workspace crate and its tests', () => {
         'packages/app-lib/src/state/friends.rs',
         'packages/app-lib/src/api/mctier/protocol.rs',
         'apps/app/src/main.rs',
-        'packages/ariadne/src/networking/message.rs',
     ])
     assert.equal(plan.reason, 'changed Rust crates')
     assert.deepEqual(
@@ -24,7 +23,6 @@ test('targets the changed workspace crate and its tests', () => {
         [
             ['theseus', ['api::mctier::protocol', 'state::friends']],
             ['theseus_gui', []],
-            ['ariadne', []],
         ],
     )
     const commands = targetedCargoArgs(plan)
@@ -39,7 +37,6 @@ test('targets the changed workspace crate and its tests', () => {
         '--test-threads=1',
     ])
     assert(commands.some((args) => args.includes('theseus_gui')))
-    assert(commands.some((args) => args.includes('ariadne')))
 })
 
 test('runs the whole crate when its root, build script or manifest changes', () => {

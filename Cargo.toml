@@ -4,7 +4,6 @@ members = [
   "apps/app",
   "apps/installer-ui",
   "packages/app-lib",
-  "packages/ariadne",
   "packages/content-management",
   "packages/daedalus",
   "packages/path-util",
@@ -17,7 +16,6 @@ repository = "https://github.com/Mystic-Stars/Axolotl"
 
 [workspace.dependencies]
 aes-gcm = "0.10.3"
-ariadne = { path = "packages/ariadne" }
 async-minecraft-ping = { path = "packages/async-minecraft-ping" }
 async-recursion = "1.1.1"
 async-trait = "0.1.89"

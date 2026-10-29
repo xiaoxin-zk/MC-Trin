@@ -13,7 +13,6 @@ ignored-paths = [
 
 [dependencies]
 aes-gcm = { workspace = true }
-ariadne = { workspace = true }
 async-minecraft-ping = { workspace = true, features = ["srv"] }
 async-recursion = { workspace = true }
 async-trait = { workspace = true }

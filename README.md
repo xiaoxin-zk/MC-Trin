@@ -7,7 +7,6 @@ MC-Trin is a Minecraft desktop launcher built on a Tauri runtime with a DeepCraf
 - Minecraft instance creation, installation, import, launch, and Microsoft device-code login through the reused native runtime.
 - CurseForge project search with an API key stored by the native settings layer.
 - Built-in MCTier-compatible LAN rooms with public lobby discovery, create/join/cancel/leave lifecycle, and EasyTier v2.6.4 no-TUN TCP port forwarding. Voice chat is not included.
-- Modrinth friends and LAN-port sharing use the public Modrinth account and signaling services; users do not need to deploy a friends server.
 - An MCP agent that connects to a user-selected MCP server and OpenAI-compatible model endpoint. Model and MCP tokens are session-only; non-read-only tool calls require confirmation.
 - Local plugin manifests for themes, static pages, navigation, notifications, and confirmed launch actions. See [MC-TRIN-PLUGIN-API.md](docs/MC-TRIN-PLUGIN-API.md).
 

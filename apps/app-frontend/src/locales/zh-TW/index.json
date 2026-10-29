@@ -8166,7 +8166,7 @@
     "message": "你好友的 Modrinth 使用者名稱是什麼？"
   },
   "friends.add-friends-to-share": {
-    "message": "<link>新增好友</link>即可查看他們正在玩什麼！"
+    "message": "<link>新增好友</link>至好友清單。"
   },
   "friends.friend.cancel-request": {
     "message": "取消請求"
@@ -8226,7 +8226,7 @@
     "message": "{title} — {count}"
   },
   "friends.sign-in-to-add-friends": {
-    "message": "<link>登入 Modrinth 帳號</link>即可新增好友並查看他們正在玩什麼！"
+    "message": "登入 <link>Modrinth 帳號</link>以管理好友。"
   },
   "instance.add-server.add-and-play": {
     "message": "新增並遊玩"

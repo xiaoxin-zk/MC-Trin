@@ -1,13 +1,5 @@
 <script setup lang="ts">
-import {
-    MailIcon,
-    SearchIcon,
-    SendIcon,
-    ShareIcon,
-    UserIcon,
-    UserPlusIcon,
-    XIcon,
-} from '@modrinth/assets'
+import { MailIcon, SearchIcon, SendIcon, UserIcon, UserPlusIcon, XIcon } from '@modrinth/assets'
 import {
     Avatar,
     Button,
@@ -22,14 +14,11 @@ import {
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 import FriendsSection from '@/components/ui/friends/FriendsSection.vue'
-import { friend_listener } from '@/helpers/events'
 import {
     add_friend,
     friends,
     type FriendWithUserData,
     remove_friend,
-    share_friend_port,
-    stop_sharing_friend_ports,
     transformFriends,
 } from '@/helpers/friends.ts'
 import type { ModrinthCredentials } from '@/helpers/mr_auth'
@@ -53,55 +42,6 @@ const friendInvitesModal = ref()
 const username = ref('')
 const addFriendModal = ref()
 
-const sharePortModal = ref()
-const sharePort = ref('')
-const sharing = ref(false)
-const sharedPort = ref<number | null>(null)
-
-function openSharePort() {
-    sharePort.value = '25565'
-    sharePortModal.value?.show()
-}
-
-async function submitSharePort() {
-    const port = Number.parseInt(sharePort.value, 10)
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        notificationManager.addNotification({
-            title: formatMessage(messages.sharePortInvalidTitle),
-            text: formatMessage(messages.sharePortInvalid),
-            type: 'error',
-        })
-        return
-    }
-    sharing.value = true
-    try {
-        sharedPort.value = await share_friend_port(port)
-        sharePortModal.value?.hide()
-        notificationManager.addNotification({
-            title: formatMessage(messages.sharePortActiveTitle),
-            text: formatMessage(messages.sharePortActive, { port }),
-            type: 'success',
-        })
-    } catch (failure) {
-        handleError(failure)
-    } finally {
-        sharing.value = false
-    }
-}
-
-async function stopSharing() {
-    try {
-        const stopped = await stop_sharing_friend_ports()
-        sharedPort.value = null
-        notificationManager.addNotification({
-            title: formatMessage(messages.sharePortStoppedTitle),
-            text: formatMessage(messages.sharePortStopped, { count: stopped }),
-            type: 'info',
-        })
-    } catch (failure) {
-        handleError(failure)
-    }
-}
 async function addFriendFromModal() {
     addFriendModal.value.hide()
     await add_friend(username.value).catch(handleError)
@@ -127,19 +67,7 @@ async function removeFriend(friend: FriendWithUserData) {
 
 const userFriends = ref<FriendWithUserData[]>([])
 const sortedFriends = computed<FriendWithUserData[]>(() =>
-    userFriends.value.slice().sort((a, b) => {
-        if (a.last_updated === null && b.last_updated === null) {
-            return 0 // Both are null, equal in sorting
-        }
-        if (a.last_updated === null) {
-            return 1 // `a` is null, move it after `b`
-        }
-        if (b.last_updated === null) {
-            return -1 // `b` is null, move it after `a`
-        }
-        // Both are non-null, sort by date
-        return b.last_updated.diff(a.last_updated)
-    }),
+    userFriends.value.slice().sort((a, b) => a.username.localeCompare(b.username)),
 )
 const filteredFriends = computed<FriendWithUserData[]>(() =>
     sortedFriends.value.filter((x) =>
@@ -147,14 +75,8 @@ const filteredFriends = computed<FriendWithUserData[]>(() =>
     ),
 )
 
-const activeFriends = computed<FriendWithUserData[]>(() =>
-    filteredFriends.value.filter((x) => !!x.status && x.online && x.accepted),
-)
-const onlineFriends = computed<FriendWithUserData[]>(() =>
-    filteredFriends.value.filter((x) => x.online && !x.status && x.accepted),
-)
-const offlineFriends = computed<FriendWithUserData[]>(() =>
-    filteredFriends.value.filter((x) => !x.online && x.accepted),
+const acceptedFriends = computed<FriendWithUserData[]>(() =>
+    filteredFriends.value.filter((x) => x.accepted),
 )
 const pendingFriends = computed(() =>
     filteredFriends.value
@@ -217,89 +139,16 @@ watch(
     { immediate: true },
 )
 
-const unlisten = await friend_listener((event) => {
-    // The backend only emits this channel for friend-specific state changes;
-    // anything that changes the roster is followed by a reload below.
-    if (event?.event === 'friend_request_rejected') {
-        notificationManager.addNotification({
-            title: formatMessage(messages.friendRequestRejectedTitle),
-            text: formatMessage(messages.friendRequestRejected, {
-                user: event.from ?? '',
-            }),
-            type: 'info',
-        })
-    }
-    void loadFriends()
-})
 onUnmounted(() => {
     disposed = true
     clearTimeout(retryTimer)
     retryTimer = undefined
-    unlisten()
 })
 
 const messages = defineMessages({
-    friendRequestRejectedTitle: {
-        id: 'friends.event.friend-request-rejected.title',
-        defaultMessage: 'Friend request declined',
-    },
-    friendRequestRejected: {
-        id: 'friends.event.friend-request-rejected',
-        defaultMessage: '{user} declined your friend request.',
-    },
     addFriend: {
         id: 'friends.action.add-friend',
         defaultMessage: 'Add a friend',
-    },
-    sharePort: {
-        id: 'friends.action.share-port',
-        defaultMessage: 'Share a LAN port',
-    },
-    sharePortTitle: {
-        id: 'friends.share-port.title',
-        defaultMessage: 'Share a LAN port',
-    },
-    sharePortDescription: {
-        id: 'friends.share-port.description',
-        defaultMessage:
-            'Let your friends join a world you opened to LAN. Enter the port Minecraft is listening on.',
-    },
-    sharePortLabel: {
-        id: 'friends.share-port.label',
-        defaultMessage: 'Local port',
-    },
-    sharePortSubmit: {
-        id: 'friends.share-port.submit',
-        defaultMessage: 'Start sharing',
-    },
-    sharePortInvalidTitle: {
-        id: 'friends.share-port.invalid.title',
-        defaultMessage: 'That port is not usable',
-    },
-    sharePortInvalid: {
-        id: 'friends.share-port.invalid',
-        defaultMessage: 'Enter a port between 1 and 65535.',
-    },
-    sharePortActiveTitle: {
-        id: 'friends.share-port.active.title',
-        defaultMessage: 'Port shared',
-    },
-    sharePortActive: {
-        id: 'friends.share-port.active',
-        defaultMessage: 'Your friends can now join through port {port}.',
-    },
-    sharePortStoppedTitle: {
-        id: 'friends.share-port.stopped.title',
-        defaultMessage: 'Sharing stopped',
-    },
-    sharePortStopped: {
-        id: 'friends.share-port.stopped',
-        defaultMessage:
-            '{count, plural, =0 {No ports were being shared.} one {One shared port was closed.} other {# shared ports were closed.}}',
-    },
-    stopSharingPort: {
-        id: 'friends.share-port.stop',
-        defaultMessage: 'Stop sharing',
     },
     addingAFriend: {
         id: 'friends.add-friend.title',
@@ -337,30 +186,17 @@ const messages = defineMessages({
         id: 'friends.heading.pending',
         defaultMessage: 'Pending',
     },
-    active: {
-        id: 'friends.heading.active',
-        defaultMessage: 'Active',
-    },
-    online: {
-        id: 'friends.heading.online',
-        defaultMessage: 'Online',
-    },
-    offline: {
-        id: 'friends.heading.offline',
-        defaultMessage: 'Offline',
-    },
     noFriendsMatch: {
         id: 'friends.no-friends-match',
         defaultMessage: `No friends matching ''{query}''`,
     },
     signInToAddFriends: {
         id: 'friends.sign-in-to-add-friends',
-        defaultMessage:
-            "<link>Sign in to a Modrinth account</link> to add friends and see what they're playing!",
+        defaultMessage: '<link>Sign in to a Modrinth account</link> to manage friends.',
     },
     addFriendsToShare: {
         id: 'friends.add-friends-to-share',
-        defaultMessage: "<link>Add friends</link> to see what they're playing!",
+        defaultMessage: '<link>Add friends</link> to build your friend list.',
     },
     viewRequests: { id: 'friends.requests.title', defaultMessage: 'View friend requests' },
     noPendingRequests: {
@@ -459,43 +295,6 @@ const messages = defineMessages({
             </div>
         </div>
     </NewModal>
-    <NewModal ref="sharePortModal" :header="formatMessage(messages.sharePortTitle)">
-        <div class="flex flex-col gap-4">
-            <p class="m-0">
-                {{ formatMessage(messages.sharePortDescription) }}
-            </p>
-            <StyledInput
-                v-model="sharePort"
-                :label="formatMessage(messages.sharePortLabel)"
-                type="text"
-                inputmode="numeric"
-                @keyup.enter="submitSharePort"
-            />
-            <div class="flex justify-end gap-2">
-                <Button :disabled="sharing" @click="sharePortModal.hide">
-                    {{ formatMessage(messages.cancel) }}
-                </Button>
-                <Button type="colored" color="brand" :disabled="sharing" @click="submitSharePort"
-                    >{{ formatMessage(messages.sharePortSubmit) }}
-                </Button>
-            </div>
-        </div>
-    </NewModal>
-    <div
-        v-if="sharedPort !== null"
-        class="flex items-center justify-between gap-2 mb-3 rounded-lg border border-solid border-surface-5 px-3 py-2"
-    >
-        <span class="text-sm">
-            {{
-                formatMessage(messages.sharePortActive, {
-                    port: sharedPort,
-                })
-            }}
-        </span>
-        <Button size="small" @click="stopSharing">
-            {{ formatMessage(messages.stopSharingPort) }}
-        </Button>
-    </div>
     <div v-if="userCredentials && !loading" class="flex gap-1 items-center mb-3 -ml-1">
         <template v-if="sortedFriends.length > 0">
             <Button
@@ -506,15 +305,6 @@ const messages = defineMessages({
                 :aria-label="formatMessage(messages.addFriend)"
                 @click="addFriendModal.show"
                 ><UserPlusIcon />
-            </Button>
-            <Button
-                v-tooltip="formatMessage(messages.sharePort)"
-                type="quiet"
-                circular
-                icon-only
-                :aria-label="formatMessage(messages.sharePort)"
-                @click="openSharePort"
-                ><ShareIcon />
             </Button>
             <StyledInput
                 v-model="search"
@@ -593,27 +383,11 @@ const messages = defineMessages({
         </template>
         <template v-else>
             <FriendsSection
-                v-if="activeFriends.length > 0"
+                v-if="acceptedFriends.length > 0"
                 :is-searching="!!search"
                 open-by-default
-                :friends="activeFriends"
-                :heading="formatMessage(messages.active)"
-                :remove-friend="removeFriend"
-            />
-            <FriendsSection
-                v-if="onlineFriends.length > 0"
-                :is-searching="!!search"
-                open-by-default
-                :friends="onlineFriends"
-                :heading="formatMessage(messages.online)"
-                :remove-friend="removeFriend"
-            />
-            <FriendsSection
-                v-if="offlineFriends.length > 0"
-                :is-searching="!!search"
-                :open-by-default="activeFriends.length + onlineFriends.length < 3"
-                :friends="offlineFriends"
-                :heading="formatMessage(messages.offline)"
+                :friends="acceptedFriends"
+                :heading="formatMessage(messages.friends)"
                 :remove-friend="removeFriend"
             />
             <FriendsSection

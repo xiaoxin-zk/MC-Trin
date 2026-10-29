@@ -84,9 +84,6 @@ pub use self::content_favorites::*;
 mod friends;
 pub use self::friends::*;
 
-mod tunnel;
-pub use self::tunnel::*;
-
 pub mod db;
 pub(crate) mod db_backup;
 mod mr_auth;
@@ -202,9 +199,6 @@ pub struct State {
     //
     // /// App identifier string (like com.modrinth.AxolotlLauncher)
     // pub app_identifier: String,
-    /// Friends socket
-    pub friends_socket: FriendsSocket,
-
     pub restart_after_pending_update: AtomicBool,
 
     /// Per-instance locks serializing content writes against instance
@@ -717,8 +711,6 @@ impl State {
                 if let Err(e) = res {
                     tracing::error!("Error running discord RPC: {e}");
                 }
-
-                // Axolotl does not connect to Modrinth's private friends socket.
             }
         });
         state.background_tasks.lock().push(maintenance_task);
@@ -1245,8 +1237,6 @@ impl State {
 
         let process_manager = ProcessManager::new();
 
-        let friends_socket = FriendsSocket::new();
-
         Ok(Arc::new(Self {
             directories,
             fetch_semaphore,
@@ -1299,7 +1289,6 @@ impl State {
             process_manager,
             maintenance_gate: MaintenanceGate::new(),
             background_tasks: Mutex::new(Vec::new()),
-            friends_socket,
             restart_after_pending_update: AtomicBool::new(false),
             instance_locks: Arc::new(InstanceLockManager::default()),
             pool,
@@ -1423,7 +1412,6 @@ pub(crate) async fn test_state(
         process_manager: ProcessManager::new(),
         maintenance_gate: MaintenanceGate::new(),
         background_tasks: Mutex::new(Vec::new()),
-        friends_socket: FriendsSocket::new(),
         restart_after_pending_update: AtomicBool::new(false),
         instance_locks: Arc::new(InstanceLockManager::default()),
         pool,

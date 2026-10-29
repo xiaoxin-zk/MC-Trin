@@ -14241,7 +14241,7 @@
     "message": "What's your friend's Modrinth username?"
   },
   "friends.add-friends-to-share": {
-    "message": "<link>Add friends</link> to see what they're playing!"
+    "message": "<link>Add friends</link> to build your friend list."
   },
   "friends.friend.cancel-request": {
     "message": "Cancel request"
@@ -14334,7 +14334,7 @@
     "message": "{title} - {count}"
   },
   "friends.sign-in-to-add-friends": {
-    "message": "<link>Sign in to a Modrinth account</link> to add friends and see what they're playing!"
+    "message": "<link>Sign in to a Modrinth account</link> to manage friends."
   },
   "instance.add-server.add-and-play": {
     "message": "Add and play"

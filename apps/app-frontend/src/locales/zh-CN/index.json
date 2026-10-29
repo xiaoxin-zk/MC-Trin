@@ -15213,7 +15213,7 @@
     "message": "你好友的 Modrinth 用户名是什么？"
   },
   "friends.add-friends-to-share": {
-    "message": "<link>添加好友</link> 来看看他们都在玩什么！"
+    "message": "<link>添加好友</link>到好友列表。"
   },
   "friends.friend.cancel-request": {
     "message": "取消请求"
@@ -15306,7 +15306,7 @@
     "message": "{title} — {count}"
   },
   "friends.sign-in-to-add-friends": {
-    "message": "登录你的 <link>Modrinth 账号</link>，添加好友，看看他们在玩什么！"
+    "message": "登录 <link>Modrinth 账号</link>以管理好友。"
   },
   "instance.add-server.add-and-play": {
     "message": "添加并游玩"
