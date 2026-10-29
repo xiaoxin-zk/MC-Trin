@@ -38,6 +38,12 @@ pub struct StartRequest {
     pub signaling_server: String,
     #[serde(default)]
     pub is_public: bool,
+    /// Optional description advertised in the public lobby listing.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Optional player limit advertised in the public lobby listing.
+    #[serde(default)]
+    pub max_players: Option<u32>,
     /// Host Minecraft port, or the destination Minecraft port when joining.
     pub game_port: u16,
 }
@@ -73,16 +79,15 @@ impl StartRequest {
         if self.is_public && self.mode != EntryMode::Create {
             bail!("only the room host can publish a lobby");
         }
-        if self.is_public && !self.password.is_empty() {
-            bail!("public lobbies cannot have a password");
+        if let Some(description) = &self.description {
+            if description.chars().count() > 200
+                || description.chars().any(char::is_control)
+            {
+                bail!("invalid lobby description");
+            }
         }
-        if self.mode == EntryMode::Create
-            && !self.is_public
-            && self.password.is_empty()
-        {
-            bail!(
-                "private lobbies need a password so only invited players can join"
-            );
+        if self.max_players.is_some_and(|players| players > 100) {
+            bail!("the lobby player limit must not exceed 100");
         }
         Ok(())
     }
@@ -431,9 +436,6 @@ pub async fn set_public(is_public: bool) -> eyre::Result<()> {
             || service.state.mode != Some(EntryMode::Create)
         {
             bail!("only the active room host can change public visibility");
-        }
-        if is_public && service.state.has_password {
-            bail!("remove the room password before publishing it");
         }
         let control = service
             .session

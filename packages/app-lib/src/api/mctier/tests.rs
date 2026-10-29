@@ -25,6 +25,8 @@ fn request() -> StartRequest {
         signaling_server: "ws://127.0.0.1:12345".into(),
         game_port: 25565,
         is_public: false,
+        description: None,
+        max_players: None,
     }
 }
 
@@ -104,12 +106,12 @@ fn request_validation_rejects_unsafe_urls_and_invalid_room_values() {
 }
 
 #[test]
-fn public_rooms_require_a_passwordless_host_session() {
+fn password_protected_lobbies_stay_publishable() {
     let mut input = request();
-    input.password.clear();
-    assert!(input.validate().is_err());
-
     input.is_public = true;
+    assert!(input.validate().is_ok());
+
+    input.password.clear();
     assert!(input.validate().is_ok());
 
     input.mode = EntryMode::Join;

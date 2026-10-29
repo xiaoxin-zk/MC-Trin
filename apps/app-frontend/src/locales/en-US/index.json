@@ -8204,11 +8204,26 @@
   "app.multiplayer.mctier.port": {
     "message": "Host Minecraft port"
   },
-  "app.multiplayer.mctier.private-password-hint": {
-    "message": "Set a password to keep this room private."
+  "app.multiplayer.mctier.lobby-description": {
+    "message": "Room description"
   },
-  "app.multiplayer.mctier.public-password-hint": {
-    "message": "Public rooms cannot have a password."
+  "app.multiplayer.mctier.max-players": {
+    "message": "Player limit"
+  },
+  "app.multiplayer.mctier.open-private-hint": {
+    "message": "Private rooms stay out of the public lobby; without a password anyone who knows the room name can join."
+  },
+  "app.multiplayer.mctier.private-password-hint": {
+    "message": "Private rooms stay out of the public lobby and require the room password to join."
+  },
+  "app.multiplayer.mctier.public-with-password-hint": {
+    "message": "Joining players must enter the room password or an invite code."
+  },
+  "app.multiplayer.mctier.random-name": {
+    "message": "Random name"
+  },
+  "app.multiplayer.mctier.random-password": {
+    "message": "Random password"
   },
   "app.multiplayer.mctier.public-pending": {
     "message": "Updating public listing…"

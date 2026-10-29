@@ -153,6 +153,8 @@ it('validates fields and starts a host session with the expected DTO', async () 
         signaling_server: 'ws://127.0.0.1:12345',
         game_port: 25565,
         is_public: false,
+        description: null,
+        max_players: null,
     })
 })
 
@@ -234,6 +236,24 @@ it('keeps public rooms passwordless and sends the chosen visibility', async () =
             mode: 'create',
             is_public: true,
             password: '',
+        }),
+    )
+})
+
+it('publishes password-protected rooms to the public lobby', async () => {
+    const wrapper = page()
+    await fillRequired(wrapper)
+    await wrapper.get('input[name="public-lobby"]').setValue(true)
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Create lobby')!
+        .trigger('click')
+    await flushPromises()
+    expect(fixture.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+            mode: 'create',
+            is_public: true,
+            password: 'secret',
         }),
     )
 })

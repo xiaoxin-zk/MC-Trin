@@ -7,6 +7,8 @@ export interface MctierStartRequest {
     signaling_server: string
     game_port: number
     is_public?: boolean
+    description?: string | null
+    max_players?: number | null
 }
 
 export interface MctierInvite {

@@ -82,13 +82,36 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.visibility',
         defaultMessage: 'Publish this room in the public lobby list',
     },
-    publicPasswordHint: {
-        id: 'app.multiplayer.mctier.public-password-hint',
-        defaultMessage: 'Public rooms cannot have a password.',
+    publicWithPasswordHint: {
+        id: 'app.multiplayer.mctier.public-with-password-hint',
+        defaultMessage:
+            'Joining players must enter the room password or an invite code.',
     },
     privatePasswordHint: {
         id: 'app.multiplayer.mctier.private-password-hint',
-        defaultMessage: 'Set a password to keep this room private.',
+        defaultMessage:
+            'Private rooms stay out of the public lobby and require the room password to join.',
+    },
+    openPrivateHint: {
+        id: 'app.multiplayer.mctier.open-private-hint',
+        defaultMessage:
+            'Private rooms stay out of the public lobby; without a password anyone who knows the room name can join.',
+    },
+    lobbyDescription: {
+        id: 'app.multiplayer.mctier.lobby-description',
+        defaultMessage: 'Room description',
+    },
+    maxPlayers: {
+        id: 'app.multiplayer.mctier.max-players',
+        defaultMessage: 'Player limit',
+    },
+    randomName: {
+        id: 'app.multiplayer.mctier.random-name',
+        defaultMessage: 'Random name',
+    },
+    randomPassword: {
+        id: 'app.multiplayer.mctier.random-password',
+        defaultMessage: 'Random password',
     },
     inviteHint: {
         id: 'app.multiplayer.mctier.invite-hint',
@@ -189,6 +212,8 @@ const signalingServer = ref(DEFAULT_MCTIER_SIGNALING)
 const inviteCodeInput = ref('')
 const inviteCode = ref('')
 const isPublic = ref(false)
+const lobbyDescription = ref('')
+const lobbyMaxPlayers = ref('')
 const pending = ref(false)
 const stopping = ref(false)
 const visibilityPending = ref(false)
@@ -204,9 +229,26 @@ const valid = computed(
         playerName.value.trim().length > 0 &&
         validLocalPort(port.value) !== null,
 )
-const canCreate = computed(
-    () => valid.value && (isPublic.value ? !password.value.trim() : Boolean(password.value.trim())),
-)
+const playerLimit = computed(() => {
+    const parsed = Number.parseInt(lobbyMaxPlayers.value, 10)
+    if (!Number.isFinite(parsed) || parsed < 2) return null
+    return Math.min(parsed, 100)
+})
+const randomAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
+function randomCode(length: number) {
+    const bytes = new Uint8Array(length)
+    crypto.getRandomValues(bytes)
+    return Array.from(
+        bytes,
+        (byte) => randomAlphabet[byte % randomAlphabet.length],
+    ).join('')
+}
+function generateLobbyName() {
+    lobbyName.value = `mc-${randomCode(6)}`
+}
+function generatePassword() {
+    password.value = randomCode(10)
+}
 const status = computed(() => {
     const value = props.state?.status
     return value && value in messages ? formatMessage(messages[value as 'hosting']) : ''
@@ -273,14 +315,6 @@ function onOutputDeviceChange(event: Event) {
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
     if (!valid.value || busy.value) return
-    if (mode === 'create' && isPublic.value && password.value.trim()) {
-        error.value = formatMessage(messages.publicPasswordHint)
-        return
-    }
-    if (mode === 'create' && !isPublic.value && !password.value.trim()) {
-        error.value = formatMessage(messages.privatePasswordHint)
-        return
-    }
     pending.value = true
     error.value = ''
     try {
@@ -293,6 +327,14 @@ async function start(mode: 'create' | 'join', invite?: MctierInvite) {
             signaling_server: invite?.signaling_server ?? signalingServer.value.trim(),
             game_port: validLocalPort(port.value)!,
             is_public: mode === 'create' && isPublic.value,
+            description:
+                mode === 'create' && lobbyDescription.value.trim()
+                    ? lobbyDescription.value.trim()
+                    : null,
+            max_players:
+                mode === 'create' && playerLimit.value !== null
+                    ? playerLimit.value
+                    : null,
         })
     } catch (failure) {
         if (!stopping.value) error.value = multiplayerErrorText(failure)
@@ -444,7 +486,7 @@ function prefillInviteFromDeepLink() {
                     <input
                         type="checkbox"
                         :checked="state.is_public"
-                        :disabled="visibilityPending || state.has_password"
+                        :disabled="visibilityPending"
                         @change="updateVisibility"
                     />
                     <span>{{ formatMessage(messages.visibility) }}</span>
@@ -453,7 +495,7 @@ function prefillInviteFromDeepLink() {
                     </span>
                 </label>
                 <p v-if="state.has_password" class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                    {{ formatMessage(messages.publicPasswordHint) }}
+                    {{ formatMessage(messages.publicWithPasswordHint) }}
                 </p>
                 <div v-if="inviteCode" class="flex min-w-0 flex-col gap-2">
                     <h3 class="m-0 text-base font-semibold">
@@ -707,6 +749,30 @@ function prefillInviteFromDeepLink() {
                 >{{ formatMessage(messages.signaling)
                 }}<StyledInput v-model="signalingServer" name="signaling-server"
             /></label>
+            <label class="flex flex-col gap-1 text-sm sm:col-span-2"
+                >{{ formatMessage(messages.lobbyDescription)
+                }}<StyledInput
+                    v-model="lobbyDescription"
+                    name="lobby-description"
+                    :maxlength="200"
+            /></label>
+            <label class="flex flex-col gap-1 text-sm"
+                >{{ formatMessage(messages.maxPlayers)
+                }}<StyledInput
+                    v-model="lobbyMaxPlayers"
+                    name="max-players"
+                    inputmode="numeric"
+                    :maxlength="3"
+                    placeholder="∞"
+            /></label>
+            <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
+                <Button type="quiet" @click="generateLobbyName">{{
+                    formatMessage(messages.randomName)
+                }}</Button>
+                <Button type="quiet" @click="generatePassword">{{
+                    formatMessage(messages.randomPassword)
+                }}</Button>
+            </div>
             <label class="flex items-center gap-2 text-sm sm:col-span-2">
                 <input v-model="isPublic" name="public-lobby" type="checkbox" />
                 <span>{{ formatMessage(messages.visibility) }}</span>
@@ -715,19 +781,25 @@ function prefillInviteFromDeepLink() {
                 v-if="isPublic && password.trim()"
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
             >
-                {{ formatMessage(messages.publicPasswordHint) }}
+                {{ formatMessage(messages.publicWithPasswordHint) }}
             </p>
             <p
-                v-else-if="!isPublic && !password.trim()"
+                v-else-if="!isPublic && password.trim()"
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
             >
                 {{ formatMessage(messages.privatePasswordHint) }}
+            </p>
+            <p
+                v-else-if="!isPublic"
+                class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
+            >
+                {{ formatMessage(messages.openPrivateHint) }}
             </p>
             <p class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
                 {{ formatMessage(messages.hostHint) }}
             </p>
             <div class="flex flex-wrap gap-2 sm:col-span-2">
-                <Button :disabled="!canCreate" @click="start('create')">{{
+                <Button :disabled="!valid" @click="start('create')">{{
                     formatMessage(messages.host)
                 }}</Button>
                 <Button :disabled="!valid" @click="start('join')">{{

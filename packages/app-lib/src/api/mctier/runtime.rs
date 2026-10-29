@@ -404,21 +404,33 @@ pub async fn run(
         }
         // The lobby service keeps a freshly registered room in the public list
         // until the host opts out, so private rooms have to state their
-        // visibility explicitly instead of relying on the default.
-        if request.is_public && request.password.is_empty() {
-            set_lobby_visibility(
+        // visibility explicitly instead of relying on the default. Public
+        // rooms stay listed even with a password: the server validates the
+        // password when players join, and a service that refuses the option
+        // must not take the room down.
+        let mut published = false;
+        if request.is_public {
+            published = set_lobby_visibility(
                 &mut registration.socket,
                 &identity.id,
                 &request.server_node,
                 true,
+                Some(&request),
                 cancellation,
             )
-            .await?;
+            .await
+            .is_ok();
+            if !published {
+                tracing::warn!(
+                    "the signaling server did not list the lobby publicly; the room stays private"
+                );
+            }
         } else if let Err(error) = set_lobby_visibility(
             &mut registration.socket,
             &identity.id,
             &request.server_node,
             false,
+            None,
             cancellation,
         )
         .await
@@ -440,7 +452,7 @@ pub async fn run(
             };
             state.virtual_ip = Some(identity.ip);
             state.local_player_id = Some(identity.id.clone());
-            state.is_public = request.is_public;
+            state.is_public = published;
             state.players = registration.players.clone();
             state.connect_address = forwarding.map(|(port, _)| {
                 SocketAddrV4::new(Ipv4Addr::LOCALHOST, port).to_string()
@@ -489,16 +501,13 @@ pub async fn run(
                         Err(eyre::eyre!(
                             "only the active room host can change public visibility"
                         ))
-                    } else if is_public && !request.password.is_empty() {
-                        Err(eyre::eyre!(
-                            "remove the room password before publishing it"
-                        ))
                     } else {
                         set_lobby_visibility(
                             &mut registration.socket,
                             &identity.id,
                             &request.server_node,
                             is_public,
+                            Some(&request),
                             cancellation,
                         )
                         .await
@@ -668,18 +677,26 @@ async fn set_lobby_visibility(
     player_id: &str,
     server_node: &str,
     is_public: bool,
+    request: Option<&StartRequest>,
     cancellation: &CancellationToken,
 ) -> eyre::Result<()> {
+    let mut options = json!({
+        "type": "set-lobby-options",
+        "from": player_id,
+        "isPublic": is_public,
+        "serverNode": server_node,
+    });
+    if let Some(request) = request {
+        if let Some(description) = request.description.as_deref() {
+            options["description"] = json!(description);
+        }
+        if let Some(max_players) = request.max_players {
+            options["maxPlayers"] = json!(max_players);
+        }
+    }
     socket
         .send(async_tungstenite::tungstenite::Message::Text(
-            json!({
-                "type": "set-lobby-options",
-                "from": player_id,
-                "isPublic": is_public,
-                "serverNode": server_node,
-            })
-            .to_string()
-            .into(),
+            options.to_string().into(),
         ))
         .await
         .wrap_err("could not send lobby visibility settings")?;
