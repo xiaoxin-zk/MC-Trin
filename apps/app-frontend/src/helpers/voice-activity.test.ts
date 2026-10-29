@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { byteRms, microphoneLevelPercent } from './voice-activity'
+import { byteRms, microphoneLevelPercent } from './voice-activity.ts'
 
 describe('byteRms', () => {
     it('is zero for digital silence', () => {
