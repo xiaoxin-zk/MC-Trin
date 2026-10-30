@@ -2,7 +2,7 @@ import { defineMessages, type MessageDescriptor } from '@modrinth/ui'
 
 export type OnboardingInteraction = 'manual' | 'navigate' | 'activate' | 'inspect'
 export type OnboardingMode =
-    'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing' | 'multiplayer' | 'assistant'
+    'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing'
 export type CreationPath = 'custom'
 export type StepDestination = string | 'complete'
 
@@ -461,7 +461,15 @@ export const onboardingMessages = defineMessages({
     mascotAlt: { id: 'app.onboarding.mascot-alt', defaultMessage: 'MC-Trin guide' },
     multiplayerTabsTitle: {
         id: 'app.onboarding.multiplayer-tabs.title',
-        defaultMessage: 'Two ways to play together',
+        defaultMessage: 'Play together: rooms and the public lobby',
+    },
+    clickMultiplayer: {
+        id: 'app.onboarding.multiplayer.click',
+        defaultMessage: 'Open Multiplayer',
+    },
+    clickAssistant: {
+        id: 'app.onboarding.assistant.click',
+        defaultMessage: 'Open the assistant',
     },
     multiplayerTabsDescription: {
         id: 'app.onboarding.multiplayer-tabs.description',
@@ -892,6 +900,44 @@ export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
             ),
         ),
         step(
+            'multiplayer-navigation',
+            'navigate',
+            copy(
+                onboardingMessages.multiplayerTabsTitle,
+                onboardingMessages.multiplayerTabsDescription,
+                onboardingMessages.clickMultiplayer,
+            ),
+            control('nav-multiplayer', '/multiplayer'),
+        ),
+        inspect(
+            'multiplayer-rooms',
+            'mctier-create-form',
+            onboardingMessages.multiplayerCreateTitle,
+            onboardingMessages.multiplayerCreateDescription,
+        ),
+        inspect(
+            'multiplayer-visibility',
+            'mctier-visibility',
+            onboardingMessages.multiplayerVisibilityTitle,
+            onboardingMessages.multiplayerVisibilityDescription,
+        ),
+        step(
+            'assistant-navigation',
+            'navigate',
+            copy(
+                onboardingMessages.assistantPermissionTitle,
+                onboardingMessages.assistantPermissionDescription,
+                onboardingMessages.clickAssistant,
+            ),
+            control('nav-assistant', '/agent'),
+        ),
+        inspect(
+            'assistant-permissions',
+            'assistant-permission',
+            onboardingMessages.assistantDangerousTitle,
+            onboardingMessages.assistantDangerousDescription,
+        ),
+        step(
             'library-navigation',
             'navigate',
             copy(
@@ -985,76 +1031,6 @@ export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
                 onboardingMessages.finishArea,
             ),
             { targetId: 'instance-tabs' },
-        ),
-    ],
-    multiplayer: [
-        inspect(
-            'multiplayer-tabs',
-            'multiplayer-tabs',
-            onboardingMessages.multiplayerTabsTitle,
-            onboardingMessages.multiplayerTabsDescription,
-        ),
-        inspect(
-            'multiplayer-create',
-            'mctier-create-form',
-            onboardingMessages.multiplayerCreateTitle,
-            onboardingMessages.multiplayerCreateDescription,
-        ),
-        inspect(
-            'multiplayer-visibility',
-            'mctier-visibility',
-            onboardingMessages.multiplayerVisibilityTitle,
-            onboardingMessages.multiplayerVisibilityDescription,
-        ),
-        inspect(
-            'multiplayer-password',
-            'mctier-password',
-            onboardingMessages.multiplayerPasswordTitle,
-            onboardingMessages.multiplayerPasswordDescription,
-        ),
-        inspect(
-            'multiplayer-invite',
-            'mctier-invite',
-            onboardingMessages.multiplayerInviteTitle,
-            onboardingMessages.multiplayerInviteDescription,
-        ),
-        inspect(
-            'multiplayer-voice',
-            'mctier-voice',
-            onboardingMessages.multiplayerVoiceTitle,
-            onboardingMessages.multiplayerVoiceDescription,
-        ),
-    ],
-    assistant: [
-        inspect(
-            'assistant-providers',
-            'assistant-providers',
-            onboardingMessages.assistantProvidersTitle,
-            onboardingMessages.assistantProvidersDescription,
-        ),
-        inspect(
-            'assistant-tools',
-            'assistant-tools',
-            onboardingMessages.assistantToolsTitle,
-            onboardingMessages.assistantToolsDescription,
-        ),
-        inspect(
-            'assistant-permission',
-            'assistant-permission',
-            onboardingMessages.assistantPermissionTitle,
-            onboardingMessages.assistantPermissionDescription,
-        ),
-        inspect(
-            'assistant-dangerous',
-            'assistant-dangerous',
-            onboardingMessages.assistantDangerousTitle,
-            onboardingMessages.assistantDangerousDescription,
-        ),
-        inspect(
-            'assistant-chat',
-            'assistant-chat',
-            onboardingMessages.assistantChatTitle,
-            onboardingMessages.assistantChatDescription,
         ),
     ],
 }

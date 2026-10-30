@@ -65,6 +65,9 @@
   "app.action-bar.backup-task.restore-preview": {
     "message": "Restore analysis"
   },
+  "app.action-bar.delete-backup": {
+    "message": "Deleting backup"
+  },
   "app.action-bar.downloading-java": {
     "message": "Downloading Java {version}"
   },
@@ -260,9 +263,6 @@
   "app.action-bar.repository": {
     "message": "Backup repository"
   },
-  "app.action-bar.delete-backup": {
-    "message": "Deleting backup"
-  },
   "app.action-bar.repository-move": {
     "message": "Moving backup repository"
   },
@@ -352,6 +352,9 @@
   },
   "app.ai-settings.endpoint": {
     "message": "API endpoint"
+  },
+  "app.ai-settings.endpoint-hint": {
+    "message": "The provider base URL that requests are sent to, for example https://api.openai.com/v1. Keep the defaults unless you use a proxy or a self-hosted model."
   },
   "app.ai-settings.field.account-id": {
     "message": "Account ID"
@@ -470,14 +473,14 @@
   "app.ai-settings.test": {
     "message": "Test provider"
   },
+  "app.ai-settings.test-failed": {
+    "message": "Connection failed: {error}"
+  },
   "app.ai-settings.test-model": {
     "message": "Test model"
   },
   "app.ai-settings.test-success": {
     "message": "Connection succeeded: {response}"
-  },
-  "app.ai-settings.test-failed": {
-    "message": "Connection failed: {error}"
   },
   "app.ai-settings.testing": {
     "message": "Testing…"
@@ -902,6 +905,12 @@
   "app.assistant.no-instances": {
     "message": "Create an instance before analyzing its logs."
   },
+  "app.assistant.permission-mode.full-banner": {
+    "message": "Full access is on: the assistant runs every tool without asking, including deleting instances and changing launcher settings."
+  },
+  "app.assistant.permission-mode.full-banner-action": {
+    "message": "Turn it off"
+  },
   "app.assistant.question": {
     "message": "Question"
   },
@@ -911,11 +920,11 @@
   "app.assistant.result": {
     "message": "Analysis"
   },
-  "app.assistant.result.root-cause": {
-    "message": "Root cause"
-  },
   "app.assistant.result.evidence": {
     "message": "Evidence"
+  },
+  "app.assistant.result.root-cause": {
+    "message": "Root cause"
   },
   "app.assistant.result.steps": {
     "message": "Next steps"
@@ -3854,9 +3863,6 @@
   "app.instance.worlds.no-worlds-heading": {
     "message": "No servers or worlds added"
   },
-  "app.instance.worlds.remove-server-modal.remove-button": {
-    "message": "Remove server"
-  },
   "app.instance.worlds.remove-server-modal.current-button": {
     "message": "Only from this instance"
   },
@@ -3874,6 +3880,9 @@
   },
   "app.instance.worlds.remove-server-modal.everywhere-warning": {
     "message": "This server will be removed from every instance that syncs servers."
+  },
+  "app.instance.worlds.remove-server-modal.remove-button": {
+    "message": "Remove server"
   },
   "app.instance.worlds.remove-server-modal.title": {
     "message": "Remove server"
@@ -7976,6 +7985,63 @@
   "app.multiplayer.copy-room-code": {
     "message": "Copy room code"
   },
+  "app.multiplayer.direct.address": {
+    "message": "Give this address to your guests"
+  },
+  "app.multiplayer.direct.create": {
+    "message": "Create room"
+  },
+  "app.multiplayer.direct.description": {
+    "message": "A password-protected room with no lobby service behind it. Share the room code; nothing is listed publicly."
+  },
+  "app.multiplayer.direct.host-hint": {
+    "message": "Open your world to LAN first and enter the port Minecraft shows. Guests join by the address below."
+  },
+  "app.multiplayer.direct.invalid": {
+    "message": "Room names use 4-32 letters, numbers, underscores, or hyphens."
+  },
+  "app.multiplayer.direct.join": {
+    "message": "Join room"
+  },
+  "app.multiplayer.direct.join-address": {
+    "message": "Host address (only when joining)"
+  },
+  "app.multiplayer.direct.join-address-hint": {
+    "message": "Ask the host for the address shown in their room, such as 10.126.126.7"
+  },
+  "app.multiplayer.direct.leave": {
+    "message": "Leave room"
+  },
+  "app.multiplayer.direct.needs-password": {
+    "message": "A direct room needs a password."
+  },
+  "app.multiplayer.direct.node": {
+    "message": "EasyTier node"
+  },
+  "app.multiplayer.direct.password": {
+    "message": "Room password"
+  },
+  "app.multiplayer.direct.player-name": {
+    "message": "Player name"
+  },
+  "app.multiplayer.direct.port": {
+    "message": "Minecraft port"
+  },
+  "app.multiplayer.direct.room-code": {
+    "message": "Room code"
+  },
+  "app.multiplayer.direct.room-code-hint": {
+    "message": "It bundles the room name, password, node, and port so a guest can paste it once."
+  },
+  "app.multiplayer.direct.room-name": {
+    "message": "Room name"
+  },
+  "app.multiplayer.direct.starting": {
+    "message": "Preparing the room…"
+  },
+  "app.multiplayer.direct.title": {
+    "message": "Direct room"
+  },
   "app.multiplayer.disconnect": {
     "message": "Disconnect"
   },
@@ -8186,11 +8252,20 @@
   "app.multiplayer.mctier.leave": {
     "message": "Leave lobby"
   },
+  "app.multiplayer.mctier.lobby-description": {
+    "message": "Room description"
+  },
+  "app.multiplayer.mctier.max-players": {
+    "message": "Player limit"
+  },
   "app.multiplayer.mctier.name": {
     "message": "Lobby name"
   },
   "app.multiplayer.mctier.node": {
     "message": "EasyTier node"
+  },
+  "app.multiplayer.mctier.open-private-hint": {
+    "message": "Private rooms stay out of the public lobby; without a password anyone who knows the room name can join."
   },
   "app.multiplayer.mctier.password": {
     "message": "Lobby password"
@@ -8204,29 +8279,32 @@
   "app.multiplayer.mctier.port": {
     "message": "Host Minecraft port"
   },
-  "app.multiplayer.mctier.lobby-description": {
-    "message": "Room description"
-  },
-  "app.multiplayer.mctier.max-players": {
-    "message": "Player limit"
-  },
-  "app.multiplayer.mctier.open-private-hint": {
-    "message": "Private rooms stay out of the public lobby; without a password anyone who knows the room name can join."
-  },
   "app.multiplayer.mctier.private-password-hint": {
     "message": "Private rooms stay out of the public lobby and require the room password to join."
   },
+  "app.multiplayer.mctier.public-open-hint": {
+    "message": "Listed publicly with no password: anyone browsing the lobby list can join directly."
+  },
+  "app.multiplayer.mctier.public-pending": {
+    "message": "Updating public listing…"
+  },
   "app.multiplayer.mctier.public-with-password-hint": {
     "message": "Joining players must enter the room password or an invite code."
+  },
+  "app.multiplayer.mctier.publish-private": {
+    "message": "Private, not listed"
+  },
+  "app.multiplayer.mctier.publish-published": {
+    "message": "Listed publicly"
+  },
+  "app.multiplayer.mctier.publish-unconfirmed": {
+    "message": "Sent to the lobby service. It did not confirm the listing, so give it a moment to appear."
   },
   "app.multiplayer.mctier.random-name": {
     "message": "Random name"
   },
   "app.multiplayer.mctier.random-password": {
     "message": "Random password"
-  },
-  "app.multiplayer.mctier.public-pending": {
-    "message": "Updating public listing…"
   },
   "app.multiplayer.mctier.signaling": {
     "message": "Lobby service"
@@ -8246,53 +8324,20 @@
   "app.multiplayer.mctier.visibility": {
     "message": "Publish this room in the public lobby list"
   },
-  "app.multiplayer.mctier.visibility-title": {
-    "message": "Who can find this room"
+  "app.multiplayer.mctier.visibility-private-description": {
+    "message": "Only people you send the invite code to can join."
   },
   "app.multiplayer.mctier.visibility-private-title": {
     "message": "Private room"
   },
-  "app.multiplayer.mctier.visibility-private-description": {
-    "message": "Only people you send the invite code to can join."
+  "app.multiplayer.mctier.visibility-public-description": {
+    "message": "Anyone browsing the lobby list can see this room and ask to join."
   },
   "app.multiplayer.mctier.visibility-public-title": {
     "message": "List in the public lobby"
   },
-  "app.multiplayer.mctier.visibility-public-description": {
-    "message": "Anyone browsing the lobby list can see this room and ask to join."
-  },
-  "app.multiplayer.mctier.publish-published": {
-    "message": "Listed publicly"
-  },
-  "app.multiplayer.mctier.publish-unconfirmed": {
-    "message": "Sent to the lobby service. It did not confirm the listing, so give it a moment to appear."
-  },
-  "app.multiplayer.mctier.publish-private": {
-    "message": "Private, not listed"
-  },
-  "app.multiplayer.mctier.public-open-hint": {
-    "message": "Listed publicly with no password: anyone browsing the lobby list can join directly."
-  },
-  "app.multiplayer.mctier.voice.microphone": {
-    "message": "Microphone"
-  },
-  "app.multiplayer.mctier.voice.mute-player": {
-    "message": "Mute {player}"
-  },
-  "app.multiplayer.mctier.voice.speaker": {
-    "message": "Speaker"
-  },
-  "app.multiplayer.mctier.voice.system-default": {
-    "message": "System default"
-  },
-  "app.multiplayer.mctier.voice.unnamed-device": {
-    "message": "Unnamed device"
-  },
-  "app.multiplayer.mctier.voice.unmute-player": {
-    "message": "Unmute {player}"
-  },
-  "app.multiplayer.mctier.voice.volume": {
-    "message": "Output volume"
+  "app.multiplayer.mctier.visibility-title": {
+    "message": "Who can find this room"
   },
   "app.multiplayer.mctier.voice.connected": {
     "message": "{count, plural, one {Voice connected to # player} other {Voice connected to # players}}"
@@ -8303,8 +8348,17 @@
   "app.multiplayer.mctier.voice.input-volume": {
     "message": "Microphone volume"
   },
+  "app.multiplayer.mctier.voice.mic-level": {
+    "message": "Mic level (speak to test)"
+  },
+  "app.multiplayer.mctier.voice.microphone": {
+    "message": "Microphone"
+  },
   "app.multiplayer.mctier.voice.mute": {
     "message": "Mute microphone"
+  },
+  "app.multiplayer.mctier.voice.mute-player": {
+    "message": "Mute {player}"
   },
   "app.multiplayer.mctier.voice.peer-volume": {
     "message": "Volume for {player}"
@@ -8312,11 +8366,26 @@
   "app.multiplayer.mctier.voice.permission-error": {
     "message": "Microphone permission was denied. Allow access in system settings and try again."
   },
+  "app.multiplayer.mctier.voice.push-to-talk": {
+    "message": "Push-to-talk"
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hint": {
+    "message": "Hold F2 or the button to transmit; the microphone stays muted otherwise."
+  },
+  "app.multiplayer.mctier.voice.push-to-talk-hold": {
+    "message": "Hold to talk"
+  },
+  "app.multiplayer.mctier.voice.speaker": {
+    "message": "Speaker"
+  },
   "app.multiplayer.mctier.voice.start": {
     "message": "Enable voice"
   },
   "app.multiplayer.mctier.voice.stop": {
     "message": "Leave voice"
+  },
+  "app.multiplayer.mctier.voice.system-default": {
+    "message": "System default"
   },
   "app.multiplayer.mctier.voice.title": {
     "message": "Room voice"
@@ -8327,23 +8396,20 @@
   "app.multiplayer.mctier.voice.unmute": {
     "message": "Unmute microphone"
   },
+  "app.multiplayer.mctier.voice.unmute-player": {
+    "message": "Unmute {player}"
+  },
+  "app.multiplayer.mctier.voice.unnamed-device": {
+    "message": "Unnamed device"
+  },
   "app.multiplayer.mctier.voice.unsupported-error": {
     "message": "This webview does not support microphone capture."
   },
+  "app.multiplayer.mctier.voice.volume": {
+    "message": "Output volume"
+  },
   "app.multiplayer.mctier.voice.waiting": {
     "message": "Waiting for another player to connect voice."
-  },
-  "app.multiplayer.mctier.voice.mic-level": {
-    "message": "Mic level (speak to test)"
-  },
-  "app.multiplayer.mctier.voice.push-to-talk": {
-    "message": "Push-to-talk"
-  },
-  "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "Hold F2 or the button to transmit; the microphone stays muted otherwise."
-  },
-  "app.multiplayer.mctier.voice.push-to-talk-hold": {
-    "message": "Hold to talk"
   },
   "app.multiplayer.no-players": {
     "message": "No players in room"
@@ -8368,6 +8434,9 @@
   },
   "app.multiplayer.powered-by-terracotta": {
     "message": "Powered by Terracotta"
+  },
+  "app.multiplayer.provider.direct": {
+    "message": "Direct room (no server)"
   },
   "app.multiplayer.provider.hongshi": {
     "message": "RedStone Online 2"
@@ -8687,6 +8756,39 @@
   "app.onboarding.appearance.title": {
     "message": "Set the vibe"
   },
+  "app.onboarding.assistant-chat.description": {
+    "message": "Ask for something concrete such as \"make a survival 1.21 instance\". You can cancel a running turn at any time, and any pending approval is denied when you do."
+  },
+  "app.onboarding.assistant-chat.title": {
+    "message": "Try a request"
+  },
+  "app.onboarding.assistant-dangerous.description": {
+    "message": "Free mode keeps asking before deleting an instance, removing content, changing launcher settings, installing a runtime, and for any tool on an MCP server you added."
+  },
+  "app.onboarding.assistant-dangerous.title": {
+    "message": "What free mode still asks about"
+  },
+  "app.onboarding.assistant-permission.description": {
+    "message": "Ask every time: every write and every MCP call waits for you. Free mode: only high-risk actions ask. Full access: nothing asks at all."
+  },
+  "app.onboarding.assistant-permission.title": {
+    "message": "Decide how much it may do alone"
+  },
+  "app.onboarding.assistant-providers.description": {
+    "message": "Pick a provider, paste its endpoint and API key, then enable one model. Keys are stored in your operating system credential store, not in the launcher settings file."
+  },
+  "app.onboarding.assistant-providers.title": {
+    "message": "Connect a model first"
+  },
+  "app.onboarding.assistant-tools.description": {
+    "message": "Read tools let the assistant look at launcher state. Write tools change something, so they follow the permission mode below."
+  },
+  "app.onboarding.assistant-tools.title": {
+    "message": "Reading is free, acting is gated"
+  },
+  "app.onboarding.assistant.click": {
+    "message": "Open the assistant"
+  },
   "app.onboarding.brewing.description": {
     "message": "Choose an input, reagent and output. Potion conditions are optional, and output components can be edited as validated JSON. Brewing recipes require Minecraft 26.3."
   },
@@ -8875,6 +8977,45 @@
   },
   "app.onboarding.mascot-alt": {
     "message": "MC-Trin guide"
+  },
+  "app.onboarding.multiplayer-create.description": {
+    "message": "In Minecraft open your world to LAN first, then copy the port it shows here. The room name and your player name are what guests see."
+  },
+  "app.onboarding.multiplayer-create.title": {
+    "message": "Fill in the room once"
+  },
+  "app.onboarding.multiplayer-invite.description": {
+    "message": "It bundles the room name, the network node and the encrypted password, so a friend can join with one paste."
+  },
+  "app.onboarding.multiplayer-invite.title": {
+    "message": "The invite code carries everything"
+  },
+  "app.onboarding.multiplayer-password.description": {
+    "message": "A private room with a password is joined with the invite code, which carries the password with it. Listed rooms are passwordless by design."
+  },
+  "app.onboarding.multiplayer-password.title": {
+    "message": "A password still works when private"
+  },
+  "app.onboarding.multiplayer-tabs.description": {
+    "message": "Rooms is where you host or join a game with a code. Public lobbies is the shared list of rooms other players published."
+  },
+  "app.onboarding.multiplayer-tabs.title": {
+    "message": "Play together: rooms and the public lobby"
+  },
+  "app.onboarding.multiplayer-visibility.description": {
+    "message": "A private room stays out of the lobby list, so only people with the invite code can join. A public room appears in the lobby list for everyone browsing it, and a listed room cannot have a password."
+  },
+  "app.onboarding.multiplayer-visibility.title": {
+    "message": "Private or listed publicly"
+  },
+  "app.onboarding.multiplayer-voice.description": {
+    "message": "Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and hold the push-to-talk key when you would rather not stay open."
+  },
+  "app.onboarding.multiplayer-voice.title": {
+    "message": "Talk while you play"
+  },
+  "app.onboarding.multiplayer.click": {
+    "message": "Open Multiplayer"
   },
   "app.onboarding.offline-account.description": {
     "message": "Open Playing as in the sidebar to add an offline Minecraft account. You may need to sign in with an official Minecraft account on this device first."
@@ -12152,9 +12293,6 @@
   "app.settings.resources.app-directory-description-portable": {
     "message": "You are currently running in portable mode. The app directory is fixed and cannot be changed."
   },
-  "app.settings.resources.mctrin-data-directory": {
-    "message": "MC-Trin data directory"
-  },
   "app.settings.resources.chinese-names": {
     "message": "Add known Chinese names to downloads"
   },
@@ -12251,6 +12389,9 @@
   "app.settings.resources.download-mirrors-description": {
     "message": "Automatic mode chooses between official and mirror sources based on your local environment and recent connection quality."
   },
+  "app.settings.resources.download-source-duplicate": {
+    "message": "A mirror with this type and base URL already exists."
+  },
   "app.settings.resources.download-source-enabled": {
     "message": "Enable mirror {name}"
   },
@@ -12269,17 +12410,11 @@
   "app.settings.resources.download-source-type": {
     "message": "Source type"
   },
-  "app.settings.resources.source.mirror-preferred": {
-    "message": "Prefer mirrors"
-  },
   "app.settings.resources.download-source-url": {
     "message": "HTTPS base URL"
   },
   "app.settings.resources.download-source-url-invalid": {
     "message": "Use a valid HTTPS base URL without credentials, query parameters, or fragments."
-  },
-  "app.settings.resources.download-source-duplicate": {
-    "message": "A mirror with this type and base URL already exists."
   },
   "app.settings.resources.download-source-url-placeholder": {
     "message": "https://mirror.example"
@@ -12292,18 +12427,6 @@
   },
   "app.settings.resources.download-source.modrinth": {
     "message": "Modrinth files"
-  },
-  "app.settings.resources.remove-download-source": {
-    "message": "Remove mirror"
-  },
-  "app.settings.resources.move-download-source-earlier": {
-    "message": "Move earlier"
-  },
-  "app.settings.resources.move-download-source-later": {
-    "message": "Move later"
-  },
-  "app.settings.resources.no-custom-download-sources": {
-    "message": "No custom mirrors added"
   },
   "app.settings.resources.ignore-ssl-errors": {
     "message": "Ignore SSL certificate errors"
@@ -12322,6 +12445,9 @@
   },
   "app.settings.resources.maximum-writes-description": {
     "message": "The maximum number of files the launcher can write to disk at once. Use a lower value if you frequently get I/O errors. An app restart is required."
+  },
+  "app.settings.resources.mctrin-data-directory": {
+    "message": "MC-Trin data directory"
   },
   "app.settings.resources.minecraft-directories": {
     "message": "Minecraft directories"
@@ -12377,6 +12503,12 @@
   "app.settings.resources.mojang-auth-service-description": {
     "message": "Mojang login, profile, skin, cape, and session verification requests used by the launcher and the game."
   },
+  "app.settings.resources.move-download-source-earlier": {
+    "message": "Move earlier"
+  },
+  "app.settings.resources.move-download-source-later": {
+    "message": "Move later"
+  },
   "app.settings.resources.multiplayer-proxy": {
     "message": "Multiplayer and LAN networking"
   },
@@ -12388,6 +12520,9 @@
   },
   "app.settings.resources.multiplayer-proxy.direct": {
     "message": "Direct connection (default)"
+  },
+  "app.settings.resources.no-custom-download-sources": {
+    "message": "No custom mirrors added"
   },
   "app.settings.resources.open-backups-folder": {
     "message": "Open backups folder"
@@ -12452,6 +12587,9 @@
   "app.settings.resources.proxy-username-placeholder": {
     "message": "Username (optional)"
   },
+  "app.settings.resources.remove-download-source": {
+    "message": "Remove mirror"
+  },
   "app.settings.resources.remove-minecraft-directory": {
     "message": "Remove .minecraft directory"
   },
@@ -12481,6 +12619,9 @@
   },
   "app.settings.resources.source.automatic": {
     "message": "Automatic (recommended)"
+  },
+  "app.settings.resources.source.mirror-preferred": {
+    "message": "Prefer mirrors"
   },
   "app.settings.resources.source.mojang-mirror-preferred": {
     "message": "Prefer Fallen-Proxy"
@@ -12569,6 +12710,9 @@
   "app.settings.storage.cacheClearFailed": {
     "message": "Could not clear the cache. Please try again."
   },
+  "app.settings.storage.cachedScanHelp": {
+    "message": "Showing the previous scan while storage usage is refreshed."
+  },
   "app.settings.storage.cacheFailureDetails": {
     "message": "Files that could not be cleared"
   },
@@ -12577,9 +12721,6 @@
   },
   "app.settings.storage.cacheRetainedHelp": {
     "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache files in previous data locations are kept. Cache database files also occupy some space."
-  },
-  "app.settings.storage.cachedScanHelp": {
-    "message": "Showing the previous scan while storage usage is refreshed."
   },
   "app.settings.storage.cancel": {
     "message": "Cancel"
@@ -12593,6 +12734,9 @@
   "app.settings.storage.cleanFailures": {
     "message": "Some files could not be deleted."
   },
+  "app.settings.storage.cleaning": {
+    "message": "Deleting files…"
+  },
   "app.settings.storage.cleanResult": {
     "message": "Freed {size} by deleting {count} files. {skipped} changed or referenced files were kept."
   },
@@ -12601,9 +12745,6 @@
   },
   "app.settings.storage.cleanTitle": {
     "message": "Clean shared game files"
-  },
-  "app.settings.storage.cleaning": {
-    "message": "Deleting files…"
   },
   "app.settings.storage.clearCache": {
     "message": "Clear cache"
@@ -12629,14 +12770,14 @@
   "app.settings.storage.customArguments": {
     "message": "Custom launch arguments may use these files, so they are kept."
   },
-  "app.settings.storage.dataType": {
-    "message": "Data type"
-  },
   "app.settings.storage.database": {
     "message": "Database"
   },
   "app.settings.storage.databaseUnavailable": {
     "message": "Some launcher records could not be read. Unverified files are kept."
+  },
+  "app.settings.storage.dataType": {
+    "message": "Data type"
   },
   "app.settings.storage.db-backup": {
     "message": "Database backups"
@@ -12785,11 +12926,11 @@
   "app.settings.storage.refresh-failed": {
     "message": "Files were deleted, but the storage total could not be refreshed."
   },
-  "app.settings.storage.refreshRequired": {
-    "message": "The analysis is a snapshot. Analyze again after installing, removing or changing instances."
-  },
   "app.settings.storage.refreshingTotals": {
     "message": "Refreshing storage totals…"
+  },
+  "app.settings.storage.refreshRequired": {
+    "message": "The analysis is a snapshot. Analyze again after installing, removing or changing instances."
   },
   "app.settings.storage.replay": {
     "message": "Replay recordings"
@@ -12818,11 +12959,11 @@
   "app.settings.storage.scanFailed": {
     "message": "Storage could not be scanned. The last complete snapshot is kept when available."
   },
-  "app.settings.storage.scanSections": {
-    "message": "{completed} / {total} areas"
-  },
   "app.settings.storage.scanning": {
     "message": "Scanning storage…"
+  },
+  "app.settings.storage.scanSections": {
+    "message": "{completed} / {total} areas"
   },
   "app.settings.storage.schematics": {
     "message": "Schematics"
@@ -12830,11 +12971,11 @@
   "app.settings.storage.screenshots": {
     "message": "Screenshots"
   },
-  "app.settings.storage.selectGroup": {
-    "message": "Select unused files in {name}"
-  },
   "app.settings.storage.selectedSize": {
     "message": "{count} items selected · {size}"
+  },
+  "app.settings.storage.selectGroup": {
+    "message": "Select unused files in {name}"
   },
   "app.settings.storage.servers": {
     "message": "Managed servers"
@@ -12890,14 +13031,14 @@
   "app.settings.storage.used": {
     "message": "In use"
   },
-  "app.settings.storage.versionUnavailable": {
-    "message": "Some installed versions are missing local version information. Shared files that may be needed are kept. Versions: {names}."
-  },
   "app.settings.storage.versions": {
     "message": "Game versions"
   },
   "app.settings.storage.versionsHelp": {
     "message": "Minecraft versions and their loaders. Expand to choose individual versions."
+  },
+  "app.settings.storage.versionUnavailable": {
+    "message": "Some installed versions are missing local version information. Shared files that may be needed are kept. Versions: {names}."
   },
   "app.settings.storage.world": {
     "message": "World"
@@ -12964,12 +13105,6 @@
   },
   "app.settings.synced-options.creative-hotbars.description": {
     "message": "Use the same saved creative hotbars across your instances."
-  },
-  "app.settings.synced-options.screenshots": {
-    "message": "Include screenshots in the global gallery"
-  },
-  "app.settings.synced-options.screenshots.description": {
-    "message": "Choose which instances appear in the global screenshot gallery."
   },
   "app.settings.synced-options.data-packs": {
     "message": "Sync data packs"
@@ -13085,6 +13220,9 @@
   "app.settings.synced-options.multiplayer-servers.address": {
     "message": "Server address"
   },
+  "app.settings.synced-options.multiplayer-servers.check-failed": {
+    "message": "Could not check"
+  },
   "app.settings.synced-options.multiplayer-servers.copy-address": {
     "message": "Copy address"
   },
@@ -13099,9 +13237,6 @@
   },
   "app.settings.synced-options.multiplayer-servers.empty": {
     "message": "No user-added servers are currently synced."
-  },
-  "app.settings.synced-options.multiplayer-servers.check-failed": {
-    "message": "Could not check"
   },
   "app.settings.synced-options.multiplayer-servers.filter-check-failed": {
     "message": "Check failed"
@@ -13144,6 +13279,12 @@
   },
   "app.settings.synced-options.resource-packs.none-synced-yet": {
     "message": "You haven't synced any resource packs yet"
+  },
+  "app.settings.synced-options.screenshots": {
+    "message": "Include screenshots in the global gallery"
+  },
+  "app.settings.synced-options.screenshots.description": {
+    "message": "Choose which instances appear in the global screenshot gallery."
   },
   "app.settings.synced-options.title": {
     "message": "Options synced across all instances"
@@ -13613,6 +13754,9 @@
   "app.translation-settings.auto-translate-description": {
     "message": "Start translating as soon as a Modrinth project page is opened."
   },
+  "app.translation-settings.bilibili-hint": {
+    "message": "Free Index-Translate API; Google Translate takes over when it fails."
+  },
   "app.translation-settings.cache": {
     "message": "Translation cache"
   },
@@ -13624,9 +13768,6 @@
   },
   "app.translation-settings.clear-cache": {
     "message": "Clear translation cache"
-  },
-  "app.translation-settings.bilibili-hint": {
-    "message": "Free Index-Translate API; Google Translate takes over when it fails."
   },
   "app.translation-settings.deepl-api-endpoint": {
     "message": "API endpoint"
@@ -13913,11 +14054,11 @@
   "app.world-editor.gamerule-category.world": {
     "message": "World updates"
   },
-  "app.world-editor.gamerule.allowFireTicksAwayFromPlayer": {
-    "message": "Update fire and lava away from players"
-  },
   "app.world-editor.gamerule.allow_entering_nether_using_portals": {
     "message": "Allow entering the Nether using portals"
+  },
+  "app.world-editor.gamerule.allowFireTicksAwayFromPlayer": {
+    "message": "Update fire and lava away from players"
   },
   "app.world-editor.gamerule.announceAdvancements": {
     "message": "Announce advancements"
@@ -13925,14 +14066,14 @@
   "app.world-editor.gamerule.blockExplosionDropDecay": {
     "message": "Bed and respawn anchor explosions destroy some drops"
   },
+  "app.world-editor.gamerule.command_blocks_work": {
+    "message": "Command blocks work"
+  },
   "app.world-editor.gamerule.commandBlockOutput": {
     "message": "Broadcast command block output"
   },
   "app.world-editor.gamerule.commandModificationBlockLimit": {
     "message": "Command modification block limit"
-  },
-  "app.world-editor.gamerule.command_blocks_work": {
-    "message": "Command blocks work"
   },
   "app.world-editor.gamerule.disableElytraMovementCheck": {
     "message": "Disable elytra movement check"
@@ -13997,11 +14138,11 @@
   "app.world-editor.gamerule.fallDamage": {
     "message": "Deal fall damage"
   },
-  "app.world-editor.gamerule.fireDamage": {
-    "message": "Deal fire damage"
-  },
   "app.world-editor.gamerule.fire_spread_radius_around_player": {
     "message": "Fire spread radius around players"
+  },
+  "app.world-editor.gamerule.fireDamage": {
+    "message": "Deal fire damage"
   },
   "app.world-editor.gamerule.forgiveDeadPlayers": {
     "message": "Forgive dead players"
@@ -14081,17 +14222,17 @@
   "app.world-editor.gamerule.snowAccumulationHeight": {
     "message": "Snow accumulation height"
   },
-  "app.world-editor.gamerule.spawnChunkRadius": {
-    "message": "Spawn chunk radius"
-  },
-  "app.world-editor.gamerule.spawnRadius": {
-    "message": "Respawn location radius"
-  },
   "app.world-editor.gamerule.spawn_monsters": {
     "message": "Spawn monsters"
   },
+  "app.world-editor.gamerule.spawnChunkRadius": {
+    "message": "Spawn chunk radius"
+  },
   "app.world-editor.gamerule.spawner_blocks_work": {
     "message": "Spawner blocks work"
+  },
+  "app.world-editor.gamerule.spawnRadius": {
+    "message": "Respawn location radius"
   },
   "app.world-editor.gamerule.spectatorsGenerateChunks": {
     "message": "Allow spectators to generate terrain"
@@ -14324,12 +14465,6 @@
   "friends.add-friend.username.description": {
     "message": "It may be different from their Minecraft username!"
   },
-  "friends.event.friend-request-rejected": {
-    "message": "{user} declined your friend request."
-  },
-  "friends.event.friend-request-rejected.title": {
-    "message": "Friend request declined"
-  },
   "friends.add-friend.username.placeholder": {
     "message": "Enter Modrinth username..."
   },
@@ -14338,6 +14473,12 @@
   },
   "friends.add-friends-to-share": {
     "message": "<link>Add friends</link> to build your friend list."
+  },
+  "friends.event.friend-request-rejected": {
+    "message": "{user} declined your friend request."
+  },
+  "friends.event.friend-request-rejected.title": {
+    "message": "Friend request declined"
   },
   "friends.friend.cancel-request": {
     "message": "Cancel request"
@@ -14372,6 +14513,30 @@
   "friends.requests.accept": {
     "message": "Accept"
   },
+  "friends.requests.cancel": {
+    "message": "Cancel"
+  },
+  "friends.requests.ignore": {
+    "message": "Ignore"
+  },
+  "friends.requests.incoming": {
+    "message": "{username} sent you a friend request"
+  },
+  "friends.requests.none": {
+    "message": "You have no pending friend requests :C"
+  },
+  "friends.requests.outgoing": {
+    "message": "You sent {username} a friend request"
+  },
+  "friends.requests.title": {
+    "message": "View friend requests"
+  },
+  "friends.search-friends-placeholder": {
+    "message": "Search friends..."
+  },
+  "friends.section.heading": {
+    "message": "{title} - {count}"
+  },
   "friends.share-port.active": {
     "message": "Your friends can now join through port {port}."
   },
@@ -14404,30 +14569,6 @@
   },
   "friends.share-port.title": {
     "message": "Share a LAN port"
-  },
-  "friends.requests.cancel": {
-    "message": "Cancel"
-  },
-  "friends.requests.ignore": {
-    "message": "Ignore"
-  },
-  "friends.requests.incoming": {
-    "message": "{username} sent you a friend request"
-  },
-  "friends.requests.none": {
-    "message": "You have no pending friend requests :C"
-  },
-  "friends.requests.outgoing": {
-    "message": "You sent {username} a friend request"
-  },
-  "friends.requests.title": {
-    "message": "View friend requests"
-  },
-  "friends.search-friends-placeholder": {
-    "message": "Search friends..."
-  },
-  "friends.section.heading": {
-    "message": "{title} - {count}"
   },
   "friends.sign-in-to-add-friends": {
     "message": "<link>Sign in to a Modrinth account</link> to manage friends."
@@ -14744,6 +14885,9 @@
   "instance.settings.sync.creative-hotbars": {
     "message": "Creative hotbars"
   },
+  "instance.settings.sync.data-packs": {
+    "message": "Data packs"
+  },
   "instance.settings.sync.description": {
     "message": "Choose which settings this instance shares with other instances."
   },
@@ -14755,9 +14899,6 @@
   },
   "instance.settings.sync.resource-packs": {
     "message": "Resource packs"
-  },
-  "instance.settings.sync.data-packs": {
-    "message": "Data packs"
   },
   "instance.settings.sync.screenshots": {
     "message": "Include in global screenshot gallery"

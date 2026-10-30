@@ -2421,6 +2421,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                 </p>
                 <NavButton
                     v-if="!themeStore.isNavItemHidden('multiplayer')"
+                    data-onboarding-id="nav-multiplayer"
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.multiplayer)"
                     :expanded="navigationExpanded"
                     :label="formatMessage(messages.multiplayer)"
@@ -2433,6 +2434,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                     {{ formatMessage(messages.navGroupAi) }}
                 </p>
                 <NavButton
+                    data-onboarding-id="nav-assistant"
                     v-tooltip.right="navigationExpanded ? '' : formatMessage(messages.aiAssistant)"
                     :expanded="navigationExpanded"
                     :label="formatMessage(messages.aiAssistant)"

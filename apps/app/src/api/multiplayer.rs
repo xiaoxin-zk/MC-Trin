@@ -10,6 +10,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             multiplayer_switch_provider,
             multiplayer_prepare_terracotta,
             multiplayer_start_mctier,
+            multiplayer_start_direct,
             multiplayer_mctier_send_voice_signal,
             multiplayer_mctier_set_public,
             multiplayer_mctier_create_invite,
@@ -85,6 +86,15 @@ pub async fn multiplayer_start_mctier<R: tauri::Runtime>(
             .await
             .map_err(theseus::Error::from)?,
     )
+}
+
+#[tauri::command]
+pub async fn multiplayer_start_direct(
+    request: theseus::mctier::DirectRequest,
+) -> Result<()> {
+    Ok(theseus::multiplayer::start_direct(request)
+        .await
+        .map_err(theseus::Error::from)?)
 }
 
 #[tauri::command]

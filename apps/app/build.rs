@@ -1115,6 +1115,7 @@ fn main() {
                         "multiplayer_switch_provider",
                         "multiplayer_prepare_terracotta",
                         "multiplayer_start_mctier",
+                        "multiplayer_start_direct",
                         "multiplayer_mctier_send_voice_signal",
                         "multiplayer_mctier_set_public",
                         "multiplayer_mctier_create_invite",

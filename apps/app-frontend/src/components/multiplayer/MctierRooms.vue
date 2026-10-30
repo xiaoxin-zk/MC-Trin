@@ -100,7 +100,13 @@ const messages = defineMessages({
     },
     visibilityPublicDescription: {
         id: 'app.multiplayer.mctier.visibility-public-description',
-        defaultMessage: 'Anyone browsing the lobby list can see this room and ask to join.',
+        defaultMessage:
+            'Listed in the lobby list for anyone to join. A listed room cannot have a password.',
+    },
+    publicNoPassword: {
+        id: 'app.multiplayer.mctier.public-no-password',
+        defaultMessage:
+            'A listed room cannot have a password. To keep a password, choose a private room and share an invite code.',
     },
     publishPublished: {
         id: 'app.multiplayer.mctier.publish-published',
@@ -118,7 +124,7 @@ const messages = defineMessages({
     publicWithPasswordHint: {
         id: 'app.multiplayer.mctier.public-with-password-hint',
         defaultMessage:
-            'Listed publicly. Anyone can find the room; joining needs the password or an invite code.',
+            'This room is listed for anyone to join. Unlisting it keeps the room private.',
     },
     privatePasswordHint: {
         id: 'app.multiplayer.mctier.private-password-hint',
@@ -134,6 +140,11 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.public-open-hint',
         defaultMessage:
             'Listed publicly with no password: anyone browsing the lobby list can join directly.',
+    },
+    publishNotListed: {
+        id: 'app.multiplayer.mctier.publish-not-listed',
+        defaultMessage:
+            'The lobby service accepted the request but does not list this room. Check that the password is empty and try again.',
     },
     lobbyDescription: {
         id: 'app.multiplayer.mctier.lobby-description',
@@ -299,6 +310,11 @@ const visibilityOptions = [
 ]
 const inviteLoading = ref(false)
 const error = ref('')
+/** The directory cannot list a password-protected room, so publishing clears
+ * the password instead of offering a combination the service ignores. */
+watch(isPublic, (isPublicNow) => {
+    if (isPublicNow) password.value = ''
+})
 const busy = computed(
     () => pending.value || ['downloading', 'connecting'].includes(props.state?.status ?? ''),
 )
@@ -587,47 +603,68 @@ function prefillInviteFromDeepLink() {
             <CopyCode v-if="state?.lobby_name" :text="state.lobby_name" />
             <template v-if="state?.mode === 'create'">
                 <div
-                    class="flex min-w-0 flex-col gap-2 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
+                    class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-4"
                     data-onboarding-id="mctier-publish-state"
                 >
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <span class="text-sm font-semibold">{{
-                            formatMessage(messages.visibilityTitle)
-                        }}</span>
+                    <div class="flex min-w-0 items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3 class="m-0 text-sm font-semibold text-[var(--color-text-primary)]">
+                                {{ formatMessage(messages.visibilityTitle) }}
+                            </h3>
+                            <p class="m-0 mt-1 text-xs text-[var(--color-text-tertiary)]">
+                                {{
+                                    formatMessage(
+                                        state.is_public
+                                            ? messages.visibilityPublicDescription
+                                            : messages.visibilityPrivateDescription,
+                                    )
+                                }}
+                            </p>
+                        </div>
+                        <label class="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                class="h-4 w-4"
+                                :checked="state.is_public"
+                                :disabled="visibilityPending"
+                                @change="onVisibilityToggle"
+                            />
+                            <span>{{ formatMessage(messages.visibility) }}</span>
+                        </label>
+                    </div>
+                    <p
+                        class="m-0 flex flex-wrap items-center gap-2 text-xs"
+                        data-onboarding-id="mctier-publish-badge"
+                        role="status"
+                    >
                         <span
-                            class="rounded-full px-2 py-0.5 text-xs"
+                            class="rounded-full px-2 py-0.5 font-semibold"
                             :class="
-                                state.is_public
+                                publishOutcome === 'published'
                                     ? 'bg-brand-highlight text-brand'
-                                    : 'bg-surface-4 text-[var(--color-text-tertiary)]'
+                                    : publishOutcome === 'not_listed'
+                                      ? 'bg-surface-4 text-red'
+                                      : publishOutcome === 'sent_unconfirmed'
+                                        ? 'bg-surface-4 text-[var(--color-text-secondary)]'
+                                        : 'bg-surface-4 text-[var(--color-text-tertiary)]'
                             "
-                            data-onboarding-id="mctier-publish-badge"
-                            role="status"
                         >
                             {{
                                 formatMessage(
                                     publishOutcome === 'published'
                                         ? messages.publishPublished
-                                        : publishOutcome === 'sent_unconfirmed'
-                                          ? messages.publishUnconfirmed
-                                          : messages.publishPrivate,
+                                        : publishOutcome === 'not_listed'
+                                          ? messages.publishNotListed
+                                          : publishOutcome === 'sent_unconfirmed'
+                                            ? messages.publishUnconfirmed
+                                            : messages.publishPrivate,
                                 )
                             }}
                         </span>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
-                            class="h-4 w-4"
-                            :checked="state.is_public"
-                            :disabled="visibilityPending"
-                            @change="onVisibilityToggle"
-                        />
-                        <span>{{ formatMessage(messages.visibility) }}</span>
-                        <span v-if="visibilityPending" role="status">
+                        <span v-if="visibilityPending" class="text-[var(--color-text-tertiary)]">
                             {{ formatMessage(messages.publicPending) }}
                         </span>
-                    </label>
+                    </p>
                     <p
                         v-if="state.has_password"
                         class="m-0 text-xs text-[var(--color-text-tertiary)]"
@@ -962,19 +999,23 @@ function prefillInviteFromDeepLink() {
                 >{{ formatMessage(messages.player)
                 }}<StyledInput v-model="playerName" name="player-name" :maxlength="64"
             /></label>
-            <label class="flex flex-col gap-1 text-sm"
-                >{{ formatMessage(messages.password) }}
+            <label class="flex flex-col gap-1 text-sm">
+                <span>{{ formatMessage(messages.password) }}</span>
                 <div class="flex min-w-0 items-center gap-2">
                     <StyledInput
                         v-model="password"
                         name="lobby-password"
                         type="password"
                         :maxlength="128"
+                        :disabled="isPublic"
                     />
-                    <Button type="quiet" size="sm" @click="generatePassword">{{
+                    <Button type="quiet" size="sm" :disabled="isPublic" @click="generatePassword">{{
                         formatMessage(messages.randomPassword)
                     }}</Button>
                 </div>
+                <span v-if="isPublic" class="text-xs text-[var(--color-text-tertiary)]">
+                    {{ formatMessage(messages.publicNoPassword) }}
+                </span>
             </label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.port)
@@ -1042,15 +1083,9 @@ function prefillInviteFromDeepLink() {
                 </div>
             </fieldset>
             <p
-                v-if="isPublic && password.trim()"
+                v-if="!isPublic && password.trim()"
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
                 data-onboarding-id="mctier-password"
-            >
-                {{ formatMessage(messages.publicWithPasswordHint) }}
-            </p>
-            <p
-                v-else-if="!isPublic && password.trim()"
-                class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
             >
                 {{ formatMessage(messages.privatePasswordHint) }}
             </p>
@@ -1059,9 +1094,6 @@ function prefillInviteFromDeepLink() {
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
             >
                 {{ formatMessage(messages.openPrivateHint) }}
-            </p>
-            <p v-else class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
-                {{ formatMessage(messages.publicOpenHint) }}
             </p>
             <p class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
                 {{ formatMessage(messages.hostHint) }}

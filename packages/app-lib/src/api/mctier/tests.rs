@@ -106,15 +106,31 @@ fn request_validation_rejects_unsafe_urls_and_invalid_room_values() {
 }
 
 #[test]
-fn password_protected_lobbies_stay_publishable() {
+fn a_public_lobby_cannot_keep_a_password() {
     let mut input = request();
-    input.is_public = true;
-    assert!(input.validate().is_ok());
-
     input.password.clear();
+    input.is_public = true;
+    assert!(
+        input.validate().is_ok(),
+        "a listed room without a password is allowed"
+    );
+
+    // The directory carries no password and the service isolates rooms by name
+    // plus password, so the combination cannot be listed. Refusing it keeps the
+    // UI from offering a room the service would silently leave out.
+    input.password = "secret".into();
+    let error = input.validate().unwrap_err();
+    assert!(
+        format!("{error}").contains("cannot have a password"),
+        "{error}"
+    );
+
+    // A private room keeps its password.
+    input.is_public = false;
     assert!(input.validate().is_ok());
 
     input.mode = EntryMode::Join;
+    input.is_public = true;
     assert!(input.validate().is_err());
 }
 

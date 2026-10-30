@@ -337,6 +337,47 @@ pub fn parse_players(value: &Value) -> eyre::Result<Vec<Player>> {
 /// the cause and the way back in rather than sounding like a dead button.
 pub const SIGNALING_DISCONNECTED: &str = "Lost the connection to the MCTier signaling server. The room has ended - check your connection and start or join the room again (the default server is wss://mctier.pmhs.top/signaling; a self-hosted or alternate address can be set in the room request).";
 
+/// Reads the public directory through a short-lived connection that never
+/// registers an identity.
+///
+/// Publishing is otherwise one-way: the host asks to be listed and has no way
+/// to learn whether the room actually reached the directory, which is how a
+/// room can look published while the lobby list stays empty. Asking the
+/// directory directly turns that guess into an answer.
+pub async fn public_lobby_names(
+    signaling_server: &str,
+    timeout: Duration,
+) -> eyre::Result<Vec<String>> {
+    let read = async {
+        let (mut socket, _) = connect_async(signaling_server).await?;
+        socket
+            .send(Message::Text(
+                json!({ "type": "public-lobby-list-request" })
+                    .to_string()
+                    .into(),
+            ))
+            .await?;
+        loop {
+            let message = next_message(&mut socket).await?;
+            if message["type"] != "public-lobby-list-response" {
+                continue;
+            }
+            let mut names: Vec<String> = Vec::new();
+            if let Some(lobbies) = message["lobbies"].as_array() {
+                for lobby in lobbies {
+                    if let Some(name) = lobby["lobbyName"].as_str() {
+                        names.push(name.to_string());
+                    }
+                }
+            }
+            return Ok::<Vec<String>, eyre::Report>(names);
+        }
+    };
+    tokio::time::timeout(timeout, read)
+        .await
+        .wrap_err("the lobby directory did not answer in time")?
+}
+
 pub async fn next_message(socket: &mut Socket) -> eyre::Result<Value> {
     loop {
         let message = socket

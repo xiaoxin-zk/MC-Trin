@@ -24,6 +24,8 @@ pub enum MultiplayerProvider {
     Terracotta,
     Hongshi,
     Mctier,
+    /// A password-protected room with no lobby service behind it.
+    Direct,
 }
 
 impl std::fmt::Display for MultiplayerProvider {
@@ -32,6 +34,7 @@ impl std::fmt::Display for MultiplayerProvider {
             Self::Terracotta => formatter.write_str("terracotta"),
             Self::Hongshi => formatter.write_str("hongshi"),
             Self::Mctier => formatter.write_str("mctier"),
+            Self::Direct => formatter.write_str("direct"),
         }
     }
 }
@@ -134,6 +137,16 @@ pub async fn get_state() -> MultiplayerState {
                     "EasyTier is unavailable on this platform".to_string()
                 }),
             },
+            MultiplayerProviderCapabilities {
+                provider: MultiplayerProvider::Direct,
+                supported: mctier::is_supported(),
+                can_host: true,
+                can_join: true,
+                requires_local_port: true,
+                unsupported_reason: (!mctier::is_supported()).then(|| {
+                    "EasyTier is unavailable on this platform".to_string()
+                }),
+            },
         ],
         terracotta,
         hongshi,
@@ -145,7 +158,11 @@ async fn stop_provider(provider: MultiplayerProvider) -> eyre::Result<()> {
     match provider {
         MultiplayerProvider::Terracotta => terracotta::stop_terracotta().await,
         MultiplayerProvider::Hongshi => hongshi::stop().await,
-        MultiplayerProvider::Mctier => mctier::stop().await,
+        // A direct room runs on the same kernel and session slot as a lobby
+        // room, so it is stopped through the same path.
+        MultiplayerProvider::Mctier | MultiplayerProvider::Direct => {
+            mctier::stop().await
+        }
     }
 }
 
@@ -265,6 +282,16 @@ pub async fn start_mctier(
     pending.wait().await
 }
 
+pub async fn start_direct(
+    request: mctier::DirectRequest,
+) -> eyre::Result<()> {
+    let pending = {
+        let _operation = MULTIPLAYER_OPERATION.lock().await;
+        mctier::begin_start_direct(request).await?
+    };
+    pending.wait().await
+}
+
 pub async fn stop() -> eyre::Result<()> {
     let _operation = MULTIPLAYER_OPERATION.lock().await;
     let provider = { *ACTIVE_PROVIDER.lock().await };
@@ -282,7 +309,9 @@ pub async fn reset() -> eyre::Result<()> {
             terracotta::reset_state().await
         }
         Some(MultiplayerProvider::Hongshi) => hongshi::stop().await,
-        Some(MultiplayerProvider::Mctier) => mctier::stop().await,
+        Some(MultiplayerProvider::Mctier | MultiplayerProvider::Direct) => {
+            mctier::stop().await
+        }
         None => Ok(()),
     }
 }

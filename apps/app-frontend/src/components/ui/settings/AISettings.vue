@@ -4,7 +4,6 @@ import {
     CopyIcon,
     ExternalIcon,
     GridIcon,
-    HelpCircleIcon,
     KeyIcon,
     LogOutIcon,
     PlugIcon,
@@ -26,7 +25,7 @@ import {
     useVIntl,
 } from '@modrinth/ui'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import providerDescriptionsEn from '@/data/lobehub-provider-descriptions/en-US.json'
@@ -59,11 +58,6 @@ import AIIcon from './AIIcon.vue'
 const { formatMessage, locale } = useVIntl()
 const { handleError } = injectNotificationManager()
 const router = useRouter()
-const replayOnboarding = inject<(mode: 'assistant') => Promise<void>>('replayOnboarding')
-
-async function openAssistantGuide() {
-    await replayOnboarding?.('assistant')
-}
 const emptyState: AIState = {
     settings: { enabled: true },
     catalog_source: '',
@@ -895,12 +889,6 @@ onMounted(async () => {
                     {{ formatMessage(messages.noProviders) }}
                 </p>
             </div>
-            <button type="button" class="ai-provider-item" @click="openAssistantGuide">
-                <HelpCircleIcon class="size-[22px] shrink-0" />
-                <span class="min-w-0 flex-1 truncate text-left text-sm font-semibold">
-                    {{ formatMessage(messages.guide) }}
-                </span>
-            </button>
             <div class="ai-master-switch">
                 <label
                     for="ai-master-switch"

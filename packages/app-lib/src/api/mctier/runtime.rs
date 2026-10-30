@@ -244,7 +244,7 @@ pub fn arguments(
     arguments
 }
 
-async fn free_port() -> eyre::Result<u16> {
+pub(super) async fn free_port() -> eyre::Result<u16> {
     Ok(TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await?
         .local_addr()?
@@ -427,7 +427,41 @@ pub async fn run(
             )
             .await
             {
-                Ok(outcome) => publish_outcome = outcome,
+                Ok(outcome) => {
+                    publish_outcome = outcome;
+                    // The request is one-way, so confirm it against the
+                    // directory itself. A host that is told "unconfirmed"
+                    // otherwise has no way to know the room is missing.
+                    if outcome != PublishOutcome::Private {
+                        let listed = protocol::public_lobby_names(
+                            &request.signaling_server,
+                            VISIBILITY_CONFIRMATION_WINDOW * 4,
+                        )
+                        .await;
+                        match listed {
+                            Ok(names)
+                                if names.iter().any(|name| {
+                                    name == &request.lobby_name
+                                }) =>
+                            {
+                                publish_outcome = PublishOutcome::Published
+                            }
+                            Ok(_) => {
+                                tracing::warn!(
+                                    lobby = %request.lobby_name,
+                                    "the lobby service accepted the publish but does not list the room"
+                                );
+                                publish_outcome = PublishOutcome::NotListed;
+                            }
+                            Err(error) => {
+                                tracing::warn!(
+                                    %error,
+                                    "could not read the lobby directory to confirm the listing"
+                                );
+                            }
+                        }
+                    }
+                }
                 Err(error) => {
                     // The room itself is healthy; only its listing failed.
                     tracing::warn!(%error, "the lobby could not be published publicly");

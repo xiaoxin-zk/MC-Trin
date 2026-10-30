@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { MctierStartRequest, MctierState } from '@/helpers/mctier'
+import type { DirectRoomRequest, MctierStartRequest, MctierState } from '@/helpers/mctier'
 import type { MctierVoiceSignal } from '@/helpers/mctier-voice'
 import type { TerracottaState } from '@/helpers/terracotta'
 
-export type MultiplayerProvider = 'terracotta' | 'hongshi' | 'mctier'
+export type MultiplayerProvider = 'terracotta' | 'hongshi' | 'mctier' | 'direct'
 export type HongshiStatus =
     | 'unsupported'
     | 'idle'
@@ -77,7 +77,7 @@ export interface MultiplayerState {
 }
 
 export function storedMultiplayerProvider(value: string | null): MultiplayerProvider {
-    return value === 'terracotta' || value === 'hongshi' ? value : 'mctier'
+    return value === 'terracotta' || value === 'hongshi' || value === 'direct' ? value : 'mctier'
 }
 
 export function validLocalPort(value: string): number | null {
@@ -147,6 +147,8 @@ export const multiplayer = {
     prepareTerracotta: () => invoke<void>(command('multiplayer_prepare_terracotta')),
     startMctier: (request: MctierStartRequest) =>
         invoke<void>(command('multiplayer_start_mctier'), { request }),
+    startDirect: (request: DirectRoomRequest) =>
+        invoke<void>(command('multiplayer_start_direct'), { request }),
     sendMctierVoiceSignal: (signal: MctierVoiceSignal) =>
         invoke<void>(command('multiplayer_mctier_send_voice_signal'), { signal }),
     setMctierPublic: (isPublic: boolean) =>

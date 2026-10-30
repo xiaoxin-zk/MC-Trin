@@ -11,6 +11,9 @@ use tokio_util::sync::CancellationToken;
 use super::multiplayer::{self, MultiplayerProvider};
 
 mod binary;
+mod direct;
+
+pub use direct::DirectRequest;
 mod invite;
 mod protocol;
 mod runtime;
@@ -78,6 +81,15 @@ impl StartRequest {
         }
         if self.is_public && self.mode != EntryMode::Create {
             bail!("only the room host can publish a lobby");
+        }
+        // The directory carries no password and the service isolates rooms by
+        // name plus password, so a password-protected room cannot also be
+        // listed. Refusing here keeps the UI from offering a combination the
+        // service would silently ignore.
+        if self.is_public && !self.password.is_empty() {
+            bail!(
+                "a public lobby cannot have a password; clear the password to publish, or keep the room private and share an invite code"
+            );
         }
         let invalid_description =
             self.description.as_ref().is_some_and(|description| {
@@ -176,6 +188,8 @@ pub enum PublishOutcome {
     Published,
     /// The request was sent and not rejected, but no broadcast arrived.
     SentUnconfirmed,
+    /// The directory was asked directly and does not list this room.
+    NotListed,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -295,7 +309,7 @@ pub async fn get_state() -> MctierState {
     state
 }
 
-async fn update(generation: u64, change: impl FnOnce(&mut MctierState)) {
+pub(super) async fn update(generation: u64, change: impl FnOnce(&mut MctierState)) {
     let mut service = SERVICE.lock().await;
     if service
         .session
@@ -411,8 +425,99 @@ pub async fn begin_start(
     Ok(PendingStart(result))
 }
 
-pub async fn send_voice_signal(signal: Value) -> eyre::Result<()> {
-    let (control, message, response) = {
+/// Starts a room that never contacts a lobby service.
+///
+/// Shares the session slot, kernel preparation and state reporting with the
+/// lobby path; only the runtime differs, so a user cannot have both running.
+pub async fn begin_start_direct(
+    request: direct::DirectRequest,
+) -> eyre::Result<PendingStart> {
+    request.validate()?;
+    if !is_supported() {
+        bail!(
+            "EasyTier is unavailable on this operating system or architecture"
+        );
+    }
+    let mut service = SERVICE.lock().await;
+    if service.session.is_some() {
+        bail!("a room is already connecting or running");
+    }
+    multiplayer::claim_provider(MultiplayerProvider::Direct).await?;
+    service.generation += 1;
+    let generation = service.generation;
+    let cancellation = CancellationToken::new();
+    let (control, _control_receiver) = mpsc::channel(4);
+    let (done, receiver) = watch::channel(false);
+    service.session = Some(Session {
+        generation,
+        cancellation: cancellation.clone(),
+        done: receiver,
+        control,
+    });
+    // A direct room has no invite envelope to mint: the room code is built from
+    // the same name and password the host typed.
+    service.invite_context = None;
+    service.state = MctierState {
+        status: Status::Downloading,
+        mode: Some(request.as_start_request().mode),
+        lobby_name: Some(request.room_name.clone()),
+        game_port: Some(request.game_port),
+        has_password: !request.password.is_empty(),
+        ..MctierState::default()
+    };
+    report_preparation(PreparationStage::Downloading, None);
+    let (ready, result) = oneshot::channel();
+    tokio::spawn(async move {
+        use futures::FutureExt;
+        let mut readiness = Some(ready);
+        let reporter: fn(PreparationStage, Option<u8>) = report_preparation;
+        let outcome = std::panic::AssertUnwindSafe(async {
+            let binary = binary::prepare(&cancellation, &reporter).await?;
+            direct::run(
+                generation,
+                request,
+                &binary,
+                &cancellation,
+                readiness.take(),
+            )
+            .await
+        })
+        .catch_unwind()
+        .await
+        .unwrap_or_else(|_| {
+            Err(eyre::eyre!("room session stopped unexpectedly"))
+        });
+        if let Some(ready) = readiness {
+            let message = outcome.as_ref().err().map_or_else(
+                || "room operation cancelled".to_string(),
+                |error| format!("{error:#}"),
+            );
+            let _ = ready.send(Err(eyre::eyre!(message)));
+        }
+        let mut service = SERVICE.lock().await;
+        if service
+            .session
+            .as_ref()
+            .is_some_and(|session| session.generation == generation)
+        {
+            service.session = None;
+            service.invite_context = None;
+            reset_preparation();
+            if cancellation.is_cancelled() || outcome.is_ok() {
+                service.state = MctierState::default();
+            } else {
+                service.state.status = Status::Error;
+                service.state.error_message =
+                    outcome.err().map(|error| format!("{error:#}"));
+            }
+            multiplayer::release_provider(MultiplayerProvider::Direct).await;
+        }
+        let _ = done.send(true);
+    });
+    Ok(PendingStart(result))
+}
+
+pub async fn send_voice_signal(signal: Value) -> eyre::Result<()> {    let (control, message, response) = {
         let service = SERVICE.lock().await;
         if !matches!(service.state.status, Status::Hosting | Status::Joined) {
             bail!("voice signaling requires an active MCTier room");

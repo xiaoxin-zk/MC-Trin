@@ -34,6 +34,7 @@ import { useRoute } from 'vue-router'
 
 import hongshiIcon from '@/assets/multiplayer/hongshi.png'
 import terracottaIcon from '@/assets/multiplayer/terracotta.png'
+import DirectRoom from '@/components/multiplayer/DirectRoom.vue'
 import MctierRooms from '@/components/multiplayer/MctierRooms.vue'
 import { useMultiplayerSession } from '@/composables/useMultiplayerSession'
 import { hongshiErrorMessage } from '@/helpers/hongshi-messages'
@@ -289,6 +290,10 @@ const messages = defineMessages({
         defaultMessage: 'RedStone Online 2',
     },
     mctierProvider: { id: 'app.multiplayer.provider.mctier', defaultMessage: 'MC-Trin LAN lobby' },
+    directProvider: {
+        id: 'app.multiplayer.provider.direct',
+        defaultMessage: 'Direct room (no server)',
+    },
     hongshiUnsupported: {
         id: 'app.multiplayer.hongshi.unsupported',
         defaultMessage:
@@ -466,6 +471,12 @@ const providerOptions = computed(() => [
     {
         id: 'mctier' as const,
         label: messages.mctierProvider,
+        image: '/mctrin.svg',
+        disabled: false,
+    },
+    {
+        id: 'direct' as const,
+        label: messages.directProvider,
         image: '/mctrin.svg',
         disabled: false,
     },
@@ -707,8 +718,12 @@ function submitJoin() {
             :state="multiplayerState?.mctier"
             :initial-invite-code="initialMctierInvite"
         />
+        <DirectRoom v-else-if="selectedProvider === 'direct'" :state="multiplayerState?.mctier" />
     </div>
-    <div v-if="selectedProvider !== 'mctier'" class="flex min-h-0 w-full flex-1 flex-col gap-3">
+    <div
+        v-if="selectedProvider !== 'mctier' && selectedProvider !== 'direct'"
+        class="flex min-h-0 w-full flex-1 flex-col gap-3"
+    >
         <template v-if="selectedProvider === 'terracotta'">
             <Card v-if="!state" class="!m-0">
                 <div class="flex items-center gap-3">
@@ -1149,6 +1164,7 @@ function submitJoin() {
             :state="multiplayerState?.mctier"
             :initial-invite-code="initialMctierInvite"
         />
+        <DirectRoom v-else-if="selectedProvider === 'direct'" :state="multiplayerState?.mctier" />
         <template v-else>
             <Card v-if="!hongshiState" class="!m-0">
                 <div class="flex items-center gap-3">

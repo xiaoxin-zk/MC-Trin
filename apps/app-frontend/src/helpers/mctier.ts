@@ -1,3 +1,15 @@
+/** A room that needs no lobby service: both sides agree on a name and a
+ * password, and no directory ever learns the room exists. */
+export interface DirectRoomRequest {
+    room_name: string
+    password: string
+    player_name: string
+    server_node: string
+    game_port: number
+    /** Host virtual address, present only when joining an existing room. */
+    host_address?: string | null
+}
+
 export interface MctierStartRequest {
     mode: 'create' | 'join'
     lobby_name: string
