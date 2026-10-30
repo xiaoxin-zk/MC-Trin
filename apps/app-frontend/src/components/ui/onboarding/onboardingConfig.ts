@@ -1,8 +1,7 @@
 import { defineMessages, type MessageDescriptor } from '@modrinth/ui'
 
 export type OnboardingInteraction = 'manual' | 'navigate' | 'activate' | 'inspect'
-export type OnboardingMode =
-    'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing'
+export type OnboardingMode = 'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing'
 export type CreationPath = 'custom'
 export type StepDestination = string | 'complete'
 
