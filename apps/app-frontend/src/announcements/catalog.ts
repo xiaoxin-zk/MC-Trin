@@ -5339,6 +5339,47 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
             ],
         },
     },
+    {
+        id: 'launcher-0.0.1-beta',
+        version: '0.0.1-beta',
+        publishedAt: '2026-10-30',
+        title: {
+            'en-US': 'MC-Trin 0.0.1-beta',
+            'zh-CN': 'MC-Trin 0.0.1-beta',
+        },
+        changes: {
+            added: [
+                {
+                    'en-US':
+                        'Added direct rooms: password-protected multiplayer that needs no lobby service, joined by pasting a room code or the host address.',
+                    'zh-CN':
+                        '新增直连房间：带密码保护的联机方式，不依赖大厅服务，粘贴房间码或房主地址即可加入。',
+                },
+                {
+                    'en-US':
+                        'Added the public lobby listing with directory verification, so a host can see whether the room is really listed.',
+                    'zh-CN': '公开大厅新增目录核验，房主能确认房间是否真正出现在大厅列表中。',
+                },
+                {
+                    'en-US':
+                        'Added multiplayer and AI assistant steps to the first-run tour, with a configurable push-to-talk key.',
+                    'zh-CN': '首次使用引导新增联机与 AI 助手步骤；语音按键说话支持自定义按键。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed the tour stalling when a navigation step lands on a route that redirects.',
+                    'zh-CN': '修复引导在导航目标发生重定向时卡住不再前进的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed publishing a lobby leaving the host with an unconfirmed status instead of a verified answer.',
+                    'zh-CN': '修复发布大厅后房主只能看到未确认状态、无法获得确切结果的问题。',
+                },
+            ],
+        },
+    },
 ]
 
 export function getAnnouncementByVersion(version: string | null | undefined) {

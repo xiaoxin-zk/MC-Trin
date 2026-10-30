@@ -186,7 +186,22 @@ function publishedReleases() {
 function auditPublishedReleases(currentRef) {
     const failures = []
     const warnings = []
-    const canonical = migrationMapAt(canonicalBootstrap.ref)
+    // The bootstrap snapshot belongs to the upstream project's migration
+    // incident. A fork without that history in its object database cannot load
+    // it, and it has nothing to audit until its first release exists, so the
+    // audit falls back to the working baseline comparison instead of failing
+    // the release.
+    let canonical
+    try {
+        canonical = migrationMapAt(canonicalBootstrap.ref)
+    } catch (error) {
+        console.warn(
+            `Migration guard notice: bootstrap snapshot ${canonicalBootstrap.tag} is unavailable ` +
+                `(${error.message.split('\n')[0]}); falling back to a base comparison`,
+        )
+        compareWithBase(resolveBaseRef('HEAD^'), currentRef)
+        return
+    }
     const backupCanonical = canonicalBackupMigrations()
     validateMigrationSet(canonical, failures)
 
@@ -275,9 +290,15 @@ function compareWithBase(baseRef, currentRef) {
     const failures = []
     const canonical = migrationMapAt(baseRef)
     // Compare the restored backup SQL with its original bytes even when the
-    // comparison base contains the withdrawn formatting change.
-    for (const [file, migration] of canonicalBackupMigrations()) {
-        if (canonical.has(file)) canonical.set(file, migration)
+    // comparison base contains the withdrawn formatting change. The upstream
+    // restore snapshot may not exist in a fork's object database; there the
+    // base map is used as-is, since the fork's own history is the record.
+    try {
+        for (const [file, migration] of canonicalBackupMigrations()) {
+            if (canonical.has(file)) canonical.set(file, migration)
+        }
+    } catch {
+        // The fork's migrations stand on their own.
     }
     validateMigrationSet(canonical, failures)
     compareCurrentWithCanonical(canonical, currentRef, failures)
