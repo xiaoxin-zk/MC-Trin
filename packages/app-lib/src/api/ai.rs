@@ -13,7 +13,7 @@ use protocol::{
     apply_openai_translation_options, apply_responses_translation_options,
     checked_openai_response_stream, google_generation_config,
     insert_json_option, openai_content, openai_response_stream_content,
-    opencode_headers,
+    opencode_headers, text_client,
 };
 
 use std::collections::HashMap;
