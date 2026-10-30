@@ -1830,17 +1830,9 @@ async function handleCommand(e: LauncherCommand | null | undefined): Promise<voi
         const version = await get_version(e.id, 'must_revalidate').catch(handleError)
         if (version) {
             await contentInstall
-                .install(
-                    version.project_id,
-                    version.id,
-                    null,
-                    'url',
-                    undefined,
-                    undefined,
-                    {
-                        showProjectInfo: true,
-                    },
-                )
+                .install(version.project_id, version.id, null, 'url', undefined, undefined, {
+                    showProjectInfo: true,
+                })
                 .catch(handleError)
         }
     } else {

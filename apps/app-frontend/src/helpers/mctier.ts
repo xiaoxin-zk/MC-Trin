@@ -40,11 +40,7 @@ export interface MctierPlayer {
 export type MctierPreparationStage = 'downloading' | 'extracting' | 'verifying'
 
 /** How the host's public listing request resolved; mirrors the Rust enum. */
-export type MctierPublishOutcome =
-    | 'private'
-    | 'published'
-    | 'sent_unconfirmed'
-    | 'not_listed'
+export type MctierPublishOutcome = 'private' | 'published' | 'sent_unconfirmed' | 'not_listed'
 
 export interface MctierState {
     status: 'idle' | 'downloading' | 'connecting' | 'hosting' | 'joined' | 'error'
