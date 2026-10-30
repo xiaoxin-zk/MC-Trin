@@ -148,14 +148,6 @@ allow('runtime-set', [
 // binding whose live value is provided elsewhere.
 allow('known-dangling-reference', [
 	[
-		'_mouse-x',
-		'packages/ui/src/components/modal/NewModal.vue references it only inside a commented-out transform; the live value binds via v-bind(mouseXOffset)',
-	],
-	[
-		'_mouse-y',
-		'packages/ui/src/components/modal/NewModal.vue references it only inside a commented-out transform; the live value binds via v-bind(mouseYOffset)',
-	],
-	[
 		'window-controls-width',
 		'apps/app-frontend/src/App.vue reads it with an inline `0px` fallback; its setter was removed from WindowControls.vue',
 	],

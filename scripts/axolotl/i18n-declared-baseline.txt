@@ -3228,15 +3228,6 @@ app.project.version.installing
 app.project.versions.add-to-another-instance
 app.project.versions.already-installed
 app.project.versions.start-server
-app.remote-announcements.center-title
-app.remote-announcements.empty
-app.remote-announcements.preview-action
-app.remote-announcements.preview-content
-app.remote-announcements.preview-summary
-app.remote-announcements.preview-title
-app.remote-announcements.read-all
-app.remote-announcements.unread
-app.remote-announcements.view
 app.resources.backups.back
 app.resources.backups.close
 app.resources.backups.confirm
