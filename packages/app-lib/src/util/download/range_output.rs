@@ -158,7 +158,6 @@ impl RangeOutput {
             path,
         })
     }
-
 }
 
 impl RangeWriter {

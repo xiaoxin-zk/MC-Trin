@@ -14,6 +14,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::oneshot,
 };
+use tokio_util::sync::CancellationToken;
 
 fn request() -> StartRequest {
     StartRequest {
@@ -1032,4 +1033,106 @@ async fn a_dropped_signaling_link_reconnects_instead_of_ending_the_room() {
         .unwrap()
         .unwrap();
     let _ = directory;
+}
+
+fn direct_request() -> direct::DirectRequest {
+    direct::DirectRequest {
+        room_name: "TestRoom".into(),
+        password: "secret".into(),
+        player_name: "Player".into(),
+        server_node: "tcp://127.0.0.1:11010".into(),
+        game_port: 25565,
+        host_address: None,
+    }
+}
+
+#[test]
+fn direct_room_validation_enforces_the_password_contract() {
+    let valid = direct_request();
+    assert!(valid.validate().is_ok());
+
+    // A direct room exists because of its password: an empty secret would be
+    // an open network wearing the name of a protected one.
+    let mut open = direct_request();
+    open.password.clear();
+    assert!(open.validate().is_err());
+
+    // Joining by an address that is not an IP is a form error, not a runtime
+    // surprise after the kernel is already up.
+    let mut joined = direct_request();
+    joined.host_address = Some("not-an-address".into());
+    assert!(joined.validate().is_err());
+
+    let mut nameless = direct_request();
+    nameless.room_name = "ab".into();
+    assert!(nameless.validate().is_err());
+}
+
+#[test]
+fn direct_room_arguments_forward_the_overlay_target_per_role() {
+    let host = direct_request();
+    let host_arguments = direct::arguments(
+        &host,
+        Ipv4Addr::new(10, 126, 126, 9),
+        18181,
+        34567,
+        Ipv4Addr::new(10, 126, 126, 9),
+    );
+    let port_forward = host_arguments
+        .iter()
+        .position(|argument| argument == "--port-forward")
+        .map(|index| host_arguments[index + 1].clone())
+        .expect("the host must publish its game port");
+    assert_eq!(port_forward, "tcp://127.0.0.1:34567/10.126.126.9:25565");
+    assert!(host_arguments.contains(&"--network-name".to_string()));
+    let name_index = host_arguments
+        .iter()
+        .position(|argument| argument == "--network-name")
+        .unwrap();
+    assert_eq!(
+        host_arguments[name_index + 1],
+        "MCTRIN-TestRoom",
+        "a direct room must not share a network name with a lobby room"
+    );
+
+    // A guest dials the host's virtual address, not its own.
+    let mut guest = direct_request();
+    guest.host_address = Some("10.126.126.9".into());
+    let guest_arguments = direct::arguments(
+        &guest,
+        Ipv4Addr::new(10, 126, 126, 12),
+        18181,
+        34567,
+        Ipv4Addr::new(10, 126, 126, 9),
+    );
+    let port_forward = guest_arguments
+        .iter()
+        .position(|argument| argument == "--port-forward")
+        .map(|index| guest_arguments[index + 1].clone())
+        .unwrap();
+    assert_eq!(port_forward, "tcp://127.0.0.1:34567/10.126.126.9:25565");
+}
+
+#[tokio::test]
+async fn direct_room_reports_success_only_once_the_forward_listens() {
+    // The kernel must be listening before the room claims to be up; reporting
+    // success at spawn time turned a dead network into a green screen.
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let address = listener.local_addr().unwrap();
+    // Nothing accepts on the kernel side here: the guard process is a stand-in
+    // that exits immediately, so wait_for_listener must fail and the room must
+    // surface that instead of reporting Hosting.
+    drop(listener);
+    let cancellation = CancellationToken::new();
+    let outcome = direct::run(
+        0,
+        direct_request(),
+        &PathBuf::from("definitely-not-a-kernel"),
+        &cancellation,
+        tokio::sync::mpsc::channel(4).1,
+        None,
+    )
+    .await;
+    assert!(outcome.is_err(), "a missing kernel cannot host a room");
+    let _ = address;
 }

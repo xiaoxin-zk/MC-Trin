@@ -449,7 +449,7 @@ pub async fn begin_start_direct(
     service.generation += 1;
     let generation = service.generation;
     let cancellation = CancellationToken::new();
-    let (control, _control_receiver) = mpsc::channel(4);
+    let (control, control_receiver) = mpsc::channel(4);
     let (done, receiver) = watch::channel(false);
     service.session = Some(Session {
         generation,
@@ -481,6 +481,7 @@ pub async fn begin_start_direct(
                 request,
                 &binary,
                 &cancellation,
+                control_receiver,
                 readiness.take(),
             )
             .await
@@ -568,6 +569,15 @@ pub async fn set_public(is_public: bool) -> eyre::Result<()> {
             || service.state.mode != Some(EntryMode::Create)
         {
             bail!("only the active room host can change public visibility");
+        }
+        // The listing carries no password and the service isolates rooms by
+        // name plus secret, so the no-password rule holds for the room's whole
+        // lifetime, not only at creation: otherwise a private room could be
+        // started with a password and flipped public mid-session.
+        if is_public && service.state.has_password {
+            bail!(
+                "a public lobby cannot have a password; keep the room private and share an invite code"
+            );
         }
         let control = service
             .session

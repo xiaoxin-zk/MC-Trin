@@ -284,7 +284,7 @@ fn error_chain(error: &eyre::Report) -> String {
 /// happens well before the peer tunnel carries traffic. Early handshakes are
 /// therefore reset, so retry until Minecraft answers instead of failing the
 /// join on the first attempt.
-async fn verify_forwarded_game(
+pub(super) async fn verify_forwarded_game(
     child: &mut Child,
     port: u16,
     cancellation: &CancellationToken,
@@ -313,7 +313,10 @@ async fn verify_forwarded_game(
     }
 }
 
-async fn wait_for_listener(child: &mut Child, port: u16) -> eyre::Result<()> {
+pub(super) async fn wait_for_listener(
+    child: &mut Child,
+    port: u16,
+) -> eyre::Result<()> {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             if let Some(status) = child.try_wait()? {

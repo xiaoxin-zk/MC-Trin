@@ -90,6 +90,8 @@ const idle = {
     voice_ice_server: null,
     error_message: null,
     is_public: false,
+    publish_outcome: 'private' as const,
+    max_players: null,
     has_password: false,
     download_stage: null,
     download_progress: null,

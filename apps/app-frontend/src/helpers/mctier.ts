@@ -39,6 +39,13 @@ export interface MctierPlayer {
 
 export type MctierPreparationStage = 'downloading' | 'extracting' | 'verifying'
 
+/** How the host's public listing request resolved; mirrors the Rust enum. */
+export type MctierPublishOutcome =
+    | 'private'
+    | 'published'
+    | 'sent_unconfirmed'
+    | 'not_listed'
+
 export interface MctierState {
     status: 'idle' | 'downloading' | 'connecting' | 'hosting' | 'joined' | 'error'
     mode: 'create' | 'join' | null
@@ -51,6 +58,8 @@ export interface MctierState {
     voice_ice_server: string | null
     error_message: string | null
     is_public: boolean
+    publish_outcome: MctierPublishOutcome
+    max_players: number | null
     has_password: boolean
     download_stage: MctierPreparationStage | null
     download_progress: number | null

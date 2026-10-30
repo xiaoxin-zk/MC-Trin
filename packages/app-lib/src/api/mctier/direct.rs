@@ -18,7 +18,8 @@ use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    HostHint, PublishOutcome, StartRequest, Status, binary, runtime, update,
+    ControlMessage, HostHint, PublishOutcome, StartRequest, Status, binary,
+    runtime, update,
 };
 
 /// What the room form collects. Mirrors the fields the lobby path uses so the
@@ -112,20 +113,20 @@ impl DirectRequest {
 /// Kernel arguments for a direct room.
 ///
 /// The lobby path builds the network name as `MCTier-{lobby}`; a direct room
-/// must use its own prefix so the two never share a network by accident. The
-/// forwarding target differs per role: the host publishes its local Minecraft
-/// port into the overlay, the guest dials the host's virtual address.
+/// must use its own prefix so the two never share a network by accident.
+///
+/// Forwarding mirrors the lobby semantics (`runtime.rs`): EasyTier listens on
+/// an explicit local port and dials the overlay-side target per connection. The
+/// host publishes its own Minecraft port, a guest dials the host's virtual
+/// address. `forward_local_port` is always an explicitly allocated port, so the
+/// caller can tell the player which address to open in Minecraft.
 pub fn arguments(
     request: &DirectRequest,
     ip: Ipv4Addr,
     rpc_port: u16,
+    forward_local_port: u16,
+    forward_remote: Ipv4Addr,
 ) -> Vec<String> {
-    let forwarding = request.host_address.as_deref().and_then(|address| {
-        address
-            .parse::<Ipv4Addr>()
-            .ok()
-            .map(|remote| (0u16, remote))
-    });
     let mut arguments = vec![
         "--no-tun".into(),
         "true".into(),
@@ -147,17 +148,12 @@ pub fn arguments(
         "off".into(),
         "--hostname".into(),
         format!("MC-Trin-{ip}"),
+        "--port-forward".into(),
+        format!(
+            "tcp://127.0.0.1:{forward_local_port}/{forward_remote}:{}",
+            request.game_port
+        ),
     ];
-    match forwarding {
-        Some((_, remote)) => arguments.extend([
-            "--port-forward".into(),
-            format!("tcp://127.0.0.1:0/{remote}:{}", request.game_port),
-        ]),
-        None => arguments.extend([
-            "--port-forward".into(),
-            format!("tcp://127.0.0.1:0/{}:{}", ip, request.game_port),
-        ]),
-    }
     arguments
 }
 
@@ -167,18 +163,28 @@ pub fn host_address(ip: Ipv4Addr, game_port: u16) -> String {
 }
 
 /// Runs the room until cancelled, mirroring the lobby lifecycle minus signaling.
+///
+/// `controls` carries the shared control channel. A direct room cannot honour
+/// most lobby controls (there is no signaling session to message), so each
+/// request is answered with an explicit error instead of leaving the sender
+/// waiting on a channel nobody reads.
 pub async fn run(
     generation: u64,
     request: DirectRequest,
     executable: &Path,
     cancellation: &CancellationToken,
+    mut controls: tokio::sync::mpsc::Receiver<ControlMessage>,
     mut ready: Option<tokio::sync::oneshot::Sender<eyre::Result<()>>>,
 ) -> eyre::Result<()> {
     update(generation, |state| state.status = Status::Connecting).await;
 
     let identity = super::protocol::Identity::generate()?;
     let ip = identity.ip;
-    let joining = request.host_address.is_some();
+    let remote = request
+        .host_address
+        .as_deref()
+        .and_then(|address| address.parse::<Ipv4Addr>().ok());
+    let joining = remote.is_some();
 
     // The host owns the LAN port; a closed port is a warning, never a failed
     // room, because players routinely open the world after creating the room.
@@ -207,14 +213,51 @@ pub async fn run(
     }
 
     let rpc_port = runtime::free_port().await?;
+    // The forward listens on this port. An explicit allocation means the state
+    // can name the address a player actually opens, instead of port zero.
+    let forward_local_port = runtime::free_port().await?;
+    let forward_remote = remote.unwrap_or(ip);
     let mut child = binary::hidden_command(executable)
-        .args(arguments(&request, ip, rpc_port))
+        .args(arguments(
+            &request,
+            ip,
+            rpc_port,
+            forward_local_port,
+            forward_remote,
+        ))
         .env("ET_NETWORK_SECRET", &request.password)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .wrap_err("could not start EasyTier")?;
+
+    // A room is only joined once the kernel actually listens on the forward:
+    // reporting success earlier turned "EasyTier failed to start" into a green
+    // screen. The guest additionally needs its forward to answer a Minecraft
+    // handshake, which proves the overlay reached the host's game.
+    if let Err(error) =
+        runtime::wait_for_listener(&mut child, forward_local_port).await
+    {
+        let _ = child.kill().await;
+        let _ = ready.take().send(Err(error));
+        update(generation, |state| state.status = Status::Idle).await;
+        bail!("the direct room network did not come up");
+    }
+    if joining {
+        if let Err(error) = runtime::verify_forwarded_game(
+            &mut child,
+            forward_local_port,
+            cancellation,
+        )
+        .await
+        {
+            let _ = child.kill().await;
+            let _ = ready.take().send(Err(error));
+            update(generation, |state| state.status = Status::Idle).await;
+            bail!("the direct room network did not deliver a Minecraft status");
+        }
+    }
 
     update(generation, |state| {
         state.status = if joining {
@@ -229,7 +272,13 @@ pub async fn run(
         // A direct room is never listed, so it must not claim to be public.
         state.is_public = false;
         state.publish_outcome = PublishOutcome::Private;
-        state.connect_address = Some(host_address(ip, request.game_port));
+        // What the player dials in Minecraft: a guest opens the local forward,
+        // the host opens its own game port as usual.
+        state.connect_address = Some(if joining {
+            format!("127.0.0.1:{forward_local_port}")
+        } else {
+            host_address(ip, request.game_port)
+        });
         state.players.clear();
     })
     .await;
@@ -237,6 +286,7 @@ pub async fn run(
         let _ = ready.send(Ok(()));
     }
 
+    let mut controls_open = true;
     let result = tokio::select! {
         biased;
         _ = cancellation.cancelled() => Ok(()),
@@ -247,6 +297,25 @@ pub async fn run(
             Err(error) => Err(eyre::eyre!(
                 "could not wait for the EasyTier process: {error}"
             )),
+        },
+        // Every lobby control is meaningless without a signaling session, but
+        // leaving the sender hanging turned a click into a ten-second stall.
+        control = controls.recv(), if controls_open => match control {
+            Some(ControlMessage::SetPublic { response, .. }) => {
+                let _ = response.send(Err(
+                    "a direct room is never listed publicly".to_string(),
+                ));
+            }
+            Some(ControlMessage::SendVoiceSignal { response, .. }) => {
+                let _ = response.send(Err(
+                    "direct rooms do not carry lobby voice signaling".to_string(),
+                ));
+            }
+            // The sender half was dropped: no more controls will arrive.
+            None => {
+                controls_open = false;
+                Ok(())
+            }
         },
     };
 
