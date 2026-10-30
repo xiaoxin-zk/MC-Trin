@@ -645,7 +645,7 @@ function prefillInviteFromDeepLink() {
                                     : publishOutcome === 'not_listed'
                                       ? 'bg-surface-4 text-red'
                                       : publishOutcome === 'sent_unconfirmed'
-                                        ? 'bg-surface-4 text-[var(--color-text-secondary)]'
+                                        ? 'bg-surface-4 text-[var(--color-text-tertiary)]'
                                         : 'bg-surface-4 text-[var(--color-text-tertiary)]'
                             "
                         >

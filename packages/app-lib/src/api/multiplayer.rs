@@ -282,9 +282,7 @@ pub async fn start_mctier(
     pending.wait().await
 }
 
-pub async fn start_direct(
-    request: mctier::DirectRequest,
-) -> eyre::Result<()> {
+pub async fn start_direct(request: mctier::DirectRequest) -> eyre::Result<()> {
     let pending = {
         let _operation = MULTIPLAYER_OPERATION.lock().await;
         mctier::begin_start_direct(request).await?

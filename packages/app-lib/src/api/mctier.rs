@@ -309,7 +309,10 @@ pub async fn get_state() -> MctierState {
     state
 }
 
-pub(super) async fn update(generation: u64, change: impl FnOnce(&mut MctierState)) {
+pub(super) async fn update(
+    generation: u64,
+    change: impl FnOnce(&mut MctierState),
+) {
     let mut service = SERVICE.lock().await;
     if service
         .session
@@ -517,7 +520,8 @@ pub async fn begin_start_direct(
     Ok(PendingStart(result))
 }
 
-pub async fn send_voice_signal(signal: Value) -> eyre::Result<()> {    let (control, message, response) = {
+pub async fn send_voice_signal(signal: Value) -> eyre::Result<()> {
+    let (control, message, response) = {
         let service = SERVICE.lock().await;
         if !matches!(service.state.status, Status::Hosting | Status::Joined) {
             bail!("voice signaling requires an active MCTier room");

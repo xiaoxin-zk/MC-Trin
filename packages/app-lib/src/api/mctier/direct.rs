@@ -49,8 +49,7 @@ impl DirectRequest {
             || self.room_name.trim() != self.room_name
             || self.room_name.chars().any(char::is_control)
             || !self.room_name.chars().all(|character| {
-                character.is_alphanumeric()
-                    || matches!(character, '_' | '-')
+                character.is_alphanumeric() || matches!(character, '_' | '-')
             })
         {
             bail!(
@@ -181,9 +180,10 @@ pub async fn run(
 
     // The host owns the LAN port; a closed port is a warning, never a failed
     // room, because players routinely open the world after creating the room.
-    if !joining && TcpStream::connect((Ipv4Addr::LOCALHOST, request.game_port))
-        .await
-        .is_err()
+    if !joining
+        && TcpStream::connect((Ipv4Addr::LOCALHOST, request.game_port))
+            .await
+            .is_err()
     {
         update(generation, |state| {
             state.host_hint = Some(HostHint::GamePortClosed);
@@ -227,8 +227,7 @@ pub async fn run(
         // A direct room is never listed, so it must not claim to be public.
         state.is_public = false;
         state.publish_outcome = PublishOutcome::Private;
-        state.connect_address =
-            Some(host_address(ip, request.game_port));
+        state.connect_address = Some(host_address(ip, request.game_port));
         state.players.clear();
     })
     .await;
