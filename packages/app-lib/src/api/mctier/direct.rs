@@ -240,7 +240,9 @@ pub async fn run(
         runtime::wait_for_listener(&mut child, forward_local_port).await
     {
         let _ = child.kill().await;
-        let _ = ready.take().send(Err(error));
+        if let Some(ready) = ready.take() {
+            let _ = ready.send(Err(error));
+        }
         update(generation, |state| state.status = Status::Idle).await;
         bail!("the direct room network did not come up");
     }
@@ -253,7 +255,9 @@ pub async fn run(
         .await
         {
             let _ = child.kill().await;
-            let _ = ready.take().send(Err(error));
+            if let Some(ready) = ready.take() {
+                let _ = ready.send(Err(error));
+            }
             update(generation, |state| state.status = Status::Idle).await;
             bail!("the direct room network did not deliver a Minecraft status");
         }
@@ -300,16 +304,20 @@ pub async fn run(
         },
         // Every lobby control is meaningless without a signaling session, but
         // leaving the sender hanging turned a click into a ten-second stall.
+        // Each branch yields the loop's result type; the None arm only closes
+        // the channel so the select stops polling it.
         control = controls.recv(), if controls_open => match control {
             Some(ControlMessage::SetPublic { response, .. }) => {
                 let _ = response.send(Err(
                     "a direct room is never listed publicly".to_string(),
                 ));
+                Ok(())
             }
             Some(ControlMessage::SendVoiceSignal { response, .. }) => {
                 let _ = response.send(Err(
                     "direct rooms do not carry lobby voice signaling".to_string(),
                 ));
+                Ok(())
             }
             // The sender half was dropped: no more controls will arrive.
             None => {
