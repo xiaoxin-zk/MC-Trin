@@ -1,0 +1,59 @@
+name: Prune desktop caches
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Delete desktop Rust caches not accessed within this many days
+        default: '14'
+        required: false
+      dry_run:
+        description: Only list the caches that would be deleted
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: prune-desktop-caches
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune cold desktop Rust caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      DAYS: ${{ inputs.days || '14' }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+    steps:
+      - name: Delete caches that have gone cold
+        shell: bash
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%S)"
+          echo "Pruning v0-rust-axolotl-desktop-* entries last accessed before ${cutoff}Z (dry_run=${DRY_RUN})"
+          gh cache list --limit 100 --json id,key,lastAccessedAt \
+            | jq -r --arg cutoff "${cutoff}" '
+                .[]
+                | select(.key | startswith("v0-rust-axolotl-desktop-"))
+                | select(.lastAccessedAt < $cutoff)
+                | "\(.id)\t\(.key)"
+              ' \
+            | while IFS=$'\t' read -r id key; do
+                if [ -z "${id}" ]; then continue; fi
+                if [ "${DRY_RUN}" = "true" ]; then
+                  echo "would delete ${key}"
+                  continue
+                fi
+                echo "deleting ${key}"
+                gh cache delete "${id}"
+              done
+          echo "done"

@@ -128,6 +128,7 @@ jobs:
             runner: windows-2025
             platform: windows
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     permissions:
       contents: write
       actions: read
@@ -143,6 +144,10 @@ jobs:
         uses: ./.github/actions/setup-desktop-build
         with:
           profile: release
+          # A cold tagged build must write its dependency cache back: the
+          # release cache is otherwise only produced by prepare-rust-cache.yml
+          # and gets evicted from the 10 GiB quota by the ci-host entries.
+          save-cache: 'true'
       - name: Reserve Linux ARM64 swap for full LTO
         if: matrix.runner == 'ubuntu-24.04-arm'
         shell: bash
@@ -201,6 +206,7 @@ jobs:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: read
@@ -217,6 +223,7 @@ jobs:
         with:
           profile: release
           target: ${{ matrix.target }}
+          save-cache: 'true'
       - name: Set release version
         run: node scripts/axolotl/set-version.mjs "${{ github.ref_name }}"
       - name: Compile native macOS binary with full LTO

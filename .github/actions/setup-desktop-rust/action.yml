@@ -10,6 +10,9 @@ inputs:
   save-cache:
     description: Whether this trusted job produces a dependency cache
     default: 'false'
+  restore-cache:
+    description: Whether to restore an existing dependency cache
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -42,9 +45,16 @@ runs:
         esac
 
     - name: Restore desktop Rust dependencies
+      if: inputs.restore-cache == 'true'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         shared-key: axolotl-desktop-v3-${{ inputs.profile }}-${{ inputs.target || 'host' }}
         save-if: ${{ inputs.save-cache }}
         cache-on-failure: true
+        # A bare `all` cache costs 1.4-1.8 GiB per platform. The ci and release
+        # profiles keep separate caches, and GitHub only allows 10 GiB in total,
+        # so both sets cannot fit unless the payload is trimmed. Dependency
+        # rlibs are the expensive part; build-script binaries rebuild in
+        # seconds, so dropping them buys roughly a third of the space back.
+        cache-targets: lib
         cache-bin: false

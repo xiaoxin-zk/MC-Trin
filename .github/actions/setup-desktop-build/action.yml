@@ -34,6 +34,9 @@ runs:
       if: inputs.package-only == 'true'
       with:
         profile: ${{ inputs.profile }}
+        # Nothing is compiled here, so the multi-hundred-MiB dependency cache
+        # would only cost download time.
+        restore-cache: 'false'
     - name: Configure Ubuntu package downloads
       if: runner.os == 'Linux'
       uses: ./.github/actions/configure-linux-apt
