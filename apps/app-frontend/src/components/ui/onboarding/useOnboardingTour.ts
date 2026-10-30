@@ -89,6 +89,7 @@ export function useOnboardingTour(
     let unlockTimer: ReturnType<typeof setTimeout> | undefined
     let targetRetryCount = 0
     let transitionLocked = false
+    let routeWaitTimer: ReturnType<typeof setTimeout> | undefined
 
     const steps = computed(() => onboardingTours[mode.value])
     const step = computed(() => steps.value[stepIndex.value])
@@ -178,6 +179,8 @@ export function useOnboardingTour(
         targetRetryTimer = undefined
         if (measureTimer !== undefined) cancelAnimationFrame(measureTimer)
         measureTimer = undefined
+        if (routeWaitTimer) clearTimeout(routeWaitTimer)
+        routeWaitTimer = undefined
     }
 
     function clearModalReservation() {
@@ -363,11 +366,29 @@ export function useOnboardingTour(
         if (clickedElement && handleBranchClick(clickedElement)) return
         if (!targetElement.value?.contains(event.target as Node)) return
 
-        if (step.value.expectedPath && route.path !== step.value.expectedPath) {
+        if (step.value.expectedPath && !routeMatches(step.value.expectedPath)) {
             waitingForRoute.value = true
+            // A navigation that never lands (a failed route load, a redirect to
+            // an unexpected path) must not trap the tour: the step either
+            // advances when the route arrives or is skipped after a grace
+            // period, mirroring how a missing target is skipped.
+            if (routeWaitTimer) clearTimeout(routeWaitTimer)
+            routeWaitTimer = setTimeout(() => {
+                routeWaitTimer = undefined
+                if (!waitingForRoute.value || !visible.value) return
+                waitingForRoute.value = false
+                void advance()
+            }, 5000)
             return
         }
         scheduleDestination()
+    }
+
+    /** A step's destination may redirect to a child route (`/multiplayer`
+     * lands on `/multiplayer/rooms`), so the expected path matches its own
+     * prefix as well as the exact value. */
+    function routeMatches(expected: string) {
+        return route.path === expected || route.path.startsWith(`${expected}/`)
     }
 
     function handleKeydown(event: KeyboardEvent) {
@@ -378,9 +399,9 @@ export function useOnboardingTour(
 
     watch(
         () => route.path,
-        (path) => {
+        () => {
             if (!waitingForRoute.value || !step.value.expectedPath) return
-            if (path !== step.value.expectedPath) return
+            if (!routeMatches(step.value.expectedPath)) return
             waitingForRoute.value = false
             void advance()
         },
