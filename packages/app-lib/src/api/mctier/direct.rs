@@ -85,7 +85,9 @@ impl DirectRequest {
 
     /// Reuses the lobby request so the kernel arguments and port forwarding stay
     /// defined in one place instead of drifting between the two modes.
-    fn as_start_request(&self) -> StartRequest {
+    /// The shared request shape, so the room state can reuse the lobby's mode
+    /// and the session bookkeeping stays identical between the two paths.
+    pub fn as_start_request(&self) -> StartRequest {
         StartRequest {
             mode: if self.host_address.is_some() {
                 super::EntryMode::Join
