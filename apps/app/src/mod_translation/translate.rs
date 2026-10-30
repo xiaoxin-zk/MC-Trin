@@ -64,13 +64,11 @@ pub struct TranslateOptions {
     pub model_id: String,
     pub batch_size: usize,
     pub deep_batch_size: usize,
-    pub concurrency: usize,
     pub max_quality_rounds: usize,
     pub generate_mod_name: bool,
     pub repair_enabled: bool,
     pub class_text_enabled: bool,
     pub max_class_batch: usize,
-    pub class_concurrency: usize,
 }
 
 impl Default for TranslateOptions {
@@ -80,13 +78,11 @@ impl Default for TranslateOptions {
             model_id: String::new(),
             batch_size: LANGUAGE_BATCH_SIZE,
             deep_batch_size: DEEP_BATCH_SIZE,
-            concurrency: 1,
             max_quality_rounds: MAX_QUALITY_ROUNDS,
             generate_mod_name: false,
             repair_enabled: true,
             class_text_enabled: false,
             max_class_batch: CLASS_BATCH_SIZE,
-            class_concurrency: 2,
         }
     }
 }

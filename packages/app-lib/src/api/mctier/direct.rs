@@ -127,7 +127,7 @@ pub fn arguments(
     forward_local_port: u16,
     forward_remote: Ipv4Addr,
 ) -> Vec<String> {
-    let mut arguments = vec![
+    let arguments = vec![
         "--no-tun".into(),
         "true".into(),
         "--use-smoltcp".into(),
@@ -247,20 +247,26 @@ pub async fn run(
         bail!("the direct room network did not come up");
     }
     if joining {
-        if let Err(error) = runtime::verify_forwarded_game(
-            &mut child,
-            forward_local_port,
-            cancellation,
-        )
-        .await
-        {
-            let _ = child.kill().await;
-            if let Some(ready) = ready.take() {
-                let _ = ready.send(Err(error));
+        let verify = async {
+            if let Err(error) = runtime::verify_forwarded_game(
+                &mut child,
+                forward_local_port,
+                cancellation,
+            )
+            .await
+            {
+                let _ = child.kill().await;
+                if let Some(ready) = ready.take() {
+                    let _ = ready.send(Err(error));
+                }
+                update(generation, |state| state.status = Status::Idle).await;
+                bail!(
+                    "the direct room network did not deliver a Minecraft status"
+                );
             }
-            update(generation, |state| state.status = Status::Idle).await;
-            bail!("the direct room network did not deliver a Minecraft status");
-        }
+            Ok::<(), eyre::Report>(())
+        };
+        verify.await?;
     }
 
     update(generation, |state| {
@@ -290,7 +296,10 @@ pub async fn run(
         let _ = ready.send(Ok(()));
     }
 
-    let mut controls_open = true;
+    // Every lobby control is meaningless without a signaling session, but
+    // leaving the sender hanging turned a click into a ten-second stall. The
+    // channel closes once the session owner drops its half, which is just
+    // another way for the room to end.
     let result = tokio::select! {
         biased;
         _ = cancellation.cancelled() => Ok(()),
@@ -302,11 +311,7 @@ pub async fn run(
                 "could not wait for the EasyTier process: {error}"
             )),
         },
-        // Every lobby control is meaningless without a signaling session, but
-        // leaving the sender hanging turned a click into a ten-second stall.
-        // Each branch yields the loop's result type; the None arm only closes
-        // the channel so the select stops polling it.
-        control = controls.recv(), if controls_open => match control {
+        control = controls.recv() => match control {
             Some(ControlMessage::SetPublic { response, .. }) => {
                 let _ = response.send(Err(
                     "a direct room is never listed publicly".to_string(),
@@ -319,11 +324,7 @@ pub async fn run(
                 ));
                 Ok(())
             }
-            // The sender half was dropped: no more controls will arrive.
-            None => {
-                controls_open = false;
-                Ok(())
-            }
+            None => Ok(()),
         },
     };
 
