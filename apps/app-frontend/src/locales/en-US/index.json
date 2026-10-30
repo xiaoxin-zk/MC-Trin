@@ -9437,33 +9437,6 @@
   "app.project.versions.start-server": {
     "message": "Create server"
   },
-  "app.remote-announcements.center-title": {
-    "message": "Announcements"
-  },
-  "app.remote-announcements.empty": {
-    "message": "No announcements"
-  },
-  "app.remote-announcements.preview-action": {
-    "message": "Visit website"
-  },
-  "app.remote-announcements.preview-content": {
-    "message": "## Announcement preview\n\nThis is **sample content**, not a published announcement.\n\n- Supports headings, lists, and links\n- Close buttons are always available\n\n> Previewing does not change real announcement read status.\n\n| Type | Display |\n| --- | --- |\n| Modal | Full Markdown content |\n| Popup | Summary, then full content |\n\n[Visit the website](https://github.com/xiaoxin-zk/MC-Trin)"
-  },
-  "app.remote-announcements.preview-summary": {
-    "message": "This is a local preview. Select View announcement to preview the full Markdown content."
-  },
-  "app.remote-announcements.preview-title": {
-    "message": "Announcement style preview"
-  },
-  "app.remote-announcements.read-all": {
-    "message": "Mark all announcements as read"
-  },
-  "app.remote-announcements.unread": {
-    "message": "Unread"
-  },
-  "app.remote-announcements.view": {
-    "message": "View announcement"
-  },
   "app.resources.backups.back": {
     "message": "Back to selection"
   },

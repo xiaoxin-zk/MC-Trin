@@ -1834,7 +1834,7 @@ async function handleCommand(e: LauncherCommand | null | undefined): Promise<voi
                     version.project_id,
                     version.id,
                     null,
-                    'URLConfirmModal',
+                    'url',
                     undefined,
                     undefined,
                     {
@@ -1845,7 +1845,7 @@ async function handleCommand(e: LauncherCommand | null | undefined): Promise<voi
         }
     } else {
         await contentInstall
-            .install(e.id, null, null, 'URLConfirmModal', undefined, undefined, {
+            .install(e.id, null, null, 'url', undefined, undefined, {
                 showProjectInfo: true,
             })
             .catch(handleError)

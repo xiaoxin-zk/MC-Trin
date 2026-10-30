@@ -9,14 +9,6 @@ import { notifyAccountSelectionChanged } from './account-state.ts'
 
 /** @typedef {import('./minecraft-account.ts').MinecraftCredential} MinecraftCredential */
 
-// Example function:
-// User goes to auth_url to complete flow, and when completed, authenticate_await_completion() returns the credentials
-// export async function authenticate() {
-//   const auth_url = await authenticate_begin_flow()
-//   console.log(auth_url)
-//   await authenticate_await_completion()
-// }
-
 /**
  * Check if the authentication servers are reachable, throwing an exception if
  * not reachable.

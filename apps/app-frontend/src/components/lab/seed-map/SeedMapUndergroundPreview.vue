@@ -580,10 +580,6 @@ onBeforeUnmount(() => {
                             }}</label
                         >
                     </div>
-                    <!-- <p class="m-0">{{ formatMessage(messages.controls) }}</p>
-                    <p class="m-0 text-[var(--color-text-tertiary)]">
-                        {{ formatMessage(messages.limits, { lava: lavaLevel }) }}
-                    </p> -->
                     <p v-if="memoryFull" class="m-0">{{ formatMessage(messages.memory) }}</p>
                     <p v-if="truncated" class="m-0">{{ formatMessage(messages.truncated) }}</p>
                     <p v-if="noAir" class="m-0">{{ formatMessage(messages.noAir) }}</p>

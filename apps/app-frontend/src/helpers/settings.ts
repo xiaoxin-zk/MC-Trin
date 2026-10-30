@@ -185,8 +185,6 @@ export type AppSettings = DohSettings & {
     default_window_title: string
     terracotta_public_nodes: string[]
 
-    telemetry: boolean
-    telemetry_consent_version: number
     discord_rpc: boolean
     allow_external_scheme: boolean
     allow_privileged_scheme: boolean

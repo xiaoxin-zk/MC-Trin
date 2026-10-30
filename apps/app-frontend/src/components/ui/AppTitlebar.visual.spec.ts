@@ -48,10 +48,6 @@ vi.mock('@/helpers/instance-backup', () => ({
 }))
 vi.mock('@/helpers/state', () => ({ progress_bars_list: async () => ({}) }))
 vi.mock('@/helpers/analytics', () => ({ trackEvent: vi.fn() }))
-vi.mock('@/helpers/remote-announcements', () => ({
-    OPEN_REMOTE_ANNOUNCEMENT_CENTER_EVENT: 'open-announcements',
-    REMOTE_ANNOUNCEMENTS_UPDATED_EVENT: 'announcements-updated',
-}))
 vi.mock('@/composables/useNetworkStatus', () => ({
     useNetworkStatus: () => ({ offline: ref(true) }),
 }))

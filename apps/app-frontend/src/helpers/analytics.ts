@@ -44,32 +44,9 @@ type AnalyticsEventMap = {
 
 export type AnalyticsEvent = keyof AnalyticsEventMap
 
-let optedIn = false
-let debugEnabled = false
-
-export const initAnalytics = () => {
-    optedIn = true
-}
-
-export const debugAnalytics = () => {
-    debugEnabled = true
-}
-
-export const optOutAnalytics = () => {
-    optedIn = false
-}
-
-export const optInAnalytics = () => {
-    optedIn = true
-}
-
 type OptionalArgs<T> = Record<string, never> extends T ? [properties?: T] : [properties: T]
 
 export const trackEvent = <E extends AnalyticsEvent>(
-    eventName: E,
-    ...args: OptionalArgs<AnalyticsEventMap[E]>
-) => {
-    if (optedIn && debugEnabled) {
-        console.debug('[MC-Trin analytics disabled]', eventName, args[0])
-    }
-}
+    _eventName: E,
+    ..._args: OptionalArgs<AnalyticsEventMap[E]>
+) => {}
