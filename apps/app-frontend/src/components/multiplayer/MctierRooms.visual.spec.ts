@@ -240,10 +240,15 @@ it('keeps public rooms passwordless and sends the chosen visibility', async () =
     )
 })
 
-it('publishes password-protected rooms to the public lobby', async () => {
+it('clears the password when the room is listed publicly', async () => {
     const wrapper = page()
     await fillRequired(wrapper)
+    // The directory cannot carry a password, so choosing to publish wipes the
+    // secret instead of sending a combination the service ignores.
+    await wrapper.get('input[name="lobby-password"]').setValue('secret')
     await wrapper.get('input[name="public-lobby"]').setValue(true)
+    await flushPromises()
+    expect((wrapper.get('input[name="lobby-password"]').element as HTMLInputElement).value).toBe('')
     await wrapper
         .findAll('button')
         .find((button) => button.text() === 'Create lobby')!
@@ -253,7 +258,7 @@ it('publishes password-protected rooms to the public lobby', async () => {
         expect.objectContaining({
             mode: 'create',
             is_public: true,
-            password: 'secret',
+            password: '',
         }),
     )
 })
