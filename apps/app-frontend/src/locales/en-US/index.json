@@ -8246,6 +8246,33 @@
   "app.multiplayer.mctier.visibility": {
     "message": "Publish this room in the public lobby list"
   },
+  "app.multiplayer.mctier.visibility-title": {
+    "message": "Who can find this room"
+  },
+  "app.multiplayer.mctier.visibility-private-title": {
+    "message": "Private room"
+  },
+  "app.multiplayer.mctier.visibility-private-description": {
+    "message": "Only people you send the invite code to can join."
+  },
+  "app.multiplayer.mctier.visibility-public-title": {
+    "message": "List in the public lobby"
+  },
+  "app.multiplayer.mctier.visibility-public-description": {
+    "message": "Anyone browsing the lobby list can see this room and ask to join."
+  },
+  "app.multiplayer.mctier.publish-published": {
+    "message": "Listed publicly"
+  },
+  "app.multiplayer.mctier.publish-unconfirmed": {
+    "message": "Sent to the lobby service. It did not confirm the listing, so give it a moment to appear."
+  },
+  "app.multiplayer.mctier.publish-private": {
+    "message": "Private, not listed"
+  },
+  "app.multiplayer.mctier.public-open-hint": {
+    "message": "Listed publicly with no password: anyone browsing the lobby list can join directly."
+  },
   "app.multiplayer.mctier.voice.microphone": {
     "message": "Microphone"
   },

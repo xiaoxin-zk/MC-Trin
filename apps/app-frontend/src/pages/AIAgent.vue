@@ -195,6 +195,43 @@ const messages = defineMessages({
         id: 'app.assistant.permission-mode.active-badge',
         defaultMessage: 'Full access is active: tools run without asking.',
     },
+    permissionTableWhat: {
+        id: 'app.assistant.permission-mode.table.what',
+        defaultMessage: 'Action',
+    },
+    permissionMatrixReadTitle: {
+        id: 'app.assistant.permission-mode.matrix.read',
+        defaultMessage: 'Reading launcher state',
+    },
+    permissionMatrixWriteTitle: {
+        id: 'app.assistant.permission-mode.matrix.write',
+        defaultMessage: 'Changing launcher data',
+    },
+    permissionMatrixDangerousTitle: {
+        id: 'app.assistant.permission-mode.matrix.dangerous',
+        defaultMessage: 'High-risk actions',
+    },
+    permissionMatrixRemoteTitle: {
+        id: 'app.assistant.permission-mode.matrix.remote',
+        defaultMessage: 'Tools on MCP servers',
+    },
+    permissionMatrixAllowed: {
+        id: 'app.assistant.permission-mode.matrix.allowed',
+        defaultMessage: 'Allowed',
+    },
+    permissionMatrixAsk: {
+        id: 'app.assistant.permission-mode.matrix.ask',
+        defaultMessage: 'Asks first',
+    },
+    permissionDangerousTitle: {
+        id: 'app.assistant.permission-mode.dangerous-title',
+        defaultMessage: 'Tools free mode still asks about',
+    },
+    permissionDangerousHint: {
+        id: 'app.assistant.permission-mode.dangerous-hint',
+        defaultMessage:
+            'Everything on an MCP server you add also asks, because this launcher does not control what those tools do.',
+    },
     usageGuideTitle: {
         id: 'app.assistant.usage-guide.title',
         defaultMessage: 'How to use the assistant',
@@ -687,6 +724,41 @@ function confirmFullAccess() {
     fullAccessWarningOpen.value = false
     applyPermissionMode('full')
 }
+
+/** The permission modes stated as one row per action class. */
+const permissionMatrix = computed(() => [
+    {
+        key: 'read',
+        label: messages.permissionMatrixReadTitle,
+        defaultMode: messages.permissionMatrixAllowed,
+        freeMode: messages.permissionMatrixAllowed,
+        fullMode: messages.permissionMatrixAllowed,
+    },
+    {
+        key: 'write',
+        label: messages.permissionMatrixWriteTitle,
+        defaultMode: messages.permissionMatrixAsk,
+        freeMode: messages.permissionMatrixAllowed,
+        fullMode: messages.permissionMatrixAllowed,
+    },
+    {
+        key: 'dangerous',
+        label: messages.permissionMatrixDangerousTitle,
+        defaultMode: messages.permissionMatrixAsk,
+        freeMode: messages.permissionMatrixAsk,
+        fullMode: messages.permissionMatrixAllowed,
+    },
+    {
+        key: 'remote',
+        label: messages.permissionMatrixRemoteTitle,
+        defaultMode: messages.permissionMatrixAsk,
+        freeMode: messages.permissionMatrixAsk,
+        fullMode: messages.permissionMatrixAllowed,
+    },
+])
+
+/** The local tools the narrower modes keep asking about, for display. */
+const dangerousToolNames = computed(() => [...DANGEROUS_AGENT_TOOLS].sort())
 const selectedAgentProfile = computed(
     () =>
         agentProfiles.value.find((profile) => profile.id === selectedAgentProfileId.value) ??
@@ -1238,6 +1310,7 @@ onUnmounted(denyPendingApprovals)
                     </p>
                     <fieldset
                         class="assistant-permissions m-0 flex flex-col gap-2 rounded-md border border-solid border-surface-4 p-3"
+                        data-onboarding-id="assistant-permission"
                     >
                         <legend class="px-1 text-sm font-semibold text-[var(--color-text-primary)]">
                             {{ formatMessage(messages.permissionModeTitle) }}
@@ -1276,6 +1349,68 @@ onUnmounted(denyPendingApprovals)
                                 </span>
                             </label>
                         </div>
+                        <table
+                            class="m-0 w-full border-collapse text-left text-xs"
+                            data-onboarding-id="assistant-permission-table"
+                        >
+                            <caption class="sr-only">
+                                {{
+                                    formatMessage(messages.permissionModeTitle)
+                                }}
+                            </caption>
+                            <thead>
+                                <tr class="text-[var(--color-text-tertiary)]">
+                                    <th class="py-1 pr-2 font-medium">
+                                        {{ formatMessage(messages.permissionTableWhat) }}
+                                    </th>
+                                    <th class="px-2 py-1 font-medium">
+                                        {{ formatMessage(messages.permissionModeDefault) }}
+                                    </th>
+                                    <th class="px-2 py-1 font-medium">
+                                        {{ formatMessage(messages.permissionModeFree) }}
+                                    </th>
+                                    <th class="py-1 pl-2 font-medium">
+                                        {{ formatMessage(messages.permissionModeFull) }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="row in permissionMatrix"
+                                    :key="row.key"
+                                    class="border-t border-solid border-surface-4"
+                                >
+                                    <th
+                                        class="py-1 pr-2 text-left font-normal text-[var(--color-text-primary)]"
+                                    >
+                                        {{ formatMessage(row.label) }}
+                                    </th>
+                                    <td class="px-2 py-1">
+                                        {{ formatMessage(row.defaultMode) }}
+                                    </td>
+                                    <td class="px-2 py-1">
+                                        {{ formatMessage(row.freeMode) }}
+                                    </td>
+                                    <td class="py-1 pl-2">
+                                        {{ formatMessage(row.fullMode) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div
+                            class="m-0 flex flex-col gap-1 text-xs text-[var(--color-text-tertiary)]"
+                            data-onboarding-id="assistant-dangerous"
+                        >
+                            <span class="font-semibold text-[var(--color-text-primary)]">{{
+                                formatMessage(messages.permissionDangerousTitle)
+                            }}</span>
+                            <ul class="m-0 flex flex-wrap gap-x-3 gap-y-1 pl-4">
+                                <li v-for="name in dangerousToolNames" :key="name">
+                                    <code>{{ name }}</code>
+                                </li>
+                            </ul>
+                            <span>{{ formatMessage(messages.permissionDangerousHint) }}</span>
+                        </div>
                         <p
                             v-if="permissionMode === 'full'"
                             class="m-0 flex flex-wrap items-center gap-2 text-sm font-semibold text-red"
@@ -1298,7 +1433,7 @@ onUnmounted(denyPendingApprovals)
                             {{ formatMessage(messages.permissionModeFreeHint) }}
                         </p>
                     </fieldset>
-                    <ul class="m-0 flex flex-col gap-2 p-0">
+                    <ul class="m-0 flex flex-col gap-2 p-0" data-onboarding-id="assistant-tools">
                         <li
                             v-for="tool in agentTools"
                             :key="tool.id"
@@ -1529,7 +1664,10 @@ onUnmounted(denyPendingApprovals)
                     </select>
                 </label>
 
-                <label class="flex flex-col gap-1.5 text-sm font-semibold">
+                <label
+                    class="flex flex-col gap-1.5 text-sm font-semibold"
+                    data-onboarding-id="assistant-chat"
+                >
                     <span>{{ formatMessage(messages.question) }}</span>
                     <textarea
                         v-model="question"

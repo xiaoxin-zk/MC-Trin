@@ -93,6 +93,10 @@ jobs:
         run: node scripts/axolotl/check-css-vars.mjs
       - name: Check orphan components
         run: node scripts/axolotl/check-orphan-components.mjs
+      - name: Check onboarding targets
+        run: node scripts/axolotl/check-onboarding-targets.mjs
+      - name: Test the onboarding target guard
+        run: node --test scripts/axolotl/check-onboarding-targets.test.mjs
       - name: Check scoped styles
         run: node scripts/axolotl/check-scoped-styles.mjs
       - name: Check retired UI

@@ -14,7 +14,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    ControlMessage, EntryMode, HostHint, StartRequest, Status,
+    ControlMessage, EntryMode, HostHint, PublishOutcome, StartRequest, Status,
     VoiceSignalEmitter, binary, protocol, update,
 };
 
@@ -33,6 +33,13 @@ const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
 const RECONNECT_BACKOFF: Duration = Duration::from_millis(50);
 /// Final, user-facing explanation once reconnecting has failed.
 const SIGNALING_LOST: &str = "Lost the connection to the MCTier signaling server and could not reconnect. The room has ended - check your connection, then start or join the room again.";
+/// How long the host waits for the service to echo a visibility change before
+/// treating the request as sent. The echo is a broadcast that some deployments
+/// never send, so this must stay short and its absence must not be an error.
+#[cfg(not(test))]
+const VISIBILITY_CONFIRMATION_WINDOW: Duration = Duration::from_millis(1500);
+#[cfg(test)]
+const VISIBILITY_CONFIRMATION_WINDOW: Duration = Duration::from_millis(150);
 
 fn stun_binding_response(
     request: &[u8],
@@ -408,9 +415,9 @@ pub async fn run(
         // rooms stay listed even with a password: the server validates the
         // password when players join, and a service that refuses the option
         // must not take the room down.
-        let mut published = false;
+        let mut publish_outcome = PublishOutcome::Private;
         if request.is_public {
-            published = set_lobby_visibility(
+            match set_lobby_visibility(
                 &mut registration.socket,
                 &identity.id,
                 &request.server_node,
@@ -419,11 +426,12 @@ pub async fn run(
                 cancellation,
             )
             .await
-            .is_ok();
-            if !published {
-                tracing::warn!(
-                    "the signaling server did not list the lobby publicly; the room stays private"
-                );
+            {
+                Ok(outcome) => publish_outcome = outcome,
+                Err(error) => {
+                    // The room itself is healthy; only its listing failed.
+                    tracing::warn!(%error, "the lobby could not be published publicly");
+                }
             }
         } else if let Err(error) = set_lobby_visibility(
             &mut registration.socket,
@@ -452,7 +460,12 @@ pub async fn run(
             };
             state.virtual_ip = Some(identity.ip);
             state.local_player_id = Some(identity.id.clone());
-            state.is_public = published;
+            state.is_public = matches!(
+                publish_outcome,
+                PublishOutcome::Published | PublishOutcome::SentUnconfirmed
+            );
+            state.publish_outcome = publish_outcome;
+            state.max_players = request.max_players;
             state.players = registration.players.clone();
             state.connect_address = forwarding.map(|(port, _)| {
                 SocketAddrV4::new(Ipv4Addr::LOCALHOST, port).to_string()
@@ -513,9 +526,14 @@ pub async fn run(
                         .await
                     };
                     match result {
-                        Ok(()) => {
+                        Ok(outcome) => {
                             update(generation, |state| {
-                                state.is_public = is_public
+                                state.is_public = matches!(
+                                    outcome,
+                                    PublishOutcome::Published
+                                        | PublishOutcome::SentUnconfirmed
+                                );
+                                state.publish_outcome = outcome;
                             })
                             .await;
                             let _ = response.send(Ok(()));
@@ -623,6 +641,34 @@ pub async fn run(
                         ) => {
                             registration.socket.send(async_tungstenite::tungstenite::Message::Text(json!({"type":"players-list-request"}).to_string().into())).await?;
                         }
+                        // The service broadcasts lobby option changes to every
+                        // member, including the host that requested them. Keep
+                        // the advertised state in step with the server so a
+                        // listing changed from another session is not shown
+                        // wrongly, and so an echoed request settles the host's
+                        // publish status.
+                        Some("lobby-options-changed") => {
+                            if let Some(is_public) =
+                                message["isPublic"].as_bool()
+                            {
+                                let max_players =
+                                    message["maxPlayers"].as_u64().and_then(
+                                        |value| u32::try_from(value).ok(),
+                                    );
+                                update(generation, |state| {
+                                    state.is_public = is_public;
+                                    state.publish_outcome = if is_public {
+                                        PublishOutcome::Published
+                                    } else {
+                                        PublishOutcome::Private
+                                    };
+                                    if max_players.is_some() {
+                                        state.max_players = max_players;
+                                    }
+                                })
+                                .await;
+                            }
+                        }
                         Some(
                             "kicked" | "register-error" | "version-too-old",
                         ) => bail!(
@@ -672,6 +718,14 @@ pub async fn run(
     result
 }
 
+/// Asks the lobby service to change this room's public listing.
+///
+/// `lobby-options-changed` is a broadcast to every member, not a per-request
+/// receipt, so waiting for it as if it were an acknowledgement made every
+/// publish attempt fail after the timeout and left the room out of the public
+/// list. The request is therefore optimistic: a rejection fails, a broadcast
+/// confirms, and silence means the service accepted the frame without echoing
+/// it — which must not take the host's room down.
 async fn set_lobby_visibility(
     socket: &mut protocol::Socket,
     player_id: &str,
@@ -679,7 +733,7 @@ async fn set_lobby_visibility(
     is_public: bool,
     request: Option<&StartRequest>,
     cancellation: &CancellationToken,
-) -> eyre::Result<()> {
+) -> eyre::Result<PublishOutcome> {
     let mut options = json!({
         "type": "set-lobby-options",
         "from": player_id,
@@ -701,7 +755,7 @@ async fn set_lobby_visibility(
         .await
         .wrap_err("could not send lobby visibility settings")?;
 
-    tokio::time::timeout(Duration::from_secs(5), async {
+    let confirmation = tokio::time::timeout(VISIBILITY_CONFIRMATION_WINDOW, async {
         loop {
             let message = tokio::select! {
                 biased;
@@ -709,15 +763,35 @@ async fn set_lobby_visibility(
                 message = protocol::next_message(socket) => message?,
             };
             match message["type"].as_str() {
-                Some("lobby-options-changed") if message["isPublic"] == is_public => return Ok(()),
-                Some("register-error") => bail!("the signaling server rejected lobby visibility changes"),
-                Some("kicked" | "version-too-old") => bail!("the signaling server ended this lobby session"),
+                Some("lobby-options-changed") if message["isPublic"] == is_public => {
+                    return Ok(())
+                }
+                Some("register-error") => {
+                    bail!("the signaling server rejected lobby visibility changes")
+                }
+                Some("kicked" | "version-too-old") => {
+                    bail!("the signaling server ended this lobby session")
+                }
                 _ => {}
             }
         }
     })
-    .await
-    .wrap_err("the signaling server did not confirm lobby visibility; it may not support MCTier lobby options")?
+    .await;
+
+    match confirmation {
+        Ok(Ok(())) if is_public => Ok(PublishOutcome::Published),
+        // Unlisting needs no acknowledgement: the room simply stops being
+        // advertised, and the host keeps hosting either way.
+        Ok(Ok(())) => Ok(PublishOutcome::Private),
+        Ok(Err(error)) => Err(error),
+        Err(_) if is_public => {
+            tracing::debug!(
+                "the lobby service did not echo the visibility change; keeping the listing request"
+            );
+            Ok(PublishOutcome::SentUnconfirmed)
+        }
+        Err(_) => Ok(PublishOutcome::Private),
+    }
 }
 
 #[cfg(test)]
@@ -807,7 +881,7 @@ mod tests {
         let (mut socket, _) =
             connect_async(format!("ws://{address}")).await.unwrap();
         let cancellation = CancellationToken::new();
-        set_lobby_visibility(
+        let outcome = set_lobby_visibility(
             &mut socket,
             &"a".repeat(64),
             "tcp://127.0.0.1:11010",
@@ -817,11 +891,108 @@ mod tests {
         )
         .await
         .unwrap();
+        assert_eq!(outcome, PublishOutcome::Published);
 
         let message = received.await.unwrap();
         assert_eq!(message["type"], "set-lobby-options");
         assert_eq!(message["from"], "a".repeat(64));
         assert_eq!(message["isPublic"], true);
         assert_eq!(message["serverNode"], "tcp://127.0.0.1:11010");
+    }
+
+    /// A service that accepts the frame without echoing it must not be treated
+    /// as a failure: that turned every publish into the "did not confirm lobby
+    /// visibility" error and kept the room out of the public list.
+    #[tokio::test]
+    async fn an_unanswered_visibility_change_stays_published() {
+        let listener =
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            // Read the request, answer nothing, keep the socket open past the
+            // confirmation window.
+            let _ = socket.next().await;
+            tokio::time::sleep(VISIBILITY_CONFIRMATION_WINDOW * 3).await;
+        });
+
+        let (mut socket, _) =
+            connect_async(format!("ws://{address}")).await.unwrap();
+        let outcome = set_lobby_visibility(
+            &mut socket,
+            &"b".repeat(64),
+            "tcp://127.0.0.1:11010",
+            true,
+            None,
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("silence is not a failure");
+        assert_eq!(outcome, PublishOutcome::SentUnconfirmed);
+    }
+
+    /// Unlisting needs no echo either; the room simply stops being advertised.
+    #[tokio::test]
+    async fn an_unanswered_unlist_returns_to_private() {
+        let listener =
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            let _ = socket.next().await;
+            tokio::time::sleep(VISIBILITY_CONFIRMATION_WINDOW * 3).await;
+        });
+
+        let (mut socket, _) =
+            connect_async(format!("ws://{address}")).await.unwrap();
+        let outcome = set_lobby_visibility(
+            &mut socket,
+            &"c".repeat(64),
+            "tcp://127.0.0.1:11010",
+            false,
+            None,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(outcome, PublishOutcome::Private);
+    }
+
+    /// A rejection is a real failure and must surface to the host.
+    #[tokio::test]
+    async fn a_rejected_visibility_change_reports_an_error() {
+        let listener =
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(stream).await.unwrap();
+            let _ = socket.next().await;
+            socket
+                .send(Message::Text(
+                    json!({ "type": "register-error" }).to_string().into(),
+                ))
+                .await
+                .unwrap();
+        });
+
+        let (mut socket, _) =
+            connect_async(format!("ws://{address}")).await.unwrap();
+        let error = set_lobby_visibility(
+            &mut socket,
+            &"d".repeat(64),
+            "tcp://127.0.0.1:11010",
+            true,
+            None,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("rejected lobby visibility"),
+            "{error:#}"
+        );
     }
 }

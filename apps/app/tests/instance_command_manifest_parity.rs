@@ -213,3 +213,64 @@ fn curseforge_runtime_handlers_match_the_build_manifest() {
          build-time manifest"
     );
 }
+
+/// The lobby room's host controls all travel through the multiplayer plugin.
+/// A command that exists only in the runtime handler fails at call time with an
+/// ACL error, which a Rust unit test or a `cargo check` cannot catch.
+#[test]
+fn multiplayer_runtime_handlers_match_the_build_manifest() {
+    let runtime = runtime_commands(include_str!("../src/api/multiplayer.rs"));
+    let manifest =
+        manifest_commands(include_str!("../build.rs"), "multiplayer");
+    assert_eq!(
+        runtime, manifest,
+        "multiplayer commands must be identical in the runtime handler and the \
+         build-time manifest"
+    );
+    for command in [
+        "multiplayer_start_mctier",
+        "multiplayer_mctier_set_public",
+        "multiplayer_mctier_create_invite",
+        "multiplayer_mctier_send_voice_signal",
+        "multiplayer_get_state",
+        "multiplayer_stop",
+    ] {
+        assert!(
+            runtime.contains(command),
+            "runtime handler lost the lobby command {command}"
+        );
+    }
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "multiplayer:default"),
+        "the main window must be allowed to reach the multiplayer plugin"
+    );
+}
+
+#[test]
+fn friends_runtime_handlers_match_the_build_manifest() {
+    let runtime = runtime_commands(include_str!("../src/api/friends.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "friends");
+    assert_eq!(
+        runtime, manifest,
+        "friends commands must be identical in the runtime handler and the \
+         build-time manifest"
+    );
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "friends:default"),
+        "the main window must be allowed to reach the friends plugin"
+    );
+}

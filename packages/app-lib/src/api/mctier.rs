@@ -160,6 +160,24 @@ pub struct Player {
     pub session_generation: u64,
 }
 
+/// How the host's public listing request resolved.
+///
+/// The lobby service broadcasts `lobby-options-changed` to every member, so an
+/// acknowledgement is not guaranteed within any useful deadline. A host whose
+/// request was accepted but not echoed must not lose the room, so the outcome
+/// distinguishes "confirmed" from "sent".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublishOutcome {
+    /// The room is not listed publicly.
+    #[default]
+    Private,
+    /// The service broadcast the new visibility.
+    Published,
+    /// The request was sent and not rejected, but no broadcast arrived.
+    SentUnconfirmed,
+}
+
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct MctierState {
     pub status: Status,
@@ -173,6 +191,10 @@ pub struct MctierState {
     pub voice_ice_server: Option<String>,
     pub error_message: Option<String>,
     pub is_public: bool,
+    /// How the current public listing resolved, for host-facing status.
+    pub publish_outcome: PublishOutcome,
+    /// Server-side player capacity when the listing advertises one.
+    pub max_players: Option<u32>,
     pub has_password: bool,
     /// Preparation stage, only meaningful while `status` is `downloading`.
     pub download_stage: Option<PreparationStage>,

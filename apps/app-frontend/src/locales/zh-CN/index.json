@@ -275,6 +275,42 @@
   "app.multiplayer.mctier.visibility": {
     "message": "将房间发布到公开大厅"
   },
+  "app.multiplayer.mctier.visibility-title": {
+    "message": "谁可以找到这个房间"
+  },
+  "app.multiplayer.mctier.visibility-private-title": {
+    "message": "私密房间"
+  },
+  "app.multiplayer.mctier.visibility-private-description": {
+    "message": "只有收到邀请码的人才能加入。"
+  },
+  "app.multiplayer.mctier.visibility-public-title": {
+    "message": "发布到公开大厅"
+  },
+  "app.multiplayer.mctier.visibility-public-description": {
+    "message": "任何浏览大厅列表的人都能看到这个房间并申请加入。"
+  },
+  "app.multiplayer.mctier.publish-published": {
+    "message": "已公开列出"
+  },
+  "app.multiplayer.mctier.publish-unconfirmed": {
+    "message": "已发送到大厅服务，但服务未确认。请稍等片刻再看列表。"
+  },
+  "app.multiplayer.mctier.publish-private": {
+    "message": "私密，未列出"
+  },
+  "app.multiplayer.mctier.public-open-hint": {
+    "message": "公开列出且无密码：任何浏览大厅列表的人都能直接加入。"
+  },
+  "app.multiplayer.mctier.public-with-password-hint": {
+    "message": "已公开列出。任何人都能找到该房间；加入时需要密码或邀请码。"
+  },
+  "app.multiplayer.mctier.private-password-hint": {
+    "message": "私密房间不会出现在公开大厅，加入时需要房间密码。"
+  },
+  "app.multiplayer.mctier.open-private-hint": {
+    "message": "私密房间不会出现在公开大厅；不设密码时，知道房名的人都可以加入。"
+  },
   "app.multiplayer.mctier.voice.microphone": {
     "message": "麦克风"
   },
@@ -949,6 +985,9 @@
   },
   "app.ai-settings.description": {
     "message": "统一配置文本模型，然后在启动器的各项功能中使用。"
+  },
+  "app.ai-settings.guide": {
+    "message": "用法说明"
   },
   "app.ai-settings.disabled": {
     "message": "已禁用"
@@ -10361,6 +10400,9 @@
   "app.multiplayer.title": {
     "message": "多人游戏"
   },
+  "app.multiplayer.guide": {
+    "message": "用法说明"
+  },
   "app.multiplayer.unknown-player-role": {
     "message": "未知身份"
   },
@@ -18301,6 +18343,33 @@
   },
   "app.assistant.permission-mode.description": {
     "message": "决定助手在执行操作前是否需要询问。模式立即生效；完全访问在页面刷新后总是重置。"
+  },
+  "app.assistant.permission-mode.table.what": {
+    "message": "操作"
+  },
+  "app.assistant.permission-mode.matrix.read": {
+    "message": "读取启动器状态"
+  },
+  "app.assistant.permission-mode.matrix.write": {
+    "message": "修改启动器数据"
+  },
+  "app.assistant.permission-mode.matrix.dangerous": {
+    "message": "高危操作"
+  },
+  "app.assistant.permission-mode.matrix.remote": {
+    "message": "MCP 服务器上的工具"
+  },
+  "app.assistant.permission-mode.matrix.allowed": {
+    "message": "允许"
+  },
+  "app.assistant.permission-mode.matrix.ask": {
+    "message": "先询问"
+  },
+  "app.assistant.permission-mode.dangerous-title": {
+    "message": "自由模式仍会询问的工具"
+  },
+  "app.assistant.permission-mode.dangerous-hint": {
+    "message": "你添加的 MCP 服务器上的所有工具也会询问，因为启动器无法控制这些工具会做什么。"
   },
   "app.assistant.permission-mode.default": {
     "message": "每次更改都询问"

@@ -4,6 +4,7 @@ import {
     CopyIcon,
     ExternalIcon,
     GridIcon,
+    HelpCircleIcon,
     KeyIcon,
     LogOutIcon,
     PlugIcon,
@@ -25,7 +26,7 @@ import {
     useVIntl,
 } from '@modrinth/ui'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import providerDescriptionsEn from '@/data/lobehub-provider-descriptions/en-US.json'
@@ -58,6 +59,11 @@ import AIIcon from './AIIcon.vue'
 const { formatMessage, locale } = useVIntl()
 const { handleError } = injectNotificationManager()
 const router = useRouter()
+const replayOnboarding = inject<(mode: 'assistant') => Promise<void>>('replayOnboarding')
+
+async function openAssistantGuide() {
+    await replayOnboarding?.('assistant')
+}
 const emptyState: AIState = {
     settings: { enabled: true },
     catalog_source: '',
@@ -99,6 +105,7 @@ function readableError(error: unknown): string {
 
 const messages = defineMessages({
     title: { id: 'app.ai-settings.title', defaultMessage: 'AI providers' },
+    guide: { id: 'app.ai-settings.guide', defaultMessage: 'How this works' },
     description: {
         id: 'app.ai-settings.description',
         defaultMessage: 'Configure text models once, then use them across launcher features.',
@@ -778,7 +785,13 @@ onMounted(async () => {
         <SpinnerIcon class="size-6 animate-spin text-[var(--color-text-tertiary)]" />
     </div>
 
-    <div v-else id="settings-target-ai-providers" tabindex="-1" class="ai-provider-layout">
+    <div
+        v-else
+        id="settings-target-ai-providers"
+        tabindex="-1"
+        class="ai-provider-layout"
+        data-onboarding-id="assistant-providers"
+    >
         <aside class="ai-provider-sidebar">
             <div class="ai-provider-search">
                 <StyledInput
@@ -877,6 +890,12 @@ onMounted(async () => {
                     {{ formatMessage(messages.noProviders) }}
                 </p>
             </div>
+            <button type="button" class="ai-provider-item" @click="openAssistantGuide">
+                <HelpCircleIcon class="size-[22px] shrink-0" />
+                <span class="min-w-0 flex-1 truncate text-left text-sm font-semibold">
+                    {{ formatMessage(messages.guide) }}
+                </span>
+            </button>
             <div class="ai-master-switch">
                 <label
                     for="ai-master-switch"

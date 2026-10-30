@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { MicrophoneIcon, XIcon } from '@modrinth/assets'
-import { Button, CopyCode, defineMessages, ProgressBar, StyledInput, useVIntl } from '@modrinth/ui'
+import { GlobeIcon, LockIcon, MicrophoneIcon, XIcon } from '@modrinth/assets'
+import {
+    BigOptionButton,
+    Button,
+    CopyCode,
+    defineMessages,
+    ProgressBar,
+    StyledInput,
+    Toggle,
+    useVIntl,
+} from '@modrinth/ui'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -82,9 +91,43 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.visibility',
         defaultMessage: 'Publish this room in the public lobby list',
     },
+    visibilityTitle: {
+        id: 'app.multiplayer.mctier.visibility-title',
+        defaultMessage: 'Who can find this room',
+    },
+    visibilityPrivateTitle: {
+        id: 'app.multiplayer.mctier.visibility-private-title',
+        defaultMessage: 'Private room',
+    },
+    visibilityPrivateDescription: {
+        id: 'app.multiplayer.mctier.visibility-private-description',
+        defaultMessage: 'Only people you send the invite code to can join.',
+    },
+    visibilityPublicTitle: {
+        id: 'app.multiplayer.mctier.visibility-public-title',
+        defaultMessage: 'List in the public lobby',
+    },
+    visibilityPublicDescription: {
+        id: 'app.multiplayer.mctier.visibility-public-description',
+        defaultMessage: 'Anyone browsing the lobby list can see this room and ask to join.',
+    },
+    publishPublished: {
+        id: 'app.multiplayer.mctier.publish-published',
+        defaultMessage: 'Listed publicly',
+    },
+    publishUnconfirmed: {
+        id: 'app.multiplayer.mctier.publish-unconfirmed',
+        defaultMessage:
+            'Sent to the lobby service. It did not confirm the listing, so give it a moment to appear.',
+    },
+    publishPrivate: {
+        id: 'app.multiplayer.mctier.publish-private',
+        defaultMessage: 'Private, not listed',
+    },
     publicWithPasswordHint: {
         id: 'app.multiplayer.mctier.public-with-password-hint',
-        defaultMessage: 'Joining players must enter the room password or an invite code.',
+        defaultMessage:
+            'Listed publicly. Anyone can find the room; joining needs the password or an invite code.',
     },
     privatePasswordHint: {
         id: 'app.multiplayer.mctier.private-password-hint',
@@ -95,6 +138,11 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.open-private-hint',
         defaultMessage:
             'Private rooms stay out of the public lobby; without a password anyone who knows the room name can join.',
+    },
+    publicOpenHint: {
+        id: 'app.multiplayer.mctier.public-open-hint',
+        defaultMessage:
+            'Listed publicly with no password: anyone browsing the lobby list can join directly.',
     },
     lobbyDescription: {
         id: 'app.multiplayer.mctier.lobby-description',
@@ -232,6 +280,9 @@ const lobbyMaxPlayers = ref('')
 const pending = ref(false)
 const stopping = ref(false)
 const visibilityPending = ref(false)
+const publishOutcome = computed(
+    () => props.state?.publish_outcome ?? (props.state?.is_public ? 'published' : 'private'),
+)
 const inviteLoading = ref(false)
 const error = ref('')
 const busy = computed(
@@ -371,13 +422,11 @@ async function joinByInvite() {
     await start('join', invite)
 }
 
-async function updateVisibility(event: Event) {
-    const target = event.target
-    if (!(target instanceof HTMLInputElement)) return
+async function updateVisibilityValue(next: boolean) {
     visibilityPending.value = true
     error.value = ''
     try {
-        await multiplayer.setMctierPublic(target.checked)
+        await multiplayer.setMctierPublic(next)
     } catch (failure) {
         error.value = multiplayerErrorText(failure)
     } finally {
@@ -497,22 +546,58 @@ function prefillInviteFromDeepLink() {
         <template v-if="connected">
             <CopyCode v-if="state?.lobby_name" :text="state.lobby_name" />
             <template v-if="state?.mode === 'create'">
-                <label class="flex items-center gap-2 text-sm">
-                    <input
-                        type="checkbox"
-                        :checked="state.is_public"
-                        :disabled="visibilityPending"
-                        @change="updateVisibility"
-                    />
-                    <span>{{ formatMessage(messages.visibility) }}</span>
-                    <span v-if="visibilityPending" role="status">
-                        {{ formatMessage(messages.publicPending) }}
-                    </span>
-                </label>
-                <p v-if="state.has_password" class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                    {{ formatMessage(messages.publicWithPasswordHint) }}
-                </p>
-                <div v-if="inviteCode" class="flex min-w-0 flex-col gap-2">
+                <div
+                    class="flex min-w-0 flex-col gap-2 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
+                    data-onboarding-id="mctier-publish-state"
+                >
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-sm font-semibold">{{
+                            formatMessage(messages.visibilityTitle)
+                        }}</span>
+                        <span
+                            class="rounded-full px-2 py-0.5 text-xs"
+                            :class="
+                                state.is_public
+                                    ? 'bg-brand-highlight text-brand'
+                                    : 'bg-surface-4 text-[var(--color-text-tertiary)]'
+                            "
+                            data-onboarding-id="mctier-publish-badge"
+                            role="status"
+                        >
+                            {{
+                                formatMessage(
+                                    publishOutcome === 'published'
+                                        ? messages.publishPublished
+                                        : publishOutcome === 'sent_unconfirmed'
+                                          ? messages.publishUnconfirmed
+                                          : messages.publishPrivate,
+                                )
+                            }}
+                        </span>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm">
+                        <Toggle
+                            :model-value="state.is_public"
+                            :disabled="visibilityPending"
+                            @update:model-value="updateVisibilityValue"
+                        />
+                        <span>{{ formatMessage(messages.visibility) }}</span>
+                        <span v-if="visibilityPending" role="status">
+                            {{ formatMessage(messages.publicPending) }}
+                        </span>
+                    </label>
+                    <p
+                        v-if="state.has_password"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                    >
+                        {{ formatMessage(messages.publicWithPasswordHint) }}
+                    </p>
+                </div>
+                <div
+                    v-if="inviteCode"
+                    class="flex min-w-0 flex-col gap-2"
+                    data-onboarding-id="mctier-invite"
+                >
                     <h3 class="m-0 text-base font-semibold">
                         {{ formatMessage(messages.inviteCode) }}
                     </h3>
@@ -534,6 +619,7 @@ function prefillInviteFromDeepLink() {
             </template>
             <section
                 class="flex min-w-0 flex-col gap-3 border-t border-solid border-surface-4 pt-4"
+                data-onboarding-id="mctier-voice"
             >
                 <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -796,23 +882,39 @@ function prefillInviteFromDeepLink() {
         <template v-else-if="busy">
             <Button :disabled="stopping" @click="stop">{{ formatMessage(messages.cancel) }}</Button>
         </template>
-        <form v-else class="grid gap-3 sm:grid-cols-2" @submit.prevent="start('create')">
+        <form
+            v-else
+            class="grid gap-3 sm:grid-cols-2"
+            data-onboarding-id="mctier-create-form"
+            @submit.prevent="start('create')"
+        >
             <label class="flex flex-col gap-1 text-sm"
-                >{{ formatMessage(messages.name)
-                }}<StyledInput v-model="lobbyName" name="lobby-name" :maxlength="32"
-            /></label>
+                >{{ formatMessage(messages.name) }}
+                <div class="flex min-w-0 items-center gap-2">
+                    <StyledInput v-model="lobbyName" name="lobby-name" :maxlength="32" />
+                    <Button type="quiet" size="sm" @click="generateLobbyName">{{
+                        formatMessage(messages.randomName)
+                    }}</Button>
+                </div>
+            </label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.player)
                 }}<StyledInput v-model="playerName" name="player-name" :maxlength="64"
             /></label>
             <label class="flex flex-col gap-1 text-sm"
-                >{{ formatMessage(messages.password)
-                }}<StyledInput
-                    v-model="password"
-                    name="lobby-password"
-                    type="password"
-                    :maxlength="128"
-            /></label>
+                >{{ formatMessage(messages.password) }}
+                <div class="flex min-w-0 items-center gap-2">
+                    <StyledInput
+                        v-model="password"
+                        name="lobby-password"
+                        type="password"
+                        :maxlength="128"
+                    />
+                    <Button type="quiet" size="sm" @click="generatePassword">{{
+                        formatMessage(messages.randomPassword)
+                    }}</Button>
+                </div>
+            </label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.port)
                 }}<StyledInput v-model="port" name="game-port" inputmode="numeric"
@@ -838,21 +940,38 @@ function prefillInviteFromDeepLink() {
                     :maxlength="3"
                     placeholder="∞"
             /></label>
-            <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
-                <Button type="quiet" @click="generateLobbyName">{{
-                    formatMessage(messages.randomName)
-                }}</Button>
-                <Button type="quiet" @click="generatePassword">{{
-                    formatMessage(messages.randomPassword)
-                }}</Button>
-            </div>
-            <label class="flex items-center gap-2 text-sm sm:col-span-2">
-                <input v-model="isPublic" name="public-lobby" type="checkbox" />
-                <span>{{ formatMessage(messages.visibility) }}</span>
-            </label>
+            <fieldset
+                class="m-0 flex min-w-0 flex-col gap-2 border-0 p-0 sm:col-span-2"
+                data-onboarding-id="mctier-visibility"
+            >
+                <legend class="mb-1 p-0 text-sm font-semibold">
+                    {{ formatMessage(messages.visibilityTitle) }}
+                </legend>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <BigOptionButton
+                        data-onboarding-id="mctier-visibility-private"
+                        :icon="LockIcon"
+                        :title="formatMessage(messages.visibilityPrivateTitle)"
+                        :description="formatMessage(messages.visibilityPrivateDescription)"
+                        :selected="!isPublic"
+                        no-icon-box
+                        @click="isPublic = false"
+                    />
+                    <BigOptionButton
+                        data-onboarding-id="mctier-visibility-public"
+                        :icon="GlobeIcon"
+                        :title="formatMessage(messages.visibilityPublicTitle)"
+                        :description="formatMessage(messages.visibilityPublicDescription)"
+                        :selected="isPublic"
+                        no-icon-box
+                        @click="isPublic = true"
+                    />
+                </div>
+            </fieldset>
             <p
                 v-if="isPublic && password.trim()"
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
+                data-onboarding-id="mctier-password"
             >
                 {{ formatMessage(messages.publicWithPasswordHint) }}
             </p>
@@ -867,6 +986,9 @@ function prefillInviteFromDeepLink() {
                 class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
             >
                 {{ formatMessage(messages.openPrivateHint) }}
+            </p>
+            <p v-else class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
+                {{ formatMessage(messages.publicOpenHint) }}
             </p>
             <p class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
                 {{ formatMessage(messages.hostHint) }}

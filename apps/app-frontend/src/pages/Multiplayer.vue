@@ -1,21 +1,27 @@
 <script setup lang="ts">
 import { GlobeIcon, UsersIcon } from '@modrinth/assets'
-import { defineMessages, NavTabs, useVIntl } from '@modrinth/ui'
-import { computed } from 'vue'
+import { Button, defineMessages, NavTabs, useVIntl } from '@modrinth/ui'
+import { computed, inject } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 const { formatMessage } = useVIntl()
 const route = useRoute()
 const router = useRouter()
+const replayOnboarding = inject<(mode: 'multiplayer') => Promise<void>>('replayOnboarding')
 
 const messages = defineMessages({
     title: { id: 'app.multiplayer.title', defaultMessage: 'Multiplayer' },
+    guide: { id: 'app.multiplayer.guide', defaultMessage: 'How this works' },
     roomsTab: { id: 'app.multiplayer.tab.rooms', defaultMessage: 'Rooms' },
     publicLobbiesTab: {
         id: 'app.multiplayer.tab.public-lobbies',
         defaultMessage: 'Public lobbies',
     },
 })
+
+async function startMultiplayerGuide() {
+    await replayOnboarding?.('multiplayer')
+}
 
 const activeTab = computed(() =>
     route.path.startsWith('/multiplayer/public-lobbies') ? 'public-lobbies' : 'rooms',
@@ -50,9 +56,14 @@ function handleTabClick(index: number) {
         "
     >
         <template v-if="!isStudioMode">
-            <h1 class="m-0 shrink-0 text-2xl font-semibold text-[var(--color-text-primary)]">
-                {{ formatMessage(messages.title) }}
-            </h1>
+            <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
+                <h1 class="m-0 text-2xl font-semibold text-[var(--color-text-primary)]">
+                    {{ formatMessage(messages.title) }}
+                </h1>
+                <Button type="quiet" @click="startMultiplayerGuide">
+                    {{ formatMessage(messages.guide) }}
+                </Button>
+            </div>
             <!--
 				This bar drives routes rather than panels, so it has no tabpanel of
 				its own: the outlet below renders child routes, and the detail and
@@ -60,12 +71,14 @@ function handleTabClick(index: number) {
 				routes but renders links rather than buttons, which normalise
 				underlines, so the switch waits on a visual review.
 			-->
-            <NavTabs
-                mode="local"
-                :active-index="activeTab === 'public-lobbies' ? 1 : 0"
-                :links="tabLinks"
-                @tab-click="handleTabClick"
-            />
+            <div data-onboarding-id="multiplayer-tabs">
+                <NavTabs
+                    mode="local"
+                    :active-index="activeTab === 'public-lobbies' ? 1 : 0"
+                    :links="tabLinks"
+                    @tab-click="handleTabClick"
+                />
+            </div>
         </template>
 
         <RouterView />

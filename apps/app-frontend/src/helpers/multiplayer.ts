@@ -97,6 +97,31 @@ export function selectedNodePreference(current: string, nodes: HongshiNode[]): s
     return current === 'auto' || nodes.some((node) => node.name === current) ? current : 'auto'
 }
 
+/**
+ * Diagnostics that belong in a log, never in a dialog: Rust's `Location:`
+ * trailer names internal source paths, and a backtrace footer tells the user to
+ * set an environment variable they cannot act on.
+ */
+const INTERNAL_DIAGNOSTIC_PATTERNS = [
+    /\s*Location:\s*\S+/u,
+    /\s*Stack backtrace:[\s\S]*/u,
+    /\s*note: run with `RUST_BACKTRACE[\s\S]*/u,
+    /\s*Stack backtrace:[\s\S]*/u,
+]
+
+/** Turns a backend error into the one sentence a user can act on. */
+export function sanitizeErrorText(text: string): string {
+    let cleaned = text
+    for (const pattern of INTERNAL_DIAGNOSTIC_PATTERNS) {
+        cleaned = cleaned.replace(pattern, '')
+    }
+    // eyre chains read "outermost: inner: innermost"; the outermost clause is
+    // the one phrased for the caller.
+    cleaned = cleaned.trim()
+    const firstSentence = cleaned.split(/\n/u)[0]?.trim() ?? ''
+    return firstSentence || cleaned
+}
+
 export function multiplayerErrorText(error: unknown): string {
     if (
         error &&
@@ -104,9 +129,9 @@ export function multiplayerErrorText(error: unknown): string {
         'message' in error &&
         typeof error.message === 'string'
     ) {
-        return error.message
+        return sanitizeErrorText(error.message)
     }
-    return String(error)
+    return sanitizeErrorText(String(error))
 }
 
 const command = (name: string) => `plugin:multiplayer|${name}`

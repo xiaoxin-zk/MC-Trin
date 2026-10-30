@@ -5,6 +5,7 @@ import {
     type DetectedLanPort,
     type HongshiNode,
     multiplayerErrorText,
+    sanitizeErrorText,
     selectedDetectedInstance,
     selectedNodePreference,
     storedMultiplayerProvider,
@@ -63,5 +64,32 @@ test('reads cancellation messages from serialized Tauri errors', () => {
     assert.equal(
         multiplayerErrorText('RedStone operation cancelled'),
         'RedStone operation cancelled',
+    )
+})
+
+test('keeps internal Rust diagnostics out of user-facing errors', () => {
+    // The lobby bug surfaced as a rustc source path in the dialog.
+    assert.equal(
+        sanitizeErrorText(
+            'the signaling server did not confirm lobby visibility\n\nLocation: /rustc/59807616e1fa2540724bfbac14d7976d7e4a3860/library/core/src/ops/function.rs:250:5',
+        ),
+        'the signaling server did not confirm lobby visibility',
+    )
+    assert.equal(
+        sanitizeErrorText(
+            'the room session is no longer active\n\nStack backtrace:\n   0: std::backtrace_rs::backtrace::libunwind::trace',
+        ),
+        'the room session is no longer active',
+    )
+    assert.equal(
+        sanitizeErrorText(
+            'EasyTier network process exited: status 1\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace',
+        ),
+        'EasyTier network process exited: status 1',
+    )
+    // Actionable text survives untouched.
+    assert.equal(
+        sanitizeErrorText('Only the room host can change public visibility'),
+        'Only the room host can change public visibility',
     )
 })

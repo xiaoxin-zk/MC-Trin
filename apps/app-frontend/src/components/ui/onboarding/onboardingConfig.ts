@@ -1,7 +1,8 @@
 import { defineMessages, type MessageDescriptor } from '@modrinth/ui'
 
 export type OnboardingInteraction = 'manual' | 'navigate' | 'activate' | 'inspect'
-export type OnboardingMode = 'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing'
+export type OnboardingMode =
+    'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing' | 'multiplayer' | 'assistant'
 export type CreationPath = 'custom'
 export type StepDestination = string | 'complete'
 
@@ -458,6 +459,105 @@ export const onboardingMessages = defineMessages({
     },
     skip: { id: 'app.onboarding.action.skip', defaultMessage: 'Leave the tour' },
     mascotAlt: { id: 'app.onboarding.mascot-alt', defaultMessage: 'MC-Trin guide' },
+    multiplayerTabsTitle: {
+        id: 'app.onboarding.multiplayer-tabs.title',
+        defaultMessage: 'Two ways to play together',
+    },
+    multiplayerTabsDescription: {
+        id: 'app.onboarding.multiplayer-tabs.description',
+        defaultMessage:
+            'Rooms is where you host or join a game with a code. Public lobbies is the shared list of rooms other players published.',
+    },
+    multiplayerCreateTitle: {
+        id: 'app.onboarding.multiplayer-create.title',
+        defaultMessage: 'Fill in the room once',
+    },
+    multiplayerCreateDescription: {
+        id: 'app.onboarding.multiplayer-create.description',
+        defaultMessage:
+            'In Minecraft open your world to LAN first, then copy the port it shows here. The room name and your player name are what guests see.',
+    },
+    multiplayerVisibilityTitle: {
+        id: 'app.onboarding.multiplayer-visibility.title',
+        defaultMessage: 'Private or listed publicly',
+    },
+    multiplayerVisibilityDescription: {
+        id: 'app.onboarding.multiplayer-visibility.description',
+        defaultMessage:
+            'A private room stays out of the lobby list, so only people with the invite code can join. A public room appears in the lobby list for everyone browsing it.',
+    },
+    multiplayerPasswordTitle: {
+        id: 'app.onboarding.multiplayer-password.title',
+        defaultMessage: 'A password still works when listed',
+    },
+    multiplayerPasswordDescription: {
+        id: 'app.onboarding.multiplayer-password.description',
+        defaultMessage:
+            'Listing a room does not remove its password. Guests who find it in the lobby must enter the password, or use the invite code instead.',
+    },
+    multiplayerInviteTitle: {
+        id: 'app.onboarding.multiplayer-invite.title',
+        defaultMessage: 'The invite code carries everything',
+    },
+    multiplayerInviteDescription: {
+        id: 'app.onboarding.multiplayer-invite.description',
+        defaultMessage:
+            'It bundles the room name, the network node and the encrypted password, so a friend can join with one paste.',
+    },
+    multiplayerVoiceTitle: {
+        id: 'app.onboarding.multiplayer-voice.title',
+        defaultMessage: 'Talk while you play',
+    },
+    multiplayerVoiceDescription: {
+        id: 'app.onboarding.multiplayer-voice.description',
+        defaultMessage:
+            'Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and hold the push-to-talk key when you would rather not stay open.',
+    },
+    assistantProvidersTitle: {
+        id: 'app.onboarding.assistant-providers.title',
+        defaultMessage: 'Connect a model first',
+    },
+    assistantProvidersDescription: {
+        id: 'app.onboarding.assistant-providers.description',
+        defaultMessage:
+            'Pick a provider, paste its endpoint and API key, then enable one model. Keys are stored in your operating system credential store, not in the launcher settings file.',
+    },
+    assistantToolsTitle: {
+        id: 'app.onboarding.assistant-tools.title',
+        defaultMessage: 'Reading is free, acting is gated',
+    },
+    assistantToolsDescription: {
+        id: 'app.onboarding.assistant-tools.description',
+        defaultMessage:
+            'Read tools let the assistant look at launcher state. Write tools change something, so they follow the permission mode below.',
+    },
+    assistantPermissionTitle: {
+        id: 'app.onboarding.assistant-permission.title',
+        defaultMessage: 'Decide how much it may do alone',
+    },
+    assistantPermissionDescription: {
+        id: 'app.onboarding.assistant-permission.description',
+        defaultMessage:
+            'Ask every time: every write and every MCP call waits for you. Free mode: only high-risk actions ask. Full access: nothing asks at all.',
+    },
+    assistantDangerousTitle: {
+        id: 'app.onboarding.assistant-dangerous.title',
+        defaultMessage: 'What free mode still asks about',
+    },
+    assistantDangerousDescription: {
+        id: 'app.onboarding.assistant-dangerous.description',
+        defaultMessage:
+            'Free mode keeps asking before deleting an instance, removing content, changing launcher settings, installing a runtime, and for any tool on an MCP server you added.',
+    },
+    assistantChatTitle: {
+        id: 'app.onboarding.assistant-chat.title',
+        defaultMessage: 'Try a request',
+    },
+    assistantChatDescription: {
+        id: 'app.onboarding.assistant-chat.description',
+        defaultMessage:
+            'Ask for something concrete such as "make a survival 1.21 instance". You can cancel a running turn at any time, and any pending approval is denied when you do.',
+    },
 })
 
 const step = (
@@ -885,6 +985,76 @@ export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
                 onboardingMessages.finishArea,
             ),
             { targetId: 'instance-tabs' },
+        ),
+    ],
+    multiplayer: [
+        inspect(
+            'multiplayer-tabs',
+            'multiplayer-tabs',
+            onboardingMessages.multiplayerTabsTitle,
+            onboardingMessages.multiplayerTabsDescription,
+        ),
+        inspect(
+            'multiplayer-create',
+            'mctier-create-form',
+            onboardingMessages.multiplayerCreateTitle,
+            onboardingMessages.multiplayerCreateDescription,
+        ),
+        inspect(
+            'multiplayer-visibility',
+            'mctier-visibility',
+            onboardingMessages.multiplayerVisibilityTitle,
+            onboardingMessages.multiplayerVisibilityDescription,
+        ),
+        inspect(
+            'multiplayer-password',
+            'mctier-password',
+            onboardingMessages.multiplayerPasswordTitle,
+            onboardingMessages.multiplayerPasswordDescription,
+        ),
+        inspect(
+            'multiplayer-invite',
+            'mctier-invite',
+            onboardingMessages.multiplayerInviteTitle,
+            onboardingMessages.multiplayerInviteDescription,
+        ),
+        inspect(
+            'multiplayer-voice',
+            'mctier-voice',
+            onboardingMessages.multiplayerVoiceTitle,
+            onboardingMessages.multiplayerVoiceDescription,
+        ),
+    ],
+    assistant: [
+        inspect(
+            'assistant-providers',
+            'assistant-providers',
+            onboardingMessages.assistantProvidersTitle,
+            onboardingMessages.assistantProvidersDescription,
+        ),
+        inspect(
+            'assistant-tools',
+            'assistant-tools',
+            onboardingMessages.assistantToolsTitle,
+            onboardingMessages.assistantToolsDescription,
+        ),
+        inspect(
+            'assistant-permission',
+            'assistant-permission',
+            onboardingMessages.assistantPermissionTitle,
+            onboardingMessages.assistantPermissionDescription,
+        ),
+        inspect(
+            'assistant-dangerous',
+            'assistant-dangerous',
+            onboardingMessages.assistantDangerousTitle,
+            onboardingMessages.assistantDangerousDescription,
+        ),
+        inspect(
+            'assistant-chat',
+            'assistant-chat',
+            onboardingMessages.assistantChatTitle,
+            onboardingMessages.assistantChatDescription,
         ),
     ],
 }
