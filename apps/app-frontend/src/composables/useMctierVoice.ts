@@ -27,9 +27,11 @@ type VoicePreferences = {
     inputDeviceId: string | null
     outputDeviceId: string | null
     pushToTalk: boolean
+    pushToTalkKey: string
 }
 
 const PREFERENCES_KEY = 'mctier.voice.preferences'
+export const DEFAULT_PUSH_TO_TALK_KEY = 'F2'
 const DEFAULT_PREFERENCES: VoicePreferences = {
     muted: false,
     outputVolume: 1,
@@ -38,6 +40,7 @@ const DEFAULT_PREFERENCES: VoicePreferences = {
     inputDeviceId: null,
     outputDeviceId: null,
     pushToTalk: false,
+    pushToTalkKey: DEFAULT_PUSH_TO_TALK_KEY,
 }
 
 function clampPeerVolumes(value: unknown): Record<string, number> {
@@ -76,6 +79,10 @@ function loadPreferences(): VoicePreferences {
                     ? parsed.outputDeviceId
                     : null,
             pushToTalk: parsed.pushToTalk === true,
+            pushToTalkKey:
+                typeof parsed.pushToTalkKey === 'string' && parsed.pushToTalkKey
+                    ? parsed.pushToTalkKey
+                    : DEFAULT_PUSH_TO_TALK_KEY,
         }
     } catch {
         return { ...DEFAULT_PREFERENCES }
@@ -107,6 +114,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const error = ref<VoiceError | null>(null)
     const peerStates = ref<Record<string, string>>({})
     const pushToTalk = ref(preferences.pushToTalk)
+    const pushToTalkKey = ref(preferences.pushToTalkKey)
     const pttHeld = ref(false)
     const speakingPeers = ref<Set<string>>(new Set())
     const inputLevel = ref(0)
@@ -166,6 +174,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             inputDeviceId: inputDeviceId.value,
             outputDeviceId: outputDeviceId.value,
             pushToTalk: pushToTalk.value,
+            pushToTalkKey: pushToTalkKey.value,
         })
     }
 
@@ -406,20 +415,20 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             .map((device) => ({ deviceId: device.deviceId, label: device.label }))
     }
 
-    /** Push-to-talk listens for a global F2 hold while a voice session is
+    /** Push-to-talk listens for the configured key while a voice session is
      * active, so the hotkey costs nothing when voice is off. */
-    const PTT_KEY = 'F2'
     function pttTargetIsEditable(target: EventTarget | null) {
         if (!(target instanceof HTMLElement)) return false
         return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
     }
     function onPttKeyDown(event: KeyboardEvent) {
-        if (event.code !== PTT_KEY || event.repeat || pttTargetIsEditable(event.target)) return
+        if (event.code !== pushToTalkKey.value || event.repeat || pttTargetIsEditable(event.target))
+            return
         event.preventDefault()
         pttHeld.value = true
     }
     function onPttKeyUp(event: KeyboardEvent) {
-        if (event.code !== PTT_KEY) return
+        if (event.code !== pushToTalkKey.value) return
         event.preventDefault()
         pttHeld.value = false
     }
@@ -435,6 +444,15 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     function setPushToTalk(enabled: boolean) {
         pushToTalk.value = enabled
         if (!enabled) pttHeld.value = false
+        persistPreferences()
+    }
+
+    /** Rebinds push-to-talk; the listener reads the ref, so no re-registration
+     * is needed when the key changes mid-session. */
+    function setPushToTalkKey(code: string) {
+        if (!code) return
+        pushToTalkKey.value = code
+        pttHeld.value = false
         persistPreferences()
     }
 
@@ -493,6 +511,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         outputDevices,
         peerMuted,
         pushToTalk,
+        pushToTalkKey,
         pttHeld,
         speakingPeers,
         inputLevel,
@@ -507,6 +526,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         setInputDevice,
         setOutputDevice,
         setPushToTalk,
+        setPushToTalkKey,
         setPttHeld,
         refreshDevices,
         stop,

@@ -155,6 +155,11 @@ const messages = defineMessages({
     enabled: { id: 'app.ai-settings.enabled', defaultMessage: 'Enabled' },
     disabled: { id: 'app.ai-settings.disabled', defaultMessage: 'Disabled' },
     providerEndpoint: { id: 'app.ai-settings.endpoint', defaultMessage: 'API endpoint' },
+    endpointHint: {
+        id: 'app.ai-settings.endpoint-hint',
+        defaultMessage:
+            'The provider base URL that requests are sent to, for example https://api.openai.com/v1. Keep the defaults unless you use a proxy or a self-hosted model.',
+    },
     apiKey: { id: 'app.ai-settings.api-key', defaultMessage: 'API key' },
     apiKeyConfigured: {
         id: 'app.ai-settings.api-key-configured',
@@ -1173,6 +1178,9 @@ onMounted(async () => {
                             type="url"
                             wrapper-class="w-full"
                         />
+                        <span class="text-xs font-normal text-[var(--color-text-tertiary)]">
+                            {{ formatMessage(messages.endpointHint) }}
+                        </span>
                     </label>
                     <label
                         v-for="field in selectedDefinition.required_settings"

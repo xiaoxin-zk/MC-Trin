@@ -1,15 +1,6 @@
 <script setup lang="ts">
 import { GlobeIcon, LockIcon, MicrophoneIcon, XIcon } from '@modrinth/assets'
-import {
-    BigOptionButton,
-    Button,
-    CopyCode,
-    defineMessages,
-    ProgressBar,
-    StyledInput,
-    Toggle,
-    useVIntl,
-} from '@modrinth/ui'
+import { Button, CopyCode, defineMessages, ProgressBar, StyledInput, useVIntl } from '@modrinth/ui'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -258,7 +249,12 @@ const messages = defineMessages({
     },
     voicePushToTalkHint: {
         id: 'app.multiplayer.mctier.voice.push-to-talk-hint',
-        defaultMessage: 'Hold F2 or the button to transmit; the microphone stays muted otherwise.',
+        defaultMessage:
+            'Hold the key or the button to transmit; the microphone stays muted otherwise.',
+    },
+    voicePttKey: {
+        id: 'app.multiplayer.mctier.voice.ptt-key',
+        defaultMessage: 'Push-to-talk key',
     },
     voicePushToTalkHold: {
         id: 'app.multiplayer.mctier.voice.push-to-talk-hold',
@@ -283,6 +279,24 @@ const visibilityPending = ref(false)
 const publishOutcome = computed(
     () => props.state?.publish_outcome ?? (props.state?.is_public ? 'published' : 'private'),
 )
+const visibilityOptions = [
+    {
+        id: 'mctier-visibility-private',
+        inputName: 'public-lobby-private',
+        value: false,
+        icon: LockIcon,
+        title: messages.visibilityPrivateTitle,
+        description: messages.visibilityPrivateDescription,
+    },
+    {
+        id: 'mctier-visibility-public',
+        inputName: 'public-lobby',
+        value: true,
+        icon: GlobeIcon,
+        title: messages.visibilityPublicTitle,
+        description: messages.visibilityPublicDescription,
+    },
+]
 const inviteLoading = ref(false)
 const error = ref('')
 const busy = computed(
@@ -382,6 +396,26 @@ function onPttToggle(event: Event) {
     voice.setPushToTalk(target.checked)
 }
 
+/** Keys offered for push-to-talk; a mouse button cannot be bound here. */
+const PTT_KEY_OPTIONS = [
+    { code: 'F2', label: 'F2' },
+    { code: 'F1', label: 'F1' },
+    { code: 'F3', label: 'F3' },
+    { code: 'F4', label: 'F4' },
+    { code: 'KeyV', label: 'V' },
+    { code: 'KeyB', label: 'B' },
+    { code: 'KeyN', label: 'N' },
+    { code: 'AltLeft', label: 'Left Alt' },
+    { code: 'ControlLeft', label: 'Left Ctrl' },
+    { code: 'ShiftLeft', label: 'Left Shift' },
+]
+
+function onPttKeyChange(event: Event) {
+    const target = event.target
+    if (!(target instanceof HTMLSelectElement)) return
+    voice.setPushToTalkKey(target.value)
+}
+
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
     if (!valid.value || busy.value) return
     pending.value = true
@@ -432,6 +466,12 @@ async function updateVisibilityValue(next: boolean) {
     } finally {
         visibilityPending.value = false
     }
+}
+
+function onVisibilityToggle(event: Event) {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    void updateVisibilityValue(target.checked)
 }
 
 async function refreshInvite() {
@@ -576,10 +616,12 @@ function prefillInviteFromDeepLink() {
                         </span>
                     </div>
                     <label class="flex items-center gap-2 text-sm">
-                        <Toggle
-                            :model-value="state.is_public"
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4"
+                            :checked="state.is_public"
                             :disabled="visibilityPending"
-                            @update:model-value="updateVisibilityValue"
+                            @change="onVisibilityToggle"
                         />
                         <span>{{ formatMessage(messages.visibility) }}</span>
                         <span v-if="visibilityPending" role="status">
@@ -782,9 +824,28 @@ function prefillInviteFromDeepLink() {
                                 @change="onPttToggle"
                             />
                             <span>{{ formatMessage(messages.voicePushToTalk) }}</span>
-                            <span class="text-xs font-normal text-[var(--color-text-tertiary)]">
-                                F2
-                            </span>
+                        </label>
+                        <label
+                            v-if="voice.pushToTalk.value"
+                            class="flex min-w-0 items-center gap-2 text-sm"
+                        >
+                            <span class="w-24 shrink-0">{{
+                                formatMessage(messages.voicePttKey)
+                            }}</span>
+                            <select
+                                class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
+                                :value="voice.pushToTalkKey.value"
+                                :aria-label="formatMessage(messages.voicePttKey)"
+                                @change="onPttKeyChange"
+                            >
+                                <option
+                                    v-for="option in PTT_KEY_OPTIONS"
+                                    :key="option.code"
+                                    :value="option.code"
+                                >
+                                    {{ option.label }}
+                                </option>
+                            </select>
                         </label>
                         <p
                             v-if="voice.pushToTalk.value"
@@ -948,24 +1009,36 @@ function prefillInviteFromDeepLink() {
                     {{ formatMessage(messages.visibilityTitle) }}
                 </legend>
                 <div class="grid gap-3 sm:grid-cols-2">
-                    <BigOptionButton
-                        data-onboarding-id="mctier-visibility-private"
-                        :icon="LockIcon"
-                        :title="formatMessage(messages.visibilityPrivateTitle)"
-                        :description="formatMessage(messages.visibilityPrivateDescription)"
-                        :selected="!isPublic"
-                        no-icon-box
-                        @click="isPublic = false"
-                    />
-                    <BigOptionButton
-                        data-onboarding-id="mctier-visibility-public"
-                        :icon="GlobeIcon"
-                        :title="formatMessage(messages.visibilityPublicTitle)"
-                        :description="formatMessage(messages.visibilityPublicDescription)"
-                        :selected="isPublic"
-                        no-icon-box
-                        @click="isPublic = true"
-                    />
+                    <label
+                        v-for="option in visibilityOptions"
+                        :key="option.id"
+                        :data-onboarding-id="option.id"
+                        class="flex min-w-0 cursor-pointer items-start gap-2 rounded-md border border-solid p-3 text-left"
+                        :class="
+                            isPublic === option.value
+                                ? 'border-brand bg-surface-3'
+                                : 'border-surface-4'
+                        "
+                    >
+                        <input
+                            type="radio"
+                            class="mt-1 h-4 w-4 shrink-0"
+                            :name="option.inputName"
+                            :checked="isPublic === option.value"
+                            @change="isPublic = option.value"
+                        />
+                        <span class="min-w-0">
+                            <span
+                                class="flex items-center gap-1 text-sm font-semibold text-[var(--color-text-primary)]"
+                            >
+                                <component :is="option.icon" class="size-4 shrink-0 text-brand" />
+                                {{ formatMessage(option.title) }}
+                            </span>
+                            <span class="block text-xs text-[var(--color-text-tertiary)]">
+                                {{ formatMessage(option.description) }}
+                            </span>
+                        </span>
+                    </label>
                 </div>
             </fieldset>
             <p

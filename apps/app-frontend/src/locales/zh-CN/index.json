@@ -402,7 +402,10 @@
     "message": "按键说话"
   },
   "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "按住 F2 或按钮说话；其余时间麦克风保持静音。"
+    "message": "按住按键或按钮说话；其余时间麦克风保持静音。"
+  },
+  "app.multiplayer.mctier.voice.ptt-key": {
+    "message": "按住说话的按键"
   },
   "app.multiplayer.mctier.voice.push-to-talk-hold": {
     "message": "按住说话"
@@ -985,6 +988,9 @@
   },
   "app.ai-settings.description": {
     "message": "统一配置文本模型，然后在启动器的各项功能中使用。"
+  },
+  "app.ai-settings.endpoint-hint": {
+    "message": "请求发送到的服务商基础地址，例如 https://api.openai.com/v1。除非使用代理或自建模型，否则保持默认即可。"
   },
   "app.ai-settings.guide": {
     "message": "用法说明"
@@ -18364,6 +18370,12 @@
   },
   "app.assistant.permission-mode.matrix.ask": {
     "message": "先询问"
+  },
+  "app.assistant.permission-mode.full-banner": {
+    "message": "完全访问已开启：助手会不经询问执行所有工具，包括删除实例和修改启动器设置。"
+  },
+  "app.assistant.permission-mode.full-banner-action": {
+    "message": "关闭它"
   },
   "app.assistant.permission-mode.dangerous-title": {
     "message": "自由模式仍会询问的工具"

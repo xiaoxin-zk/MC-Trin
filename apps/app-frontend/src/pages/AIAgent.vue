@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EditIcon, PlusIcon, SparklesIcon, TrashIcon } from '@modrinth/assets'
+import { EditIcon, PlusIcon, ShieldAlertIcon, SparklesIcon, TrashIcon } from '@modrinth/assets'
 import { Button, defineMessages, injectNotificationManager, useVIntl } from '@modrinth/ui'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
@@ -198,6 +198,15 @@ const messages = defineMessages({
     permissionTableWhat: {
         id: 'app.assistant.permission-mode.table.what',
         defaultMessage: 'Action',
+    },
+    fullAccessBanner: {
+        id: 'app.assistant.permission-mode.full-banner',
+        defaultMessage:
+            'Full access is on: the assistant runs every tool without asking, including deleting instances and changing launcher settings.',
+    },
+    fullAccessBannerAction: {
+        id: 'app.assistant.permission-mode.full-banner-action',
+        defaultMessage: 'Turn it off',
     },
     permissionMatrixReadTitle: {
         id: 'app.assistant.permission-mode.matrix.read',
@@ -1138,6 +1147,23 @@ onUnmounted(denyPendingApprovals)
                 formatMessage(messages.settings)
             }}</Button>
         </header>
+
+        <p
+            v-if="permissionMode === 'full'"
+            class="m-0 flex flex-wrap items-center gap-2 rounded-md border border-solid border-red bg-surface-3 px-3 py-2 text-sm font-semibold text-red"
+            role="alert"
+            data-onboarding-id="assistant-full-access-banner"
+        >
+            <ShieldAlertIcon class="size-4 shrink-0" />
+            {{ formatMessage(messages.fullAccessBanner) }}
+            <button
+                type="button"
+                class="cursor-pointer border-0 bg-transparent p-0 text-sm font-normal underline"
+                @click="setPermissionMode('default')"
+            >
+                {{ formatMessage(messages.fullAccessBannerAction) }}
+            </button>
+        </p>
 
         <p v-if="loading" class="m-0 text-sm text-[var(--color-text-tertiary)]" role="status">
             {{ formatMessage(messages.loading) }}
