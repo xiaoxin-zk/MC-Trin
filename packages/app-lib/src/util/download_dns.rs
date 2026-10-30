@@ -230,7 +230,7 @@ impl DownloadDnsResolver {
 
     /// Resolves `host` through `resolver_host` while preserving the original
     /// URL host for HTTP Host headers and TLS SNI.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_host_override(
         &self,
         host: &str,
@@ -251,7 +251,7 @@ impl DownloadDnsResolver {
         Ok(())
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn clear_host_override(&self, host: &str) -> Result<(), &'static str> {
         let host = normalize_host(host)?;
         self.host_overrides.lock().remove(&host);

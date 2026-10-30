@@ -143,17 +143,17 @@ use connection_budget::{
 mod routes;
 #[cfg(test)]
 use crate::state::{CustomDownloadSource, CustomDownloadSourceKind};
+pub use routes::resolve_download_routes_for;
 #[cfg(test)]
-use routes::explicit_mirror_routes;
+use routes::{
+    explicit_mirror_routes, resolve_download_routes_for_with_sources, route,
+};
 use routes::{
     infer_resource_class, is_mrpack_url, is_official_route,
-    official_fallback_route, official_route, order_auto_routes, route,
+    official_fallback_route, official_route, order_auto_routes,
     source_mode_for_resource,
 };
 pub(crate) use routes::{is_official_modrinth_download_url, route_host};
-pub use routes::{
-    resolve_download_routes_for, resolve_download_routes_for_with_sources,
-};
 
 #[cfg(test)]
 fn is_safe_redirect_location(location: &str) -> bool {
@@ -643,7 +643,7 @@ pub(crate) static DOWNLOAD_DNS_RESOLVER: LazyLock<Arc<DownloadDnsResolver>> =
 
 /// Forces download requests to resolve `host` through `resolver_host` while
 /// preserving `host` in the URL, HTTP Host header, and TLS SNI.
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn set_download_dns_host_override(
     host: &str,
     resolver_host: &str,
@@ -653,7 +653,7 @@ pub fn set_download_dns_host_override(
         .map_err(|error| crate::ErrorKind::InputError(error.to_string()).into())
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn clear_download_dns_host_override(host: &str) -> crate::Result<()> {
     DOWNLOAD_DNS_RESOLVER
         .clear_host_override(host)
@@ -1454,7 +1454,7 @@ pub async fn fetch(
 }
 
 /// Downloads a file from its official source without applying mirror routes.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[tracing::instrument(skip_all)]
 pub async fn fetch_official(
     url: &str,
@@ -1523,7 +1523,7 @@ pub(crate) async fn fetch_official_with_pool(
     .await
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[tracing::instrument(skip_all)]
 pub(crate) async fn fetch_metadata<T>(
     url: &str,
@@ -1737,7 +1737,7 @@ pub(crate) async fn fetch_with_pool(
 /// synced (e.g. `tag/game_version`). Treating that as a valid response would
 /// poison the cache with an empty collection, so collection fetches validate
 /// that the response actually contains data and fall back to the next source.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[tracing::instrument(skip_all)]
 pub async fn fetch_json_nonempty<T>(
     method: Method,
@@ -5681,7 +5681,7 @@ fn error_chain(error: &crate::Error) -> String {
 
 /// Streams a download to a sibling `.part` file, verifies it, then atomically
 /// moves it into place.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[tracing::instrument(skip(semaphore, _exec, progress, request, destination))]
 pub async fn download_to_path(
     request: DownloadRequest,

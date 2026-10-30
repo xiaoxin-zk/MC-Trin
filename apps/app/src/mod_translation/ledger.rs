@@ -375,11 +375,6 @@ pub struct ResolutionLedger {
 }
 
 impl ClassDecisionLedger {
-    #[allow(dead_code)]
-    pub fn is_resolved(&self, id: &str) -> bool {
-        self.decisions.contains_key(id)
-    }
-
     pub fn unresolved(
         &self,
         candidates: &[analyze::ClassCandidate],

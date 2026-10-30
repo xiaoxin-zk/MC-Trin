@@ -100,7 +100,7 @@ pub(super) async fn install_pack(
     )
     .await?;
     Ok(match outcome {
-        MrpackInstallOutcome::Completed(_) => {
+        MrpackInstallOutcome::Completed => {
             InstallExecutionOutcome::Completed(())
         }
         MrpackInstallOutcome::WaitingForUser(reason) => {
@@ -277,7 +277,7 @@ async fn install_local_pack_file(
                 )
                 .await?
                 {
-                    MrpackInstallOutcome::Completed(_) => {
+                    MrpackInstallOutcome::Completed => {
                         InstallExecutionOutcome::Completed(())
                     }
                     MrpackInstallOutcome::WaitingForUser(reason) => {

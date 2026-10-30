@@ -415,28 +415,6 @@ async fn mcarchive_provider_file_ids_migrate_fresh_and_preserve_existing_referen
     assert!(foreign_key_errors.is_empty());
 }
 
-#[allow(dead_code)]
-async fn settings_snapshot(pool: &Pool<Sqlite>) -> Vec<(String, String)> {
-    let columns: Vec<String> = sqlx::query_scalar(
-        "SELECT name FROM pragma_table_info('settings') ORDER BY cid",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap();
-    let mut snapshot = Vec::with_capacity(columns.len());
-    for column in columns {
-        let escaped = column.replace('"', "\"\"");
-        let value: String = sqlx::query_scalar(&format!(
-            "SELECT quote(\"{escaped}\") FROM settings WHERE id = 0"
-        ))
-        .fetch_one(pool)
-        .await
-        .unwrap();
-        snapshot.push((column, value));
-    }
-    snapshot
-}
-
 #[tokio::test]
 async fn terracotta_public_nodes_migration_preserves_existing_settings() {
     let pool = SqlitePoolOptions::new()

@@ -168,9 +168,6 @@ pub async fn set_privacy(
 	.bind(0_i64)
 	.execute(&mut *transaction)
 	.await?;
-    sqlx::query("DELETE FROM telemetry_outbox")
-        .execute(&mut *transaction)
-        .await?;
     transaction.commit().await?;
 
     if let Err(error) = state.discord_rpc.clear_to_default(true).await {

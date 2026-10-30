@@ -180,8 +180,7 @@ async fn finalize_mrpack_materializations(tasks: &[MrpackDatabaseTask]) {
 }
 
 pub(crate) enum MrpackInstallOutcome {
-    #[allow(dead_code)]
-    Completed(String),
+    Completed,
     WaitingForUser(InstallPauseReason),
 }
 
@@ -2276,7 +2275,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .await?;
     }
 
-    Ok(MrpackInstallOutcome::Completed(instance_id.clone()))
+    Ok(MrpackInstallOutcome::Completed)
 }
 
 fn pack_source_path(file: &CreatePackFile) -> String {

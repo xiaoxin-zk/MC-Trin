@@ -14,7 +14,7 @@ use std::{net::Ipv4Addr, path::Path, process::Stdio, time::Duration};
 
 use eyre::{Context, bail};
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, process::Child};
+use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 
 use super::{

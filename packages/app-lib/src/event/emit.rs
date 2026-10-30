@@ -11,7 +11,6 @@ use crate::event::{
     ServerPayload, WarningPayload,
 };
 use futures::prelude::*;
-use serde_json::Value;
 #[cfg(feature = "tauri")]
 use std::sync::LazyLock;
 #[cfg(feature = "tauri")]
@@ -19,9 +18,6 @@ use tauri::{Emitter, Manager};
 #[cfg(feature = "tauri")]
 use tokio::sync::oneshot;
 use uuid::Uuid;
-
-#[cfg(feature = "cli")]
-const CLI_PROGRESS_BAR_TOTAL: u64 = 1000;
 
 #[cfg(feature = "tauri")]
 static JAVA_DOWNLOAD_CONFIRMATIONS: LazyLock<
@@ -95,20 +91,6 @@ pub async fn init_loading_unsafe(
             current: 0.0,
             last_sent: 0.0,
             bar_type,
-            #[cfg(feature = "cli")]
-            cli_progress_bar: {
-                let pb = indicatif::ProgressBar::new(CLI_PROGRESS_BAR_TOTAL);
-
-                pb.set_position(0);
-                pb.set_style(
-                    indicatif::ProgressStyle::default_bar()
-                        .template(
-                            "{spinner:.green} [{elapsed_precise}] [{bar:.lime/green}] {pos}/{len} {msg}",
-                        ).unwrap()
-                        .progress_chars("#>-"),
-                );
-                pb
-            },
         },
     );
     // attempt an initial loading_emit event to the frontend
@@ -138,19 +120,6 @@ pub fn emit_loading(
     let display_frac = loading_bar.current / loading_bar.total;
 
     if f64::abs(display_frac - loading_bar.last_sent) > 0.005 {
-        // Emit event to indicatif progress bar
-        #[cfg(feature = "cli")]
-        {
-            loading_bar.cli_progress_bar.set_message(
-                message
-                    .map(|x| x.to_string())
-                    .unwrap_or(loading_bar.message.clone()),
-            );
-            loading_bar.cli_progress_bar.set_position(
-                (display_frac * CLI_PROGRESS_BAR_TOTAL as f64).round() as u64,
-            );
-        }
-
         //Emit event to tauri
         #[cfg(feature = "tauri")]
         event_state
@@ -173,7 +142,7 @@ pub fn emit_loading(
             )
             .map_err(EventError::from)?;
 
-        #[cfg(not(any(feature = "cli", feature = "tauri")))]
+        #[cfg(not(feature = "tauri"))]
         let _ = message;
 
         loading_bar.last_sent = display_frac;
@@ -420,20 +389,6 @@ pub async fn emit_instance_groups_changed(
             )
             .map_err(EventError::from)?;
     }
-    Ok(())
-}
-
-#[allow(unused_variables)]
-pub async fn emit_notification(payload: Value) -> crate::Result<()> {
-    #[cfg(feature = "tauri")]
-    {
-        let event_state = crate::EventState::get()?;
-        event_state
-            .app
-            .emit("notification", payload)
-            .map_err(EventError::from)?;
-    }
-
     Ok(())
 }
 

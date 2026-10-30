@@ -60,7 +60,6 @@ hickory-resolver = { workspace = true }
 hmac = { workspace = true }
 http = { workspace = true }
 iana-time-zone = { workspace = true }
-indicatif = { workspace = true, optional = true }
 itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
 keyring = { workspace = true }
@@ -183,7 +182,6 @@ windows-core = { workspace = true }
 winreg = { workspace = true }
 
 [features]
-cli = ["dep:indicatif"]
 tauri = ["dep:tauri"]
 
 [lints]

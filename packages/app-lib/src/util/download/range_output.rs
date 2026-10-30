@@ -2,8 +2,7 @@
 
 use crate::util::download::constants::{
     RANGE_OUTPUT_CREATING_RANGED_DOWNLOAD_OUTPUT,
-    RANGE_OUTPUT_FLUSHING_RANGED_DOWNLOAD_OUTPUT,
-    RANGE_OUTPUT_INVALID_RANGE_BOUNDS, RANGE_OUTPUT_OFFSET_OVERFLOW,
+    RANGE_OUTPUT_INVALID_RANGE_BOUNDS,
     RANGE_OUTPUT_OPENING_RANGED_DOWNLOAD_OUTPUT,
     RANGE_OUTPUT_RANGE_OUTPUT_LENGTH_CHANGED, RANGE_OUTPUT_WRITE_EXCEEDS_RANGE,
 };
@@ -160,44 +159,6 @@ impl RangeOutput {
         })
     }
 
-    /// Legacy adapter; not used by the concurrent range hot path.
-    #[allow(dead_code)]
-    pub(crate) async fn write_at(
-        &self,
-        offset: u64,
-        bytes: &[u8],
-        path: &Path,
-    ) -> Result<(), IOError> {
-        let end = offset.checked_add(bytes.len() as u64).ok_or_else(|| {
-            IOError::with_path(
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    RANGE_OUTPUT_OFFSET_OVERFLOW,
-                ),
-                path,
-            )
-        })?;
-        let mut writer = self.open_range(offset, end).await?;
-        writer.write_next(bytes).await?;
-        writer.flush().await
-    }
-
-    /// Legacy adapter for callers that previously flushed the shared handle.
-    #[allow(dead_code)]
-    pub(crate) async fn flush(&self, path: &Path) -> Result<(), IOError> {
-        let mut file = io::retry_windows_sharing_violation(
-            path,
-            RANGE_OUTPUT_FLUSHING_RANGED_DOWNLOAD_OUTPUT,
-            || async {
-                OpenOptions::new().read(true).write(true).open(path).await
-            },
-        )
-        .await
-        .map_err(|error| io::io_error_with_lock_info(error, path))?;
-        super::local_resources::write(path, 0, file.flush())
-            .await
-            .map_err(|error| io::io_error_with_lock_info(error, path))
-    }
 }
 
 impl RangeWriter {

@@ -739,11 +739,8 @@ pub(crate) const RANGE_JOURNAL_RANGE_CHECKPOINT_EXCEEDS_ITS_BOUNDS: &str =
 pub(crate) const RANGE_JOURNAL_SUFFIX: &str = ".ranges.json";
 pub(crate) const RANGE_OUTPUT_CREATING_RANGED_DOWNLOAD_OUTPUT: &str =
     "creating ranged download output";
-pub(crate) const RANGE_OUTPUT_FLUSHING_RANGED_DOWNLOAD_OUTPUT: &str =
-    "flushing ranged download output";
 pub(crate) const RANGE_OUTPUT_INVALID_RANGE_BOUNDS: &str =
     "invalid range bounds";
-pub(crate) const RANGE_OUTPUT_OFFSET_OVERFLOW: &str = "offset overflow";
 pub(crate) const RANGE_OUTPUT_OPENING_RANGED_DOWNLOAD_OUTPUT: &str =
     "opening ranged download output";
 pub(crate) const RANGE_OUTPUT_RANGE_OUTPUT_LENGTH_CHANGED: &str =

@@ -21,25 +21,28 @@ use super::{
 /// How many times a dropped signaling link is retried before the room ends.
 const RECONNECT_ATTEMPTS: u32 = 5;
 pub(super) const REGISTRATION_ATTEMPT_LIMIT: usize = 16;
-#[cfg(not(test))]
-const REGISTRATION_TIME_LIMIT: Duration = Duration::from_secs(60);
-#[cfg(test)]
-const REGISTRATION_TIME_LIMIT: Duration = Duration::from_secs(2);
+const REGISTRATION_TIME_LIMIT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(60)
+};
 /// Delay between reconnect attempts; it grows linearly per attempt. Tests use a
 /// much shorter budget so the reconnect path stays cheap to exercise.
-#[cfg(not(test))]
-const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
-#[cfg(test)]
-const RECONNECT_BACKOFF: Duration = Duration::from_millis(50);
+const RECONNECT_BACKOFF: Duration = if cfg!(test) {
+    Duration::from_millis(50)
+} else {
+    Duration::from_secs(2)
+};
 /// Final, user-facing explanation once reconnecting has failed.
 const SIGNALING_LOST: &str = "Lost the connection to the MCTier signaling server and could not reconnect. The room has ended - check your connection, then start or join the room again.";
 /// How long the host waits for the service to echo a visibility change before
 /// treating the request as sent. The echo is a broadcast that some deployments
 /// never send, so this must stay short and its absence must not be an error.
-#[cfg(not(test))]
-const VISIBILITY_CONFIRMATION_WINDOW: Duration = Duration::from_millis(1500);
-#[cfg(test)]
-const VISIBILITY_CONFIRMATION_WINDOW: Duration = Duration::from_millis(150);
+const VISIBILITY_CONFIRMATION_WINDOW: Duration = if cfg!(test) {
+    Duration::from_millis(150)
+} else {
+    Duration::from_millis(1500)
+};
 
 fn stun_binding_response(
     request: &[u8],
@@ -616,20 +619,17 @@ pub async fn run(
                             _ = cancellation.cancelled() => return Ok(()),
                             _ = tokio::time::sleep(RECONNECT_BACKOFF * (attempt + 1)) => {}
                         }
-                        let result = match tokio::time::timeout(
+                        let Ok(result) = tokio::time::timeout(
                             Duration::from_secs(10),
                             protocol::register(&request, &identity),
                         )
                         .await
-                        {
-                            Ok(result) => result,
-                            Err(_) => {
-                                tracing::warn!(
-                                    attempt,
-                                    "MCTier reconnect attempt timed out"
-                                );
-                                continue;
-                            }
+                        else {
+                            tracing::warn!(
+                                attempt,
+                                "MCTier reconnect attempt timed out"
+                            );
+                            continue;
                         };
                         match result {
                             Ok(session) => {

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 /// Maximum recursion depth to prevent infinite loops.
-#[allow(dead_code)]
+#[cfg(test)]
 const MAX_DEPTH: u32 = 3;
 
 /// Resolve a shortcut, symlink, or application bundle to its target path.

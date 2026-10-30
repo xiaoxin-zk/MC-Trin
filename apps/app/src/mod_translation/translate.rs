@@ -58,7 +58,6 @@ pub fn is_config_failure(error: &TranslateError) -> bool {
     )
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct TranslateOptions {
     pub provider_id: String,

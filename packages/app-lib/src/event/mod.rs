@@ -56,14 +56,6 @@ impl EventState {
         let value = Self::get()?;
         Ok(value.loading_bars.clone())
     }
-
-    #[cfg(feature = "tauri")]
-    pub async fn get_main_window() -> crate::Result<Option<tauri::WebviewWindow>>
-    {
-        use tauri::Manager;
-        let value = Self::get()?;
-        Ok(value.app.get_webview_window("main"))
-    }
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -76,9 +68,6 @@ pub struct LoadingBar {
     #[serde(skip)]
     pub last_sent: f64,
     pub bar_type: LoadingBarType,
-    #[cfg(feature = "cli")]
-    #[serde(skip)]
-    pub cli_progress_bar: indicatif::ProgressBar,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -90,40 +79,30 @@ impl Drop for LoadingBarId {
         let loader_uuid = self.0;
         tokio::spawn(async move {
             if let Ok(event_state) = EventState::get() {
-                #[cfg(any(feature = "tauri", feature = "cli"))]
+                #[cfg(feature = "tauri")]
                 if let Some((_, bar)) =
                     event_state.loading_bars.remove(&loader_uuid)
                 {
-                    #[cfg(feature = "tauri")]
-                    {
-                        let loader_uuid = bar.loading_bar_uuid;
-                        let event = bar.bar_type.clone();
-                        let fraction = bar.current / bar.total;
+                    let loader_uuid = bar.loading_bar_uuid;
+                    let event = bar.bar_type.clone();
+                    let fraction = bar.current / bar.total;
 
-                        let _ = event_state.app.emit(
-                            "loading",
-                            LoadingPayload {
-                                fraction: None,
-                                message: "Completed".to_string(),
-                                event,
-                                loader_uuid,
-                            },
-                        );
-                        tracing::trace!(
-                            "Exited at {fraction} for loading bar: {:?}",
-                            loader_uuid
-                        );
-                    }
-
-                    // Emit event to indicatif progress bar arc
-                    #[cfg(feature = "cli")]
-                    {
-                        let cli_progress_bar = bar.cli_progress_bar;
-                        cli_progress_bar.finish();
-                    }
+                    let _ = event_state.app.emit(
+                        "loading",
+                        LoadingPayload {
+                            fraction: None,
+                            message: "Completed".to_string(),
+                            event,
+                            loader_uuid,
+                        },
+                    );
+                    tracing::trace!(
+                        "Exited at {fraction} for loading bar: {:?}",
+                        loader_uuid
+                    );
                 }
 
-                #[cfg(not(any(feature = "tauri", feature = "cli")))]
+                #[cfg(not(feature = "tauri"))]
                 event_state.loading_bars.remove(&loader_uuid);
             }
         });
@@ -378,11 +357,6 @@ pub enum ServerPayloadType {
         crashed: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<ExitReason>,
-    },
-    #[allow(dead_code)]
-    EulaRequired {
-        server_id: String,
-        eula_text: String,
     },
 }
 
