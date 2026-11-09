@@ -2524,6 +2524,17 @@ async fn rename_backup_path(
         match tokio::fs::rename(source, destination).await {
             Ok(()) => return Ok(()),
             Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    && attempt + 1 < ATTEMPTS =>
+            {
+                // Windows can report a file as missing while a handle on it is
+                // still closing; retry briefly before treating it as gone.
+                tokio::time::sleep(Duration::from_millis(
+                    40 * u64::from(attempt + 1),
+                ))
+                .await;
+            }
+            Err(error)
                 if error.kind() == std::io::ErrorKind::PermissionDenied
                     && attempt + 1 < ATTEMPTS =>
             {
@@ -3847,7 +3858,15 @@ pub(crate) async fn move_default_repository_for_launcher_directory(
     let temporary = destination_parent
         .join(format!(".axolotl-backup-move-{}", Uuid::new_v4()));
     let copy_result: crate::Result<()> = async {
-        io::copy_dir(source, &temporary).await?;
+        // SQLite recreates its shared-memory and WAL files at the destination;
+        // copying them either races the engine deleting them or carries a
+        // half-written WAL across.
+        io::copy_dir_skipping(
+            source,
+            &temporary,
+            &["backup.db-shm", "backup.db-wal"],
+        )
+        .await?;
         validate_repository_at(&temporary).await?;
         tokio::fs::remove_dir(destination).await?;
         rename_backup_path(&temporary, destination).await?;
@@ -4017,7 +4036,15 @@ async fn move_repository_inner(destination: PathBuf) -> crate::Result<()> {
             let temporary = destination_parent
                 .join(format!(".axolotl-backup-move-{}", Uuid::new_v4()));
             let copy_result: crate::Result<()> = async {
-                io::copy_dir(&source, &temporary).await?;
+                // SQLite recreates its shared-memory and WAL files at the
+                // destination; copying them either races the engine deleting
+                // them or carries a half-written WAL across.
+                io::copy_dir_skipping(
+                    &source,
+                    &temporary,
+                    &["backup.db-shm", "backup.db-wal"],
+                )
+                .await?;
                 validate_repository_at(&temporary).await?;
                 tokio::fs::remove_dir(&destination).await?;
                 rename_backup_path(&temporary, &destination).await?;

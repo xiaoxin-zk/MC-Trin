@@ -1064,6 +1064,8 @@ async function findLauncherDir() {
     })
 
     if (newDir) {
+        // Persisting the change records the directory being left behind, so the
+        // existing instances move with it on the next start.
         settings.value.custom_dir = newDir
     }
 }

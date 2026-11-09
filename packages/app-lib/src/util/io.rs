@@ -718,9 +718,25 @@ pub async fn copy_dir(
     from: impl AsRef<std::path::Path>,
     to: impl AsRef<std::path::Path>,
 ) -> Result<(), IOError> {
+    copy_dir_skipping(from, to, &[]).await
+}
+
+/// Copies a directory tree while leaving out entries whose file name matches
+/// one of `skip_file_names`.
+///
+/// SQLite keeps `-shm` and `-wal` beside a database as transient state that the
+/// engine creates and removes on its own schedule. Copying them either races
+/// the engine deleting them (surfacing as a spurious "file not found") or
+/// carries a half-written WAL into the copy, so callers that move a database
+/// directory skip them and let the engine rebuild them at the destination.
+pub async fn copy_dir_skipping(
+    from: impl AsRef<std::path::Path>,
+    to: impl AsRef<std::path::Path>,
+    skip_file_names: &[&str],
+) -> Result<(), IOError> {
     let from = from.as_ref().to_path_buf();
     let to = to.as_ref().to_path_buf();
-    copy_dir_inner(&from, &to, &mut Vec::new()).await
+    copy_dir_inner(&from, &to, &mut Vec::new(), skip_file_names).await
 }
 
 #[async_recursion::async_recursion]
@@ -728,6 +744,7 @@ async fn copy_dir_inner(
     from: &Path,
     to: &Path,
     dir_stack: &mut Vec<PathBuf>,
+    skip_file_names: &[&str],
 ) -> Result<(), IOError> {
     use async_walkdir::WalkDir;
     use futures::StreamExt as _;
@@ -760,6 +777,15 @@ async fn copy_dir_inner(
             .to_str()
             .map(|s| s.starts_with("__MACOSX"))
             .unwrap_or(false)
+        {
+            continue;
+        }
+
+        if !skip_file_names.is_empty()
+            && entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| skip_file_names.contains(&name))
         {
             continue;
         }
@@ -802,7 +828,8 @@ async fn copy_dir_inner(
             if target_meta.is_dir() {
                 // Materialize the directory link: copy the target subtree as
                 // a real directory instead of recreating the link.
-                copy_dir_inner(&resolved, &target, dir_stack).await?;
+                copy_dir_inner(&resolved, &target, dir_stack, skip_file_names)
+                    .await?;
             } else {
                 // Materialize file links as their target's content.
                 let bytes = read(&entry_path).await?;
@@ -1147,6 +1174,27 @@ mod atomic_replace_tests {
 mod copy_dir_tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn copy_dir_skipping_leaves_the_named_entries_behind() {
+        let src = tempdir().expect("temp src");
+        std::fs::write(src.path().join("keep.txt"), b"keep")
+            .expect("write keep");
+        std::fs::write(src.path().join("drop.tmp"), b"drop")
+            .expect("write drop");
+
+        let dst = tempdir().expect("temp dst");
+        copy_dir_skipping(src.path(), dst.path().join("out"), &["drop.tmp"])
+            .await
+            .expect("copy");
+
+        let out = dst.path().join("out");
+        assert!(out.join("keep.txt").is_file(), "kept file should exist");
+        assert!(
+            !out.join("drop.tmp").exists(),
+            "skipped file must not be copied"
+        );
+    }
 
     #[tokio::test]
     async fn copy_dir_copies_plain_tree() {

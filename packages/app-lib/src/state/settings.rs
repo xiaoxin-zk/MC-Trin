@@ -643,6 +643,27 @@ impl Settings {
         &self,
         connection: &mut sqlx::SqliteConnection,
     ) -> crate::Result<()> {
+        // Record the directory being left behind before persisting a change.
+        // The startup relocation only runs when `prev_custom_dir` is set, and
+        // the UI lets the path be typed directly, so trusting the caller to
+        // remember it left instances stranded on the previous disk.
+        let mut prev_custom_dir = self.prev_custom_dir.clone();
+        if prev_custom_dir.is_none() {
+            let stored: Option<Option<String>> = sqlx::query_scalar(
+                "SELECT custom_dir FROM settings WHERE id = 0",
+            )
+            .fetch_optional(&mut *connection)
+            .await?;
+            if let Some(Some(stored_dir)) = stored {
+                let trimmed = stored_dir.trim();
+                if !trimmed.is_empty()
+                    && self.custom_dir.as_deref().map(str::trim)
+                        != Some(trimmed)
+                {
+                    prev_custom_dir = Some(trimmed.to_string());
+                }
+            }
+        }
         let max_concurrent_writes = self.max_concurrent_writes as i32;
         let max_concurrent_downloads =
             self.max_concurrent_downloads
@@ -789,7 +810,7 @@ impl Settings {
             self.hooks.wrapper,
             self.hooks.post_exit,
             self.custom_dir,
-            self.prev_custom_dir,
+            prev_custom_dir,
             self.migrated,
             self.toggle_sidebar,
             feature_flags,
