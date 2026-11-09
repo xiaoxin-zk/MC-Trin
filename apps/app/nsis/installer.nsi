@@ -1,4 +1,4 @@
-Unicode true
+﻿Unicode true
 ManifestDPIAware true
 ; Add in `dpiAwareness` `PerMonitorV2` to manifest for Windows 10 1607+ (note this should not affect lower versions since they should be able to ignore this and pick up `dpiAware` `true` set by `ManifestDPIAware true`)
 ; Currently undocumented on NSIS's website but is in the Docs folder of source tree, see
@@ -118,6 +118,8 @@ Var StatusFile
 Var NoRunAfterInstall
 Var UninstallUiChild
 Var UninstallFailure
+Var PortableMode
+Var PortableCheckbox
 
 !macro AxlUninstallFile PATH
   Delete "${PATH}"
@@ -545,6 +547,17 @@ Function UpdateResourceDirectoryNotice
   ${EndIf}
 FunctionEnd
 
+Function UpdatePortableModeNotice
+  ${NSD_GetState} $PortableCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    StrCpy $PortableMode 1
+    ${NSD_SetText} $ResourceDirNotice "$(axlPortableHint)"
+  ${Else}
+    StrCpy $PortableMode 0
+    ${NSD_SetText} $ResourceDirNotice "$(axlDataSubfolderNotice)"
+  ${EndIf}
+FunctionEnd
+
 Function BrowseInstallDirectory
   ${NSD_GetText} $InstallDirInput $INSTDIR
   nsDialogs::SelectFolderDialog "$(axlSelectInstallDirectory)" "$INSTDIR"
@@ -596,31 +609,22 @@ Function PageOptions
   ${NSD_OnClick} $0 BrowseInstallDirectory
 
   ${If} $FreshInstall = 1
-    ${NSD_CreateLabel} 0 61u 100% 10u "$(axlResourceDirectoryLabel)"
-    Pop $ResourceDirLabel
-    SetCtlColors $ResourceDirLabel ${AXL_TEXT} ${AXL_BACKGROUND}
-    SendMessage $ResourceDirLabel ${WM_SETFONT} $InstallerBodyFont 1
-
-    ${NSD_CreateLabel} 0 73u 100% 18u "$(axlResourceDirectoryDescription)"
+    ${NSD_CreateLabel} 0 61u 100% 18u "$(axlDataSubfolderNotice)"
     Pop $ResourceDirDescription
     SetCtlColors $ResourceDirDescription ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
     SendMessage $ResourceDirDescription ${WM_SETFONT} $InstallerSmallFont 1
 
-    ${NSD_CreateText} 0 94u 77% 14u "$ResourceDir"
-    Pop $ResourceDirInput
-    !insertmacro AxlStyleControl $ResourceDirInput ${AXL_TEXT} ${AXL_CONTROL}
-    SendMessage $ResourceDirInput ${WM_SETFONT} $InstallerBodyFont 1
+    ${NSD_CreateCheckbox} 0 84u 100% 12u "$(axlPortableCheckbox)"
+    Pop $PortableCheckbox
+    !insertmacro AxlStyleControl $PortableCheckbox ${AXL_TEXT} ${AXL_BACKGROUND}
+    SendMessage $PortableCheckbox ${WM_SETFONT} $InstallerBodyFont 1
+    ${NSD_SetState} $PortableCheckbox $PortableMode
+    ${NSD_OnClick} $PortableCheckbox UpdatePortableModeNotice
 
-    ${NSD_CreateButton} 79% 94u 21% 14u "$(axlBrowse)"
-    Pop $ResourceDirBrowse
-    !insertmacro AxlStyleControl $ResourceDirBrowse ${AXL_TEXT} ${AXL_CONTROL}
-    ${NSD_OnClick} $ResourceDirBrowse BrowseResourceDirectory
-
-    ${NSD_CreateLabel} 0 111u 100% 18u ""
+    ${NSD_CreateLabel} 0 99u 100% 18u "$(axlPortableHint)"
     Pop $ResourceDirNotice
+    SetCtlColors $ResourceDirNotice ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
     SendMessage $ResourceDirNotice ${WM_SETFONT} $InstallerSmallFont 1
-    ShowWindow $ResourceDirNotice ${SW_HIDE}
-    Call UpdateResourceDirectoryNotice
   ${Else}
     ${NSD_CreateLabel} 0 64u 100% 34u "$(axlExistingInstallDirectoryPreserved)"
     Pop $0
@@ -661,53 +665,32 @@ Function PageLeaveOptions
   ${NSD_GetState} $DesktopShortcutCheckbox $DesktopShortcutState
 
   ${If} $FreshInstall <> 1
+    StrCpy $ResourceDir "$INSTDIR\data"
     Return
   ${EndIf}
 
-  ${NSD_GetText} $ResourceDirInput $ResourceDir
-  Push $ResourceDir
-  Call TrimTrailingSlash
-  Pop $ResourceDir
-  ${NSD_SetText} $ResourceDirInput $ResourceDir
-
-  ${GetRoot} "$ResourceDir" $0
-  ${If} $0 == ""
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryAbsolute)"
-    Abort
-  ${EndIf}
-  ${If} "$ResourceDir" == "$0"
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryRoot)"
-    Abort
-  ${EndIf}
-  ${If} "$ResourceDir" == "$0\"
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryRoot)"
-    Abort
-  ${EndIf}
-
-  ${StrCase} $0 "$INSTDIR" "L"
-  ${StrCase} $1 "$ResourceDir" "L"
-  ${If} $0 == $1
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryInsideInstall)"
-    Abort
-  ${EndIf}
-  StrCpy $2 "$0\"
-  StrLen $3 $2
-  StrCpy $4 $1 $3
-  ${If} $4 == $2
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryInsideInstall)"
-    Abort
+  ; One folder decides everything: a portable install keeps the data beside
+  ; the program, a normal install keeps it in a data subfolder so that
+  ; uninstalling can leave instances and saves behind.
+  ${NSD_GetState} $PortableCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    StrCpy $PortableMode 1
+    StrCpy $ResourceDir "$INSTDIR"
+  ${Else}
+    StrCpy $PortableMode 0
+    StrCpy $ResourceDir "$INSTDIR\data"
   ${EndIf}
 
   ClearErrors
   CreateDirectory "$ResourceDir"
-  FileOpen $0 "$ResourceDir\.axolotl-write-test" w
+  FileOpen $1 "$ResourceDir\.axolotl-write-test" w
   ${If} ${Errors}
     ClearErrors
     ${NSD_SetText} $OptionsError "$(axlResourceDirectoryNotWritable)"
     Abort
   ${EndIf}
-  FileWrite $0 "MC-Trin"
-  FileClose $0
+  FileWrite $1 "MC-Trin"
+  FileClose $1
   Delete "$ResourceDir\.axolotl-write-test"
 FunctionEnd
 
@@ -872,6 +855,10 @@ LangString axlResourceDirectoryNotWritable ${LANG_ENGLISH} "MC-Trin cannot write
 LangString axlFinishTitle ${LANG_ENGLISH} "MC-Trin is installed"
 LangString axlFinishText ${LANG_ENGLISH} "Everything is ready. Your application directory is:$\r$\n$ResourceDir"
 LangString axlFinishButton ${LANG_ENGLISH} "Finish"
+LangString axlPortableCheckbox ${LANG_ENGLISH} "Portable install: keep everything in one folder"
+LangString axlPortableHint ${LANG_ENGLISH} "Uninstalling also removes instances, saves and caches."
+LangString axlDataSubfolderNotice ${LANG_ENGLISH} "Instances, Java, assets and caches go into the data subfolder; uninstalling keeps them by default."
+LangString axlUninstallKeepData ${LANG_ENGLISH} "Keep instances, saves and caches"
 
 LangString axlWelcomeTitle ${LANG_SIMPCHINESE} "安装 MC-Trin"
 LangString axlWelcomeText ${LANG_SIMPCHINESE} "为你的 Minecraft 实例准备的现代化启动器。$\r$\n$\r$\n版本 ${VERSION} · 64 位 · 当前用户"
@@ -895,6 +882,10 @@ LangString axlResourceDirectoryNotWritable ${LANG_SIMPCHINESE} "MC-Trin 无法�
 LangString axlFinishTitle ${LANG_SIMPCHINESE} "MC-Trin 已安装"
 LangString axlFinishText ${LANG_SIMPCHINESE} "一切准备就绪。当前应用目录：$\r$\n$ResourceDir"
 LangString axlFinishButton ${LANG_SIMPCHINESE} "完成"
+LangString axlPortableCheckbox ${LANG_SIMPCHINESE} "便携安装：所有内容集中在一个文件夹"
+LangString axlPortableHint ${LANG_SIMPCHINESE} "日后卸载会同时删除实例、存档与缓存。"
+LangString axlDataSubfolderNotice ${LANG_SIMPCHINESE} "实例、Java、资源与缓存存放在 data 子文件夹，卸载默认保留。"
+LangString axlUninstallKeepData ${LANG_SIMPCHINESE} "保留实例、存档与缓存"
 
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
@@ -937,6 +928,12 @@ Function .onInit
   ${GetOptions} $CMDLINE "/RESOURCE_DIR=" $0
   ${IfNot} ${Errors}
     StrCpy $ResourceDir "$0"
+  ${EndIf}
+
+  ; Passive installs (the modern installer UI) choose the layout up front.
+  ${GetOptions} $CMDLINE "/PORTABLE_MODE=" $0
+  ${IfNot} ${Errors}
+    StrCpy $PortableMode 1
   ${EndIf}
   StrCpy $DesktopShortcutState ${BST_CHECKED}
   StrCpy $FreshInstall 1
@@ -1240,6 +1237,13 @@ Section Install
     ${Else}
       WriteRegStr HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory" "$ResourceDir"
     ${EndIf}
+    ; The uninstaller reads this to decide whether the data lives beside the
+    ; program (portable) or in the data subfolder.
+    ${If} $PortableMode == 1
+      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "1"
+    ${Else}
+      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+    ${EndIf}
   ${EndIf}
 
   ; Auto close this page for passive mode
@@ -1396,6 +1400,26 @@ Section Uninstall
   ; Keep the uninstaller and registration available if optional data removal fails.
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
+    ; A normal install keeps instances in <program folder>\data, a portable one
+    ; keeps them in the program folder itself. Both are only removed when the
+    ; user asked for it, which is why the checkbox starts unchecked.
+    ReadRegStr $0 HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
+    ReadRegStr $1 HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+    ${If} $1 == "1"
+      StrCpy $0 "$INSTDIR"
+    ${EndIf}
+    ${If} $0 != ""
+      StrCpy $2 "$0\"
+      StrLen $3 $2
+      StrCpy $4 "$INSTDIR" $3
+      ${If} $0 != "$INSTDIR"
+      ${OrIf} $1 == "1"
+        RmDir /r "$0"
+        Push "$0"
+        Call un.CheckPathRemoved
+      ${EndIf}
+    ${EndIf}
+
     RmDir /r "$APPDATA\${BUNDLEID}"
     Push "$APPDATA\${BUNDLEID}"
     Call un.CheckPathRemoved

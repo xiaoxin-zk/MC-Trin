@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
@@ -533,6 +533,30 @@
                 color: var(--text-tertiary);
             }
 
+            .checkbox-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--text);
+                cursor: pointer;
+            }
+
+            .checkbox-row input[type='checkbox'] {
+                width: 16px;
+                height: 16px;
+                accent-color: var(--accent, #3b82f6);
+                cursor: pointer;
+            }
+
+            .field-note {
+                margin: 0;
+                font-size: 12px;
+                line-height: 1.5;
+                color: var(--text-tertiary);
+            }
+
             .input-group {
                 display: flex;
                 align-items: center;
@@ -1063,11 +1087,10 @@
                     <section class="screen" data-screen="configure">
                         <div class="screen-content-wrapper">
                             <h2 id="configure-title" data-i18n="configureTitle">
-                                Choose installation locations
+                                Choose installation location
                             </h2>
                             <p class="section-copy" id="configure-copy" data-i18n="configureCopy">
-                                You can keep the defaults or choose separate locations for the
-                                program and its data.
+                                Everything the launcher installs stays inside this folder.
                             </p>
 
                             <div class="form">
@@ -1107,41 +1130,22 @@
                                     </span>
                                 </label>
 
-                                <label class="field" id="resource-field">
+                                <div class="field" id="resource-field">
                                     <span class="field-label">
-                                        <span data-i18n="dataLocation">Application directory</span>
+                                        <span data-i18n="dataLocation">Data folder</span>
                                         <span class="field-hint" data-i18n="dataHint"
                                             >Instances, Java, assets, caches</span
                                         >
                                     </span>
-                                    <span class="input-group">
-                                        <input
-                                            class="path-input"
-                                            id="resource-dir"
-                                            autocomplete="off"
-                                            spellcheck="false"
-                                        />
-                                        <button
-                                            class="browse-button"
-                                            id="browse-resource"
-                                            type="button"
-                                            aria-label="Browse"
-                                            data-i18n-label="browse"
+                                    <label class="checkbox-row" id="portable-row">
+                                        <input type="checkbox" id="portable-mode" />
+                                        <span data-i18n="portableMode"
+                                            >Portable install: keep everything in one folder</span
                                         >
-                                            <svg
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                            >
-                                                <path
-                                                    d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"
-                                                />
-                                            </svg>
-                                            <span data-i18n="browse">Browse</span>
-                                        </button>
-                                    </span>
-                                </label>
+                                    </label>
+                                    <p class="field-note" id="portable-note"></p>
+                                    <p class="field-note" id="data-path"></p>
+                                </div>
 
                                 <div class="notice hidden" id="existing-notice">
                                     <svg
@@ -1340,7 +1344,7 @@
                     packageScope: 'Scope',
                     packageCurrentUser: 'Current user',
                     packageEngine: 'Interface',
-                    configureTitle: 'Choose installation locations',
+                    configureTitle: 'Choose installation location',
                     configureCopy:
                         'Keep the defaults or choose separate locations for the program and its data.',
                     updateTitle: 'Update MC-Trin',
@@ -1348,7 +1352,11 @@
                         'The launcher will be updated in place and your application data will be preserved.',
                     programLocation: 'Program location',
                     programHint: 'Launcher files',
-                    dataLocation: 'Application directory',
+                    dataLocation: 'Data folder',
+                    portableMode: 'Portable install: keep everything in one folder',
+                    portableHint: 'Uninstalling also removes instances, saves and caches.',
+                    dataSubfolderNotice:
+                        'Instances, saves and caches live in the data subfolder. Uninstalling keeps them unless you ask to delete them.',
                     dataHint: 'Instances, Java, assets, caches',
                     existingNotice:
                         'Your existing application directory will be preserved. You can change it later in Settings.',
@@ -1435,7 +1443,11 @@
                     updateCopy: '启动器会原位更新，并完整保留现有应用数据。',
                     programLocation: '程序安装位置',
                     programHint: '启动器程序文件',
-                    dataLocation: '应用目录',
+                    dataLocation: '数据文件夹',
+                    portableMode: '便携安装：所有内容集中在一个文件夹',
+                    portableHint: '日后卸载会同时删除实例、存档与缓存。',
+                    dataSubfolderNotice:
+                        '实例、存档与缓存位于 data 子文件夹，卸载默认保留。',
                     dataHint: '实例、Java、资源与缓存',
                     existingNotice: '现有应用目录会被保留，之后仍可在启动器设置中修改。',
                     desktopShortcut: '创建桌面快捷方式',
@@ -1520,7 +1532,17 @@
             if ($('#version')) $('#version').textContent = boot.version
             if ($('#package-version')) $('#package-version').textContent = boot.version
             $('#install-dir').value = boot.installDir
-            $('#resource-dir').value = boot.resourceDir
+            if (boot.freshInstall) syncDataDir()
+            function dataDirFor(installDir) {
+                return $('#portable-mode').checked ? installDir : `${installDir}\\data`
+            }
+            function syncDataDir() {
+                const installDir = $('#install-dir').value.trim()
+                $('#data-path').textContent = dataDirFor(installDir)
+                $('#portable-note').textContent = $('#portable-mode').checked
+                    ? t.portableHint
+                    : t.dataSubfolderNotice
+            }
             if (boot.uninstall) {
                 document.body.classList.add('is-uninstalling')
                 $('#uninstall-directory').textContent = boot.installDir
@@ -1632,7 +1654,8 @@
                 post({
                     command: 'install',
                     installDir: $('#install-dir').value.trim(),
-                    resourceDir: $('#resource-dir').value.trim(),
+                    resourceDir: $('#data-path').textContent.trim(),
+                    portable: $('#portable-mode').checked,
                     desktopShortcut: $('#desktop-shortcut').checked,
                     launchAfter: state.launchAfter,
                 })
@@ -1683,9 +1706,8 @@
             $('#browse-install').addEventListener('click', () =>
                 post({ command: 'browse', target: 'install', current: $('#install-dir').value }),
             )
-            $('#browse-resource').addEventListener('click', () =>
-                post({ command: 'browse', target: 'resource', current: $('#resource-dir').value }),
-            )
+            $('#install-dir').addEventListener('input', syncDataDir)
+            $('#portable-mode').addEventListener('change', syncDataDir)
             $('#launch-after').addEventListener('change', () => {
                 state.launchAfter = $('#launch-after').checked
                 renderFooter()
@@ -1719,7 +1741,7 @@
                             ? t.uninstallWait
                             : t.progressWait
                         $('#install-summary').textContent = $('#install-dir').value
-                        $('#resource-summary').textContent = $('#resource-dir').value
+                        $('#resource-summary').textContent = $('#data-path').textContent
                         $('#resource-summary-row').classList.toggle(
                             'hidden',
                             boot.uninstall || !boot.freshInstall,

@@ -1935,6 +1935,23 @@ fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
 /// the destination and full integrity contract so unrelated artifacts can
 /// never share a writer. Legacy paths remain separate outputs of that single
 /// committed object.
+/// Re-shapes a coalesced batch object as a per-file download.
+///
+/// The batch carries one entry per physical object while the per-file path
+/// also needs the legacy copies, so both destination lists are preserved and
+/// the logical item count keeps progress accounting identical.
+fn fallback_asset_from_batch(item: H2BatchAsset) -> FallbackAsset {
+    FallbackAsset {
+        name: item.sha1.clone(),
+        hash: item.sha1,
+        size: item.size,
+        url: item.url,
+        resource_path: item.destination,
+        legacy_resource_paths: item.legacy_destinations,
+        logical_items: item.logical_items,
+    }
+}
+
 fn coalesce_batch_assets(items: Vec<H2BatchAsset>) -> Vec<H2BatchAsset> {
     let mut positions: HashMap<(PathBuf, String, u64), usize> = HashMap::new();
     let mut coalesced: Vec<H2BatchAsset> = Vec::new();
@@ -2097,6 +2114,9 @@ pub async fn download_assets(
                 ))
                 .into());
             }
+            // Keep a copy so a refused batch can still be fetched one file at a
+            // time over the ordinary client.
+            let coalesced_batch_items = batch_items.clone();
             let callback = {
                 let progress = progress.clone();
                 let loading_bar = loading_bar.cloned();
@@ -2119,14 +2139,30 @@ pub async fn download_assets(
                     })
                 }
             };
-            download_asset_batch_via_h2(
+            let batch_result = download_asset_batch_via_h2(
                 &route,
                 batch_items,
                 ASSET_BATCH_CONCURRENCY,
                 apply_native_policy,
                 callback,
             )
-            .await?;
+            .await;
+            if let Err(error) = batch_result {
+                // A route the native policy refuses (a system proxy, a retired
+                // source, an HTTP/1-only mirror) describes the transport, not
+                // the files. Failing the whole installation here turned a
+                // perfectly installable pack into a network error, so the same
+                // objects go through the per-file path instead.
+                tracing::warn!(
+                    %error,
+                    "Batched asset download unavailable; falling back to per-file downloads"
+                );
+                fallback_assets.extend(
+                    coalesced_batch_items
+                        .into_iter()
+                        .map(fallback_asset_from_batch),
+                );
+            }
         } else {
             return Err(crate::ErrorKind::NetworkError(
                 "No download route could be resolved for Minecraft assets"

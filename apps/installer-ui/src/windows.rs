@@ -1,4 +1,4 @@
-use std::{
+﻿use std::{
     env, fs,
     io::Write,
     os::windows::process::CommandExt,
@@ -67,6 +67,8 @@ struct Arguments {
 struct InstallRequest {
     install_dir: String,
     resource_dir: String,
+    #[serde(default)]
+    portable: bool,
     desktop_shortcut: bool,
     launch_after: bool,
 }
@@ -493,13 +495,16 @@ fn validate_request(
         return Err(("resource", "driveRoot"));
     }
 
-    let install_key = normalized_path_key(&install_dir);
-    let resource_key = normalized_path_key(&resource_dir);
-    if resource_key == install_key
-        || resource_key.starts_with(&format!("{install_key}\\"))
-    {
-        return Err(("resource", "insideInstall"));
-    }
+    // The user picks one folder. A normal install keeps instances and caches
+    // in a `data` subfolder so uninstalling can leave them behind; a portable
+    // install keeps everything together and uninstalling removes it all. The
+    // layout is derived from the portable flag, so a request that names the
+    // program folder is accepted rather than rejected as "inside the install".
+    let resource_dir = if request.portable {
+        install_dir.clone()
+    } else {
+        install_dir.join("data")
+    };
 
     if fs::create_dir_all(&resource_dir).is_err() {
         return Err(("resource", "notWritable"));
@@ -728,6 +733,10 @@ fn installer_arguments(
         "/S".to_string(),
         nsis_value_option("INSTALL_DIR", request.install_dir.trim()),
         nsis_value_option("RESOURCE_DIR", request.resource_dir.trim()),
+        nsis_value_option(
+            "PORTABLE_MODE",
+            if request.portable { "1" } else { "0" },
+        ),
         nsis_value_option("STATUS_FILE", &status_path.to_string_lossy()),
         "/NO_RUN_AFTER_INSTALL".to_string(),
     ];
@@ -945,6 +954,33 @@ mod tests {
         };
 
         assert!(request.launch_after);
+    }
+
+    #[test]
+    fn install_request_carries_the_portable_choice() {
+        let command = serde_json::from_str::<UiCommand>(
+            r#"{"command":"install","installDir":"C:\\Axolotl","resourceDir":"C:\\Axolotl","portable":true,"desktopShortcut":true,"launchAfter":false}"#,
+        )
+        .expect("install request should deserialize");
+        let UiCommand::Install(request) = command else {
+            panic!("expected install command");
+        };
+
+        assert!(request.portable);
+    }
+
+    #[test]
+    fn a_request_without_the_portable_flag_means_a_normal_install() {
+        let command = serde_json::from_str::<UiCommand>(
+            r#"{"command":"install","installDir":"C:\\Axolotl","resourceDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":false}"#,
+        )
+        .expect("install request should deserialize");
+        let UiCommand::Install(request) = command else {
+            panic!("expected install command");
+        };
+
+        // Data goes to <install>\data so uninstalling can keep it.
+        assert!(!request.portable);
     }
 
     #[test]
