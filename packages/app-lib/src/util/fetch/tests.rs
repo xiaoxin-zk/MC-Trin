@@ -1416,6 +1416,23 @@ fn a_failing_official_route_promotes_the_mirror() {
     *ROUTE_HEALTH.lock() = previous_health;
 }
 
+fn routes_with_mcim_mirror() -> Vec<DownloadRoute> {
+    vec![
+        direct_test_route(
+            "https://resources.download.minecraft.net/ee/object".into(),
+            DownloadRouteSource::Official,
+        ),
+        direct_test_route(
+            "https://bmclapi2.bangbang93.com/assets/ee/object".into(),
+            DownloadRouteSource::Bmclapi,
+        ),
+        direct_test_route(
+            "https://mod.mcimirror.top/data/ee/object".into(),
+            DownloadRouteSource::Mcim,
+        ),
+    ]
+}
+
 #[test]
 fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
     let _guard = AUTO_SOURCE_TEST_LOCK
@@ -1423,35 +1440,76 @@ fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
-    // MCIM asks to be tried after the official hosts on every request, so it
-    // must sort last regardless of the throughput recorded for it.
-    let url = "https://resources.download.minecraft.net/dd/object";
-    let mut routes = resolve_download_routes_for(
-        url,
-        ResourceClass::MinecraftAsset,
-        crate::state::DownloadSourceMode::Auto,
-    );
-    let mcim_index = routes
+    // MCIM asks to be tried after the official hosts on every request, so a
+    // record that makes it the fastest route must not promote it. Without the
+    // health entry this test would pass even if the rule were deleted.
+    let mut routes = routes_with_mcim_mirror();
+    let mcim = routes
         .iter()
-        .position(|route| route.source == DownloadRouteSource::Mcim);
-    let Some(mcim_index) = mcim_index else {
-        // No MCIM route is defined for this host; nothing to order.
-        *ROUTE_HEALTH.lock() = previous_health;
-        return;
-    };
+        .find(|route| route.source == DownloadRouteSource::Mcim)
+        .unwrap()
+        .clone();
+    let key = route_health_key(&mcim, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(900_000_000.0),
+            ttfb_ms: Some(1.0),
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset);
 
     assert_eq!(
-        mcim_index,
-        routes.len() - 1,
+        routes.last().unwrap().source,
+        DownloadRouteSource::Mcim,
         "MCIM must sort last, routes: {:?}",
         routes
             .iter()
             .map(|route| route.url.as_str())
             .collect::<Vec<_>>()
     );
-
-    routes.clear();
     *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn every_source_mode_pins_mcim_last() {
+    // A mirror preference is not a reason to lead with MCIM: it answers file
+    // requests with a redirect to a third-party mirror and asks to stay last.
+    // The pin is applied after the mode sort, so it must survive all of them.
+    for mode in [
+        crate::state::DownloadSourceMode::Auto,
+        crate::state::DownloadSourceMode::OfficialOnly,
+        crate::state::DownloadSourceMode::OfficialPreferred,
+        crate::state::DownloadSourceMode::MirrorPreferred,
+    ] {
+        let mut routes = routes_with_mcim_mirror();
+        if mode == crate::state::DownloadSourceMode::OfficialOnly {
+            routes.retain(|route| !route.is_mirror);
+            assert!(
+                routes
+                    .iter()
+                    .all(|route| route.source != DownloadRouteSource::Mcim),
+                "official-only drops every mirror, MCIM included"
+            );
+            continue;
+        }
+
+        super::routes::order_routes_for_mode(
+            &mut routes,
+            ResourceClass::MinecraftAsset,
+            mode,
+            "https://resources.download.minecraft.net/ee/object",
+        );
+
+        assert_eq!(
+            routes.last().unwrap().source,
+            DownloadRouteSource::Mcim,
+            "{mode:?} must pin MCIM last"
+        );
+    }
 }
 
 #[test]
@@ -2097,16 +2155,21 @@ fn segmented_download_caps_are_provider_neutral() {
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, size), 32);
     let bulk = 100_855_703;
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, bulk), 56);
-    // `capacity` subtracts one permit while a per-authority regular budget
-    // exists, and that budget only appears once proxy clients are initialised.
-    // A targeted run and the full suite differ in that respect, so assert the
-    // provider-neutral property instead of one fixed number.
-    let capped = route_segmented_concurrency_cap(&modrinth, 96, bulk);
-    assert!(
-        (63..=64).contains(&capped),
-        "the cap must stay within the authority limit, got {capped}"
+    // `capacity` subtracts one permit for a Modrinth route because it also has
+    // a per-authority regular budget. That answer must not depend on whether
+    // proxy clients happen to be initialised: a fixed expectation here is what
+    // catches an accidental change to the admission rule.
+    assert_eq!(route_segmented_concurrency_cap(&modrinth, 96, bulk), 63);
+    assert_eq!(
+        route_segmented_concurrency_cap(&official, 96, bulk),
+        64,
+        "a route without a regular budget keeps the full authority limit"
     );
-    assert!(capped > 0, "a route must always be allowed to download");
+    assert_eq!(
+        route_segmented_concurrency_cap(&bmclapi, 96, bulk),
+        64,
+        "non-Modrinth authorities do not reserve a regular budget"
+    );
 }
 
 #[test]

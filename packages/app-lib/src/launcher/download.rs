@@ -24,7 +24,8 @@ use crate::{
     },
     state::State,
     util::download::h2_download::{
-        ASSET_BATCH_CONCURRENCY, H2BatchAsset, download_asset_batch_via_h2,
+        ASSET_BATCH_CONCURRENCY, AssetBatchOutcome, H2BatchAsset,
+        download_asset_batch_via_h2,
     },
     util::{fetch::*, io},
 };
@@ -1878,6 +1879,11 @@ struct FallbackAsset {
     resource_path: PathBuf,
     legacy_resource_paths: Vec<PathBuf>,
     logical_items: u32,
+    /// The batch already committed this object before it failed. Only the
+    /// legacy copies may still be missing, so the object must never be fetched
+    /// again — not even under `force`, which would otherwise delete a good file
+    /// and download the whole asset set a second time.
+    object_committed: bool,
 }
 
 fn build_fallback_asset(
@@ -1902,6 +1908,7 @@ fn build_fallback_asset(
             ),
         ],
         logical_items: 1,
+        object_committed: false,
     }
 }
 
@@ -1918,6 +1925,9 @@ fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
             let existing = &mut coalesced[position];
             existing.logical_items =
                 existing.logical_items.saturating_add(item.logical_items);
+            // One writer produced the object, so any alias that saw it
+            // committed means the object is present for all of them.
+            existing.object_committed |= item.object_committed;
             for legacy in item.legacy_resource_paths.drain(..) {
                 if !existing.legacy_resource_paths.contains(&legacy) {
                     existing.legacy_resource_paths.push(legacy);
@@ -1935,23 +1945,6 @@ fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
 /// the destination and full integrity contract so unrelated artifacts can
 /// never share a writer. Legacy paths remain separate outputs of that single
 /// committed object.
-/// Re-shapes a coalesced batch object as a per-file download.
-///
-/// The batch carries one entry per physical object while the per-file path
-/// also needs the legacy copies, so both destination lists are preserved and
-/// the logical item count keeps progress accounting identical.
-fn fallback_asset_from_batch(item: H2BatchAsset) -> FallbackAsset {
-    FallbackAsset {
-        name: item.sha1.clone(),
-        hash: item.sha1,
-        size: item.size,
-        url: item.url,
-        resource_path: item.destination,
-        legacy_resource_paths: item.legacy_destinations,
-        logical_items: item.logical_items,
-    }
-}
-
 fn coalesce_batch_assets(items: Vec<H2BatchAsset>) -> Vec<H2BatchAsset> {
     let mut positions: HashMap<(PathBuf, String, u64), usize> = HashMap::new();
     let mut coalesced: Vec<H2BatchAsset> = Vec::new();
@@ -1974,6 +1967,80 @@ fn coalesce_batch_assets(items: Vec<H2BatchAsset>) -> Vec<H2BatchAsset> {
     coalesced
 }
 
+/// Re-shapes a coalesced batch object as a per-file download.
+///
+/// The URL is deliberately the canonical official one, not the mirror the
+/// batch happened to pick. Route resolution only rewrites official hosts to
+/// mirrors; it has no reverse mapping, so a mirror URL can only ever resolve
+/// back to that same authority. Retrying from the official URL lets the
+/// per-file client fall through to the official host when the mirror is down.
+/// The index name is kept so the per-file error context names a file rather
+/// than a hash.
+fn fallback_asset_from_batch(
+    item: H2BatchAsset,
+    object_committed: bool,
+) -> FallbackAsset {
+    FallbackAsset {
+        name: item.name,
+        hash: item.sha1,
+        size: item.size,
+        url: item.official_url,
+        resource_path: item.destination,
+        legacy_resource_paths: item.legacy_destinations,
+        logical_items: item.logical_items,
+        object_committed,
+    }
+}
+
+/// Per-file work left after a batch attempt.
+///
+/// Objects the batch completed are dropped outright: their bytes and loading
+/// bar share were already reported by the batch callback, and re-fetching them
+/// would download committed files a second time. Objects whose content landed
+/// but whose legacy copy did not are kept, flagged so the per-file path copies
+/// locally instead of downloading again.
+fn fallback_assets_from_batch_outcome(
+    outcome: AssetBatchOutcome,
+) -> Vec<FallbackAsset> {
+    outcome
+        .committed_without_legacy
+        .into_iter()
+        .map(|item| fallback_asset_from_batch(item, true))
+        .chain(
+            outcome
+                .failed
+                .into_iter()
+                .map(|item| fallback_asset_from_batch(item, false)),
+        )
+        .collect()
+}
+
+/// Whether a fallback item still has to fetch its content-addressed object.
+///
+/// A missing or wrongly sized object is always fetched, including when the
+/// batch claimed to commit it: the file is the contract, the flag is a hint.
+/// With the file in place, `force` refreshes objects this path owns — but never
+/// one the batch already committed, which would delete a verified file and
+/// download the whole asset set again after a single unrelated failure.
+fn fallback_needs_object(
+    item: &FallbackAsset,
+    force: bool,
+    object_usable: bool,
+) -> bool {
+    !object_usable || (force && !item.object_committed)
+}
+
+/// Progress units a fallback item still has to report.
+///
+/// The batch reports an object only through its completion callback, and it
+/// skips that callback for an object whose legacy copy failed — so nothing in
+/// the fallback list was counted before, except the one unit the object path
+/// reports itself when it downloads or reuses the object.
+fn fallback_progress_units(item: &FallbackAsset, object_reported: bool) -> u32 {
+    item.logical_items
+        .saturating_sub(u32::from(object_reported))
+}
+
 #[tracing::instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub async fn download_assets(
@@ -1987,8 +2054,11 @@ pub async fn download_assets(
     progress: Option<MinecraftDownloadProgress>,
 ) -> crate::Result<()> {
     tracing::debug!("Loading assets");
-    let asset_download_semaphore =
-        FetchSemaphore(tokio::sync::Semaphore::new(ASSET_BATCH_CONCURRENCY));
+    // The asset path streams hundreds of small files, but the user's download
+    // concurrency is the budget every other transfer also draws from. Cap the
+    // logical workers here instead of letting the batch ignore the setting.
+    let asset_concurrency =
+        st.download_concurrency().clamp(1, ASSET_BATCH_CONCURRENCY);
     let num_futs = index.objects.len();
     let per_file_fraction = if num_futs > 0 {
         loading_amount / num_futs as f64
@@ -2034,7 +2104,9 @@ pub async fn download_assets(
                     sub_hash = &hash[..2]
                 );
                 batch_items.push(H2BatchAsset {
+                    official_url: url.clone(),
                     url,
+                    name: name.clone(),
                     destination: resource_path,
                     legacy_destinations: should_fetch_legacy
                         .then_some(legacy_resource_path)
@@ -2076,106 +2148,126 @@ pub async fn download_assets(
             prepare_native_download_routes(
                 &probe_request,
                 &mut routes,
-                &asset_download_semaphore,
+                &st.download_semaphore,
             )
             .await;
         }
         let route = routes.into_iter().next();
-        if let Some(route) = route {
-            // Resolve each item's URL onto the chosen route (official or
-            // mirror) so the batch reuses one connection to that authority.
-            // Items whose resolved URL targets a different authority cannot
-            // share the batch connection and go through the per-file path.
-            let route_authority = url_authority(&route.url);
-            for item in &mut batch_items {
-                let item_routes = resolve_download_routes_for(
-                    &item.url,
-                    ResourceClass::MinecraftAsset,
-                    source_mode,
-                );
-                item.url = item_routes
-                    .iter()
-                    .find(|candidate| {
-                        apply_native_policy
-                            && candidate.source == route.source
-                            && candidate.proxy == route.proxy
-                    })
-                    .or_else(|| item_routes.first())
-                    .map(|route| route.url.clone())
-                    .unwrap_or_else(|| item.url.clone());
-            }
-            let (batch_items, rerouted_items): (Vec<_>, Vec<_>) = batch_items
-                .into_iter()
-                .partition(|item| url_authority(&item.url) == route_authority);
-            if !rerouted_items.is_empty() {
-                return Err(crate::ErrorKind::NetworkError(format!(
-                    "{} Minecraft assets resolved to a different batch authority",
-                    rerouted_items.len(),
-                ))
-                .into());
-            }
-            // Keep a copy so a refused batch can still be fetched one file at a
-            // time over the ordinary client.
-            let coalesced_batch_items = batch_items.clone();
-            let callback = {
-                let progress = progress.clone();
-                let loading_bar = loading_bar.cloned();
-                move |item: H2BatchAsset| -> Pin<Box<dyn Future<Output = ()> + Send>> {
-                    let progress = progress.clone();
-                    let loading_bar = loading_bar.clone();
-                    Box::pin(async move {
-                        for _ in 0..item.logical_items {
-                            if let Some(progress) = &progress
-                                && let Err(error) = progress.add_bytes(item.size).await {
-                                    tracing::warn!(
-                                        error = %error,
-                                        "Failed to record batch asset bytes"
-                                    );
-                                }
-                            if let Some(loading_bar) = &loading_bar {
-                                let _ = emit_loading(loading_bar, per_file_fraction, None);
-                            }
-                        }
-                    })
+        match route {
+            Some(route) => {
+                // Resolve each item's URL onto the chosen route (official or
+                // mirror) so the batch reuses one connection to that authority.
+                // Items whose resolved URL targets a different authority cannot
+                // share the batch connection and go through the per-file path.
+                let route_authority = url_authority(&route.url);
+                for item in &mut batch_items {
+                    let item_routes = resolve_download_routes_for(
+                        &item.url,
+                        ResourceClass::MinecraftAsset,
+                        source_mode,
+                    );
+                    item.url = item_routes
+                        .iter()
+                        .find(|candidate| {
+                            apply_native_policy
+                                && candidate.source == route.source
+                                && candidate.proxy == route.proxy
+                        })
+                        .or_else(|| item_routes.first())
+                        .map(|route| route.url.clone())
+                        .unwrap_or_else(|| item.url.clone());
                 }
-            };
-            let batch_result = download_asset_batch_via_h2(
-                &route,
-                batch_items,
-                ASSET_BATCH_CONCURRENCY,
-                apply_native_policy,
-                callback,
-            )
-            .await;
-            if let Err(error) = batch_result {
-                // A route the native policy refuses (a system proxy, a retired
-                // source, an HTTP/1-only mirror) describes the transport, not
-                // the files. Failing the whole installation here turned a
-                // perfectly installable pack into a network error, so the same
-                // objects go through the per-file path instead.
+                let (batch_items, rerouted_items): (Vec<_>, Vec<_>) =
+                    batch_items.into_iter().partition(|item| {
+                        url_authority(&item.url) == route_authority
+                    });
+                if !rerouted_items.is_empty() {
+                    // A mirror that only serves part of the set is still a
+                    // usable mirror for the rest; the rest keep their official
+                    // URL and are fetched per file instead of aborting.
+                    tracing::warn!(
+                        items = rerouted_items.len(),
+                        "Minecraft assets resolved to a different batch authority; downloading them per file"
+                    );
+                    fallback_assets.extend(
+                        rerouted_items
+                            .into_iter()
+                            .map(|item| fallback_asset_from_batch(item, false)),
+                    );
+                }
+                if !batch_items.is_empty() {
+                    let callback = {
+                        let progress = progress.clone();
+                        let loading_bar = loading_bar.cloned();
+                        move |item: H2BatchAsset| -> Pin<Box<dyn Future<Output = ()> + Send>> {
+                            let progress = progress.clone();
+                            let loading_bar = loading_bar.clone();
+                            Box::pin(async move {
+                                for _ in 0..item.logical_items {
+                                    if let Some(progress) = &progress
+                                        && let Err(error) = progress.add_bytes(item.size).await {
+                                            tracing::warn!(
+                                                error = %error,
+                                                "Failed to record batch asset bytes"
+                                            );
+                                        }
+                                    if let Some(loading_bar) = &loading_bar {
+                                        let _ = emit_loading(loading_bar, per_file_fraction, None);
+                                    }
+                                }
+                            })
+                        }
+                    };
+                    let outcome = download_asset_batch_via_h2(
+                        &route,
+                        batch_items,
+                        asset_concurrency,
+                        apply_native_policy,
+                        callback,
+                    )
+                    .await;
+                    if let Some(error) = &outcome.error {
+                        // A route the native policy refuses (a system proxy, a
+                        // retired source, an HTTP/1-only mirror) describes the
+                        // transport, not the files. Failing the whole
+                        // installation here turned a perfectly installable pack
+                        // into a network error.
+                        tracing::warn!(
+                            %error,
+                            completed = outcome.completed.len(),
+                            committed = outcome.committed_without_legacy.len(),
+                            failed = outcome.failed.len(),
+                            "Batched asset download incomplete; falling back to per-file downloads"
+                        );
+                    }
+                    // Only objects the batch did not finish may be retried.
+                    // Everything it completed has already been counted, and
+                    // under `force` a second pass would delete a verified file.
+                    fallback_assets
+                        .extend(fallback_assets_from_batch_outcome(outcome));
+                }
+            }
+            None => {
+                // No route could be resolved up front, but the per-file client
+                // builds its own route list and may still reach the official
+                // host. Nothing here is fatal until a download actually fails.
                 tracing::warn!(
-                    %error,
-                    "Batched asset download unavailable; falling back to per-file downloads"
+                    items = batch_items.len(),
+                    "No download route could be resolved for the Minecraft asset batch; downloading per file"
                 );
                 fallback_assets.extend(
-                    coalesced_batch_items
+                    batch_items
                         .into_iter()
-                        .map(fallback_asset_from_batch),
+                        .map(|item| fallback_asset_from_batch(item, false)),
                 );
             }
-        } else {
-            return Err(crate::ErrorKind::NetworkError(
-                "No download route could be resolved for Minecraft assets"
-                    .to_string(),
-            )
-            .into());
         }
     }
 
     // Legacy copies for assets whose object is already on disk.
     futures::stream::iter(legacy_copies)
         .map(Ok::<_, crate::Error>)
-        .try_for_each_concurrent(ASSET_BATCH_CONCURRENCY, |(name, asset)| {
+        .try_for_each_concurrent(asset_concurrency, |(name, asset)| {
             let progress = progress.clone();
             async move {
                 let resource_path = st.directories.object_dir(&asset.hash);
@@ -2201,21 +2293,24 @@ pub async fn download_assets(
         })
         .await?;
 
-    // Local runtime reuse may still need a regular download when its source
-    // file is unavailable. Batch failures are surfaced instead of retried here.
+    // Object downloads and legacy copies both consume the configured download
+    // budget, so the asset path cannot exceed the user's concurrency setting.
     let fallback_assets = coalesce_fallback_assets(fallback_assets);
     if !fallback_assets.is_empty() {
         futures::stream::iter(fallback_assets)
             .map(Ok::<FallbackAsset, crate::Error>)
-            .try_for_each_concurrent(ASSET_BATCH_CONCURRENCY, |item| {
+            .try_for_each_concurrent(asset_concurrency, |item| {
                 let progress = progress.clone();
-                let semaphore = &asset_download_semaphore;
+                let semaphore = &st.download_semaphore;
                 async move {
                     let resource_path = &item.resource_path;
                     let hash = &item.hash;
                     let name = &item.name;
-                    let should_fetch_object = force
-                        || !asset_file_is_usable(resource_path, item.size);
+                    let should_fetch_object = fallback_needs_object(
+                        &item,
+                        force,
+                        asset_file_is_usable(resource_path, item.size),
+                    );
                     let legacy_resource_paths = item
                         .legacy_resource_paths
                         .iter()
@@ -2226,12 +2321,7 @@ pub async fn download_assets(
                         })
                         .collect::<Vec<_>>();
                     let should_fetch_legacy = !legacy_resource_paths.is_empty();
-                    let fetch_progress =
-                        if should_fetch_object || should_fetch_legacy {
-                            progress.clone()
-                        } else {
-                            None
-                        };
+                    let fetch_progress = progress.clone();
                     if should_fetch_object {
                         let context = InstallErrorContext::new(
                             "download Minecraft asset",
@@ -2270,13 +2360,6 @@ pub async fn download_assets(
                         } else {
                             tracing::trace!("Fetched asset with hash {hash}");
                         }
-                        if item.logical_items > 1
-                            && let Some(progress) = &fetch_progress
-                        {
-                            for _ in 1..item.logical_items {
-                                progress.add_bytes(item.size).await?;
-                            }
-                        }
                     }
                     if should_fetch_legacy {
                         for legacy_resource_path in legacy_resource_paths {
@@ -2286,14 +2369,22 @@ pub async fn download_assets(
                                 &st.io_semaphore,
                             )
                             .await?;
-                            if !should_fetch_object
-                                && let Some(progress) = &fetch_progress
-                            {
-                                progress.add_bytes(item.size).await?;
-                            }
                             tracing::trace!(
                                 "Copied legacy asset with hash {hash}"
                             );
+                        }
+                    }
+
+                    // These entries were never reported by the batch, so
+                    // balance progress and the loading bar for every logical
+                    // index entry they stand for. Nothing is counted twice
+                    // because batch-completed objects never reach this path.
+                    if let Some(progress) = &fetch_progress {
+                        for _ in 0..fallback_progress_units(
+                            &item,
+                            should_fetch_object,
+                        ) {
+                            progress.add_bytes(item.size).await?;
                         }
                     }
 

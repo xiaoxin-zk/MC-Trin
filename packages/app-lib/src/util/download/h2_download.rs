@@ -819,6 +819,13 @@ async fn verify_and_finalize(
 pub(crate) struct H2BatchAsset {
     /// Route-resolved URL for the asset.
     pub url: String,
+    /// Canonical official URL. The batch rewrites `url` onto the mirror it
+    /// picked, so a refused batch needs this copy to retry on a route that is
+    /// not the one that just failed.
+    pub official_url: String,
+    /// Index entry name (`sounds/.../x.ogg`), used for error context. A hash is
+    /// useless to a user trying to identify a broken file.
+    pub name: String,
     /// Destination for the object (`assets/objects/<hh>/<hash>`).
     pub destination: std::path::PathBuf,
     /// Legacy `resources/` copies to create after the object is committed.
@@ -854,6 +861,8 @@ impl Clone for H2BatchAsset {
     fn clone(&self) -> Self {
         Self {
             url: self.url.clone(),
+            official_url: self.official_url.clone(),
+            name: self.name.clone(),
             destination: self.destination.clone(),
             legacy_destinations: self.legacy_destinations.clone(),
             sha1: self.sha1.clone(),
@@ -1005,6 +1014,9 @@ mod tests {
         let legacy = blocked_parent.join("resource");
         let item = H2BatchAsset {
             url: "https://resources.download.minecraft.net/aa/object".into(),
+            official_url: "https://resources.download.minecraft.net/aa/object"
+                .into(),
+            name: "sounds/test.ogg".into(),
             destination: destination.clone(),
             legacy_destinations: vec![legacy.clone()],
             sha1: "unused-by-copy-test".into(),
@@ -1048,15 +1060,15 @@ mod tests {
 /// governed by the shared authority stream budget. The group begins with one
 /// connection and may add one sibling only for a sustained saturated batch;
 /// it never creates one connection per file. Items that cannot be downloaded
-/// after internal retries fail the batch instead of switching to per-file
-/// network downloads.
+/// after internal retries come back in `failed` instead of switching to
+/// per-file network downloads here.
 pub(crate) async fn download_asset_batch_via_h2<F>(
     route: &DownloadRoute,
     items: Vec<H2BatchAsset>,
     concurrency: usize,
     apply_native_policy: bool,
     on_completed: F,
-) -> crate::Result<()>
+) -> AssetBatchOutcome
 where
     F: Fn(H2BatchAsset) -> Pin<Box<dyn Future<Output = ()> + Send>>
         + Send
@@ -1073,13 +1085,43 @@ where
     .await
 }
 
+/// Per-object completion report for one batch attempt.
+///
+/// A batch can commit some objects and still fail overall (a later connection
+/// error, or one object exhausting its retry passes). The caller needs to know
+/// exactly which objects are already on disk: re-fetching them would duplicate
+/// work, and re-counting them would push progress past its total.
+pub(crate) struct AssetBatchOutcome {
+    /// Objects fully handled, including their legacy copies.
+    pub completed: Vec<H2BatchAsset>,
+    /// Objects whose content is committed but whose legacy copy still has to
+    /// be made. They must never be downloaded again, even under `force`.
+    pub committed_without_legacy: Vec<H2BatchAsset>,
+    /// Objects the batch did not commit; the caller retries these per file.
+    pub failed: Vec<H2BatchAsset>,
+    /// Why the batch stopped early, for logging. Every object is still
+    /// accounted for in the lists above.
+    pub error: Option<crate::Error>,
+}
+
+impl AssetBatchOutcome {
+    fn refused(items: Vec<H2BatchAsset>, error: crate::Error) -> Self {
+        Self {
+            completed: Vec::new(),
+            committed_without_legacy: Vec::new(),
+            failed: items,
+            error: Some(error),
+        }
+    }
+}
+
 async fn download_asset_batch_inner<F>(
     route: &DownloadRoute,
     items: Vec<H2BatchAsset>,
     concurrency: usize,
     apply_native_policy: bool,
     on_completed: F,
-) -> crate::Result<()>
+) -> AssetBatchOutcome
 where
     F: Fn(H2BatchAsset) -> Pin<Box<dyn Future<Output = ()> + Send>>
         + Send
@@ -1090,10 +1132,13 @@ where
     if apply_native_policy
         && let Some(reason) = super::native::h2_ineligible_reason(route)
     {
-        return Err(crate::ErrorKind::NetworkError(format!(
-            "Minecraft asset route cannot use HTTP/2 batching: {reason:?}"
-        ))
-        .into());
+        return AssetBatchOutcome::refused(
+            items,
+            crate::ErrorKind::NetworkError(format!(
+                "Minecraft asset route cannot use HTTP/2 batching: {reason:?}"
+            ))
+            .into(),
+        );
     }
     // Local object I/O failures are deterministic per destination; remember the
     // first one and keep draining the batch so siblings already in flight or
@@ -1123,10 +1168,13 @@ where
                     None,
                 );
             }
-            return Err(crate::ErrorKind::NetworkError(format!(
-                "Could not establish an HTTP/2 asset batch connection: {failure:?}"
-            ))
-            .into());
+            return AssetBatchOutcome::refused(
+                items,
+                crate::ErrorKind::NetworkError(format!(
+                    "Could not establish an HTTP/2 asset batch connection: {failure:?}"
+                ))
+                .into(),
+            );
         }
     };
     let connections = Arc::new(AssetBatchConnectionGroup::new(
@@ -1152,6 +1200,8 @@ where
     let batch_started = std::time::Instant::now();
     let mut completed_bytes = 0_u64;
     let mut network_failures = 0_u32;
+    let mut completed: Vec<H2BatchAsset> = Vec::new();
+    let mut committed_without_legacy: Vec<H2BatchAsset> = Vec::new();
     let callback = Arc::new(on_completed);
     for pass in 0..ASSET_BATCH_RETRY_PASSES {
         if items.is_empty() {
@@ -1198,6 +1248,7 @@ where
                         completed_bytes =
                             completed_bytes.saturating_add(item.size);
                     }
+                    completed.push(item);
                 }
                 Ok(AssetBatchItemOutcome::LocalCopyFailed {
                     downloaded,
@@ -1216,7 +1267,7 @@ where
                     // The ordinary fallback path sees the valid object and
                     // performs only the outstanding local copy. Do not spend
                     // another network retry pass on a local filesystem error.
-                    failed.push(item);
+                    committed_without_legacy.push(item);
                 }
                 Ok(AssetBatchItemOutcome::LocalObjectFailed { error }) => {
                     tracing::warn!(
@@ -1228,6 +1279,7 @@ where
                     if local_object_error.is_none() {
                         local_object_error = Some(error);
                     }
+                    failed.push(item);
                 }
                 Err(error) => {
                     network_failures = network_failures.saturating_add(1);
@@ -1263,10 +1315,9 @@ where
             );
         }
     }
-    if let Some(error) = local_object_error {
-        return Err(error);
-    }
-    if !failed.is_empty() {
+    let error = if let Some(error) = local_object_error {
+        Some(error)
+    } else if !failed.is_empty() {
         tracing::warn!(
             items = failed.len(),
             retry_passes = ASSET_BATCH_RETRY_PASSES,
@@ -1275,14 +1326,23 @@ where
             failed.len(),
             route.source.as_str(),
         );
-        return Err(crate::ErrorKind::NetworkError(format!(
-            "{} Minecraft assets failed in the HTTP/2 batch on route {}",
-            failed.len(),
-            route.source.as_str(),
-        ))
-        .into());
+        Some(
+            crate::ErrorKind::NetworkError(format!(
+                "{} Minecraft assets failed in the HTTP/2 batch on route {}",
+                failed.len(),
+                route.source.as_str(),
+            ))
+            .into(),
+        )
+    } else {
+        None
+    };
+    AssetBatchOutcome {
+        completed,
+        committed_without_legacy,
+        failed,
+        error,
     }
-    Ok(())
 }
 
 async fn prepare_asset_part_path(
@@ -1366,6 +1426,10 @@ async fn download_asset_item(
             Some(
                 tokio::time::timeout(
                     ASSET_RESOURCE_WAIT_TIMEOUT,
+                    // Assets hold no global transfer weight: the batch already
+                    // bounds its logical workers by the configured download
+                    // concurrency, and a hundred short asset streams taking
+                    // permits would starve the large transfers that need them.
                     super::h2_stream_budget::acquire_download(
                         &current_route,
                         None,

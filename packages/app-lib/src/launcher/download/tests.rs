@@ -339,6 +339,9 @@ fn batch_assets_coalesce_duplicate_objects_and_keep_legacy_targets() {
     let second_legacy = PathBuf::from("resources/second");
     let make_item = |legacy_destinations| H2BatchAsset {
         url: "https://resources.download.minecraft.net/ab/abcdef".into(),
+        official_url: "https://resources.download.minecraft.net/ab/abcdef"
+            .into(),
+        name: "sound/first.ogg".into(),
         destination: destination.clone(),
         legacy_destinations,
         sha1: "abcdef".into(),
@@ -364,6 +367,10 @@ fn batch_assets_do_not_coalesce_different_integrity_contracts() {
     let destination = PathBuf::from("assets/objects/ab/object");
     let make_item = |sha1: &str, size| H2BatchAsset {
         url: format!("https://resources.download.minecraft.net/ab/{sha1}"),
+        official_url: format!(
+            "https://resources.download.minecraft.net/ab/{sha1}"
+        ),
+        name: "sound/object.ogg".into(),
         destination: destination.clone(),
         legacy_destinations: Vec::new(),
         sha1: sha1.into(),
@@ -382,26 +389,30 @@ fn batch_assets_do_not_coalesce_different_integrity_contracts() {
     );
 }
 
+fn fallback_item(
+    name: &str,
+    legacy_resource_paths: Vec<PathBuf>,
+) -> FallbackAsset {
+    FallbackAsset {
+        name: name.into(),
+        hash: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+        size: 36_747,
+        url: "https://resources.download.minecraft.net/85/857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+        resource_path: PathBuf::from("assets/objects/85/hash"),
+        legacy_resource_paths,
+        logical_items: 1,
+        object_committed: false,
+    }
+}
+
 #[test]
 fn fallback_assets_coalesce_aliases_and_keep_legacy_targets() {
-    let destination = PathBuf::from("assets/objects/85/hash");
     let first_legacy = PathBuf::from("resources/sound/liquid/splash2.ogg");
     let second_legacy = PathBuf::from("resources/sounds/liquid/splash2.ogg");
-    let make_item = |name: &str, legacy_resource_paths: Vec<PathBuf>| {
-        FallbackAsset {
-                name: name.into(),
-                hash: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
-                size: 36_747,
-            url: "https://resources.download.minecraft.net/85/857abbbfb58186c2f1b5510a4072630950e518f6".into(),
-            resource_path: destination.clone(),
-                legacy_resource_paths,
-                logical_items: 1,
-            }
-    };
 
     let items = coalesce_fallback_assets(vec![
-        make_item("sound/liquid/splash2.ogg", vec![first_legacy.clone()]),
-        make_item(
+        fallback_item("sound/liquid/splash2.ogg", vec![first_legacy.clone()]),
+        fallback_item(
             "sounds/liquid/splash2.ogg",
             vec![second_legacy.clone(), first_legacy.clone()],
         ),
@@ -416,6 +427,23 @@ fn fallback_assets_coalesce_aliases_and_keep_legacy_targets() {
 }
 
 #[test]
+fn a_committed_alias_makes_the_whole_coalesced_object_committed() {
+    // Two index names can share one object. If either path reports the object
+    // as already written, the merged entry must not download it again.
+    let mut committed = fallback_item("sound/a.ogg", Vec::new());
+    committed.object_committed = true;
+    let pending = fallback_item("sound/b.ogg", Vec::new());
+
+    let items = coalesce_fallback_assets(vec![pending, committed]);
+
+    assert_eq!(items.len(), 1);
+    assert!(
+        items[0].object_committed,
+        "a committed alias must protect the shared object from a second GET"
+    );
+}
+
+#[test]
 fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
     let destination = PathBuf::from("assets/objects/85/object");
     let make_item = |hash: &str, size| FallbackAsset {
@@ -426,6 +454,7 @@ fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
         resource_path: destination.clone(),
         legacy_resource_paths: Vec::new(),
         logical_items: 1,
+        object_committed: false,
     };
 
     assert_eq!(
@@ -439,6 +468,21 @@ fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
     );
 }
 
+fn batch_item(name: &str, url: &str, official_url: &str) -> H2BatchAsset {
+    H2BatchAsset {
+        url: url.into(),
+        official_url: official_url.into(),
+        name: name.into(),
+        destination: PathBuf::from("assets/objects/85/object"),
+        legacy_destinations: vec![PathBuf::from(
+            "resources/sound/liquid/splash2.ogg",
+        )],
+        sha1: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+        size: 36_747,
+        logical_items: 2,
+    }
+}
+
 #[test]
 fn a_refused_batch_becomes_one_per_file_download_per_object() {
     // The batch builds one entry per physical object, so a transport refusal
@@ -446,17 +490,23 @@ fn a_refused_batch_becomes_one_per_file_download_per_object() {
     // produced them: a duplicated asset would otherwise be fetched twice.
     let destination = PathBuf::from("assets/objects/85/object");
     let legacy = PathBuf::from("resources/sound/liquid/splash2.ogg");
-    let batch_item = H2BatchAsset {
-        url: "https://resources.download.minecraft.net/85/object".into(),
-        destination: destination.clone(),
-        legacy_destinations: vec![legacy.clone()],
-        sha1: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
-        size: 36_747,
-        logical_items: 2,
+    let official = "https://resources.download.minecraft.net/85/object";
+    let item = batch_item(
+        "sound/liquid/splash2.ogg",
+        "https://bmclapi2.bangbang93.com/assets/85/object",
+        official,
+    );
+
+    let outcome = AssetBatchOutcome {
+        completed: Vec::new(),
+        committed_without_legacy: Vec::new(),
+        failed: vec![item],
+        error: None,
     };
+    let fallbacks = fallback_assets_from_batch_outcome(outcome);
 
-    let fallback = fallback_asset_from_batch(batch_item);
-
+    assert_eq!(fallbacks.len(), 1);
+    let fallback = &fallbacks[0];
     assert_eq!(
         fallback.resource_path, destination,
         "the object must keep its content-addressed destination"
@@ -473,8 +523,135 @@ fn a_refused_batch_becomes_one_per_file_download_per_object() {
     assert_eq!(fallback.size, 36_747);
     assert_eq!(fallback.hash, "857abbbfb58186c2f1b5510a4072630950e518f6");
     assert_eq!(
-        fallback.url, "https://resources.download.minecraft.net/85/object",
-        "the route-resolved URL is what the per-file client must reuse"
+        fallback.name, "sound/liquid/splash2.ogg",
+        "the error context must name the asset, not its hash"
+    );
+    assert_eq!(
+        fallback.url, official,
+        "the retry must target the official URL: the mirror URL only resolves back to the mirror that just failed"
+    );
+    assert!(!fallback.object_committed);
+}
+
+#[test]
+fn a_batch_that_committed_an_object_never_downloads_it_again() {
+    // Under `force` the per-file path normally refreshes every object. An
+    // object the batch already wrote must be exempt: otherwise one failed
+    // sibling deletes a verified file and re-downloads the whole asset set.
+    let item = batch_item(
+        "sound/liquid/splash2.ogg",
+        "https://resources.download.minecraft.net/85/object",
+        "https://resources.download.minecraft.net/85/object",
+    );
+    let outcome = AssetBatchOutcome {
+        completed: Vec::new(),
+        committed_without_legacy: vec![item.clone()],
+        failed: Vec::new(),
+        error: Some(
+            crate::ErrorKind::NetworkError("sibling failed".into()).into(),
+        ),
+    };
+
+    let fallbacks = fallback_assets_from_batch_outcome(outcome);
+    assert_eq!(fallbacks.len(), 1);
+    assert!(
+        fallbacks[0].object_committed,
+        "a locally failed legacy copy must not trigger another download"
+    );
+    assert!(
+        !fallback_needs_object(&fallbacks[0], true, true),
+        "force must not re-open a usable committed object"
+    );
+    assert!(
+        fallback_needs_object(&fallbacks[0], true, false),
+        "a committed object that is gone must still be downloaded"
+    );
+}
+
+#[test]
+fn batch_completed_objects_are_not_scheduled_again() {
+    // The whole point of tracking completion: objects the batch finished are
+    // neither downloaded nor counted a second time.
+    let completed = batch_item(
+        "sound/liquid/splash2.ogg",
+        "https://resources.download.minecraft.net/85/object",
+        "https://resources.download.minecraft.net/85/object",
+    );
+    let failed = batch_item(
+        "sound/liquid/other.ogg",
+        "https://resources.download.minecraft.net/85/other",
+        "https://resources.download.minecraft.net/85/other",
+    );
+    let outcome = AssetBatchOutcome {
+        completed: vec![completed],
+        committed_without_legacy: Vec::new(),
+        failed: vec![failed],
+        error: Some(crate::ErrorKind::NetworkError("partial".into()).into()),
+    };
+
+    let fallbacks = fallback_assets_from_batch_outcome(outcome);
+
+    assert_eq!(fallbacks.len(), 1);
+    assert_eq!(fallbacks[0].name, "sound/liquid/other.ogg");
+    assert!(!fallbacks[0].object_committed);
+}
+
+#[test]
+fn force_still_refreshes_objects_the_batch_never_wrote() {
+    let item = fallback_item("sound/a.ogg", Vec::new());
+
+    assert!(
+        fallback_needs_object(&item, true, true),
+        "force must still repair an object the per-file path owns"
+    );
+    assert!(!fallback_needs_object(&item, false, true));
+    assert!(fallback_needs_object(&item, false, false));
+}
+
+#[test]
+fn a_missing_object_is_fetched_even_when_the_batch_claimed_it() {
+    // The flag is a hint from a previous attempt; the file is the contract. A
+    // user who deleted the object, or a write the OS lost, must still heal.
+    let mut item = fallback_item("sound/a.ogg", Vec::new());
+    item.object_committed = true;
+
+    assert!(
+        fallback_needs_object(&item, false, false),
+        "a committed object that is no longer usable must be downloaded again"
+    );
+    assert!(
+        !fallback_needs_object(&item, true, true),
+        "a usable committed object must not be re-downloaded under force"
+    );
+}
+
+#[test]
+fn a_committed_object_still_reports_every_unreported_unit() {
+    // D1/D3: an object whose legacy copy failed is never reported by the batch
+    // callback, so the fallback still owes every unit for it — but it must not
+    // download the object again, and a fresh download must not report its own
+    // object twice.
+    let mut item = fallback_item("sound/a.ogg", Vec::new());
+    item.logical_items = 3;
+
+    assert_eq!(
+        fallback_progress_units(&item, false),
+        3,
+        "an object the batch never reported is fully unreported"
+    );
+
+    item.object_committed = true;
+    assert_eq!(
+        fallback_progress_units(&item, false),
+        3,
+        "the batch skipped its callback for this object, so every unit is still owed"
+    );
+
+    item.object_committed = false;
+    assert_eq!(
+        fallback_progress_units(&item, true),
+        2,
+        "a fresh download reports its own object, so only the aliases remain"
     );
 }
 
@@ -486,6 +663,9 @@ fn the_batch_snapshot_keeps_the_coalesced_objects_not_the_index_entries() {
     let destination = PathBuf::from("assets/objects/aa/object");
     let make_item = |legacy: &str| H2BatchAsset {
         url: "https://resources.download.minecraft.net/aa/object".into(),
+        official_url: "https://resources.download.minecraft.net/aa/object"
+            .into(),
+        name: legacy.into(),
         destination: destination.clone(),
         legacy_destinations: vec![PathBuf::from(legacy)],
         sha1: "aa00000000000000000000000000000000000000".into(),
@@ -501,7 +681,7 @@ fn the_batch_snapshot_keeps_the_coalesced_objects_not_the_index_entries() {
     assert_eq!(coalesced.len(), 1, "aliases must collapse to one object");
     assert_eq!(coalesced[0].logical_items, 2);
 
-    let fallback = fallback_asset_from_batch(coalesced[0].clone());
+    let fallback = fallback_asset_from_batch(coalesced[0].clone(), false);
     assert_eq!(fallback.logical_items, 2);
     assert_eq!(fallback.legacy_resource_paths.len(), 2);
 }

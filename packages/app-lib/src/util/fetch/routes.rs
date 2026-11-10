@@ -356,6 +356,15 @@ fn is_official_version_manifest_url(url: &str) -> bool {
     route_policy::is_official_version_manifest_url(url)
 }
 
+/// MCIM asks to be tried after the official hosts on every request.
+///
+/// Every caller that can produce a mixed route list runs this last, so no
+/// mode-specific sort can hand MCIM the lead: a source preference is not a
+/// reason to send MCIM a request it explicitly refuses to serve first.
+fn pin_mcim_last(routes: &mut [DownloadRoute]) {
+    routes.sort_by_key(|route| route.source == DownloadRouteSource::Mcim);
+}
+
 pub(super) fn order_auto_routes(
     routes: &mut [DownloadRoute],
     resource: ResourceClass,
@@ -378,8 +387,6 @@ pub(super) fn order_auto_routes(
             left_health.cooldown_until.is_some_and(|until| until > now);
         let right_cooling =
             right_health.cooldown_until.is_some_and(|until| until > now);
-        // MCIM is a fallback whatever the health data says: it asks for
-        // official sources to be tried first on every request.
         (left.source == DownloadRouteSource::Mcim)
             .cmp(&(right.source == DownloadRouteSource::Mcim))
             .then_with(|| left_cooling.cmp(&right_cooling))
@@ -429,6 +436,42 @@ pub fn resolve_download_routes_for(
     )
 }
 
+/// Applies the mode's ordering and then the MCIM pin.
+///
+/// Split from route construction so the ordering contract is testable with a
+/// mixed list: no route builder in this build emits an MCIM mirror beside an
+/// official URL, and a test that relied on one would pass vacuously.
+pub(super) fn order_routes_for_mode(
+    routes: &mut Vec<DownloadRoute>,
+    resource: ResourceClass,
+    mode: crate::state::DownloadSourceMode,
+    url: &str,
+) {
+    match mode {
+        crate::state::DownloadSourceMode::Auto
+            if is_official_version_manifest_url(url) =>
+        {
+            routes.sort_by_key(|route| route.is_mirror)
+        }
+        crate::state::DownloadSourceMode::Auto => {
+            order_auto_routes(routes, resource)
+        }
+        crate::state::DownloadSourceMode::OfficialOnly => {
+            routes.retain(|route| !route.is_mirror);
+        }
+        crate::state::DownloadSourceMode::OfficialPreferred => {
+            routes.sort_by_key(|route| route.is_mirror);
+        }
+        crate::state::DownloadSourceMode::MirrorPreferred => {
+            routes.sort_by_key(|route| !route.is_mirror);
+        }
+    }
+    // MCIM asks to be a fallback on every request, and a source preference is
+    // not a reason to hand it a file request it explicitly refuses to lead.
+    // This runs after every mode so no path can put it first.
+    pin_mcim_last(routes);
+}
+
 pub fn resolve_download_routes_for_with_sources(
     url: &str,
     resource: ResourceClass,
@@ -456,25 +499,7 @@ pub fn resolve_download_routes_for_with_sources(
     } else {
         mode
     };
-    match mode {
-        crate::state::DownloadSourceMode::Auto
-            if is_official_version_manifest_url(&url) =>
-        {
-            routes.sort_by_key(|route| route.is_mirror)
-        }
-        crate::state::DownloadSourceMode::Auto => {
-            order_auto_routes(&mut routes, resource)
-        }
-        crate::state::DownloadSourceMode::OfficialOnly => {
-            routes.retain(|route| !route.is_mirror);
-        }
-        crate::state::DownloadSourceMode::OfficialPreferred => {
-            routes.sort_by_key(|route| route.is_mirror);
-        }
-        crate::state::DownloadSourceMode::MirrorPreferred => {
-            routes.sort_by_key(|route| !route.is_mirror);
-        }
-    }
+    order_routes_for_mode(&mut routes, resource, mode, &url);
     routes
 }
 

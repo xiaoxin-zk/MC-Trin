@@ -248,10 +248,23 @@ pub(crate) fn in_use(route: &DownloadRoute) -> usize {
     })
 }
 
+/// Reserves one permit for a regular (non-Modrinth) budget.
+///
+/// This answers a policy question — does this route get a separate regular
+/// budget at all — not a runtime one. It must not consult the ambient proxy
+/// clients: that made the same route cap at 64 or 63 depending on whether the
+/// caller happened to run inside a client scope, which is invisible to the
+/// user and impossible to test deterministically. Whether the budget is
+/// actually used is decided by `regular_budget`, which owns the client check.
+fn reserves_regular_budget(route: &DownloadRoute) -> bool {
+    url::Url::parse(&route.url)
+        .is_ok_and(|url| super::modrinth_cdn::is_current_url(&url))
+}
+
 /// Admission changes with active transfers; it must not permanently reduce a
 /// file's growth ceiling when that file starts during a busy batch.
 pub(crate) fn capacity(route: &DownloadRoute) -> usize {
-    MAX_CONNECTIONS_PER_AUTHORITY - usize::from(regular_budget(route).is_some())
+    MAX_CONNECTIONS_PER_AUTHORITY - usize::from(reserves_regular_budget(route))
 }
 
 #[cfg(test)]
@@ -302,5 +315,28 @@ mod tests {
         ));
         drop(permits);
         assert!(try_acquire(&route).is_ok());
+    }
+
+    #[test]
+    fn capacity_depends_on_the_route_not_on_ambient_proxy_clients() {
+        // `route_segmented_concurrency_cap` divides this number up, so a value
+        // that changed with the caller's scope would make the same download
+        // start a different number of ranges depending on unrelated state.
+        let modrinth = DownloadRoute {
+            url: "https://cdn.modrinth.com/data/project/version/file.jar"
+                .into(),
+            source: DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: ProxyPolicy::Direct,
+        };
+        let official = DownloadRoute {
+            url: "https://resources.download.minecraft.net/ab/object".into(),
+            ..modrinth.clone()
+        };
+
+        assert_eq!(capacity(&modrinth), MAX_CONNECTIONS_PER_AUTHORITY - 1);
+        assert_eq!(capacity(&official), MAX_CONNECTIONS_PER_AUTHORITY);
     }
 }

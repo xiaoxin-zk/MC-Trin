@@ -22,6 +22,15 @@ pub(super) fn route_segmented_concurrency_cap(
         .min(crate::util::download::native_budget::capacity(route))
 }
 
+/// The user's configured download concurrency for a transfer budget.
+///
+/// Every production caller passes one of the state's semaphores, whose permit
+/// count is the configured concurrency; that value is stable for the whole
+/// session and is what the range cap must divide up. A semaphore created ad hoc
+/// has no recorded configuration, so its current free permits are the only
+/// upper bound available — and that number shrinks as transfers start, which
+/// would silently reduce a later file's segment count. Callers that need a
+/// stable cap must therefore pass a state semaphore, not a private one.
 pub(crate) fn configured_semaphore_limit(semaphore: &FetchSemaphore) -> usize {
     if let Some(state) = crate::State::get_if_initialized()
         && (std::ptr::eq(
@@ -37,7 +46,12 @@ pub(crate) fn configured_semaphore_limit(semaphore: &FetchSemaphore) -> usize {
     {
         return state.download_concurrency();
     }
-    semaphore.0.available_permits().max(1)
+    let available = semaphore.0.available_permits().max(1);
+    tracing::debug!(
+        available_permits = available,
+        "Transfer budget is not a state semaphore; its concurrency is only known from free permits"
+    );
+    available
 }
 
 pub(super) async fn acquire_initial_segment_permits<'a>(
