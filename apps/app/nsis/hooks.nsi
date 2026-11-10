@@ -121,20 +121,52 @@ Var /GLOBAL OldInstallDir
         ; instead of having its target emptied. The layout is detected the same
         ; way the cleanup below detects it, so a portable install created before
         ; PortableInstall existed is still scanned as a whole folder.
-        !insertmacro AxlDetectPortableLayout
-        ${If} $AxlPortableLayout == "1"
-            ${If} ${FileExists} "$INSTDIR"
-                Push "$INSTDIR"
-                Call un.RemoveReparsePoints
-            ${EndIf}
-        ${Else}
-            ${If} ${FileExists} "$INSTDIR\data"
-                Push "$INSTDIR\data"
-                Call un.RemoveReparsePoints
-            ${EndIf}
-        ${EndIf}
+        Call un.ScanInstallFolderForReparsePoints
     ${EndIf}
 !macroend
+
+Function un.ScanInstallFolderForReparsePoints
+    ; A portable install keeps everything beside the executable; a normal one
+    ; keeps instances in a data subfolder. Both are removed recursively later, so
+    ; a junction a user created to park instances on another disk has to be
+    ; unlinked first or the recursive delete would empty its target.
+    StrCpy $R3 "0"
+    ClearErrors
+    ReadRegStr $R4 HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+    ${If} $R4 == "1"
+        StrCpy $R3 "1"
+    ${EndIf}
+    ${If} $R3 == "0"
+        ${If} ${FileExists} "$INSTDIR\.MC-Trin"
+            StrCpy $R3 "1"
+        ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "0"
+        ${If} ${FileExists} "$INSTDIR\.MC-Trin\*"
+            StrCpy $R3 "1"
+        ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "0"
+        ${If} ${FileExists} "$INSTDIR\.Axolotl"
+            StrCpy $R3 "1"
+        ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "0"
+        ${If} ${FileExists} "$INSTDIR\.Axolotl\*"
+            StrCpy $R3 "1"
+        ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "1"
+        Push "$INSTDIR"
+        Call un.RemoveReparsePoints
+    ${EndIf}
+    ${If} $R3 == "0"
+        ${If} ${FileExists} "$INSTDIR\data"
+            Push "$INSTDIR\data"
+            Call un.RemoveReparsePoints
+        ${EndIf}
+    ${EndIf}
+FunctionEnd
 
 Function un.RemoveReparsePoints
     Exch $0 ; root directory to scan
