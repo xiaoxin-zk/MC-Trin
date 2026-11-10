@@ -79,6 +79,14 @@ async fn mutate_friend(
     semaphore: &FetchSemaphore,
     exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
 ) -> crate::Result<()> {
+    // An empty identifier would build `/v3/friend/` and come back as a
+    // meaningless "user not found" message pointing at an empty username.
+    if user_id.trim().is_empty() {
+        return Err(ErrorKind::InputError(
+            "Enter a username or user ID before adding a friend".into(),
+        )
+        .into());
+    }
     let url = friend_endpoint(api_base, user_id)?;
     let result = match client {
         Some(client) => {

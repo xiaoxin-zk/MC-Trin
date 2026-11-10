@@ -247,7 +247,8 @@ pub(super) async fn checked_openai_response_stream(
     let status = response.status();
     let text = response.text().await.map_err(|error| {
         ErrorKind::OtherError(format!(
-            "Could not read {provider} response: {error}"
+            "AI_NETWORK_FAILED: Could not read the {provider} response: {}",
+            ai_error_summary(&error)
         ))
     })?;
     if !status.is_success() {
@@ -263,11 +264,64 @@ pub(super) async fn checked_openai_response_stream(
         };
         return Err(ErrorKind::OtherError(format!(
             "{category}: {provider} returned HTTP {status}: {}",
-            text.chars().take(500).collect::<String>()
+            sanitized_body_snippet(&text)
         ))
         .into());
     }
     openai_response_stream_content(&text, provider)
+}
+
+/// Removes the trailing request URL that `reqwest::Error` appends.
+///
+/// `reqwest::Error`'s `Display` ends with `for url (<url>)`, and a provider key
+/// can travel in that URL's query string. The trailer is always the final
+/// element, so cutting from the last marker to the end removes it without
+/// mangling a URL that itself contains parentheses.
+pub(super) fn strip_error_url(text: &str) -> String {
+    const MARKER: &str = " for url (";
+    let Some(start) = text.rfind(MARKER) else {
+        return text.to_string();
+    };
+    let trailer = &text[start + MARKER.len()..];
+    // Only a trailing URL is stripped: a message that merely mentions the
+    // phrase keeps its text instead of being truncated.
+    if trailer.ends_with(')')
+        && trailer.starts_with("http")
+        && !trailer[..trailer.len() - 1].contains(' ')
+    {
+        text[..start].to_string()
+    } else {
+        text.to_string()
+    }
+}
+
+/// One bounded, single-line transport error message with no request URL.
+///
+/// Takes the error by reference and only borrows through `Display`, so nothing
+/// here moves out of the error and the call sites keep ownership of it.
+pub(super) fn ai_error_summary(error: &reqwest::Error) -> String {
+    use std::error::Error as _;
+    let mut detail = strip_error_url(&error.to_string());
+    // `Display` only names the failing stage ("error sending request"); the
+    // actionable cause (refused, timed out, invalid certificate) is the source
+    // chain, which never carries the request URL.
+    let mut source = error.source();
+    let mut depth = 0;
+    while let Some(cause) = source {
+        if depth == 3 {
+            break;
+        }
+        let text = strip_error_url(&cause.to_string());
+        let text = text.trim();
+        if !text.is_empty() && !detail.contains(text) {
+            detail.push_str(": ");
+            detail.push_str(text);
+        }
+        source = cause.source();
+        depth += 1;
+    }
+    let flattened = detail.split_whitespace().collect::<Vec<_>>().join(" ");
+    flattened.chars().take(200).collect()
 }
 
 pub(super) fn ai_network_error(
@@ -275,7 +329,8 @@ pub(super) fn ai_network_error(
     error: reqwest::Error,
 ) -> crate::Error {
     ErrorKind::OtherError(format!(
-        "AI_NETWORK_FAILED: Could not reach {provider}: {error}"
+        "AI_NETWORK_FAILED: Could not reach {provider}: {}",
+        ai_error_summary(&error)
     ))
     .into()
 }

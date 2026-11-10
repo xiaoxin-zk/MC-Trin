@@ -53,6 +53,41 @@ function parseEventStream(body: string, expectedId: number): JsonRpcResponse {
     throw new Error('MCP event stream did not contain the matching response.')
 }
 
+/**
+ * Reads a response body without buffering past the size cap.
+ *
+ * A malicious or broken server can answer with an endless body; checking the
+ * size after `text()` has already materialised it lets that body exhaust the
+ * renderer's memory first. The reader stops as soon as the cap is exceeded.
+ */
+async function readBoundedBody(response: Response, maxBytes = MAX_RESPONSE_BYTES): Promise<string> {
+    if (!response.body) return ''
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    try {
+        for (;;) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (!value) continue
+            total += value.byteLength
+            if (total > maxBytes) {
+                throw new Error('MCP response is too large.')
+            }
+            chunks.push(value)
+        }
+    } finally {
+        reader.cancel().catch(() => {})
+    }
+    const combined = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+        combined.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return new TextDecoder().decode(combined)
+}
+
 export class StreamableHttpMcpClient {
     readonly endpoint: string
     private readonly token: string
@@ -187,8 +222,7 @@ export class StreamableHttpMcpClient {
     ): Promise<void> {
         const response = await this.post({ jsonrpc: '2.0', method, params }, signal)
         if (response.status === 202 || response.status === 204) return
-        const body = await response.text()
-        if (body.length > MAX_RESPONSE_BYTES) throw new Error('MCP response is too large.')
+        await readBoundedBody(response)
     }
 
     private async request(
@@ -200,9 +234,7 @@ export class StreamableHttpMcpClient {
         const response = await this.post({ jsonrpc: '2.0', id, method, params }, signal)
         if (response.status === 202 || response.status === 204)
             throw new Error(`MCP server accepted ${method} without returning a response.`)
-        const body = await response.text()
-        if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES)
-            throw new Error('MCP response is too large.')
+        const body = await readBoundedBody(response)
         const responseType = response.headers.get('content-type') ?? ''
         let message: JsonRpcResponse
         if (responseType.includes('text/event-stream')) {

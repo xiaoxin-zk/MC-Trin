@@ -1,5 +1,7 @@
 import { computed, onScopeDispose, ref } from 'vue'
 
+import { sanitizeAiErrorText } from '@/helpers/ai'
+
 import * as backend from '../logagent/backend.ts'
 import { type ActivityEntry, applyProgress } from '../logagent/progress.ts'
 import type {
@@ -10,6 +12,7 @@ import type {
     LocalProgress,
     PreparedSession,
     RemoteMcpGateway,
+    ToolRequest,
     UploadTicket,
 } from '../logagent/types.ts'
 
@@ -36,6 +39,11 @@ interface Dependencies {
 }
 
 function readableError(cause: unknown): string {
+    const raw = rawErrorText(cause)
+    return sanitizeAiErrorText(raw) || 'The assistant request failed.'
+}
+
+function rawErrorText(cause: unknown): string {
     if (cause instanceof Error) return cause.message
     if (typeof cause === 'string') return cause
     if (cause && typeof cause === 'object') {
@@ -52,6 +60,45 @@ function readableError(cause: unknown): string {
     return String(cause)
 }
 
+/**
+ * Mirrors `assistant_write_tool` in
+ * `packages/app-lib/src/api/logs/logagent/mod.rs`. Keep the two lists identical:
+ * a name missing here would be sent without a grant and refused by the backend,
+ * so every write added there must also be added here.
+ */
+const WRITE_TOOLS: ReadonlySet<string> = new Set([
+    'update_launcher_settings',
+    'create_instance',
+    'rename_instance',
+    'delete_instance',
+    'install_java_runtime',
+    'set_java_default_runtime',
+    'queue_resource_install',
+    'cancel_install_job',
+    'disable_content',
+    'enable_content',
+    'remove_content',
+])
+
+type GrantRequest = ToolRequest & { approval_request?: boolean; approval?: string }
+
+/** Approves one write with the backend, then executes it with that grant. */
+async function runTool(
+    runId: string,
+    request: ToolRequest,
+    execute: (request: ToolRequest) => Promise<unknown>,
+): Promise<unknown> {
+    if (!WRITE_TOOLS.has(request.name)) return execute(request)
+    const minted = (await execute({
+        ...request,
+        approval_request: true,
+    } as GrantRequest)) as { approval_token?: unknown } | null
+    const token = minted && typeof minted.approval_token === 'string' ? minted.approval_token : ''
+    if (!token)
+        throw new Error('This launcher change needs a fresh user approval')
+    return execute({ ...request, approval: token } as GrantRequest)
+}
+
 const dependencies: Dependencies = {
     prepare: backend.prepareSession,
     cancel: backend.cancelSession,
@@ -59,7 +106,7 @@ const dependencies: Dependencies = {
     local: async (...args) => (await import('../logagent/agent.ts')).runLocalAgent(...args),
     gateway: (runId) => ({
         modelTurn: (turn, onEvent) => backend.modelTurn(runId, turn, onEvent),
-        tool: (request) => backend.executeTool(runId, request),
+        tool: (request) => runTool(runId, request, (approved) => backend.executeTool(runId, approved)),
     }),
 }
 

@@ -9,7 +9,7 @@ pub use catalog::catalog;
 use catalog::{BUILTIN_MODEL_CATALOG, SPONSORED_PROVIDERS};
 use catalog::{PROVIDERS, builtin_models, provider_definition};
 use protocol::{
-    ai_network_error, apply_openai_response_format,
+    ai_error_summary, ai_network_error, apply_openai_response_format,
     apply_openai_translation_options, apply_responses_translation_options,
     checked_openai_response_stream, google_generation_config,
     insert_json_option, openai_content, opencode_headers, text_client,
@@ -385,6 +385,41 @@ fn input_error(message: String) -> crate::Error {
     ErrorKind::InputError(message).into()
 }
 
+/// Drops the query string and any user information from a URL so it can be
+/// embedded in an error message without carrying credentials.
+pub(crate) fn redact_url(url: &str) -> String {
+    let Ok(mut parsed) = Url::parse(url) else {
+        return "[invalid URL]".to_string();
+    };
+    if parsed.query().is_some() {
+        parsed.set_query(None);
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        let _ = parsed.set_username("");
+        let _ = parsed.set_password(None);
+    }
+    parsed.to_string()
+}
+
+/// Collapses an untrusted response body into one bounded, credential-free line.
+///
+/// Provider error bodies routinely repeat the request (including any key that
+/// travelled in the URL), so only a short, single-line summary is kept.
+pub(crate) fn sanitized_body_snippet(text: &str) -> String {
+    let flattened = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let bounded = flattened.chars().take(160).collect::<String>();
+    if bounded.is_empty() {
+        "no response body".to_string()
+    } else {
+        bounded
+    }
+}
+
 fn normalize_endpoint(endpoint: &str, fallback: &str) -> crate::Result<String> {
     let endpoint = if endpoint.trim().is_empty() {
         fallback.trim()
@@ -738,12 +773,29 @@ async fn load_provider_config(
             source: "builtin".to_string(),
         });
     }
+    // Each credential is read exactly once per provider. A transient keyring
+    // failure must not hide the whole provider list, so an unreadable entry is
+    // logged and reported as "not configured" instead of failing the state.
     let mut configured_credentials = Vec::new();
     for credential in credential_names(definition.id) {
-        if read_credential(definition.id, credential)?.is_some() {
-            configured_credentials.push((*credential).to_string());
+        match read_credential(definition.id, credential) {
+            Ok(Some(_)) => {
+                configured_credentials.push((*credential).to_string())
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    provider_id = definition.id,
+                    credential,
+                    error = %error,
+                    "Could not read an AI credential"
+                );
+            }
         }
     }
+    let has_api_key = configured_credentials
+        .iter()
+        .any(|credential| credential == API_KEY_CREDENTIAL);
     Ok(AiProviderConfig {
         provider_id: definition.id.to_string(),
         custom_name,
@@ -751,10 +803,18 @@ async fn load_provider_config(
         enabled,
         endpoint,
         settings,
-        has_api_key: read_credential(definition.id, API_KEY_CREDENTIAL)?
-            .is_some(),
+        has_api_key,
         configured_credentials,
-        oauth_connected: read_oauth_credentials(definition.id)?.is_some(),
+        oauth_connected: read_oauth_credentials(definition.id)
+            .inspect_err(|error| {
+                tracing::warn!(
+                    provider_id = definition.id,
+                    error = %error,
+                    "Could not read stored AI OAuth credentials"
+                );
+            })
+            .unwrap_or(None)
+            .is_some(),
         models,
     })
 }
@@ -915,7 +975,8 @@ async fn checked_json(
     let status = response.status();
     let text = response.text().await.map_err(|error| {
         ErrorKind::OtherError(format!(
-            "Could not read {provider} response: {error}"
+            "AI_NETWORK_FAILED: Could not read the {provider} response: {}",
+            ai_error_summary(&error)
         ))
     })?;
     if !status.is_success() {
@@ -931,7 +992,7 @@ async fn checked_json(
         };
         return Err(ErrorKind::OtherError(format!(
             "{category}: {provider} returned HTTP {status}: {}",
-            text.chars().take(500).collect::<String>()
+            sanitized_body_snippet(&text)
         ))
         .into());
     }
@@ -1828,11 +1889,12 @@ async fn complete_google(
                 definition.name
             ))
         })?;
+    // The key travels in a header, never in the URL: a URL ends up in
+    // `reqwest::Error`, in proxy logs and in whatever the UI shows the user.
     let endpoint = format!(
-        "{}/v1beta/models/{}:generateContent?key={}",
+        "{}/v1beta/models/{}:generateContent",
         config.endpoint.trim_end_matches('/'),
-        urlencoding::encode(&request.model_id),
-        urlencoding::encode(&api_key)
+        urlencoding::encode(&request.model_id)
     );
     let body = json!({
         "systemInstruction": { "parts": [{ "text": request.system_prompt }] },
@@ -1842,6 +1904,7 @@ async fn complete_google(
     let value = checked_json(
         text_client(request)
             .post(endpoint)
+            .header("x-goog-api-key", &api_key)
             .json(&body)
             .send()
             .await
@@ -2150,12 +2213,13 @@ pub async fn fetch_models(
     };
     let (endpoint, mut builder) = match config.protocol {
         AiProtocol::Google => {
-            let endpoint = format!(
-                "{}/v1beta/models?key={}",
-                config.endpoint,
-                urlencoding::encode(&key)
-            );
-            (endpoint.clone(), AI_CLIENT.get(endpoint))
+            // Header auth keeps the key out of the URL, and therefore out of
+            // transport errors, proxy logs and the model-discovery failure
+            // message built below.
+            let endpoint = format!("{}/v1beta/models", config.endpoint);
+            let builder =
+                AI_CLIENT.get(&endpoint).header("x-goog-api-key", &key);
+            (endpoint, builder)
         }
         AiProtocol::Ollama => {
             let endpoint = endpoint_with_path(&config.endpoint, "/api/tags");
@@ -2219,8 +2283,9 @@ pub async fn fetch_models(
     let models = discovered_models(&value, config.protocol);
     if models.is_empty() {
         return Err(ErrorKind::OtherError(format!(
-            "{} returned no text models from {endpoint}",
-            definition.name
+            "{} returned no text models from {}",
+            definition.name,
+            redact_url(&endpoint)
         ))
         .into());
     }
@@ -2350,20 +2415,27 @@ pub async fn begin_oauth(
         )
     };
     let flow_id = Uuid::new_v4();
-    OAUTH_FLOWS
-        .lock()
-        .map_err(|_| {
+    {
+        let mut flows = OAUTH_FLOWS.lock().map_err(|_| {
             ErrorKind::OtherError("OAuth flow state is unavailable".to_string())
-        })?
-        .insert(
+        })?;
+        // Only the newest attempt for a provider stays live: the previous
+        // device code is unusable once the user starts over, and keeping every
+        // attempt would grow the table for the lifetime of the process.
+        let now = now_seconds();
+        flows.retain(|_, flow| {
+            flow.provider_id != provider_id && flow.expires_at > now
+        });
+        flows.insert(
             flow_id,
             PendingOAuthFlow {
                 provider_id,
                 device_code,
-                expires_at: now_seconds() + expires_in,
+                expires_at: now + expires_in,
                 credentials: None,
             },
         );
+    }
     Ok(OAuthDeviceCode {
         flow_id,
         user_code,

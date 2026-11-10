@@ -12,8 +12,10 @@ use crate::{
     api::ai::chat::{ChatMessage, ChatModel, ChatTurn},
     prelude::Credentials,
 };
-use serde::Serialize;
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock, Mutex},
@@ -21,7 +23,28 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 use tools::LogFile;
-pub use tools::ToolRequest;
+pub use tools::ToolRequest as ToolCall;
+
+/// A tool request plus the approval grant a write tool must present.
+///
+/// `approval_request` asks the backend to mint a grant for this exact call; the
+/// renderer sends it only after the user accepted the approval dialog. The
+/// minted `approval` token is then sent back to execute. Neither field is part
+/// of the model-facing tool schema, and the model's arguments are validated by
+/// [`assistant_request_shape_valid`], which rejects unknown keys.
+#[derive(Deserialize)]
+pub struct ToolRequest {
+    #[serde(flatten)]
+    pub(crate) call: ToolCall,
+    #[serde(default)]
+    approval: Option<String>,
+    #[serde(default)]
+    approval_request: Option<bool>,
+}
+
+/// Response shape for the mint step: no launcher state is touched.
+pub const APPROVAL_REQUIRED: &str = "approval_required";
+pub const APPROVAL_TOKEN: &str = "approval_token";
 
 const SESSION_TTL: Duration = Duration::from_secs(10 * 60);
 static SESSIONS: LazyLock<Mutex<HashMap<String, Arc<Session>>>> =
@@ -32,6 +55,7 @@ struct Snapshot {
     files: Vec<LogFile>,
     share_settings: LogShareSettings,
 }
+/// One diagnostic run. Owns the per-run approval grants.
 struct Session {
     created: Instant,
     cancel: CancellationToken,
@@ -39,6 +63,124 @@ struct Session {
     source: String,
     budget: Mutex<Budget>,
     turn_lock: tokio::sync::Mutex<()>,
+    /// Write approvals issued by this run and not yet redeemed.
+    approvals: Mutex<HashMap<String, PendingApproval>>,
+}
+
+/// A write approval the backend issued for one exact tool call.
+///
+/// The token is only ever produced by this module after the caller asked to
+/// run a write tool; it is bound to the run, the tool name and the exact
+/// arguments, expires quickly and is removed the moment it is redeemed.
+/// A model can neither guess one nor reuse one it has already spent.
+struct PendingApproval {
+    tool: String,
+    arguments: String,
+    expires: Instant,
+}
+
+/// How long a user approval stays redeemable before it must be asked again.
+const APPROVAL_TTL: Duration = Duration::from_secs(120);
+/// Cap the number of unredeemed approvals one run can hold.
+const MAX_PENDING_APPROVALS: usize = 16;
+
+fn approval_token() -> String {
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// Fingerprint of the exact tool arguments, so an approval for one call cannot
+/// be repointed at another instance, file or settings patch.
+fn arguments_digest(request: &ToolCall) -> String {
+    let canonical =
+        serde_json::to_string(request).unwrap_or_else(|_| request.name.clone());
+    Sha256::digest(canonical.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+impl Session {
+    /// Issues a single-use approval for one write call and returns its token.
+    fn issue_approval(
+        &self,
+        tool: &str,
+        arguments: &str,
+    ) -> crate::Result<String> {
+        let mut approvals = self
+            .approvals
+            .lock()
+            .map_err(|_| error("LogAgent approval store unavailable"))?;
+        let now = Instant::now();
+        approvals.retain(|_, approval| approval.expires > now);
+        if approvals.len() >= MAX_PENDING_APPROVALS {
+            return Err(error(
+                "Too many pending tool approvals; finish or cancel the current run",
+            ));
+        }
+        let token = approval_token();
+        approvals.insert(
+            token.clone(),
+            PendingApproval {
+                tool: tool.to_string(),
+                arguments: arguments.to_string(),
+                expires: now + APPROVAL_TTL,
+            },
+        );
+        Ok(token)
+    }
+
+    /// Redeems an approval. Returns false when it is unknown, expired, already
+    /// spent, or bound to a different tool or different arguments.
+    fn redeem_approval(
+        &self,
+        token: &str,
+        tool: &str,
+        arguments: &str,
+    ) -> bool {
+        let Ok(mut approvals) = self.approvals.lock() else {
+            return false;
+        };
+        // Drop grants nobody redeemed so an expired one cannot occupy the
+        // pending cap and shut out the user's next legitimate approval.
+        let now = Instant::now();
+        approvals.retain(|_, approval| approval.expires > now);
+        let Some(approval) = approvals.remove(token) else {
+            return false;
+        };
+        approval.tool == tool && approval.arguments == arguments
+    }
+}
+
+/// Gate for one assistant write call.
+///
+/// `Ok(Some(token))` means the caller asked for an approval: a grant was minted
+/// and the write must not run yet. `Ok(None)` means the presented grant was
+/// valid and has now been consumed. Every other outcome is an error the renderer
+/// cannot turn into an execution.
+fn check_write_approval(
+    session: &Session,
+    approval: Option<&str>,
+    approval_request: bool,
+    request: &ToolCall,
+) -> crate::Result<Option<String>> {
+    let arguments = arguments_digest(request);
+    match approval {
+        Some(token) => {
+            if session.redeem_approval(token, &request.name, &arguments) {
+                Ok(None)
+            } else {
+                Err(error("This launcher change needs a fresh user approval"))
+            }
+        }
+        None if approval_request => {
+            Ok(Some(session.issue_approval(&request.name, &arguments)?))
+        }
+        None => Err(error(
+            "This launcher change needs an explicit user approval",
+        )),
+    }
 }
 
 #[derive(Default)]
@@ -135,6 +277,7 @@ pub async fn prepare(
         source,
         budget: Mutex::new(Budget::default()),
         turn_lock: tokio::sync::Mutex::new(()),
+        approvals: Mutex::new(HashMap::new()),
     });
     {
         let mut sessions = sessions()?;
@@ -360,12 +503,37 @@ pub async fn model_turn(
 
 pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
     let session = session(run_id)?;
+    let approval = request.approval;
+    let request = request.call;
     if session.source == "assistant" {
         if !assistant_request_shape_valid(&request) {
             return Err(error("Unsupported launcher assistant tool request"));
         }
     } else if session.source != "custom" {
         return Err(error("Local tools are unavailable for cloud sessions"));
+    }
+    // The backend refuses a launcher change unless the call carries a
+    // single-use grant bound to this run, this tool and these exact arguments.
+    // The grant is minted by the trusted renderer path (`useLogAgent.runTool`),
+    // which is reached only after the approval dialog in `agent.ts`; the model
+    // never sees the token, so a tool call it drives cannot redeem one. Minting
+    // performs no work: without a grant the write stops here. The consent
+    // prompt itself lives in the renderer, so this gate guarantees that an
+    // unapproved write cannot execute, not that a hostile renderer cannot ask
+    // for a grant.
+    if session.source == "assistant" && assistant_write_tool(&request.name) {
+        if let Some(token) = check_write_approval(
+            &session,
+            approval.as_deref(),
+            approval_request.unwrap_or(false),
+            &request,
+        )? {
+            return Ok(json!({
+                APPROVAL_REQUIRED: true,
+                APPROVAL_TOKEN: token,
+                "tool": request.name,
+            }));
+        }
     }
     let duplicate = {
         let mut budget = session
@@ -467,7 +635,7 @@ fn assistant_write_tool(name: &str) -> bool {
     )
 }
 
-fn assistant_request_shape_valid(request: &ToolRequest) -> bool {
+fn assistant_request_shape_valid(request: &ToolCall) -> bool {
     let allowed_fields: &[&str] = match request.name.as_str() {
         "get_instance_overview"
         | "get_launcher_settings"
@@ -804,7 +972,7 @@ fn assistant_request_shape_valid(request: &ToolRequest) -> bool {
 }
 
 fn only_expected_assistant_fields(
-    request: &ToolRequest,
+    request: &ToolCall,
     allowed: &[&str],
 ) -> bool {
     let Ok(Value::Object(mut fields)) = serde_json::to_value(request) else {
@@ -819,7 +987,7 @@ fn only_expected_assistant_fields(
     })
 }
 
-fn no_assistant_extra_fields(request: &ToolRequest) -> bool {
+fn no_assistant_extra_fields(request: &ToolCall) -> bool {
     request.instance_id.is_none()
         && request.instance_name.is_none()
         && request.game_version.is_none()
@@ -897,23 +1065,188 @@ pub async fn cloud(
 mod tests {
     use super::*;
 
+    fn make_session(source: &str) -> Arc<Session> {
+        Arc::new(Session {
+            created: Instant::now(),
+            cancel: CancellationToken::new(),
+            snapshot: tokio::sync::OnceCell::new(),
+            source: source.into(),
+            budget: Mutex::new(Budget::default()),
+            turn_lock: tokio::sync::Mutex::new(()),
+            approvals: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn write_request(name: &str, instance: &str) -> ToolCall {
+        let mut request: ToolCall =
+            serde_json::from_value(json!({ "name": name })).unwrap();
+        request.instance_id = Some(instance.to_string());
+        request
+    }
+
+    fn wrap(call: ToolCall, approval: Option<&str>) -> ToolRequest {
+        ToolRequest {
+            call,
+            approval: approval.map(str::to_string),
+            approval_request: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn the_tool_entry_point_refuses_a_write_that_presents_no_grant() {
+        let run_id = uuid::Uuid::new_v4().to_string();
+        let session = make_session("assistant");
+        sessions().unwrap().insert(run_id.clone(), session);
+
+        // delete_instance is a real launcher write and its shape is valid here,
+        // so the only thing that can stop it is the approval gate in `tool`.
+        let call = write_request("delete_instance", "instance-1");
+        let error = tool(&run_id, wrap(call, None)).await.unwrap_err();
+        assert!(
+            format!("{error}").contains("explicit user approval"),
+            "the gate must refuse before any launcher state is touched: {error:#}"
+        );
+
+        // Asking for an approval mints a token but still performs no work.
+        let call = write_request("delete_instance", "instance-1");
+        let minted = tool(
+            &run_id,
+            ToolRequest {
+                call,
+                approval: None,
+                approval_request: Some(true),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(minted[APPROVAL_REQUIRED], json!(true));
+        assert_eq!(minted[APPROVAL_TOKEN].as_str().map(str::len), Some(64));
+
+        cancel(&run_id).unwrap();
+    }
+
+    #[test]
+    fn a_forged_token_never_authorizes_a_write() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let arguments = arguments_digest(&call);
+        assert!(!session.redeem_approval("forged", &call.name, &arguments));
+        assert!(!session.redeem_approval("", &call.name, &arguments));
+        assert_eq!(arguments.len(), 64);
+    }
+
+    #[test]
+    fn an_approval_is_bound_to_the_tool_and_arguments_it_was_issued_for() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let arguments = arguments_digest(&call);
+
+        // A grant for instance-1 must not delete instance-2.
+        let token = session.issue_approval(&call.name, &arguments).unwrap();
+        let other_instance = write_request("delete_instance", "instance-2");
+        assert!(!session.redeem_approval(
+            &token,
+            &other_instance.name,
+            &arguments_digest(&other_instance)
+        ));
+
+        // A grant for delete_instance must not remove content instead.
+        let token = session.issue_approval(&call.name, &arguments).unwrap();
+        let other_tool = write_request("remove_content", "instance-1");
+        assert!(!session.redeem_approval(
+            &token,
+            &other_tool.name,
+            &arguments_digest(&other_tool)
+        ));
+
+        // The matching call is the only one the grant authorizes.
+        let token = session.issue_approval(&call.name, &arguments).unwrap();
+        assert!(session.redeem_approval(&token, &call.name, &arguments));
+    }
+
+    #[test]
+    fn a_valid_approval_is_accepted_exactly_once() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let arguments = arguments_digest(&call);
+        let token = session.issue_approval(&call.name, &arguments).unwrap();
+
+        assert!(session.redeem_approval(&token, &call.name, &arguments));
+        assert!(
+            !session.redeem_approval(&token, &call.name, &arguments),
+            "a redeemed grant must not be reusable"
+        );
+    }
+
+    #[test]
+    fn expired_approvals_are_rejected() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let arguments = arguments_digest(&call);
+        let token = session.issue_approval(&call.name, &arguments).unwrap();
+        {
+            let mut approvals = session.approvals.lock().unwrap();
+            if let Some(approval) = approvals.get_mut(&token) {
+                approval.expires = Instant::now() - Duration::from_secs(1);
+            }
+        }
+        assert!(!session.redeem_approval(&token, &call.name, &arguments));
+    }
+
+    #[test]
+    fn wrapping_a_read_only_call_keeps_its_fields_untouched() {
+        let call: ToolCall = serde_json::from_value(
+            json!({ "name": "get_install_job", "job_id": "job-1" }),
+        )
+        .unwrap();
+        let request = wrap(call, None);
+        assert_eq!(request.call.name, "get_install_job");
+        assert_eq!(request.call.job_id.as_deref(), Some("job-1"));
+        assert!(request.approval.is_none());
+    }
+
+    #[test]
+    fn a_write_without_a_grant_is_refused_instead_of_running() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let outcome = check_write_approval(&session, None, false, &call);
+        let message = format!("{}", outcome.unwrap_err());
+        assert!(message.contains("explicit user approval"), "{message}");
+        assert!(
+            session.approvals.lock().unwrap().is_empty(),
+            "a refused write must not leave a redeemable grant behind"
+        );
+    }
+
+    #[test]
+    fn only_an_explicit_request_mints_a_grant() {
+        let session = make_session("assistant");
+        let call = write_request("delete_instance", "instance-1");
+        let token = check_write_approval(&session, None, true, &call)
+            .unwrap()
+            .expect("an explicit request must mint a token");
+        assert_eq!(token.len(), 64);
+        assert!(
+            check_write_approval(&session, Some(&token), false, &call)
+                .unwrap()
+                .is_none(),
+            "the minted grant must authorize exactly the call it was issued for"
+        );
+        assert!(
+            check_write_approval(&session, Some(&token), false, &call).is_err(),
+            "the same grant must not authorize a second call"
+        );
+    }
+
     #[test]
     fn cancellation_cannot_affect_another_run() {
         let first = uuid::Uuid::new_v4().to_string();
         let second = uuid::Uuid::new_v4().to_string();
-        let make_session = || {
-            Arc::new(Session {
-                created: Instant::now(),
-                cancel: CancellationToken::new(),
-                snapshot: tokio::sync::OnceCell::new(),
-                source: "custom".into(),
-                budget: Mutex::new(Budget::default()),
-                turn_lock: tokio::sync::Mutex::new(()),
-            })
-        };
-        let old = make_session();
+        let old = make_session("custom");
         sessions().unwrap().insert(first.clone(), old.clone());
-        sessions().unwrap().insert(second.clone(), make_session());
+        sessions()
+            .unwrap()
+            .insert(second.clone(), make_session("custom"));
         cancel(&first).unwrap();
         assert!(old.cancel.is_cancelled());
         assert!(session(&first).is_err());

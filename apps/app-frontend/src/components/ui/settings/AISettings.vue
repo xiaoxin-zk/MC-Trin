@@ -44,6 +44,7 @@ import {
     type OAuthPollStatus,
     pollAIOAuth,
     removeAIModel,
+    sanitizeAiErrorText,
     setAIProviderCredential,
     setAIProviderKey,
     sharedAIState,
@@ -83,6 +84,16 @@ const oauthChecking = ref(false)
 let oauthTimer: ReturnType<typeof setTimeout> | undefined
 
 function readableError(error: unknown): string {
+    const text = rawErrorText(error)
+    return sanitizeAiErrorText(text) || 'The provider test failed.'
+}
+
+/** Reports an AI failure after stripping internal diagnostics from it. */
+function reportAiError(error: unknown): void {
+    handleError(sanitizeAiErrorText(rawErrorText(error)))
+}
+
+function rawErrorText(error: unknown): string {
     if (error instanceof Error) return error.message
     if (typeof error === 'string') return error
     if (error && typeof error === 'object') {
@@ -421,7 +432,7 @@ async function openSponsoredWebsite() {
     try {
         await openUrl(url)
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -433,7 +444,7 @@ async function setMasterEnabled(enabled: boolean) {
         await updateAISettings(enabled)
     } catch (error) {
         state.value.settings.enabled = previous
-        handleError(error)
+        reportAiError(error)
     } finally {
         masterBusy.value = false
     }
@@ -454,7 +465,7 @@ async function saveProvider() {
         status.value = formatMessage(messages.saved)
         return true
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
         return false
     } finally {
         busy.value = false
@@ -482,7 +493,7 @@ async function setProviderEnabledById(providerId: string, enabled: boolean) {
         })
     } catch (error) {
         config.enabled = previous
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -497,7 +508,7 @@ async function saveApiKey() {
         apiKey.value = ''
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -509,7 +520,7 @@ async function clearApiKey() {
         await setAIProviderKey(selectedConfig.value.provider_id, null)
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -530,7 +541,7 @@ async function saveCredential(name: string) {
         credentialValues.value[name] = ''
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -542,7 +553,7 @@ async function clearCredential(name: string) {
         await setAIProviderCredential(selectedConfig.value.provider_id, name, null)
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -563,7 +574,7 @@ async function saveCredentials(names: string[]) {
         for (const [name] of values) credentialValues.value[name] = ''
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -580,7 +591,7 @@ async function clearCredentials(names: string[]) {
         )
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -591,7 +602,7 @@ async function copyOAuthCode() {
     try {
         await navigator.clipboard.writeText(oauthInfo.value.user_code)
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -600,7 +611,7 @@ async function openOAuthAuthorization() {
     try {
         await openUrl(oauthInfo.value.verification_uri_complete ?? oauthInfo.value.verification_uri)
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -619,7 +630,7 @@ async function setModelEnabled(modelId: string, enabled: boolean) {
         if (enabled && !selectedTestModel.value) selectedTestModel.value = model.id
     } catch (error) {
         model.enabled = !enabled
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -637,7 +648,7 @@ async function addModel() {
         customModelName.value = ''
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -647,7 +658,7 @@ async function removeModel(modelId: string) {
         await removeAIModel(selectedConfig.value.provider_id, modelId)
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -658,7 +669,7 @@ async function refreshModels() {
         await fetchAIModels(selectedConfig.value.provider_id)
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -710,7 +721,7 @@ async function pollOAuth(info: OAuthDeviceCode, interval = info.interval) {
         )
     } catch (error) {
         stopOAuthPolling()
-        handleError(error)
+        reportAiError(error)
     } finally {
         oauthChecking.value = false
     }
@@ -740,7 +751,7 @@ async function connectOAuth() {
         await openUrl(info.verification_uri_complete ?? info.verification_uri)
         oauthTimer = setTimeout(() => void pollOAuth(info), 2000)
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         busy.value = false
     }
@@ -752,7 +763,7 @@ async function disconnectOAuth() {
         await disconnectAIOAuth(selectedConfig.value.provider_id)
         await reloadState()
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     }
 }
 
@@ -772,7 +783,7 @@ onMounted(async () => {
         selectedId.value = 'all'
         selectProvider(selectedId.value)
     } catch (error) {
-        handleError(error)
+        reportAiError(error)
     } finally {
         loading.value = false
     }

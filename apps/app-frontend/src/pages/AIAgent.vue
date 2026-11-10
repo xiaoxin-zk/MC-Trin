@@ -21,6 +21,7 @@ import {
     type AIState,
     getAICatalog,
     getAIState,
+    sanitizeAiErrorText,
 } from '@/helpers/ai'
 import {
     addAgentProfile,
@@ -52,6 +53,28 @@ import type {
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
+
+/** Reports a page error after stripping Rust internals from it. */
+function reportAiError(error: unknown): void {
+    handleError(sanitizeAiErrorText(readableErrorText(error)))
+}
+
+function readableErrorText(error: unknown): string {
+    if (error instanceof Error) return error.message
+    if (typeof error === 'string') return error
+    if (error && typeof error === 'object') {
+        const record = error as Record<string, unknown>
+        for (const key of ['message', 'error', 'details']) {
+            if (typeof record[key] === 'string' && record[key]) return record[key]
+        }
+        try {
+            return JSON.stringify(error) ?? 'The assistant request failed.'
+        } catch {
+            return 'The assistant request failed.'
+        }
+    }
+    return String(error)
+}
 const router = useRouter()
 const agent = useLogAgent()
 
@@ -824,6 +847,26 @@ const assistantModel = computed(() => {
     return null
 })
 
+/**
+ * True when the assistant fell back to the first enabled provider rather than
+ * the model the user configured for analysis. The selection decides which third
+ * party receives the question, so it is never left implicit in the UI.
+ */
+const assistantModelIsAuto = computed(
+    () => Boolean(assistantModel.value) && !selectedLogModel.value,
+)
+
+const assistantModelLabel = computed(() => {
+    const selected = assistantModel.value
+    if (!selected) return ''
+    const name =
+        selected.provider.custom_name?.trim() ||
+        providerCatalog.value.find((item) => item.id === selected.provider.provider_id)?.name ||
+        selected.provider.provider_id
+    const model = selected.model.name?.trim() || selected.model.id
+    return `${name} · ${model}`
+})
+
 const hasConfiguredModel = computed(() => {
     if (mode.value === 'logs')
         return Boolean(selectedLogModel.value) && Boolean(analysisSettings.value?.enabled)
@@ -866,7 +909,7 @@ async function load() {
         if (!availableInstances.value.some((instance) => instance.id === selectedInstanceId.value))
             selectedInstanceId.value = availableInstances.value[0]?.id ?? ''
     } catch (error) {
-        handleError(error as Error)
+        reportAiError(error)
     } finally {
         loading.value = false
     }
@@ -921,6 +964,11 @@ async function submit() {
 
 function openAISettings() {
     void router.push({ path: '/settings', hash: '#ai' })
+}
+
+/** Opens the settings section that decides the model when one is auto-picked. */
+function openAssistantModelSettings() {
+    void router.push({ path: '/settings', hash: assistantModelIsAuto ? '#logs' : '#ai' })
 }
 
 function openRequiredSettings() {
@@ -1170,6 +1218,22 @@ onUnmounted(denyPendingApprovals)
         </p>
 
         <template v-else>
+            <p
+                v-if="assistantModelLabel"
+                class="m-0 flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-tertiary)]"
+                data-onboarding-id="assistant-active-model"
+            >
+                <strong class="break-all font-medium text-[var(--color-text-primary)]">
+                    {{ assistantModelLabel }}
+                </strong>
+                <button
+                    type="button"
+                    class="cursor-pointer border-0 bg-transparent p-0 text-sm font-normal text-brand underline"
+                    @click="openAssistantModelSettings"
+                >
+                    {{ formatMessage(messages.settings) }}
+                </button>
+            </p>
             <div
                 class="flex flex-wrap gap-2"
                 role="tablist"

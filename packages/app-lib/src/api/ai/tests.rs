@@ -464,3 +464,62 @@ fn vertex_service_account_defaults_and_claims_are_validated() {
         .is_err()
     );
 }
+
+#[test]
+fn a_provider_error_never_repeats_the_api_key() {
+    let key = "sk-live-very-secret-value";
+    let endpoint = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    );
+    let message = format!(
+        "Google returned no text models from {}",
+        redact_url(&endpoint)
+    );
+    assert!(!message.contains(key), "{message}");
+    assert!(message.contains("generativelanguage.googleapis.com"));
+}
+
+#[test]
+fn a_transport_error_summary_drops_the_request_url() {
+    let key = "AIzaSy-example-leaked-key";
+    let rendered = format!(
+        "error sending request for url (https://example.test/v1beta/models?key={key})"
+    );
+    let summary = super::protocol::strip_error_url(&rendered);
+    assert!(!summary.contains(key), "{summary}");
+    assert!(!summary.contains("for url"), "{summary}");
+    assert_eq!(summary, "error sending request");
+
+    // A message that is only a URL must not survive either.
+    assert_eq!(
+        super::protocol::strip_error_url(&format!(
+            "error following redirect for url (https://example.test/?key={key})"
+        )),
+        "error following redirect"
+    );
+}
+
+#[test]
+fn response_bodies_are_collapsed_and_bounded() {
+    let body = "{\n  \"error\": \"denied\",\n  \"detail\": \"x\"\n}";
+    let snippet = sanitized_body_snippet(body);
+    assert!(!snippet.contains('\n'), "{snippet}");
+    assert!(snippet.contains("denied"));
+
+    let huge = "a".repeat(10_000);
+    assert!(sanitized_body_snippet(&huge).chars().count() <= 160);
+    assert_eq!(sanitized_body_snippet("   \n\n "), "no response body");
+}
+
+#[test]
+fn redact_url_removes_query_and_user_information() {
+    assert_eq!(
+        redact_url("https://user:pass@example.test/v1/models?key=secret"),
+        "https://example.test/v1/models"
+    );
+    assert_eq!(
+        redact_url("https://example.test/v1/models"),
+        "https://example.test/v1/models"
+    );
+    assert_eq!(redact_url("not a url"), "[invalid URL]");
+}
