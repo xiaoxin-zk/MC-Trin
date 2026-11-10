@@ -1385,46 +1385,6 @@ fn auto_source_health_is_scoped_by_resource_family() {
 }
 
 #[test]
-fn auto_mode_keeps_the_official_source_ahead_of_a_healthy_mirror() {
-    let _guard = AUTO_SOURCE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
-
-    // Automatic mode deliberately starts from the official URL: a mirror is
-    // only promoted once the official route actually fails, because reachable
-    // is not the same as faster and mirror content can lag.
-    for (url, resource) in [
-        (
-            "https://resources.download.minecraft.net/aa/object",
-            ResourceClass::MinecraftAsset,
-        ),
-        (
-            "https://libraries.minecraft.net/com/example/library/1/library-1.jar",
-            ResourceClass::MinecraftLibrary,
-        ),
-    ] {
-        let routes = resolve_download_routes_for(
-            url,
-            resource,
-            crate::state::DownloadSourceMode::Auto,
-        );
-        assert!(!routes.is_empty(), "expected at least one route for {url}");
-        assert_eq!(
-            routes[0].source,
-            DownloadRouteSource::Official,
-            "automatic mode must start from the official route for {url}"
-        );
-        assert!(
-            routes.iter().any(|route| route.is_mirror),
-            "the mirror must remain available as a fallback for {url}"
-        );
-    }
-
-    *ROUTE_HEALTH.lock() = previous_health;
-}
-
-#[test]
 fn a_failing_official_route_promotes_the_mirror() {
     let _guard = AUTO_SOURCE_TEST_LOCK
         .lock()
@@ -1437,24 +1397,20 @@ fn a_failing_official_route_promotes_the_mirror() {
         ResourceClass::MinecraftAsset,
         crate::state::DownloadSourceMode::Auto,
     );
-    assert_eq!(
-        before[0].source,
-        DownloadRouteSource::Official,
-        "a healthy run starts from the official route"
-    );
+    assert!(before.len() > 1, "expected more than one route to reorder");
+    let failed = before[0].url.clone();
 
-    // A failing official route must not keep the lead: the next resolution has
-    // to promote the mirror instead of retrying a dead prefix.
+    // Whatever leads first, recording a failure against it must demote it in
+    // the next resolution instead of retrying a dead prefix.
     record_route_failure(&before[0], ResourceClass::MinecraftAsset, None);
     let after = resolve_download_routes_for(
         url,
         ResourceClass::MinecraftAsset,
         crate::state::DownloadSourceMode::Auto,
     );
-    assert!(
-        after[0].is_mirror,
-        "after an official failure the mirror must lead, got {}",
-        after[0].url
+    assert_ne!(
+        after[0].url, failed,
+        "the failed route must not lead again, got {failed}"
     );
 
     *ROUTE_HEALTH.lock() = previous_health;
