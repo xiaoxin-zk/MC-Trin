@@ -12,9 +12,14 @@ use protocol::{
     ai_network_error, apply_openai_response_format,
     apply_openai_translation_options, apply_responses_translation_options,
     checked_openai_response_stream, google_generation_config,
-    insert_json_option, openai_content, openai_response_stream_content,
-    opencode_headers, text_client,
+    insert_json_option, openai_content, opencode_headers, text_client,
 };
+
+// Only the protocol tests exercise the raw stream reader; production paths go
+// through `checked_openai_response_stream`, so importing it at module scope
+// left an unused import that the lint gate rightly rejects.
+#[cfg(test)]
+use protocol::openai_response_stream_content;
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
