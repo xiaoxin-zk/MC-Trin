@@ -1090,9 +1090,13 @@ where
 /// A batch can commit some objects and still fail overall (a later connection
 /// error, or one object exhausting its retry passes). The caller needs to know
 /// exactly which objects are already on disk: re-fetching them would duplicate
-/// work, and re-counting them would push progress past its total.
+/// work, and re-counting them would push progress past its total. Every item the
+/// batch received appears in exactly one of the three lists; `completed` is the
+/// set the caller excludes by leaving it out of the retry list, not a list it
+/// tests against before starting a download.
 pub(crate) struct AssetBatchOutcome {
-    /// Objects fully handled, including their legacy copies.
+    /// Objects fully handled, including their legacy copies. The caller drops
+    /// these and reports them in the log; it does not consult them per item.
     pub completed: Vec<H2BatchAsset>,
     /// Objects whose content is committed but whose legacy copy still has to
     /// be made. They must never be downloaded again, even under `force`.

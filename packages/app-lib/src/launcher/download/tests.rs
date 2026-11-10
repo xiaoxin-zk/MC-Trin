@@ -635,23 +635,46 @@ fn a_committed_object_still_reports_every_unreported_unit() {
     item.logical_items = 3;
 
     assert_eq!(
-        fallback_progress_units(&item, false),
+        fallback_progress_units(&item, true, false),
         3,
         "an object the batch never reported is fully unreported"
     );
 
     item.object_committed = true;
     assert_eq!(
-        fallback_progress_units(&item, false),
+        fallback_progress_units(&item, true, false),
         3,
         "the batch skipped its callback for this object, so every unit is still owed"
     );
 
     item.object_committed = false;
     assert_eq!(
-        fallback_progress_units(&item, true),
+        fallback_progress_units(&item, true, true),
         2,
         "a fresh download reports its own object, so only the aliases remain"
+    );
+}
+
+#[test]
+fn an_item_with_nothing_left_to_do_reports_nothing() {
+    // The object can become usable between the batch attempt and this pass: the
+    // batch committed it in a retry after the item was queued as failed, or a
+    // concurrent install wrote it. Copying nothing and downloading nothing must
+    // add no bytes, or progress runs ahead of the bytes actually transferred.
+    let mut item = fallback_item("sound/a.ogg", Vec::new());
+    item.logical_items = 4;
+
+    assert_eq!(
+        fallback_progress_units(&item, false, false),
+        0,
+        "no object fetch and no legacy copy means no progress units"
+    );
+
+    item.object_committed = true;
+    assert_eq!(
+        fallback_progress_units(&item, false, false),
+        0,
+        "a committed object with a usable legacy copy does no work and reports nothing"
     );
 }
 

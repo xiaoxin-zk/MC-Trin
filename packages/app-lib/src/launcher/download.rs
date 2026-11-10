@@ -1969,11 +1969,16 @@ fn coalesce_batch_assets(items: Vec<H2BatchAsset>) -> Vec<H2BatchAsset> {
 
 /// Re-shapes a coalesced batch object as a per-file download.
 ///
-/// The URL is deliberately the canonical official one, not the mirror the
-/// batch happened to pick. Route resolution only rewrites official hosts to
-/// mirrors; it has no reverse mapping, so a mirror URL can only ever resolve
-/// back to that same authority. Retrying from the official URL lets the
-/// per-file client fall through to the official host when the mirror is down.
+/// The URL is the canonical official one, not the mirror the batch happened to
+/// pick. Route resolution only rewrites official hosts to mirrors and has no
+/// reverse mapping, so a mirror URL can only ever resolve back to that same
+/// authority. When the mirror is what failed, starting from the official URL is
+/// strictly better: the retry leaves the failing authority entirely. When the
+/// official host is what failed, the retry begins on that same authority again —
+/// the mirror is only reached through the per-file route resolution, which does
+/// run, but not before one more attempt against the host that just failed. That
+/// is still better than retrying a mirror-only URL, which could not reach the
+/// official host at all, but it is not a guarantee of falling through.
 /// The index name is kept so the per-file error context names a file rather
 /// than a hash.
 fn fallback_asset_from_batch(
@@ -2034,9 +2039,18 @@ fn fallback_needs_object(
 ///
 /// The batch reports an object only through its completion callback, and it
 /// skips that callback for an object whose legacy copy failed — so nothing in
-/// the fallback list was counted before, except the one unit the object path
-/// reports itself when it downloads or reuses the object.
-fn fallback_progress_units(item: &FallbackAsset, object_reported: bool) -> u32 {
+/// the fallback list was counted before. A fallback owes units only for work it
+/// actually performs: an object that became usable between the batch attempt and
+/// this pass, with no legacy copy left to make, does nothing and reports
+/// nothing, even though the batch never counted it.
+fn fallback_progress_units(
+    item: &FallbackAsset,
+    did_work: bool,
+    object_reported: bool,
+) -> u32 {
+    if !did_work {
+        return 0;
+    }
     item.logical_items
         .saturating_sub(u32::from(object_reported))
 }
@@ -2375,13 +2389,17 @@ pub async fn download_assets(
                         }
                     }
 
-                    // These entries were never reported by the batch, so
-                    // balance progress and the loading bar for every logical
-                    // index entry they stand for. Nothing is counted twice
-                    // because batch-completed objects never reach this path.
+                    // Report bytes only for the work this pass actually did: an
+                    // object that became usable after the batch attempt, with no
+                    // legacy copy outstanding, transfers nothing. The byte total
+                    // is brought to its final value by `finish()` regardless, so
+                    // staying silent here cannot strand the bar. The loading bar
+                    // is a file counter, not a byte counter: this entry is
+                    // genuinely finished, so it still advances there.
                     if let Some(progress) = &fetch_progress {
                         for _ in 0..fallback_progress_units(
                             &item,
+                            should_fetch_object || should_fetch_legacy,
                             should_fetch_object,
                         ) {
                             progress.add_bytes(item.size).await?;
