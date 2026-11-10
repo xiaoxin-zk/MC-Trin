@@ -53,7 +53,11 @@ vi.mock('@/helpers/ai', async () => {
             },
         ],
     }
-    return { sharedAIState: ref(state), getAIState: async () => state }
+    return {
+        sharedAIState: ref(state),
+        getAIState: async () => state,
+        sanitizeAiErrorText: (value: string) => value,
+    }
 })
 vi.mock('@/helpers/logs', () => ({
     get_crash_analysis_ai_settings: async () => ({ ...calls.settings }),

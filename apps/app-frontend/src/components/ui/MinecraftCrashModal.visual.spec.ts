@@ -102,6 +102,7 @@ vi.mock('@/helpers/events.js', () => ({
     },
 }))
 vi.mock('@/helpers/ai', () => ({
+    sanitizeAiErrorText: (text: string) => text,
     getAIState: async () => ({
         settings: { enabled: true },
         providers: [

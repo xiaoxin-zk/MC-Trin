@@ -26,6 +26,7 @@ vi.mock('@/helpers/instance', () => ({ list: mocks.instances }))
 vi.mock('@/helpers/ai', () => ({
     getAICatalog: mocks.catalog,
     getAIState: mocks.aiState,
+    sanitizeAiErrorText: (text: string) => text,
 }))
 vi.mock('@/helpers/logs', () => ({
     get_crash_analysis_ai_settings: mocks.analysisSettings,
