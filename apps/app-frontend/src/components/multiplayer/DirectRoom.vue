@@ -10,7 +10,12 @@ import {
     type MctierState,
     parseDirectRoomCode,
 } from '@/helpers/mctier'
-import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'
+import {
+    multiplayer,
+    multiplayerErrorText,
+    sanitizeErrorText,
+    validLocalPort,
+} from '@/helpers/multiplayer'
 
 const props = defineProps<{ state?: MctierState }>()
 
@@ -103,7 +108,9 @@ const pending = ref(false)
 const stopping = ref(false)
 const error = ref('')
 /** Backend state errors carry transport detail; the UI shows one sentence. */
-const displayError = computed(() => error.value || sanitizeErrorText(props.state?.error_message ?? ''))
+const displayError = computed(
+    () => error.value || sanitizeErrorText(props.state?.error_message ?? ''),
+)
 
 /** The room this component created or joined, so the other provider's session
  * is never rendered as this one's. */
@@ -136,17 +143,13 @@ const baseValid = computed(
         isValidDirectServerNode(node.value),
 )
 /** Creating needs the room definition the host types. */
-const canCreate = computed(
-    () => baseValid.value && /^[\p{L}\p{N}_-]{4,32}$/u.test(roomName.value),
-)
+const canCreate = computed(() => baseValid.value && /^[\p{L}\p{N}_-]{4,32}$/u.test(roomName.value))
 /**
  * Joining needs a room code or host address, not a typed room name: the code
  * itself carries the name, so requiring both would force the guest to press
  * the decode button before "Join room" became usable.
  */
-const canJoin = computed(
-    () => baseValid.value && parseDirectRoomCode(joinAddress.value) !== null,
-)
+const canJoin = computed(() => baseValid.value && parseDirectRoomCode(joinAddress.value) !== null)
 
 async function start(joining: boolean) {
     if (pending.value) return
@@ -261,8 +264,7 @@ async function stop() {
 
         <template
             v-else-if="
-                pending ||
-                (ownsRoom && ['downloading', 'connecting'].includes(state?.status ?? ''))
+                pending || (ownsRoom && ['downloading', 'connecting'].includes(state?.status ?? ''))
             "
         >
             <p class="m-0 text-sm" role="status">{{ formatMessage(messages.starting) }}</p>
@@ -291,7 +293,9 @@ async function stop() {
                 </span>
             </label>
             <label class="flex flex-col gap-1 text-sm">
-                <span>{{ formatMessage(joinAddress.trim() ? messages.guestPort : messages.port) }}</span>
+                <span>{{
+                    formatMessage(joinAddress.trim() ? messages.guestPort : messages.port)
+                }}</span>
                 <StyledInput v-model="port" name="direct-port" inputmode="numeric" />
             </label>
             <label class="flex flex-col gap-1 text-sm sm:col-span-2">

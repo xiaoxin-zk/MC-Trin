@@ -145,7 +145,8 @@ function isIpv4(value: string): boolean {
     return (
         parts.length === 4 &&
         parts.every(
-            (part) => /^\d{1,3}$/.test(part) && Number(part) <= 255 && String(Number(part)) === part,
+            (part) =>
+                /^\d{1,3}$/.test(part) && Number(part) <= 255 && String(Number(part)) === part,
         )
     )
 }

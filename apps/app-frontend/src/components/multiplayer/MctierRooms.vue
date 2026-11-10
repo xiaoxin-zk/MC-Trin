@@ -13,7 +13,12 @@ import {
     type MctierState,
     parseMctierInviteCode,
 } from '@/helpers/mctier'
-import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'
+import {
+    multiplayer,
+    multiplayerErrorText,
+    sanitizeErrorText,
+    validLocalPort,
+} from '@/helpers/multiplayer'
 
 const props = defineProps<{ state?: MctierState; initialInviteCode?: string }>()
 const { formatMessage } = useVIntl()
@@ -336,7 +341,9 @@ const visibilityOptions = [
 const inviteLoading = ref(false)
 const error = ref('')
 /** Backend state errors carry transport detail; the UI shows one sentence. */
-const displayError = computed(() => error.value || sanitizeErrorText(props.state?.error_message ?? ''))
+const displayError = computed(
+    () => error.value || sanitizeErrorText(props.state?.error_message ?? ''),
+)
 /** The directory cannot list a password-protected room, so publishing clears
  * the password instead of offering a combination the service ignores. */
 watch(isPublic, (isPublicNow) => {
@@ -638,11 +645,7 @@ function prefillInviteFromDeepLink() {
             show-progress
         />
         <p v-if="hostHint" class="m-0 text-xs text-[var(--color-text-tertiary)]">{{ hostHint }}</p>
-        <p
-            v-if="displayError"
-            class="m-0 text-sm text-[var(--color-red)]"
-            role="alert"
-        >
+        <p v-if="displayError" class="m-0 text-sm text-[var(--color-red)]" role="alert">
             {{ displayError }}
         </p>
         <template v-if="connected">
@@ -1073,13 +1076,13 @@ function prefillInviteFromDeepLink() {
             /></label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.node)
-                }}<StyledInput v-model="serverNode" name="server-node"
-                /><span
+                }}<StyledInput v-model="serverNode" name="server-node" /><span
                     v-if="serverNode.trim() && !isValidDirectServerNode(serverNode)"
                     class="text-xs text-[var(--color-red)]"
                 >
                     {{ formatMessage(messages.nodeInvalid) }}
-                </span></label>
+                </span></label
+            >
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.signaling)
                 }}<StyledInput v-model="signalingServer" name="signaling-server"

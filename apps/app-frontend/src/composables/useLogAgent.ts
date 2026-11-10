@@ -93,8 +93,7 @@ async function runTool(
         approval_request: true,
     } as GrantRequest)) as { approval_token?: unknown } | null
     const token = minted && typeof minted.approval_token === 'string' ? minted.approval_token : ''
-    if (!token)
-        throw new Error('This launcher change needs a fresh user approval')
+    if (!token) throw new Error('This launcher change needs a fresh user approval')
     return execute({ ...request, approval: token } as GrantRequest)
 }
 
@@ -105,7 +104,8 @@ const dependencies: Dependencies = {
     local: async (...args) => (await import('../logagent/agent.ts')).runLocalAgent(...args),
     gateway: (runId) => ({
         modelTurn: (turn, onEvent) => backend.modelTurn(runId, turn, onEvent),
-        tool: (request) => runTool(runId, request, (approved) => backend.executeTool(runId, approved)),
+        tool: (request) =>
+            runTool(runId, request, (approved) => backend.executeTool(runId, approved)),
     }),
 }
 
