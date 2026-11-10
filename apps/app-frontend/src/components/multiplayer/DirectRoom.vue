@@ -6,8 +6,8 @@ import { computed, ref } from 'vue'
 import {
     DEFAULT_MCTIER_NODE,
     type DirectRoomRequest,
-    type MctierState,
     isValidDirectServerNode,
+    type MctierState,
     parseDirectRoomCode,
 } from '@/helpers/mctier'
 import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'

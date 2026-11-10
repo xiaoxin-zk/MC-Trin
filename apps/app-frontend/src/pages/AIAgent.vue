@@ -968,7 +968,7 @@ function openAISettings() {
 
 /** Opens the settings section that decides the model when one is auto-picked. */
 function openAssistantModelSettings() {
-    void router.push({ path: '/settings', hash: assistantModelIsAuto ? '#logs' : '#ai' })
+    void router.push({ path: '/settings', hash: assistantModelIsAuto.value ? '#logs' : '#ai' })
 }
 
 function openRequiredSettings() {

@@ -8,9 +8,9 @@ import { useMctierVoice } from '@/composables/useMctierVoice'
 import {
     DEFAULT_MCTIER_NODE,
     DEFAULT_MCTIER_SIGNALING,
+    isValidDirectServerNode,
     type MctierInvite,
     type MctierState,
-    isValidDirectServerNode,
     parseMctierInviteCode,
 } from '@/helpers/mctier'
 import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'
