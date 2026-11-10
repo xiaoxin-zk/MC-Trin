@@ -1383,6 +1383,117 @@ fn auto_source_health_is_scoped_by_resource_family() {
 }
 
 #[test]
+fn auto_mode_leads_with_a_mirror_for_assets_and_libraries() {
+    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // Assets and libraries are the files a mainland network fetches slowly
+    // from the official hosts, so the automatic order has to start with a
+    // mirror while keeping the official route as the fallback.
+    for (url, resource) in [
+        (
+            "https://resources.download.minecraft.net/aa/object",
+            ResourceClass::MinecraftAsset,
+        ),
+        (
+            "https://libraries.minecraft.net/com/example/lib.jar",
+            ResourceClass::MinecraftLibrary,
+        ),
+    ] {
+        let routes = resolve_download_routes_for(
+            url,
+            resource,
+            crate::state::DownloadSourceMode::Auto,
+        );
+        assert!(!routes.is_empty(), "expected at least one route for {url}");
+        assert!(
+            routes[0].is_mirror,
+            "automatic mode must lead with a mirror for {url}, got {}",
+            routes[0].url
+        );
+        assert!(
+            routes.iter().any(|route| !route.is_mirror),
+            "the official source must remain available for {url}"
+        );
+    }
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_failing_mirror_hands_the_lead_back_to_the_official_source() {
+    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let url = "https://resources.download.minecraft.net/bb/object";
+    let before = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::Auto,
+    );
+    assert!(before[0].is_mirror, "a healthy run leads with the mirror");
+
+    // An unreachable mirror must not keep the lead: the next resolution has to
+    // promote the official route instead of retrying a dead prefix.
+    record_route_failure(&before[0], ResourceClass::MinecraftAsset, None);
+    let after = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::Auto,
+    );
+    assert!(
+        !after[0].is_mirror,
+        "after a mirror failure the official route must lead, got {}",
+        after[0].url
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn the_version_manifest_still_prefers_the_official_host() {
+    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // Manifests decide which files get downloaded at all, so a stale mirror is
+    // worse than a slow one: this route keeps its official-first order.
+    let routes = resolve_download_routes_for(
+        "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+        ResourceClass::Metadata,
+        crate::state::DownloadSourceMode::Auto,
+    );
+    assert_eq!(routes[0].source, DownloadRouteSource::Official);
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn explicit_source_modes_override_the_automatic_order() {
+    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let url = "https://resources.download.minecraft.net/cc/object";
+    let official_only = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::OfficialOnly,
+    );
+    assert!(
+        official_only.iter().all(|route| !route.is_mirror),
+        "official-only must not offer a mirror"
+    );
+
+    let mirror_preferred = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::MirrorPreferred,
+    );
+    assert!(mirror_preferred[0].is_mirror);
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
 fn disabled_tianpao_routes_leave_official_cdn_available() {
     let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
@@ -1801,7 +1912,7 @@ fn loader_libraries_prefer_mirrors_with_an_official_fallback() {
 }
 
 #[test]
-fn auto_loader_routes_start_official_and_retain_explicit_mirror_preference() {
+fn auto_loader_routes_lead_with_a_mirror_and_fall_back_to_official() {
     let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
     for source in [
@@ -1809,27 +1920,36 @@ fn auto_loader_routes_start_official_and_retain_explicit_mirror_preference() {
         "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml",
         "https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml",
     ] {
+        // Automatic mode leads with a mirror: the official hosts are the slow
+        // route from mainland networks, and a mirror only yields when it fails.
         let routes = resolve_download_routes_for(
             source,
             ResourceClass::Loader,
             crate::state::DownloadSourceMode::Auto,
         );
-        assert_eq!(routes[0].url, source);
-        assert_eq!(routes[0].source, DownloadRouteSource::Official);
-        assert!(routes[1..].iter().any(|route| route.is_mirror));
-        let mirrors = resolve_download_routes_for(
-            source,
-            ResourceClass::Loader,
-            crate::state::DownloadSourceMode::MirrorPreferred,
+        assert!(routes[0].is_mirror);
+        assert!(
+            routes
+                .iter()
+                .any(|route| route.source == DownloadRouteSource::Official),
+            "the official source must stay available as a fallback"
         );
-        assert!(mirrors[0].is_mirror);
+        // An unavailable mirror hands the lead back to the official source.
         record_route_failure(&routes[0], ResourceClass::Loader, None);
         let after_failure = resolve_download_routes_for(
             source,
             ResourceClass::Loader,
             crate::state::DownloadSourceMode::Auto,
         );
-        assert!(after_failure[0].is_mirror);
+        assert_eq!(after_failure[0].url, source);
+        assert_eq!(after_failure[0].source, DownloadRouteSource::Official);
+        // An explicit preference still wins over the automatic ordering.
+        let official = resolve_download_routes_for(
+            source,
+            ResourceClass::Loader,
+            crate::state::DownloadSourceMode::OfficialPreferred,
+        );
+        assert_eq!(official[0].source, DownloadRouteSource::Official);
     }
     *ROUTE_HEALTH.lock() = previous_health;
 }

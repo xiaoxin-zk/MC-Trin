@@ -118,12 +118,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - name: Linux x64
-            runner: ubuntu-24.04
-            platform: linux
-          - name: Linux arm64
-            runner: ubuntu-24.04-arm
-            platform: linux
+          # Only Windows is published for now. The other platforms still run
+          # in the desktop CI workflow so their builds stay verified.
           - name: Windows x64
             runner: windows-2025
             platform: windows
@@ -194,105 +190,13 @@ jobs:
         shell: bash
         run: node scripts/axolotl/upload-release-assets.mjs "$GITHUB_REF_NAME" target/release-assets/upload
 
-  macos-build:
-    name: Compile macOS (${{ matrix.target }})
-    needs: preflight
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - runner: macos-26
-            target: aarch64-apple-darwin
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    permissions:
-      contents: read
-      actions: read
-    env:
-      SQLX_OFFLINE: true
-      CARGO_PROFILE_RELEASE_LTO: 'true'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          submodules: recursive
-      - name: Setup desktop build
-        uses: ./.github/actions/setup-desktop-build
-        with:
-          profile: release
-          target: ${{ matrix.target }}
-          save-cache: 'true'
-      - name: Set release version
-        run: node scripts/axolotl/set-version.mjs "${{ github.ref_name }}"
-      - name: Compile native macOS binary with full LTO
-        env:
-          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-        run: node scripts/axolotl/build-desktop.mjs --profile release --target "${{ matrix.target }}"
-      - name: Upload macOS build artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: macos-${{ matrix.target }}
-          overwrite: true
-          path: |
-            target/${{ matrix.target }}/release/MC-Trin
-            target/${{ matrix.target }}/release/axolotl-build.json
-          retention-days: 7
-          if-no-files-found: error
-
-  macos-universal:
-    name: Package macOS universal
-    needs: [preflight, macos-build]
-    runs-on: macos-26
-    permissions:
-      contents: write
-      actions: read
-    env:
-      SQLX_OFFLINE: true
-      CARGO_PROFILE_RELEASE_LTO: 'true'
-      TAURI_BUNDLER_DMG_IGNORE_CI: 'true'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          submodules: recursive
-      - name: Setup desktop build
-        uses: ./.github/actions/setup-desktop-build
-        with:
-          profile: release
-          package-only: 'true'
-      - name: Download macOS ARM64 build artifacts
-        uses: ./.github/actions/download-run-artifact
-        with:
-          name: macos-aarch64-apple-darwin
-          path: target/macos-input/aarch64-apple-darwin
-      - name: Download macOS x64 build artifacts
-        uses: ./.github/actions/download-run-artifact
-        with:
-          name: macos-x86_64-apple-darwin
-          path: target/macos-input/x86_64-apple-darwin
-      - name: Set release version
-        run: node scripts/axolotl/set-version.mjs "${{ github.ref_name }}"
-      - name: Merge architectures and package signed updater
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          node scripts/axolotl/package-macos-universal.mjs
-          node scripts/axolotl/stage-release-assets.mjs --input target/universal-apple-darwin/release/bundle --output target/release-assets/upload --platform macos
-      - name: Upload macOS release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/axolotl/upload-release-assets.mjs "$GITHUB_REF_NAME" target/release-assets/upload
-
   verify-and-publish:
     name: Publish GitHub release
-    needs: [build, macos-universal]
+    needs: [build]
     if: >-
       ${{ always() && !cancelled() &&
           (github.event_name == 'workflow_dispatch' ||
-           (github.event_name == 'push' && needs.build.result == 'success' && needs.macos-universal.result == 'success')) }}
+           (github.event_name == 'push' && needs.build.result == 'success')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

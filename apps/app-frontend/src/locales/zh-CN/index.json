@@ -16602,7 +16602,7 @@
     "message": "选择 .minecraft 目录"
   },
   "app.settings.resources.source.automatic": {
-    "message": "自动（推荐）"
+    "message": "自动：优先镜像，镜像不可用时切官方（推荐）"
   },
   "app.settings.resources.source.mirror-preferred": {
     "message": "优先镜像源"
@@ -16623,7 +16623,7 @@
     "message": "优先官方源"
   },
   "app.settings.resources.source.open-bmcl-api": {
-    "message": "优先 BMCLAPI 国内镜像"
+    "message": "仅优先 BMCLAPI 国内镜像"
   },
   "app.settings.resources.system-downloads-directory": {
     "message": "系统 Downloads 文件夹"

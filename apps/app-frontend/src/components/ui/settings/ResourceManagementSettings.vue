@@ -439,7 +439,7 @@ const messages = defineMessages({
     },
     automaticSource: {
         id: 'app.settings.resources.source.automatic',
-        defaultMessage: 'Automatic (recommended)',
+        defaultMessage: 'Automatic: mirror first, official fallback (recommended)',
     },
     officialPreferredSource: {
         id: 'app.settings.resources.source.official-preferred',
@@ -455,7 +455,7 @@ const messages = defineMessages({
     },
     openBmclApiSource: {
         id: 'app.settings.resources.source.open-bmcl-api',
-        defaultMessage: 'Prefer BMCLAPI (OpenBMCLAPI)',
+        defaultMessage: 'Mirror only preference (BMCLAPI)',
     },
     minecraftMetadataSource: {
         id: 'app.settings.resources.minecraft-metadata-source',

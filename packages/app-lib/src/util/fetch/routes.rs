@@ -386,11 +386,12 @@ pub(super) fn order_auto_routes(
                     .cmp(&right_health.consecutive_failures)
             })
             .then_with(|| {
-                // Automatic content downloads start from the supplied
-                // official URL. Health can still move a failing official
-                // route behind a mirror, but connectivity alone is not a
-                // reason to call a mirror faster.
-                (!is_official_route(left)).cmp(&(!is_official_route(right)))
+                // Automatic downloads lead with a mirror. The official host is
+                // the slow route from mainland networks, and a route only moves
+                // behind another when it actually failed (the comparisons
+                // above), so an unavailable mirror hands over to the official
+                // source instead of stalling.
+                (right.is_mirror).cmp(&(left.is_mirror))
             })
             .then_with(|| {
                 (right_health.success_samples > 0)
@@ -406,7 +407,9 @@ pub(super) fn order_auto_routes(
                 };
                 ordering.unwrap_or(std::cmp::Ordering::Equal)
             })
-            .then_with(|| left.is_mirror.cmp(&right.is_mirror))
+            .then_with(|| {
+                (!is_official_route(left)).cmp(&(!is_official_route(right)))
+            })
     });
 }
 

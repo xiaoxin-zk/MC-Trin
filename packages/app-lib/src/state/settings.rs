@@ -323,6 +323,30 @@ pub enum FeatureFlag {
     AutoInstallDependencies,
 }
 
+/// Decides which directory to record as `prev_custom_dir` for a settings write.
+///
+/// The startup relocation only runs when that value is set, so a caller that
+/// changes `custom_dir` without naming the directory it left would strand every
+/// instance on the previous disk. An explicit value always wins; otherwise the
+/// stored directory is handed over whenever it differs from the new one.
+fn directory_handover(
+    requested_prev: Option<&str>,
+    stored_custom: Option<&str>,
+    new_custom: Option<&str>,
+) -> Option<String> {
+    if requested_prev.is_some() {
+        return requested_prev.map(str::to_string);
+    }
+    let stored = stored_custom?.trim();
+    if stored.is_empty() {
+        return None;
+    }
+    if new_custom.map(str::trim) == Some(stored) {
+        return None;
+    }
+    Some(stored.to_string())
+}
+
 impl Settings {
     const CURRENT_VERSION: usize = 3;
 
@@ -647,23 +671,23 @@ impl Settings {
         // The startup relocation only runs when `prev_custom_dir` is set, and
         // the UI lets the path be typed directly, so trusting the caller to
         // remember it left instances stranded on the previous disk.
-        let mut prev_custom_dir = self.prev_custom_dir.clone();
-        if prev_custom_dir.is_none() {
-            let stored: Option<Option<String>> = sqlx::query_scalar(
-                "SELECT custom_dir FROM settings WHERE id = 0",
-            )
-            .fetch_optional(&mut *connection)
-            .await?;
-            if let Some(Some(stored_dir)) = stored {
-                let trimmed = stored_dir.trim();
-                if !trimmed.is_empty()
-                    && self.custom_dir.as_deref().map(str::trim)
-                        != Some(trimmed)
-                {
-                    prev_custom_dir = Some(trimmed.to_string());
-                }
-            }
-        }
+        let stored_custom_dir: Option<Option<String>> = if self
+            .prev_custom_dir
+            .is_none()
+        {
+            sqlx::query_scalar("SELECT custom_dir FROM settings WHERE id = 0")
+                .fetch_optional(&mut *connection)
+                .await?
+        } else {
+            None
+        };
+        let prev_custom_dir = directory_handover(
+            self.prev_custom_dir.as_deref(),
+            stored_custom_dir
+                .as_ref()
+                .and_then(|value| value.as_deref()),
+            self.custom_dir.as_deref(),
+        );
         let max_concurrent_writes = self.max_concurrent_writes as i32;
         let max_concurrent_downloads =
             self.max_concurrent_downloads
@@ -1307,6 +1331,67 @@ impl DefaultPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changing_the_directory_records_the_one_being_left() {
+        // Without this the startup relocation never runs, which is what left
+        // instances on the old disk.
+        assert_eq!(
+            directory_handover(
+                None,
+                Some(r"D:\Old\MC-Trin"),
+                Some(r"E:\New\MC-Trin"),
+            ),
+            Some(r"D:\Old\MC-Trin".to_string())
+        );
+    }
+
+    #[test]
+    fn an_explicit_previous_directory_is_never_overwritten() {
+        assert_eq!(
+            directory_handover(
+                Some(r"D:\Chosen\MC-Trin"),
+                Some(r"E:\Stored\MC-Trin"),
+                Some(r"F:\New\MC-Trin"),
+            ),
+            Some(r"D:\Chosen\MC-Trin".to_string())
+        );
+    }
+
+    #[test]
+    fn re_saving_the_same_directory_records_nothing() {
+        assert_eq!(
+            directory_handover(
+                None,
+                Some(r"D:\Same\MC-Trin"),
+                Some(r"D:\Same\MC-Trin"),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_change_without_a_stored_directory_records_nothing() {
+        assert_eq!(
+            directory_handover(None, None, Some(r"E:\New\MC-Trin")),
+            None
+        );
+        assert_eq!(
+            directory_handover(None, Some("   "), Some(r"E:\New\MC-Trin")),
+            None,
+            "a blank stored value is not a directory to relocate"
+        );
+    }
+
+    #[test]
+    fn clearing_the_override_still_records_the_stored_directory() {
+        // Resetting to the default location has to move the instances back, so
+        // the stored custom directory is the one to relocate from.
+        assert_eq!(
+            directory_handover(None, Some(r"D:\Custom\MC-Trin"), None),
+            Some(r"D:\Custom\MC-Trin".to_string())
+        );
+    }
 
     #[test]
     fn home_layout_uses_stable_wire_values() {
