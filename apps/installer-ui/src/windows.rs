@@ -1,4 +1,4 @@
-﻿use std::{
+use std::{
     env, fs,
     io::Write,
     os::windows::process::CommandExt,
@@ -517,13 +517,6 @@ fn validate_request(
     let _ = fs::remove_file(write_test);
 
     Ok(())
-}
-
-fn normalized_path_key(path: &Path) -> String {
-    path.to_string_lossy()
-        .trim_end_matches(['\\', '/'])
-        .replace('/', "\\")
-        .to_lowercase()
 }
 
 fn dialog_initial_location(path: &Path) -> Option<PathBuf> {
