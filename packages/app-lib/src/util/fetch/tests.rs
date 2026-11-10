@@ -1360,7 +1360,9 @@ fn log_urls_keep_route_but_remove_credentials_and_fragments() {
 
 #[test]
 fn auto_source_health_is_scoped_by_resource_family() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
     let manifest_url =
         "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
@@ -1384,7 +1386,9 @@ fn auto_source_health_is_scoped_by_resource_family() {
 
 #[test]
 fn auto_mode_keeps_the_official_source_ahead_of_a_healthy_mirror() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
     // Automatic mode deliberately starts from the official URL: a mirror is
@@ -1422,7 +1426,9 @@ fn auto_mode_keeps_the_official_source_ahead_of_a_healthy_mirror() {
 
 #[test]
 fn a_failing_official_route_promotes_the_mirror() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
     let url = "https://resources.download.minecraft.net/bb/object";
@@ -1456,7 +1462,9 @@ fn a_failing_official_route_promotes_the_mirror() {
 
 #[test]
 fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
     // MCIM asks to be tried after the official hosts on every request, so it
@@ -1492,7 +1500,9 @@ fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
 
 #[test]
 fn the_version_manifest_still_prefers_the_official_host() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
     // Manifests decide which files get downloaded at all, so a stale mirror is
@@ -1509,7 +1519,9 @@ fn the_version_manifest_still_prefers_the_official_host() {
 
 #[test]
 fn explicit_source_modes_override_the_automatic_order() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
     let url = "https://resources.download.minecraft.net/cc/object";
@@ -1535,7 +1547,9 @@ fn explicit_source_modes_override_the_automatic_order() {
 
 #[test]
 fn disabled_tianpao_routes_leave_official_cdn_available() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
     let url =
         "https://cdn-alt.modrinth.com/data/project/versions/version/file.jar";
@@ -1953,7 +1967,9 @@ fn loader_libraries_prefer_mirrors_with_an_official_fallback() {
 
 #[test]
 fn auto_loader_routes_keep_official_when_no_mirror_exists() {
-    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
     for source in [
         "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
