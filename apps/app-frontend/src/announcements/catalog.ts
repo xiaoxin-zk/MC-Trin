@@ -1,4 +1,4 @@
-export type AnnouncementLocale = 'en-US' | 'zh-CN'
+﻿export type AnnouncementLocale = 'en-US' | 'zh-CN'
 
 export type AnnouncementChangeType =
     'added' | 'changed' | 'deprecated' | 'removed' | 'fixed' | 'security'
@@ -5365,6 +5365,12 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                         'Added multiplayer and AI assistant steps to the first-run tour, with a configurable push-to-talk key.',
                     'zh-CN': '首次使用引导新增联机与 AI 助手步骤；语音按键说话支持自定义按键。',
                 },
+                {
+                    'en-US':
+                        'The installer now asks for one folder. A normal install keeps data in a data subfolder that survives uninstalling; a portable install keeps everything together.',
+                    'zh-CN':
+                        '安装程序现在只需选择一个文件夹。正常安装把数据放在 data 子文件夹，卸载默认保留；便携安装则全部集中在一起。',
+                },
             ],
             fixed: [
                 {
@@ -5376,6 +5382,22 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                     'en-US':
                         'Fixed publishing a lobby leaving the host with an unconfirmed status instead of a verified answer.',
                     'zh-CN': '修复发布大厅后房主只能看到未确认状态、无法获得确切结果的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed modpack installation failing with a network error when a system proxy blocked the batched asset download.',
+                    'zh-CN':
+                        '修复系统代理导致批量资源下载不可用时，整合包安装直接报网络错误的问题。',
+                },
+                {
+                    'en-US':
+                        "Fixed moving the backup repository failing on SQLite's transient shared-memory files.",
+                    'zh-CN': '修复移动备份仓库时因 SQLite 临时共享内存文件而失败的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed instances staying on the previous disk after changing the app directory.',
+                    'zh-CN': '修复更改应用目录后实例仍留在原磁盘的问题。',
                 },
             ],
         },
