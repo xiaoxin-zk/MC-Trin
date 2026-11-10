@@ -1,16 +1,6 @@
 name: Notify Discord release
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        type: string
-    secrets:
-      DISCORD_BOT_TOKEN:
-        required: false
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:

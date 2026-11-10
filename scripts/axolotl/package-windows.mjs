@@ -23,7 +23,6 @@ const { values } = parseArgs({
 if (process.platform !== 'win32') throw new Error('Windows packaging requires Windows')
 const profile = values.profile
 requireProfile(profile)
-const withUpdaterArtifacts = profile === 'release' && Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY)
 const source = path.join(root, 'target', profile)
 const binary = requireFile(path.join(source, 'MC-Trin.exe'))
 const initialHash = sha256(binary)
@@ -56,8 +55,6 @@ for (const variant of ['modern', 'native']) {
         '--config',
         `tauri-${variant}.conf.json`,
     ]
-    if (variant === 'modern' && withUpdaterArtifacts)
-        args.push('--config', 'tauri-updater.conf.json')
     if (profile === 'ci') args.push('--no-sign')
     run(pnpmCommand(), args, { cwd: app })
     const installers = fs.readdirSync(bundleDirectory).filter((file) => file.endsWith('-setup.exe'))
@@ -67,18 +64,6 @@ for (const variant of ['modern', 'native']) {
     fs.copyFileSync(installer, path.join(destination, name))
     if (variant === 'native' && fs.existsSync(`${installer}.sig`)) {
         fs.copyFileSync(`${installer}.sig`, path.join(destination, `${name}.sig`))
-    }
-    if (withUpdaterArtifacts && variant === 'modern') {
-        requireFile(`${installer}.sig`)
-        fs.copyFileSync(`${installer}.sig`, path.join(destination, `${name}.sig`))
-        const archives = fs
-            .readdirSync(bundleDirectory)
-            .filter((file) => file.endsWith('-setup.nsis.zip'))
-        if (archives.length !== 1) throw new Error('Missing modern updater archive')
-        for (const suffix of ['', '.sig']) {
-            const file = requireFile(path.join(bundleDirectory, `${archives[0]}${suffix}`))
-            fs.copyFileSync(file, path.join(destination, path.basename(file)))
-        }
     }
 }
 if (sha256(binary) !== initialHash) throw new Error('Packaging changed the compiled application')

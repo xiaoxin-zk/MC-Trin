@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
 const CRATES = [
-    { root: 'apps/app', package: 'theseus_gui', features: ['updater'] },
+    { root: 'apps/app', package: 'theseus_gui' },
     { root: 'apps/installer-ui', package: 'axolotl-installer-ui' },
     { root: 'packages/app-lib', package: 'theseus', moduleTests: true },
     { root: 'packages/content-management', package: 'content-management' },

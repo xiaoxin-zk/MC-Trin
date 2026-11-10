@@ -301,7 +301,7 @@ jobs:
             --skip synced_ \
             --skip util::download::endpoint_selection::benchmark::range_recovery \
             --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream
-      - run: cargo check --package theseus_gui --features updater
+      - run: cargo check --package theseus_gui
       - name: Test synchronized instance features
         if: runner.os == 'Linux'
         timeout-minutes: 20
@@ -325,7 +325,6 @@ jobs:
         run: >-
           cargo nextest run
           --package theseus_gui
-          --features updater
           --no-fail-fast
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'
