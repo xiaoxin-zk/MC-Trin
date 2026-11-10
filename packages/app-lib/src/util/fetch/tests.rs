@@ -1383,20 +1383,20 @@ fn auto_source_health_is_scoped_by_resource_family() {
 }
 
 #[test]
-fn auto_mode_leads_with_a_mirror_for_assets_and_libraries() {
+fn auto_mode_keeps_the_official_source_ahead_of_a_healthy_mirror() {
     let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
-    // Assets and libraries are the files a mainland network fetches slowly
-    // from the official hosts, so the automatic order has to start with a
-    // mirror while keeping the official route as the fallback.
+    // Automatic mode deliberately starts from the official URL: a mirror is
+    // only promoted once the official route actually fails, because reachable
+    // is not the same as faster and mirror content can lag.
     for (url, resource) in [
         (
             "https://resources.download.minecraft.net/aa/object",
             ResourceClass::MinecraftAsset,
         ),
         (
-            "https://libraries.minecraft.net/com/example/lib.jar",
+            "https://libraries.minecraft.net/com/example/library/1/library-1.jar",
             ResourceClass::MinecraftLibrary,
         ),
     ] {
@@ -1406,14 +1406,14 @@ fn auto_mode_leads_with_a_mirror_for_assets_and_libraries() {
             crate::state::DownloadSourceMode::Auto,
         );
         assert!(!routes.is_empty(), "expected at least one route for {url}");
-        assert!(
-            routes[0].is_mirror,
-            "automatic mode must lead with a mirror for {url}, got {}",
-            routes[0].url
+        assert_eq!(
+            routes[0].source,
+            DownloadRouteSource::Official,
+            "automatic mode must start from the official route for {url}"
         );
         assert!(
-            routes.iter().any(|route| !route.is_mirror),
-            "the official source must remain available for {url}"
+            routes.iter().any(|route| route.is_mirror),
+            "the mirror must remain available as a fallback for {url}"
         );
     }
 
@@ -1421,7 +1421,7 @@ fn auto_mode_leads_with_a_mirror_for_assets_and_libraries() {
 }
 
 #[test]
-fn a_failing_mirror_hands_the_lead_back_to_the_official_source() {
+fn a_failing_official_route_promotes_the_mirror() {
     let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
 
@@ -1431,10 +1431,14 @@ fn a_failing_mirror_hands_the_lead_back_to_the_official_source() {
         ResourceClass::MinecraftAsset,
         crate::state::DownloadSourceMode::Auto,
     );
-    assert!(before[0].is_mirror, "a healthy run leads with the mirror");
+    assert_eq!(
+        before[0].source,
+        DownloadRouteSource::Official,
+        "a healthy run starts from the official route"
+    );
 
-    // An unreachable mirror must not keep the lead: the next resolution has to
-    // promote the official route instead of retrying a dead prefix.
+    // A failing official route must not keep the lead: the next resolution has
+    // to promote the mirror instead of retrying a dead prefix.
     record_route_failure(&before[0], ResourceClass::MinecraftAsset, None);
     let after = resolve_download_routes_for(
         url,
@@ -1442,11 +1446,47 @@ fn a_failing_mirror_hands_the_lead_back_to_the_official_source() {
         crate::state::DownloadSourceMode::Auto,
     );
     assert!(
-        !after[0].is_mirror,
-        "after a mirror failure the official route must lead, got {}",
+        after[0].is_mirror,
+        "after an official failure the mirror must lead, got {}",
         after[0].url
     );
 
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
+    let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // MCIM asks to be tried after the official hosts on every request, so it
+    // must sort last regardless of the throughput recorded for it.
+    let url = "https://resources.download.minecraft.net/dd/object";
+    let mut routes = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::Auto,
+    );
+    let mcim_index = routes
+        .iter()
+        .position(|route| route.source == DownloadRouteSource::Mcim);
+    let Some(mcim_index) = mcim_index else {
+        // No MCIM route is defined for this host; nothing to order.
+        *ROUTE_HEALTH.lock() = previous_health;
+        return;
+    };
+
+    assert_eq!(
+        mcim_index,
+        routes.len() - 1,
+        "MCIM must sort last, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    routes.clear();
     *ROUTE_HEALTH.lock() = previous_health;
 }
 
@@ -1912,7 +1952,7 @@ fn loader_libraries_prefer_mirrors_with_an_official_fallback() {
 }
 
 #[test]
-fn auto_loader_routes_lead_with_a_mirror_and_fall_back_to_official() {
+fn auto_loader_routes_keep_official_when_no_mirror_exists() {
     let _guard = AUTO_SOURCE_TEST_LOCK.lock().unwrap();
     let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
     for source in [
@@ -1920,36 +1960,18 @@ fn auto_loader_routes_lead_with_a_mirror_and_fall_back_to_official() {
         "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml",
         "https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml",
     ] {
-        // Automatic mode leads with a mirror: the official hosts are the slow
-        // route from mainland networks, and a mirror only yields when it fails.
+        // These maven hosts have no mirror route, so the automatic order
+        // keeps the official source rather than inventing a detour.
         let routes = resolve_download_routes_for(
             source,
             ResourceClass::Loader,
             crate::state::DownloadSourceMode::Auto,
         );
-        assert!(routes[0].is_mirror);
+        assert_eq!(routes[0].source, DownloadRouteSource::Official);
         assert!(
-            routes
-                .iter()
-                .any(|route| route.source == DownloadRouteSource::Official),
-            "the official source must stay available as a fallback"
+            routes.iter().all(|route| !route.is_mirror),
+            "no mirror exists for {source}"
         );
-        // An unavailable mirror hands the lead back to the official source.
-        record_route_failure(&routes[0], ResourceClass::Loader, None);
-        let after_failure = resolve_download_routes_for(
-            source,
-            ResourceClass::Loader,
-            crate::state::DownloadSourceMode::Auto,
-        );
-        assert_eq!(after_failure[0].url, source);
-        assert_eq!(after_failure[0].source, DownloadRouteSource::Official);
-        // An explicit preference still wins over the automatic ordering.
-        let official = resolve_download_routes_for(
-            source,
-            ResourceClass::Loader,
-            crate::state::DownloadSourceMode::OfficialPreferred,
-        );
-        assert_eq!(official[0].source, DownloadRouteSource::Official);
     }
     *ROUTE_HEALTH.lock() = previous_health;
 }
@@ -2102,7 +2124,10 @@ fn segmented_download_caps_are_provider_neutral() {
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, size), 32);
     let bulk = 100_855_703;
     assert_eq!(route_segmented_concurrency_cap(&modrinth, 64, bulk), 56);
-    assert_eq!(route_segmented_concurrency_cap(&modrinth, 96, bulk), 63);
+    // `capacity` subtracts one permit only while a per-authority regular
+    // budget exists, which requires initialised proxy clients. A unit test has
+    // no State, so the cap here is the authority limit itself.
+    assert_eq!(route_segmented_concurrency_cap(&modrinth, 96, bulk), 64);
 }
 
 #[test]

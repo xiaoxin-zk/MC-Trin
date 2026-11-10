@@ -378,20 +378,22 @@ pub(super) fn order_auto_routes(
             left_health.cooldown_until.is_some_and(|until| until > now);
         let right_cooling =
             right_health.cooldown_until.is_some_and(|until| until > now);
-        left_cooling
-            .cmp(&right_cooling)
+        // MCIM is a fallback whatever the health data says: it asks for
+        // official sources to be tried first on every request.
+        (left.source == DownloadRouteSource::Mcim)
+            .cmp(&(right.source == DownloadRouteSource::Mcim))
+            .then_with(|| left_cooling.cmp(&right_cooling))
             .then_with(|| {
                 left_health
                     .consecutive_failures
                     .cmp(&right_health.consecutive_failures)
             })
             .then_with(|| {
-                // Automatic downloads lead with a mirror. The official host is
-                // the slow route from mainland networks, and a route only moves
-                // behind another when it actually failed (the comparisons
-                // above), so an unavailable mirror hands over to the official
-                // source instead of stalling.
-                (right.is_mirror).cmp(&(left.is_mirror))
+                // Automatic content downloads start from the supplied
+                // official URL. Health can still move a failing official
+                // route behind a mirror, but connectivity alone is not a
+                // reason to call a mirror faster.
+                (!is_official_route(left)).cmp(&(!is_official_route(right)))
             })
             .then_with(|| {
                 (right_health.success_samples > 0)
@@ -407,9 +409,7 @@ pub(super) fn order_auto_routes(
                 };
                 ordering.unwrap_or(std::cmp::Ordering::Equal)
             })
-            .then_with(|| {
-                (!is_official_route(left)).cmp(&(!is_official_route(right)))
-            })
+            .then_with(|| left.is_mirror.cmp(&right.is_mirror))
     });
 }
 
