@@ -23,7 +23,6 @@ mod windows {
             prev_custom_dir: String,
         },
         Clear,
-        Ignore,
     }
 
     fn normalize_directory(path: &str) -> Option<String> {
@@ -46,19 +45,10 @@ mod windows {
     }
 
     fn decide_pending_directory(
-        pending_directory: Option<&str>,
+        pending_directory: &str,
         default_directory: &Path,
         settings_initialized: bool,
-        portable: bool,
     ) -> PendingDirectoryDecision {
-        if portable {
-            return PendingDirectoryDecision::Ignore;
-        }
-
-        let Some(pending_directory) = pending_directory else {
-            return PendingDirectoryDecision::Ignore;
-        };
-
         if settings_initialized {
             return PendingDirectoryDecision::Clear;
         }
@@ -82,15 +72,18 @@ mod windows {
         }
     }
 
-    /// Finds the pending directory an installer recorded, with the key it
-    /// belongs to.
+    /// Finds the pending directory an installer recorded, if any.
     ///
     /// Every key is tried and the first one that actually *has* the value wins,
     /// because the installer creates its own key on every run: stopping at the
     /// first openable key would make the legacy fallback unreachable. A key that
     /// cannot be read is stepped over so one restrictive ACL does not hide a
     /// value recorded by the other installer.
-    fn find_pending_directory() -> crate::Result<Option<String>> {
+    ///
+    /// Nothing here is worth failing the launch over: a machine whose registry
+    /// cannot be read simply keeps its configured directory, which is the same
+    /// result as an install that never recorded one.
+    fn find_pending_directory() -> Option<String> {
         for path in INSTALLER_REGISTRY_KEYS {
             let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
                 .open_subkey_with_flags(path, KEY_READ)
@@ -98,12 +91,18 @@ mod windows {
                 continue;
             };
             match key.get_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
-                Ok(value) => return Ok(Some(value)),
+                Ok(value) => return Some(value),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    tracing::warn!(
+                        key = path,
+                        %error,
+                        "Could not read the installer's pending directory"
+                    );
+                }
             }
         }
-        Ok(None)
+        None
     }
 
     /// Removes the recorded value so it is only applied once.
@@ -112,7 +111,7 @@ mod windows {
     /// rather than for every launch. A key that cannot be written leaves the
     /// value in place, which costs one redundant re-apply instead of failing the
     /// startup that already succeeded.
-    fn clear_pending_directory() -> crate::Result<()> {
+    fn clear_pending_directory() {
         for path in INSTALLER_REGISTRY_KEYS {
             let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
                 .open_subkey_with_flags(path, KEY_SET_VALUE)
@@ -120,12 +119,18 @@ mod windows {
                 continue;
             };
             match key.delete_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
-                Ok(()) => return Ok(()),
+                Ok(()) => return,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    tracing::warn!(
+                        key = path,
+                        %error,
+                        "Could not clear the installer's pending directory"
+                    );
+                    return;
+                }
             }
         }
-        Ok(())
     }
 
     pub async fn apply_pending_installer_directory(
@@ -137,10 +142,9 @@ mod windows {
             return Ok(());
         }
 
-        let Some(pending_directory) = find_pending_directory()? else {
+        let Some(pending_directory) = find_pending_directory() else {
             return Ok(());
         };
-        let pending_directory = Some(pending_directory);
         let default_directory = DirectoryInfo::initial_settings_dir_path(
             app_identifier,
         )
@@ -151,10 +155,9 @@ mod windows {
             settings.custom_dir.is_some() || settings.prev_custom_dir.is_some();
 
         match decide_pending_directory(
-            pending_directory.as_deref(),
+            &pending_directory,
             &default_directory,
             settings_initialized,
-            false,
         ) {
             PendingDirectoryDecision::Apply {
                 custom_dir,
@@ -166,12 +169,11 @@ mod windows {
                 settings.custom_dir = Some(custom_dir);
                 settings.prev_custom_dir = Some(prev_custom_dir);
                 settings.update(pool).await?;
-                clear_pending_directory()?;
+                clear_pending_directory();
             }
             PendingDirectoryDecision::Clear => {
-                clear_pending_directory()?;
+                clear_pending_directory();
             }
-            PendingDirectoryDecision::Ignore => {}
         }
 
         Ok(())
@@ -203,9 +205,8 @@ mod windows {
         fn applies_a_custom_installer_directory() {
             assert_eq!(
                 decide_pending_directory(
-                    Some(r"D:\Minecraft\Axolotl"),
+                    r"D:\Minecraft\Axolotl",
                     &default_directory(),
-                    false,
                     false,
                 ),
                 PendingDirectoryDecision::Apply {
@@ -221,9 +222,8 @@ mod windows {
         fn clears_a_default_installer_directory() {
             assert_eq!(
                 decide_pending_directory(
-                    Some(r"C:\Users\Test\AppData\Roaming\red.ghs.axolotl\"),
+                    r"C:\Users\Test\AppData\Roaming\red.ghs.axolotl\",
                     &default_directory(),
-                    false,
                     false,
                 ),
                 PendingDirectoryDecision::Clear
@@ -234,10 +234,9 @@ mod windows {
         fn does_not_override_existing_settings() {
             assert_eq!(
                 decide_pending_directory(
-                    Some(r"D:\Minecraft\Axolotl"),
+                    r"D:\Minecraft\Axolotl",
                     &default_directory(),
                     true,
-                    false,
                 ),
                 PendingDirectoryDecision::Clear
             );
@@ -245,30 +244,13 @@ mod windows {
 
         #[test]
         fn clears_invalid_relative_and_root_directories() {
+            let default_directory = default_directory();
             for path in ["relative", r"C:\", ""] {
                 assert_eq!(
-                    decide_pending_directory(
-                        Some(path),
-                        &default_directory(),
-                        false,
-                        false,
-                    ),
+                    decide_pending_directory(path, &default_directory, false),
                     PendingDirectoryDecision::Clear
                 );
             }
-        }
-
-        #[test]
-        fn portable_mode_leaves_the_pending_value_for_the_installed_app() {
-            assert_eq!(
-                decide_pending_directory(
-                    Some(r"D:\Minecraft\Axolotl"),
-                    &default_directory(),
-                    false,
-                    true,
-                ),
-                PendingDirectoryDecision::Ignore
-            );
         }
 
         #[test]
@@ -277,9 +259,8 @@ mod windows {
                 custom_dir: _,
                 prev_custom_dir,
             } = decide_pending_directory(
-                Some(r"D:\Minecraft\Axolotl"),
+                r"D:\Minecraft\Axolotl",
                 &default_directory(),
-                false,
                 false,
             )
             else {

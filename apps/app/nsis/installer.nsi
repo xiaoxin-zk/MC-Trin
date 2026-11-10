@@ -31,6 +31,41 @@ ManifestDPIAwareness PerMonitorV2
 ${StrCase}
 ${StrLoc}
 
+; Declared before the hooks include below, because a hook can expand the
+; macro that writes them.
+Var AxlPortableLayout
+Var AxlPortableValue
+
+; Sets $AxlPortableLayout to "1" when the installation is portable.
+;
+; The registry value is the authoritative record for installs made by this
+; build, but it cannot be relied on alone: installs created before it existed
+; have no PortableInstall value at all, so the marker directory the launcher
+; itself keys portable mode off is checked as well - including the pre-rename
+; name, so an old portable folder is still recognised.
+;
+; The registry is checked first and the markers only when it says nothing, so
+; a folder that is no longer portable cannot be reclassified by a leftover
+; marker file.
+!macro AxlDetectPortableLayout
+  StrCpy $AxlPortableLayout "0"
+  ClearErrors
+  ReadRegStr $AxlPortableValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+  ${If} $AxlPortableValue == "1"
+    StrCpy $AxlPortableLayout "1"
+  ${EndIf}
+  ${If} $AxlPortableLayout == "0"
+    ; Both the plain path and the wildcard form are tested, so the result does
+    ; not depend on how IfFileExists treats a directory in this NSIS version.
+    ${If} ${FileExists} "$INSTDIR\.MC-Trin"
+    ${OrIf} ${FileExists} "$INSTDIR\.MC-Trin\*"
+    ${OrIf} ${FileExists} "$INSTDIR\.Axolotl"
+    ${OrIf} ${FileExists} "$INSTDIR\.Axolotl\*"
+      StrCpy $AxlPortableLayout "1"
+    ${EndIf}
+  ${EndIf}
+!macroend
+
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
 {{/if}}
@@ -665,7 +700,17 @@ Function PageLeaveOptions
   ${NSD_GetState} $DesktopShortcutCheckbox $DesktopShortcutState
 
   ${If} $FreshInstall <> 1
-    StrCpy $ResourceDir "$INSTDIR\data"
+    ; The layout was chosen on the first install, so an update must reuse it
+    ; instead of assuming a data subfolder: a portable install keeps everything
+    ; beside the program and has no data folder at all.
+    !insertmacro AxlDetectPortableLayout
+    ${If} $AxlPortableLayout == "1"
+      StrCpy $PortableMode 1
+      StrCpy $ResourceDir "$INSTDIR"
+    ${Else}
+      StrCpy $PortableMode 0
+      StrCpy $ResourceDir "$INSTDIR\data"
+    ${EndIf}
     Return
   ${EndIf}
 
@@ -757,7 +802,16 @@ Function un.ConfirmShow ; Add add a `Delete app data` check box
   IntOp $5 $5 / 96
   IntOp $6 $6 / 96
   IntOp $7 $7 / 96
-  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$(deleteAppData)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
+  ; The checkbox is created by this page, so its label can follow the layout:
+  ; on a portable install the same tick removes the program folder itself,
+  ; which the generic wording does not convey.
+  !insertmacro AxlDetectPortableLayout
+  ${If} $AxlPortableLayout == "1"
+    StrCpy $0 "$(axlDeleteAppDataPortable)"
+  ${Else}
+    StrCpy $0 "$(deleteAppData)"
+  ${EndIf}
+  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$0", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
   Pop $DeleteAppDataCheckbox
   SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
   SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
@@ -859,6 +913,7 @@ LangString axlPortableCheckbox ${LANG_ENGLISH} "Portable install: keep everythin
 LangString axlPortableHint ${LANG_ENGLISH} "Uninstalling also removes instances, saves and caches."
 LangString axlDataSubfolderNotice ${LANG_ENGLISH} "Instances, Java, assets and caches go into the data subfolder; uninstalling keeps them by default."
 LangString axlUninstallKeepData ${LANG_ENGLISH} "Keep instances, saves and caches"
+LangString axlDeleteAppDataPortable ${LANG_ENGLISH} "Delete MC-Trin and everything in this folder"
 
 LangString axlWelcomeTitle ${LANG_SIMPCHINESE} "安装 MC-Trin"
 LangString axlWelcomeText ${LANG_SIMPCHINESE} "为你的 Minecraft 实例准备的现代化启动器。$\r$\n$\r$\n版本 ${VERSION} · 64 位 · 当前用户"
@@ -886,6 +941,7 @@ LangString axlPortableCheckbox ${LANG_SIMPCHINESE} "便携安装：所有内容�
 LangString axlPortableHint ${LANG_SIMPCHINESE} "日后卸载会同时删除实例、存档与缓存。"
 LangString axlDataSubfolderNotice ${LANG_SIMPCHINESE} "实例、Java、资源与缓存存放在 data 子文件夹，卸载默认保留。"
 LangString axlUninstallKeepData ${LANG_SIMPCHINESE} "保留实例、存档与缓存"
+LangString axlDeleteAppDataPortable ${LANG_SIMPCHINESE} "删除 MC-Trin 及此文件夹中的所有内容"
 
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
@@ -930,6 +986,10 @@ Function .onInit
     StrCpy $ResourceDir "$0"
   ${EndIf}
 
+  ; GetOptions leaves its output variable untouched when the switch is absent,
+  ; so clear it before the layout switch is read: a native silent install
+  ; passes no /PORTABLE_MODE= and would otherwise compare the directory above.
+  StrCpy $0 ""
   ; Passive installs (the modern installer UI) choose the layout up front. The
   ; switch is always present, so only its value decides.
   ${GetOptions} $CMDLINE "/PORTABLE_MODE=" $0
@@ -944,7 +1004,11 @@ Function .onInit
   ${If} $0 != ""
     StrCpy $FreshInstall 0
   ${EndIf}
-  ${If} ${FileExists} "$APPDATA\${BUNDLEID}\app.db"
+  ; The launcher keeps its database under the channel directory; the bare file
+  ; is the pre-channel location that an upgrade migrates on first run.
+  ${If} ${FileExists} "$APPDATA\${BUNDLEID}\release\app.db"
+  ${OrIf} ${FileExists} "$APPDATA\${BUNDLEID}\beta\app.db"
+  ${OrIf} ${FileExists} "$APPDATA\${BUNDLEID}\app.db"
     StrCpy $FreshInstall 0
   ${EndIf}
   ${If} $UpdateMode = 1
@@ -981,6 +1045,18 @@ Function .onInit
   !if "${INSTALLMODE}" == "both"
     !insertmacro MULTIUSER_INIT
   !endif
+
+  ; A portable install keeps its settings and database inside the marker
+  ; directory, which the probe above cannot see because it only knows the
+  ; AppData location. Without this, a portable folder whose uninstall
+  ; registration was lost would be treated as a fresh install. This runs after
+  ; $INSTDIR is known, since the marker lives beside the program.
+  ${If} ${FileExists} "$INSTDIR\.MC-Trin\release\app.db"
+  ${OrIf} ${FileExists} "$INSTDIR\.MC-Trin\beta\app.db"
+  ${OrIf} ${FileExists} "$INSTDIR\.Axolotl\release\app.db"
+  ${OrIf} ${FileExists} "$INSTDIR\.Axolotl\beta\app.db"
+    StrCpy $FreshInstall 0
+  ${EndIf}
 
   Push 4
   Call ReportInstallerProgress
@@ -1229,20 +1305,38 @@ Section Install
   Push 96
   Call ReportInstallerProgress
 
-  ; Hand the first-install application directory to the launcher. The launcher
-  ; consumes this value after creating its database and before initializing
-  ; the existing directory migration pipeline.
+  ; Record the layout for good. The launcher consumes PendingResourceDirectory
+  ; on its first start and deletes it, so it cannot tell the uninstaller where
+  ; the data lives; PortableInstall is written once here and read by the
+  ; uninstaller and by later updates, which is what keeps <install>\data
+  ; reachable when the user asks to delete application data.
   ${If} $FreshInstall = 1
-    ${StrCase} $0 "$ResourceDir" "L"
-    ${StrCase} $1 "$APPDATA\${BUNDLEID}" "L"
-    ${If} $0 == $1
+    ${If} $PortableMode == 1
+      ; A portable install is recognised by this marker directory, which is
+      ; also what makes the launcher keep its settings and caches inside the
+      ; folder. A pending directory would instead point at the program folder
+      ; and be applied the day the marker disappears.
+      CreateDirectory "$INSTDIR\.MC-Trin"
+      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "1"
       DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
     ${Else}
-      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory" "$ResourceDir"
+      ${StrCase} $0 "$ResourceDir" "L"
+      ${StrCase} $1 "$APPDATA\${BUNDLEID}" "L"
+      ${If} $0 == $1
+        DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
+      ${Else}
+        WriteRegStr HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory" "$ResourceDir"
+      ${EndIf}
+      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
     ${EndIf}
-    ; The uninstaller reads this to decide whether the data lives beside the
-    ; program (portable) or in the data subfolder.
-    ${If} $PortableMode == 1
+  ${EndIf}
+
+  ; Backfill the record for installs made before it existed. Detection also
+  ; looks at the marker directory, so an update of an old portable folder
+  ; writes the value here and the uninstaller no longer has to infer it.
+  ${If} $FreshInstall <> 1
+    !insertmacro AxlDetectPortableLayout
+    ${If} $AxlPortableLayout == "1"
       WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "1"
     ${Else}
       DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
@@ -1319,7 +1413,10 @@ Function un.onInit
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
     File "/oname=$PLUGINSDIR\AxolotlInstallerUI.exe" "${AXL_INSTALLER_UI_PATH}"
-    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --version "${VERSION}" --language "$LANGUAGE"' $0
+    ; The UI needs the layout to describe what the optional cleanup removes:
+    ; a portable install has no data subfolder, everything is in $INSTDIR.
+    !insertmacro AxlDetectPortableLayout
+    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --version "${VERSION}" --language "$LANGUAGE"' $0
     SetErrorLevel $0
     Quit
   ${EndIf}
@@ -1376,6 +1473,56 @@ Function un.onUninstSuccess
   SetErrorLevel 0
 FunctionEnd
 
+Function un.RemovePortableDirectory
+  Push $0
+  Push $1
+
+  ; Schedule the running copy first: deleting it now always fails, and the
+  ; verification pass below must not treat it as leftover data.
+  ${If} $EXEPATH == "$INSTDIR\uninstall.exe"
+    Delete /REBOOTOK "$INSTDIR\uninstall.exe"
+  ${EndIf}
+
+  ClearErrors
+  RmDir /r "$INSTDIR"
+
+  ; Report success only when nothing but the deferred uninstaller is left.
+  ClearErrors
+  FindFirst $0 $1 "$INSTDIR\*"
+  IfErrors portable_directory_unlistable
+  portable_directory_loop:
+    StrCmp $1 "" portable_directory_verified
+    StrCmp $1 "." portable_directory_next
+    StrCmp $1 ".." portable_directory_next
+    StrCmp $1 "uninstall.exe" portable_directory_next
+      StrCpy $UninstallFailure "Could not remove: $INSTDIR\$1"
+      FindClose $0
+      SetErrorLevel 2
+      Pop $1
+      Pop $0
+      Abort
+  portable_directory_next:
+    FindNext $0 $1
+    Goto portable_directory_loop
+  portable_directory_verified:
+  FindClose $0
+  ; The folder itself can only disappear after the reboot delete runs.
+  ClearErrors
+  RMDir "$INSTDIR"
+  Goto portable_directory_done
+
+  portable_directory_unlistable:
+  ; Nothing is enumerable: either the folder is gone or it cannot be listed.
+  ; CheckPathRemoved tells the two apart instead of assuming success here.
+  ClearErrors
+  Push "$INSTDIR"
+  Call un.CheckPathRemoved
+
+  portable_directory_done:
+  Pop $1
+  Pop $0
+FunctionEnd
+
 Section Uninstall
 
   Push 4
@@ -1403,31 +1550,18 @@ Section Uninstall
   ; Keep the uninstaller and registration available if optional data removal fails.
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
-    ; A normal install keeps instances in <program folder>\data, a portable one
-    ; keeps them in the program folder itself. Both are only removed when the
-    ; user asked for it, which is why the checkbox starts unchecked.
-    ReadRegStr $0 HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
-    ReadRegStr $1 HKCU "${MANUPRODUCTKEY}" "PortableInstall"
-    ${If} $1 == "1"
-      StrCpy $0 "$INSTDIR"
-    ${EndIf}
-    ${If} $0 != ""
-      StrCpy $2 "$0\"
-      StrLen $3 $2
-      StrCpy $4 "$INSTDIR" $3
-      ${If} $0 != "$INSTDIR"
-        RmDir /r "$0"
-        Push "$0"
-        Call un.CheckPathRemoved
-      ${ElseIf} $1 == "1"
-        ; Portable layout: data and program share one folder, and this
-        ; uninstaller is running from inside it. Empty the folder and let the
-        ; deferred delete remove the directory after this process exits.
-        RmDir /r "$0\data"
-        Delete "$0\MC-Trin.exe"
-        Delete "$0\*.*"
-        RMDir "$0"
-      ${EndIf}
+    ; The layout comes from the recorded choice or the marker directory, not
+    ; from PendingResourceDirectory: the launcher consumes that one-shot value
+    ; on its first start and deletes it, so it is gone by uninstall time.
+    !insertmacro AxlDetectPortableLayout
+    ${If} $AxlPortableLayout == "1"
+      ; A portable install keeps instances, saves and caches beside the
+      ; program, so removing the application data removes the whole folder.
+      Call un.RemovePortableDirectory
+    ${Else}
+      RmDir /r "$INSTDIR\data"
+      Push "$INSTDIR\data"
+      Call un.CheckPathRemoved
     ${EndIf}
 
     RmDir /r "$APPDATA\${BUNDLEID}"

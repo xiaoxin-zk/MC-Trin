@@ -36,6 +36,7 @@ use wry::{
 const HTML: &str = include_str!("installer.html");
 const LOGO: &[u8] = include_bytes!("../../app/icons/128x128.png");
 const MAIN_BINARY_NAME: &str = "MC-Trin.exe";
+const UNINSTALLER_NAME: &str = "uninstall.exe";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +48,7 @@ struct Bootstrap {
     language: Language,
     logo_data_url: String,
     uninstall: bool,
+    portable: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -413,6 +415,7 @@ fn parse_arguments() -> Result<Arguments, String> {
     let mut fresh_install = true;
     let mut uninstall = false;
     let mut language = Language::En;
+    let mut portable = false;
 
     while let Some(argument) = args.next() {
         let value = args.next().ok_or_else(|| {
@@ -432,6 +435,7 @@ fn parse_arguments() -> Result<Arguments, String> {
                 resource_dir = Some(value.to_string_lossy().into_owned())
             }
             "--fresh-install" => fresh_install = value != "0",
+            "--portable" => portable = value == "1",
             "--language" => {
                 language = if value == "2052" {
                     Language::ZhCn
@@ -468,6 +472,7 @@ fn parse_arguments() -> Result<Arguments, String> {
                 BASE64.encode(LOGO)
             ),
             uninstall,
+            portable,
         },
     })
 }
@@ -575,6 +580,7 @@ fn start_uninstall(
             thread_id_suffix()
         ));
         let _ = fs::remove_file(&status_path);
+        let delete_app_data = request.delete_app_data;
         let result = spawn_uninstaller(
             &uninstaller,
             &install_dir,
@@ -583,11 +589,19 @@ fn start_uninstall(
         )
         .and_then(|mut process| {
             match wait_for_installer(&mut process, &status_path, &proxy) {
-                Ok(()) => uninstall_result(0, &status_path, &install_dir),
+                Ok(()) => uninstall_result(
+                    0,
+                    &status_path,
+                    &install_dir,
+                    delete_app_data,
+                ),
                 Err(error) => match error.exit_code {
-                    Some(code) => {
-                        uninstall_result(code, &status_path, &install_dir)
-                    }
+                    Some(code) => uninstall_result(
+                        code,
+                        &status_path,
+                        &install_dir,
+                        delete_app_data,
+                    ),
                     None => Err(error),
                 },
             }
@@ -663,6 +677,7 @@ fn uninstall_result(
     exit_code: i32,
     status_path: &Path,
     install_dir: &Path,
+    delete_app_data: bool,
 ) -> Result<(), InstallFailure> {
     let status = read_installer_status(status_path).unwrap_or_default();
     if exit_code != 0 || status.trim() != "100" {
@@ -676,8 +691,15 @@ fn uninstall_result(
             },
         });
     }
-    for filename in [MAIN_BINARY_NAME, "uninstall.exe"] {
-        let path = install_dir.join(filename);
+
+    let mut checked = vec![install_dir.join(MAIN_BINARY_NAME)];
+    if delete_app_data {
+        // A normal install keeps instances, saves, Java and caches in the data
+        // subfolder; a portable one keeps them directly in the program folder,
+        // and the script removes the whole folder in that case.
+        checked.push(install_dir.join("data"));
+    }
+    for path in checked {
         match path.try_exists() {
             Ok(false) => {}
             Ok(true) => {
@@ -700,6 +722,23 @@ fn uninstall_result(
             }
         }
     }
+
+    // Only now that everything else is verified: the uninstaller runs in place
+    // (`_?=`), so NSIS can only delete its own file through a reboot-deferred
+    // delete and the handle can still be open for a moment. Removing it before
+    // the checks above would leave a failed uninstall without any uninstaller.
+    let uninstaller = install_dir.join(UNINSTALLER_NAME);
+    for _ in 0..20 {
+        match fs::remove_file(&uninstaller) {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(_) => thread::sleep(Duration::from_millis(50)),
+        }
+    }
+
+    // The folder itself can only go once the uninstaller above is gone; this
+    // is a no-op when anything the user kept is still inside it.
+    let _ = fs::remove_dir(install_dir);
     Ok(())
 }
 
@@ -1028,30 +1067,62 @@ mod tests {
     }
 
     #[test]
-    fn uninstall_success_requires_completion_and_removed_executables() {
+    fn uninstall_success_requires_completion_and_a_removed_main_binary() {
         let directory = std::env::temp_dir()
             .join(format!("axolotl-uninstall-result-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let status = directory.join("uninstall.status");
-        assert!(uninstall_result(0, &status, &directory).is_err());
+        assert!(uninstall_result(0, &status, &directory, false).is_err());
         fs::write(&status, "82").unwrap();
-        assert!(uninstall_result(0, &status, &directory).is_err());
+        assert!(uninstall_result(0, &status, &directory, false).is_err());
         fs::write(&status, "error:Could not remove a locked file").unwrap();
         assert!(
-            uninstall_result(2, &status, &directory)
+            uninstall_result(2, &status, &directory, false)
                 .unwrap_err()
                 .message
                 .contains("locked file")
         );
         fs::write(&status, "100").unwrap();
-        assert!(uninstall_result(2, &status, &directory).is_err());
-        for filename in [MAIN_BINARY_NAME, "uninstall.exe"] {
-            let file = directory.join(filename);
-            fs::write(&file, "still installed").unwrap();
-            assert!(uninstall_result(0, &status, &directory).is_err());
-            fs::remove_file(file).unwrap();
-        }
-        assert!(uninstall_result(0, &status, &directory).is_ok());
+        assert!(uninstall_result(2, &status, &directory, false).is_err());
+
+        let binary = directory.join(MAIN_BINARY_NAME);
+        fs::write(&binary, "still installed").unwrap();
+        assert!(uninstall_result(0, &status, &directory, false).is_err());
+        fs::remove_file(&binary).unwrap();
+
+        // A failed verification must leave the uninstaller alone: deleting it
+        // first would strand an installation that can no longer be removed.
+        let uninstaller = directory.join("uninstall.exe");
+        fs::write(&uninstaller, "deferred delete").unwrap();
+        fs::write(&binary, "still installed").unwrap();
+        assert!(uninstall_result(0, &status, &directory, false).is_err());
+        assert!(uninstaller.exists(), "a failed check keeps the uninstaller");
+        fs::remove_file(&binary).unwrap();
+
+        // The uninstaller runs in place and defers its own delete to a reboot,
+        // so its file is still there when this check runs. That must not turn a
+        // completed uninstall into a failure; the check removes it afterwards.
+        assert!(uninstall_result(0, &status, &directory, false).is_ok());
+        assert!(!uninstaller.exists(), "the leftover uninstaller is removed");
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn deleting_app_data_verifies_the_instances_folder_is_gone() {
+        let directory = std::env::temp_dir()
+            .join(format!("axolotl-uninstall-data-{}", std::process::id()));
+        let data = directory.join("data");
+        fs::create_dir_all(&data).unwrap();
+        let status = directory.join("uninstall.status");
+        fs::write(&status, "100").unwrap();
+
+        // A kept data folder is expected: the checkbox was not ticked.
+        assert!(uninstall_result(0, &status, &directory, false).is_ok());
+        assert!(uninstall_result(0, &status, &directory, true).is_err());
+
+        fs::remove_dir_all(&data).unwrap();
+        assert!(uninstall_result(0, &status, &directory, true).is_ok());
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -1069,7 +1140,7 @@ mod tests {
             .collect();
         fs::write(&status, bytes).unwrap();
         assert_eq!(
-            uninstall_result(2, &status, &directory)
+            uninstall_result(2, &status, &directory, false)
                 .unwrap_err()
                 .message,
             &message[6..]

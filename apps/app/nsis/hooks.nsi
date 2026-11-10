@@ -116,6 +116,20 @@ Var /GLOBAL OldInstallDir
             Push "$LOCALAPPDATA\${BUNDLEID}"
             Call un.RemoveReparsePoints
         ${EndIf}
+        ; The application directory is removed recursively as well, so a junction
+        ; a user created to park instances on another disk must be unlinked
+        ; instead of having its target emptied. The layout is detected the same
+        ; way the cleanup below detects it, so a portable install created before
+        ; PortableInstall existed is still scanned as a whole folder.
+        !insertmacro AxlDetectPortableLayout
+        ${If} $AxlPortableLayout == "1"
+        ${AndIf} ${FileExists} "$INSTDIR"
+            Push "$INSTDIR"
+            Call un.RemoveReparsePoints
+        ${ElseIf} ${FileExists} "$INSTDIR\data"
+            Push "$INSTDIR\data"
+            Call un.RemoveReparsePoints
+        ${EndIf}
     ${EndIf}
 !macroend
 

@@ -1321,6 +1321,7 @@
                 resourceDir: 'C:\\Users\\Admin\\AppData\\Roaming\\axolotl-launcher',
                 freshInstall: false,
                 uninstall: false,
+                portable: false,
             }
             window.ipc = window.ipc || { postMessage: (msg) => console.log('IPC Mock:', msg) }
 
@@ -1362,12 +1363,16 @@
                         'Your existing application directory will be preserved. You can change it later in Settings.',
                     desktopShortcut: 'Desktop shortcut',
                     launchAfter: 'Launch when complete',
-                    deleteAppData: 'Delete configuration and caches',
+                    deleteAppData: 'Delete application data',
+                    deleteAppDataPortable:
+                        'Delete MC-Trin and everything in this folder, including instances, saves, Java and caches',
                     uninstallTitle: 'Uninstall MC-Trin',
                     uninstallCopy:
                         'Remove MC-Trin and its Windows shortcuts from this computer. Application data is kept by default.',
                     uninstallDataScope:
-                        'The optional cleanup removes MC-Trin data in AppData. Instances, saves, Java and resources in a custom application directory are kept.',
+                        'The optional cleanup removes the launcher data in AppData and the instances, saves, Java and caches in the data folder. Leave it off to keep them.',
+                    uninstallDataScopePortable:
+                        'The optional cleanup removes this whole folder, including the launcher files and the instances, saves, Java and caches inside it. Leave it off to keep them.',
                     uninstall: 'Uninstall',
                     uninstalling: 'Uninstalling',
                     cancel: 'Cancel',
@@ -1452,11 +1457,14 @@
                     existingNotice: '现有应用目录会被保留，之后仍可在启动器设置中修改。',
                     desktopShortcut: '创建桌面快捷方式',
                     launchAfter: '完成后启动',
-                    deleteAppData: '删除配置与缓存',
+                    deleteAppData: '删除应用数据',
+                    deleteAppDataPortable: '删除 MC-Trin 及此文件夹中的所有内容，包括实例、存档、Java 与缓存',
                     uninstallTitle: '卸载 MC-Trin',
                     uninstallCopy: '从此电脑移除 MC-Trin 及其 Windows 快捷方式。默认保留应用数据。',
                     uninstallDataScope:
-                        '可选清理仅移除 AppData 中的 启动器数据。自定义应用目录中的实例、存档、Java 和资源会保留。',
+                        '开启后将移除 AppData 中的启动器数据，以及 data 文件夹中的实例、存档、Java 与缓存；关闭则全部保留。',
+                    uninstallDataScopePortable:
+                        '开启后将移除此整个文件夹，包括启动器文件和其中的实例、存档、Java 与缓存；关闭则全部保留。',
                     uninstall: '卸载',
                     uninstalling: '正在卸载',
                     cancel: '取消',
@@ -1546,6 +1554,13 @@
             if (boot.uninstall) {
                 document.body.classList.add('is-uninstalling')
                 $('#uninstall-directory').textContent = boot.installDir
+                if (boot.portable) {
+                    // A portable install keeps everything in the program folder,
+                    // so the cleanup deletes far more than the AppData caches.
+                    $('[data-i18n="deleteAppData"]').textContent = t.deleteAppDataPortable
+                    $('[data-i18n="uninstallDataScope"]').textContent =
+                        t.uninstallDataScopePortable
+                }
                 $('[data-screen="complete"] h2').textContent = t.uninstallCompleteTitle
                 $('[data-screen="complete"] .lead').textContent = t.uninstallCompleteCopy
                 $('[data-screen="complete"] .lead').classList.replace('lead', 'task-copy')
