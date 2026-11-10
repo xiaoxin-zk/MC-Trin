@@ -440,6 +440,73 @@ fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
 }
 
 #[test]
+fn a_refused_batch_becomes_one_per_file_download_per_object() {
+    // The batch builds one entry per physical object, so a transport refusal
+    // must rebuild exactly those objects rather than the index entries that
+    // produced them: a duplicated asset would otherwise be fetched twice.
+    let destination = PathBuf::from("assets/objects/85/object");
+    let legacy = PathBuf::from("resources/sound/liquid/splash2.ogg");
+    let batch_item = H2BatchAsset {
+        url: "https://resources.download.minecraft.net/85/object".into(),
+        destination: destination.clone(),
+        legacy_destinations: vec![legacy.clone()],
+        sha1: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+        size: 36_747,
+        logical_items: 2,
+    };
+
+    let fallback = fallback_asset_from_batch(batch_item);
+
+    assert_eq!(
+        fallback.resource_path, destination,
+        "the object must keep its content-addressed destination"
+    );
+    assert_eq!(
+        fallback.legacy_resource_paths,
+        vec![legacy],
+        "legacy copies must survive the fallback"
+    );
+    assert_eq!(
+        fallback.logical_items, 2,
+        "progress accounting must stay index-based"
+    );
+    assert_eq!(fallback.size, 36_747);
+    assert_eq!(fallback.hash, "857abbbfb58186c2f1b5510a4072630950e518f6");
+    assert_eq!(
+        fallback.url, "https://resources.download.minecraft.net/85/object",
+        "the route-resolved URL is what the per-file client must reuse"
+    );
+}
+
+#[test]
+fn the_batch_snapshot_keeps_the_coalesced_objects_not_the_index_entries() {
+    // `coalesce_batch_assets` merges duplicate objects before the batch runs.
+    // The fallback snapshot is taken after that merge, so aliases must not
+    // reappear as extra downloads.
+    let destination = PathBuf::from("assets/objects/aa/object");
+    let make_item = |legacy: &str| H2BatchAsset {
+        url: "https://resources.download.minecraft.net/aa/object".into(),
+        destination: destination.clone(),
+        legacy_destinations: vec![PathBuf::from(legacy)],
+        sha1: "aa00000000000000000000000000000000000000".into(),
+        size: 64,
+        logical_items: 1,
+    };
+
+    let coalesced = coalesce_batch_assets(vec![
+        make_item("resources/first.ogg"),
+        make_item("resources/second.ogg"),
+    ]);
+
+    assert_eq!(coalesced.len(), 1, "aliases must collapse to one object");
+    assert_eq!(coalesced[0].logical_items, 2);
+
+    let fallback = fallback_asset_from_batch(coalesced[0].clone());
+    assert_eq!(fallback.logical_items, 2);
+    assert_eq!(fallback.legacy_resource_paths.len(), 2);
+}
+
+#[test]
 fn asset_fast_path_requires_a_regular_file_with_expected_size() {
     let directory = tempfile::tempdir().unwrap();
     let valid = directory.path().join("valid");
