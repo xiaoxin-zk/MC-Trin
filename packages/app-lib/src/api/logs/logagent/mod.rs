@@ -504,6 +504,7 @@ pub async fn model_turn(
 pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
     let session = session(run_id)?;
     let approval = request.approval;
+    let approval_request = request.approval_request;
     let request = request.call;
     if session.source == "assistant" {
         if !assistant_request_shape_valid(&request) {

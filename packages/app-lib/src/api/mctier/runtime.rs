@@ -882,7 +882,7 @@ async fn set_lobby_visibility(
                 Some("kicked" | "version-too-old") => {
                     bail!("the signaling server ended this lobby session")
                 }
-                _ => deferred.push(message),
+                _ => deferred.push_back(message),
             }
         }
     })
