@@ -1960,17 +1960,18 @@ fn auto_loader_routes_keep_official_when_no_mirror_exists() {
         "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml",
         "https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml",
     ] {
-        // These maven hosts have no mirror route, so the automatic order
-        // keeps the official source rather than inventing a detour.
+        // These loader hosts do have mirror routes, but automatic mode still
+        // starts from the official URL and only promotes a mirror after a
+        // failure.
         let routes = resolve_download_routes_for(
             source,
             ResourceClass::Loader,
             crate::state::DownloadSourceMode::Auto,
         );
-        assert_eq!(routes[0].source, DownloadRouteSource::Official);
-        assert!(
-            routes.iter().all(|route| !route.is_mirror),
-            "no mirror exists for {source}"
+        assert_eq!(
+            routes[0].source,
+            DownloadRouteSource::Official,
+            "automatic mode must start from the official route for {source}"
         );
     }
     *ROUTE_HEALTH.lock() = previous_health;
