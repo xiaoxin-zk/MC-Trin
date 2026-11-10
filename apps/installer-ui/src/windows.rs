@@ -73,6 +73,23 @@ struct InstallRequest {
     launch_after: bool,
 }
 
+impl InstallRequest {
+    /// Where the launcher keeps instances, Java, assets and caches.
+    ///
+    /// A normal install uses a `data` subfolder so uninstalling can keep it;
+    /// a portable install keeps everything beside the program. The caller
+    /// does not choose this directly, so validation and the installer have to
+    /// agree on one rule rather than trusting the submitted path.
+    fn data_dir(&self) -> PathBuf {
+        let install_dir = PathBuf::from(self.install_dir.trim());
+        if self.portable {
+            install_dir
+        } else {
+            install_dir.join("data")
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UninstallRequest {
@@ -487,24 +504,10 @@ fn validate_request(
         return Ok(());
     }
 
-    let resource_dir = PathBuf::from(request.resource_dir.trim());
-    if !resource_dir.is_absolute() || request.resource_dir.contains('"') {
-        return Err(("resource", "absolutePath"));
-    }
+    let resource_dir = request.data_dir();
     if resource_dir.parent().is_none() {
         return Err(("resource", "driveRoot"));
     }
-
-    // The user picks one folder. A normal install keeps instances and caches
-    // in a `data` subfolder so uninstalling can leave them behind; a portable
-    // install keeps everything together and uninstalling removes it all. The
-    // layout is derived from the portable flag, so a request that names the
-    // program folder is accepted rather than rejected as "inside the install".
-    let resource_dir = if request.portable {
-        install_dir.clone()
-    } else {
-        install_dir.join("data")
-    };
 
     if fs::create_dir_all(&resource_dir).is_err() {
         return Err(("resource", "notWritable"));
@@ -725,7 +728,10 @@ fn installer_arguments(
     let mut arguments = vec![
         "/S".to_string(),
         nsis_value_option("INSTALL_DIR", request.install_dir.trim()),
-        nsis_value_option("RESOURCE_DIR", request.resource_dir.trim()),
+        nsis_value_option(
+            "RESOURCE_DIR",
+            &request.data_dir().to_string_lossy(),
+        ),
         nsis_value_option(
             "PORTABLE_MODE",
             if request.portable { "1" } else { "0" },

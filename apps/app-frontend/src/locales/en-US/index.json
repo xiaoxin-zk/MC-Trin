@@ -12591,7 +12591,7 @@
     "message": "Select a .minecraft directory"
   },
   "app.settings.resources.source.automatic": {
-    "message": "Automatic: mirror first, official fallback (recommended)"
+    "message": "Automatic (recommended)"
   },
   "app.settings.resources.source.mirror-preferred": {
     "message": "Prefer mirrors"
@@ -12612,7 +12612,7 @@
     "message": "Prefer official sources"
   },
   "app.settings.resources.source.open-bmcl-api": {
-    "message": "Mirror only preference (BMCLAPI)"
+    "message": "Prefer OpenBMCLAPI"
   },
   "app.settings.resources.system-downloads-directory": {
     "message": "System Downloads folder"

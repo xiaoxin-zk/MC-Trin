@@ -1735,7 +1735,11 @@
                     } else if (message.type === 'validationError') {
                         setScreen('configure')
                         $('#field-error').textContent = t[message.code] || t.absolutePath
-                        $(`#${message.field}-dir`).focus()
+                        // Only the program folder is editable now, so a data
+                        // folder error points at the choice that produced it.
+                        const focusField = $(`#${message.field}-dir`)
+                        if (focusField) focusField.focus()
+                        if (!focusField) $('#install-dir').focus()
                     } else if (message.type === 'installStarted') {
                         $('#progress-detail').textContent = boot.uninstall
                             ? t.uninstallWait

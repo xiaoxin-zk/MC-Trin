@@ -930,10 +930,13 @@ Function .onInit
     StrCpy $ResourceDir "$0"
   ${EndIf}
 
-  ; Passive installs (the modern installer UI) choose the layout up front.
+  ; Passive installs (the modern installer UI) choose the layout up front. The
+  ; switch is always present, so only its value decides.
   ${GetOptions} $CMDLINE "/PORTABLE_MODE=" $0
-  ${IfNot} ${Errors}
+  ${If} $0 == "1"
     StrCpy $PortableMode 1
+  ${Else}
+    StrCpy $PortableMode 0
   ${EndIf}
   StrCpy $DesktopShortcutState ${BST_CHECKED}
   StrCpy $FreshInstall 1
@@ -1413,10 +1416,17 @@ Section Uninstall
       StrLen $3 $2
       StrCpy $4 "$INSTDIR" $3
       ${If} $0 != "$INSTDIR"
-      ${OrIf} $1 == "1"
         RmDir /r "$0"
         Push "$0"
         Call un.CheckPathRemoved
+      ${ElseIf} $1 == "1"
+        ; Portable layout: data and program share one folder, and this
+        ; uninstaller is running from inside it. Empty the folder and let the
+        ; deferred delete remove the directory after this process exits.
+        RmDir /r "$0\data"
+        Delete "$0\MC-Trin.exe"
+        Delete "$0\*.*"
+        RMDir "$0"
       ${EndIf}
     ${EndIf}
 
