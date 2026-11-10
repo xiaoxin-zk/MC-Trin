@@ -274,10 +274,7 @@ it('parses and joins a MCTier v3 invite while retaining the manual game port', a
         .setValue(
             'mctier://join?v=3&name=TestRoom&secret=mctier-invite-v3%3AQUJD&node=tcp%3A%2F%2F127.0.0.1%3A11010&signal=ws%3A%2F%2F127.0.0.1%3A12345',
         )
-    await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Join using invite code')!
-        .trigger('click')
+    await wrapper.find('form:last-of-type').trigger('submit')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith(
         expect.objectContaining({

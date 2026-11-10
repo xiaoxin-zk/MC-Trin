@@ -239,7 +239,8 @@ it('invalidates a pending microphone request and stops a stream that resolves la
     request.resolve(stream)
     await start
 
-    expect(track.stop).toHaveBeenCalledOnce()
+    expect(track.stopped).toBe(true)
+    expect(track.readyState).toBe('ended')
     expect(voice.active.value).toBe(false)
     expect(voice.starting.value).toBe(false)
 })

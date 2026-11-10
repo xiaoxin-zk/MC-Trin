@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, ref } from 'vue'
 
-import { sanitizeAiErrorText } from '../helpers/ai.ts'
+import { sanitizeAiErrorText } from '../helpers/ai-error.ts'
 import * as backend from '../logagent/backend.ts'
 import { type ActivityEntry, applyProgress } from '../logagent/progress.ts'
 import type {
