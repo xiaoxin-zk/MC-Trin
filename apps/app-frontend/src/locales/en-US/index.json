@@ -7988,17 +7988,35 @@
   "app.multiplayer.direct.address": {
     "message": "Give this address to your guests"
   },
+  "app.multiplayer.direct.cancel": {
+    "message": "Cancel"
+  },
   "app.multiplayer.direct.create": {
     "message": "Create room"
   },
   "app.multiplayer.direct.description": {
     "message": "A password-protected room with no lobby service behind it. Share the room code; nothing is listed publicly."
   },
+  "app.multiplayer.direct.game-port-closed": {
+    "message": "Minecraft is not accepting connections on that port. Open the world to LAN, or start the game first."
+  },
   "app.multiplayer.direct.host-hint": {
     "message": "Open your world to LAN first and enter the port Minecraft shows. Guests join by the address below."
   },
+  "app.multiplayer.direct.guest-address": {
+    "message": "Host address"
+  },
+  "app.multiplayer.direct.guest-hint": {
+    "message": "Ask the host for their room code or address, then join from here."
+  },
   "app.multiplayer.direct.invalid": {
     "message": "Room names use 4-32 letters, numbers, underscores, or hyphens."
+  },
+  "app.multiplayer.direct.invalid-code": {
+    "message": "Enter a valid room code or an IPv4 address."
+  },
+  "app.multiplayer.direct.invalid-node": {
+    "message": "Enter a valid node address, for example tcp://1.2.3.4:11010."
   },
   "app.multiplayer.direct.join": {
     "message": "Join room"
@@ -8018,6 +8036,9 @@
   "app.multiplayer.direct.node": {
     "message": "EasyTier node"
   },
+  "app.multiplayer.direct.guest-port": {
+    "message": "Host Minecraft port"
+  },
   "app.multiplayer.direct.password": {
     "message": "Room password"
   },
@@ -8031,7 +8052,7 @@
     "message": "Room code"
   },
   "app.multiplayer.direct.room-code-hint": {
-    "message": "It bundles the room name, password, node, and port so a guest can paste it once."
+    "message": "It bundles the room name, node, and port. Send the password separately."
   },
   "app.multiplayer.direct.room-name": {
     "message": "Room name"
@@ -8261,6 +8282,9 @@
   "app.multiplayer.mctier.name": {
     "message": "Lobby name"
   },
+  "app.multiplayer.mctier.node-invalid": {
+    "message": "Enter a valid node address, for example tcp://1.2.3.4:11010."
+  },
   "app.multiplayer.mctier.node": {
     "message": "EasyTier node"
   },
@@ -8370,7 +8394,13 @@
     "message": "Push-to-talk"
   },
   "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "Hold F2 or the button to transmit; the microphone stays muted otherwise."
+    "message": "Hold the key while this window has focus, or hold the on-screen button while in game; the microphone stays muted otherwise."
+  },
+  "app.multiplayer.mctier.voice.input-device-lost": {
+    "message": "The microphone was disconnected. Reconnect it, then enable voice again."
+  },
+  "app.multiplayer.mctier.voice.output-device-lost": {
+    "message": "The speaker was disconnected. Voice is playing through the system default."
   },
   "app.multiplayer.mctier.voice.push-to-talk-hold": {
     "message": "Hold to talk"
@@ -14419,132 +14449,6 @@
   },
   "drop.help.worlds-title": {
     "message": "World Saves"
-  },
-  "friends.action.add-friend": {
-    "message": "Add a friend"
-  },
-  "friends.action.share-port": {
-    "message": "Share a LAN port"
-  },
-  "friends.action.view-friend-requests": {
-    "message": "{count} friend {count, plural, one {request} other {requests}}"
-  },
-  "friends.add-friend.submit": {
-    "message": "Send friend request"
-  },
-  "friends.add-friend.title": {
-    "message": "Adding a friend"
-  },
-  "friends.add-friend.username.description": {
-    "message": "It may be different from their Minecraft username!"
-  },
-  "friends.add-friend.username.placeholder": {
-    "message": "Enter Modrinth username..."
-  },
-  "friends.add-friend.username.title": {
-    "message": "What's your friend's Modrinth username?"
-  },
-  "friends.add-friends-to-share": {
-    "message": "<link>Add friends</link> to build your friend list."
-  },
-  "friends.event.friend-request-rejected": {
-    "message": "{user} declined your friend request."
-  },
-  "friends.event.friend-request-rejected.title": {
-    "message": "Friend request declined"
-  },
-  "friends.friend.cancel-request": {
-    "message": "Cancel request"
-  },
-  "friends.friend.remove-friend": {
-    "message": "Remove friend"
-  },
-  "friends.friend.request-sent": {
-    "message": "Friend request sent"
-  },
-  "friends.friend.view-profile": {
-    "message": "View profile"
-  },
-  "friends.heading": {
-    "message": "Friends"
-  },
-  "friends.heading.active": {
-    "message": "Active"
-  },
-  "friends.heading.offline": {
-    "message": "Offline"
-  },
-  "friends.heading.online": {
-    "message": "Online"
-  },
-  "friends.heading.pending": {
-    "message": "Pending"
-  },
-  "friends.no-friends-match": {
-    "message": "No friends matching ''{query}''"
-  },
-  "friends.requests.accept": {
-    "message": "Accept"
-  },
-  "friends.requests.cancel": {
-    "message": "Cancel"
-  },
-  "friends.requests.ignore": {
-    "message": "Ignore"
-  },
-  "friends.requests.incoming": {
-    "message": "{username} sent you a friend request"
-  },
-  "friends.requests.none": {
-    "message": "You have no pending friend requests :C"
-  },
-  "friends.requests.outgoing": {
-    "message": "You sent {username} a friend request"
-  },
-  "friends.requests.title": {
-    "message": "View friend requests"
-  },
-  "friends.search-friends-placeholder": {
-    "message": "Search friends..."
-  },
-  "friends.section.heading": {
-    "message": "{title} - {count}"
-  },
-  "friends.share-port.active": {
-    "message": "Your friends can now join through port {port}."
-  },
-  "friends.share-port.active.title": {
-    "message": "Port shared"
-  },
-  "friends.share-port.description": {
-    "message": "Let your friends join a world you opened to LAN. Enter the port Minecraft is listening on."
-  },
-  "friends.share-port.invalid": {
-    "message": "Enter a port between 1 and 65535."
-  },
-  "friends.share-port.invalid.title": {
-    "message": "That port is not usable"
-  },
-  "friends.share-port.label": {
-    "message": "Local port"
-  },
-  "friends.share-port.stop": {
-    "message": "Stop sharing"
-  },
-  "friends.share-port.stopped": {
-    "message": "{count, plural, =0 {No ports were being shared.} one {One shared port was closed.} other {# shared ports were closed.}}"
-  },
-  "friends.share-port.stopped.title": {
-    "message": "Sharing stopped"
-  },
-  "friends.share-port.submit": {
-    "message": "Start sharing"
-  },
-  "friends.share-port.title": {
-    "message": "Share a LAN port"
-  },
-  "friends.sign-in-to-add-friends": {
-    "message": "<link>Sign in to a Modrinth account</link> to manage friends."
   },
   "instance.add-server.add-and-play": {
     "message": "Add and play"

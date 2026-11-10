@@ -11906,17 +11906,35 @@
   "app.multiplayer.direct.address": {
     "message": "把这个地址发给你的朋友"
   },
+  "app.multiplayer.direct.cancel": {
+    "message": "取消"
+  },
   "app.multiplayer.direct.create": {
     "message": "创建房间"
   },
   "app.multiplayer.direct.description": {
     "message": "带密码保护、不依赖大厅服务的房间。把房间码分享给朋友即可；不会出现在任何公开列表里。"
   },
+  "app.multiplayer.direct.game-port-closed": {
+    "message": "该端口上的 Minecraft 没有在监听。请先将世界开放到局域网，或先启动游戏。"
+  },
   "app.multiplayer.direct.host-hint": {
     "message": "先在游戏里对局域网开放，再把 Minecraft 显示的端口填到这里。朋友通过下面的地址加入。"
   },
+  "app.multiplayer.direct.guest-address": {
+    "message": "主机地址"
+  },
+  "app.multiplayer.direct.guest-hint": {
+    "message": "向房主索取房间码或地址，然后在这里加入。"
+  },
   "app.multiplayer.direct.invalid": {
     "message": "房间名使用 4-32 个字母、数字、下划线或连字符。"
+  },
+  "app.multiplayer.direct.invalid-code": {
+    "message": "请输入有效的房间码或 IPv4 地址。"
+  },
+  "app.multiplayer.direct.invalid-node": {
+    "message": "请输入有效的节点地址，例如 tcp://1.2.3.4:11010。"
   },
   "app.multiplayer.direct.join": {
     "message": "加入房间"
@@ -11936,6 +11954,9 @@
   "app.multiplayer.direct.node": {
     "message": "EasyTier 节点"
   },
+  "app.multiplayer.direct.guest-port": {
+    "message": "主机 Minecraft 端口"
+  },
   "app.multiplayer.direct.password": {
     "message": "房间密码"
   },
@@ -11949,7 +11970,7 @@
     "message": "房间码"
   },
   "app.multiplayer.direct.room-code-hint": {
-    "message": "它打包了房间名、密码、节点和端口，朋友粘贴一次就能加入。"
+    "message": "包含房间名、节点与端口。密码请另外告知。"
   },
   "app.multiplayer.direct.room-name": {
     "message": "房间名"
@@ -12182,6 +12203,9 @@
   "app.multiplayer.mctier.name": {
     "message": "房间名称"
   },
+  "app.multiplayer.mctier.node-invalid": {
+    "message": "请输入有效的节点地址，例如 tcp://1.2.3.4:11010。"
+  },
   "app.multiplayer.mctier.node": {
     "message": "EasyTier 节点"
   },
@@ -12294,7 +12318,13 @@
     "message": "按键说话"
   },
   "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "按住按键或按钮说话；其余时间麦克风保持静音。"
+    "message": "本窗口在前台时可按住按键说话；进入游戏后请按住界面上的按钮；其余时间麦克风保持静音。"
+  },
+  "app.multiplayer.mctier.voice.input-device-lost": {
+    "message": "麦克风已断开连接。请重新接入后再次开启语音。"
+  },
+  "app.multiplayer.mctier.voice.output-device-lost": {
+    "message": "扬声器已断开连接，语音已切换到系统默认设备。"
   },
   "app.multiplayer.mctier.voice.push-to-talk-hold": {
     "message": "按住说话"
@@ -18676,132 +18706,6 @@
   },
   "effect.wither": {
     "message": "凋零"
-  },
-  "friends.action.add-friend": {
-    "message": "添加好友"
-  },
-  "friends.action.share-port": {
-    "message": "共享局域网端口"
-  },
-  "friends.action.view-friend-requests": {
-    "message": "{count} 个好友请求"
-  },
-  "friends.add-friend.submit": {
-    "message": "发送好友请求"
-  },
-  "friends.add-friend.title": {
-    "message": "添加好友"
-  },
-  "friends.add-friend.username.description": {
-    "message": "这可能与对方的 Minecraft 用户名不同！"
-  },
-  "friends.add-friend.username.placeholder": {
-    "message": "输入 Modrinth 用户名……"
-  },
-  "friends.add-friend.username.title": {
-    "message": "你好友的 Modrinth 用户名是什么？"
-  },
-  "friends.add-friends-to-share": {
-    "message": "<link>添加好友</link>到好友列表。"
-  },
-  "friends.event.friend-request-rejected": {
-    "message": "{user} 拒绝了你的好友请求。"
-  },
-  "friends.event.friend-request-rejected.title": {
-    "message": "好友请求被拒绝"
-  },
-  "friends.friend.cancel-request": {
-    "message": "取消请求"
-  },
-  "friends.friend.remove-friend": {
-    "message": "删除好友"
-  },
-  "friends.friend.request-sent": {
-    "message": "已发送好友申请"
-  },
-  "friends.friend.view-profile": {
-    "message": "查看个人资料"
-  },
-  "friends.heading": {
-    "message": "好友"
-  },
-  "friends.heading.active": {
-    "message": "活跃"
-  },
-  "friends.heading.offline": {
-    "message": "离线"
-  },
-  "friends.heading.online": {
-    "message": "在线"
-  },
-  "friends.heading.pending": {
-    "message": "待确认"
-  },
-  "friends.no-friends-match": {
-    "message": "没有对应名字“{query}”的好友"
-  },
-  "friends.requests.accept": {
-    "message": "接受"
-  },
-  "friends.requests.cancel": {
-    "message": "取消"
-  },
-  "friends.requests.ignore": {
-    "message": "忽略"
-  },
-  "friends.requests.incoming": {
-    "message": "{username} 向你发送了好友请求"
-  },
-  "friends.requests.none": {
-    "message": "没有待处理的好友请求 :C"
-  },
-  "friends.requests.outgoing": {
-    "message": "你向 {username} 发送了好友请求"
-  },
-  "friends.requests.title": {
-    "message": "查看好友请求"
-  },
-  "friends.search-friends-placeholder": {
-    "message": "搜索好友…"
-  },
-  "friends.section.heading": {
-    "message": "{title} — {count}"
-  },
-  "friends.share-port.active": {
-    "message": "好友现在可以通过端口 {port} 加入。"
-  },
-  "friends.share-port.active.title": {
-    "message": "端口已共享"
-  },
-  "friends.share-port.description": {
-    "message": "让你在游戏里对局域网开放的世界可被好友加入。请输入 Minecraft 正在监听的端口。"
-  },
-  "friends.share-port.invalid": {
-    "message": "请输入 1 到 65535 之间的端口。"
-  },
-  "friends.share-port.invalid.title": {
-    "message": "该端口不可用"
-  },
-  "friends.share-port.label": {
-    "message": "本地端口"
-  },
-  "friends.share-port.stop": {
-    "message": "停止共享"
-  },
-  "friends.share-port.stopped": {
-    "message": "{count, plural, =0 {当前没有共享中的端口。} other {已关闭 # 个共享端口。}}"
-  },
-  "friends.share-port.stopped.title": {
-    "message": "已停止共享"
-  },
-  "friends.share-port.submit": {
-    "message": "开始共享"
-  },
-  "friends.share-port.title": {
-    "message": "共享局域网端口"
-  },
-  "friends.sign-in-to-add-friends": {
-    "message": "登录 <link>Modrinth 账号</link>以管理好友。"
   },
   "instance.add-server.add-and-play": {
     "message": "添加并游玩"
