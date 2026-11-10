@@ -6,7 +6,14 @@ mod windows {
     use winreg::RegKey;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
 
-    const INSTALLER_REGISTRY_KEY: &str = "Software\\ghs\\Axolotl Launcher";
+    /// Keys the installer may have written its choices under, most specific
+    /// first. The first entry matches the key the NSIS script derives from the
+    /// bundle's manufacturer and product name; the second is the upstream
+    /// project's key, kept so installs from older builds still resolve.
+    const INSTALLER_REGISTRY_KEYS: [&str; 2] = [
+        "Software\\mctrin\\MC-Trin",
+        "Software\\ghs\\Axolotl Launcher",
+    ];
     const PENDING_RESOURCE_DIRECTORY_VALUE: &str = "PendingResourceDirectory";
 
     #[derive(Debug, Eq, PartialEq)]
@@ -75,11 +82,27 @@ mod windows {
         }
     }
 
+    /// Opens the registry key an installer wrote its choices into.
+    ///
+    /// Returns `NotFound` only when no known key exists, so callers keep their
+    /// "nothing to apply" path instead of surfacing an error for a machine that
+    /// was never installed through the NSIS package.
     fn open_installer_registry_key() -> std::io::Result<RegKey> {
-        RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
-            INSTALLER_REGISTRY_KEY,
-            KEY_READ | KEY_SET_VALUE,
-        )
+        let mut last = None;
+        for path in INSTALLER_REGISTRY_KEYS {
+            match RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey_with_flags(path, KEY_READ | KEY_SET_VALUE)
+            {
+                Ok(key) => return Ok(key),
+                Err(error) => last = Some(error),
+            }
+        }
+        Err(last.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no installer registry key",
+            )
+        }))
     }
 
     fn clear_pending_directory(key: &RegKey) -> crate::Result<()> {
@@ -158,6 +181,20 @@ mod windows {
 
         fn default_directory() -> PathBuf {
             PathBuf::from(r"C:\Users\Test\AppData\Roaming\red.ghs.axolotl")
+        }
+
+        #[test]
+        fn the_lookup_checks_the_key_this_installer_writes_first() {
+            // The NSIS script derives its key from the bundle's manufacturer and
+            // product name. Reading only the upstream key meant the data folder
+            // chosen at install time was never applied, which is what left
+            // instances on the system drive.
+            assert_eq!(INSTALLER_REGISTRY_KEYS[0], r"Software\mctrin\MC-Trin");
+            assert!(
+                INSTALLER_REGISTRY_KEYS
+                    .contains(&r"Software\ghs\Axolotl Launcher"),
+                "older installs must keep resolving"
+            );
         }
 
         #[test]
