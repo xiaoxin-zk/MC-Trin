@@ -123,12 +123,15 @@ Var /GLOBAL OldInstallDir
         ; PortableInstall existed is still scanned as a whole folder.
         !insertmacro AxlDetectPortableLayout
         ${If} $AxlPortableLayout == "1"
-        ${AndIf} ${FileExists} "$INSTDIR"
-            Push "$INSTDIR"
-            Call un.RemoveReparsePoints
-        ${ElseIf} ${FileExists} "$INSTDIR\data"
-            Push "$INSTDIR\data"
-            Call un.RemoveReparsePoints
+            ${If} ${FileExists} "$INSTDIR"
+                Push "$INSTDIR"
+                Call un.RemoveReparsePoints
+            ${EndIf}
+        ${Else}
+            ${If} ${FileExists} "$INSTDIR\data"
+                Push "$INSTDIR\data"
+                Call un.RemoveReparsePoints
+            ${EndIf}
         ${EndIf}
     ${EndIf}
 !macroend
