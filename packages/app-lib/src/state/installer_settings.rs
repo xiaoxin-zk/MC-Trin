@@ -82,37 +82,50 @@ mod windows {
         }
     }
 
-    /// Opens the registry key an installer wrote its choices into.
+    /// Finds the pending directory an installer recorded, with the key it
+    /// belongs to.
     ///
-    /// Returns `NotFound` only when no known key exists, so callers keep their
-    /// "nothing to apply" path instead of surfacing an error for a machine that
-    /// was never installed through the NSIS package.
-    fn open_installer_registry_key() -> std::io::Result<RegKey> {
-        let mut last = None;
+    /// Every key is tried and the first one that actually *has* the value wins,
+    /// because the installer creates its own key on every run: stopping at the
+    /// first openable key would make the legacy fallback unreachable. A key that
+    /// cannot be read is stepped over so one restrictive ACL does not hide a
+    /// value recorded by the other installer.
+    fn find_pending_directory() -> crate::Result<Option<String>> {
         for path in INSTALLER_REGISTRY_KEYS {
-            match RegKey::predef(HKEY_CURRENT_USER)
-                .open_subkey_with_flags(path, KEY_READ | KEY_SET_VALUE)
-            {
-                Ok(key) => return Ok(key),
-                Err(error) => last = Some(error),
+            let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey_with_flags(path, KEY_READ)
+            else {
+                continue;
+            };
+            match key.get_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
+                Ok(value) => return Ok(Some(value)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
             }
         }
-        Err(last.unwrap_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "no installer registry key",
-            )
-        }))
+        Ok(None)
     }
 
-    fn clear_pending_directory(key: &RegKey) -> crate::Result<()> {
-        match key.delete_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(())
+    /// Removes the recorded value so it is only applied once.
+    ///
+    /// The lookup opens keys for reading, so write access is requested here
+    /// rather than for every launch. A key that cannot be written leaves the
+    /// value in place, which costs one redundant re-apply instead of failing the
+    /// startup that already succeeded.
+    fn clear_pending_directory() -> crate::Result<()> {
+        for path in INSTALLER_REGISTRY_KEYS {
+            let Ok(key) = RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey_with_flags(path, KEY_SET_VALUE)
+            else {
+                continue;
+            };
+            match key.delete_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
+                Ok(()) => return Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
             }
-            Err(error) => Err(error.into()),
         }
+        Ok(())
     }
 
     pub async fn apply_pending_installer_directory(
@@ -124,21 +137,10 @@ mod windows {
             return Ok(());
         }
 
-        let key = match open_installer_registry_key() {
-            Ok(key) => key,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(());
-            }
-            Err(error) => return Err(error.into()),
+        let Some(pending_directory) = find_pending_directory()? else {
+            return Ok(());
         };
-        let pending_directory: Option<String> =
-            match key.get_value(PENDING_RESOURCE_DIRECTORY_VALUE) {
-                Ok(value) => Some(value),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(());
-                }
-                Err(error) => return Err(error.into()),
-            };
+        let pending_directory = Some(pending_directory);
         let default_directory = DirectoryInfo::initial_settings_dir_path(
             app_identifier,
         )
@@ -164,10 +166,10 @@ mod windows {
                 settings.custom_dir = Some(custom_dir);
                 settings.prev_custom_dir = Some(prev_custom_dir);
                 settings.update(pool).await?;
-                clear_pending_directory(&key)?;
+                clear_pending_directory()?;
             }
             PendingDirectoryDecision::Clear => {
-                clear_pending_directory(&key)?;
+                clear_pending_directory()?;
             }
             PendingDirectoryDecision::Ignore => {}
         }
