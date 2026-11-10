@@ -51,10 +51,21 @@ pub struct StartRequest {
     pub game_port: u16,
 }
 
+/// Name bounds shared with the invite parser in the frontend. A lobby the
+/// service renames on a collision must still fit inside them, otherwise the
+/// host is told the room exists but cannot share its invite.
+pub(super) const MIN_LOBBY_NAME_CHARS: usize = 4;
+pub(super) const MAX_LOBBY_NAME_CHARS: usize = 32;
+
 impl StartRequest {
     fn validate(&self) -> eyre::Result<()> {
         for (value, name, minimum, maximum) in [
-            (&self.lobby_name, "lobby name", 4, 32),
+            (
+                &self.lobby_name,
+                "lobby name",
+                MIN_LOBBY_NAME_CHARS,
+                MAX_LOBBY_NAME_CHARS,
+            ),
             (&self.player_name, "player name", 1, 64),
             (&self.password, "password", 0, 128),
         ] {
@@ -104,6 +115,34 @@ impl StartRequest {
         }
         Ok(())
     }
+}
+
+/// Render a failure for the state snapshot the UI shows.
+///
+/// `{:#}` walks the whole eyre chain, which drags upstream transport text
+/// (socket options, mirror URLs, per-attempt errors) onto the screen; the
+/// outermost context is the sentence written for the player. The full chain is
+/// still logged where the failure happens.
+pub(super) fn display_error(error: &eyre::Report) -> String {
+    let first_line = error.to_string();
+    let first_line = first_line.lines().next().unwrap_or_default().trim();
+    let cleaned: String = first_line
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect();
+    if cleaned.is_empty() {
+        "The room stopped because of an unexpected error".to_string()
+    } else {
+        cleaned.chars().take(400).collect()
+    }
+}
+
+/// Validate an EasyTier peer/node address.
+///
+/// Shared with the direct room, whose request otherwise bypassed the node check
+/// that the lobby request performs.
+pub(super) fn validate_peer_node(value: &str) -> eyre::Result<()> {
+    validate_endpoint(value, false)
 }
 
 fn validate_endpoint(value: &str, signaling: bool) -> eyre::Result<()> {
@@ -192,6 +231,18 @@ pub enum PublishOutcome {
     NotListed,
 }
 
+/// Which provider owns the running session.
+///
+/// Both providers share one state snapshot, so the frontend needs this to tell
+/// its own room from the other provider's: a Direct tab must never render a
+/// lobby room (or its own "leave" button) as if it owned it.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomKind {
+    Lobby,
+    Direct,
+}
+
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct MctierState {
     pub status: Status,
@@ -216,6 +267,8 @@ pub struct MctierState {
     pub download_progress: Option<u8>,
     /// Actionable notice for the host, cleared once it no longer applies.
     pub host_hint: Option<HostHint>,
+    /// Provider that owns this session, for the two frontend tabs.
+    pub room_kind: Option<RoomKind>,
 }
 
 #[derive(Default)]
@@ -282,6 +335,21 @@ fn reset_preparation() {
     if let Ok(mut preparation) = PREPARATION.lock() {
         *preparation = Preparation::default();
     }
+}
+
+/// Fields that describe a live room and must not outlive it.
+///
+/// Both cleanup paths share this so a failed direct room cannot keep the
+/// previous run's address, roster, or voice endpoint on screen.
+fn clear_room_state(state: &mut MctierState) {
+    state.connect_address = None;
+    state.virtual_ip = None;
+    state.players.clear();
+    state.local_player_id = None;
+    state.voice_ice_server = None;
+    state.host_hint = None;
+    state.download_stage = None;
+    state.download_progress = None;
 }
 
 pub struct PendingStart(oneshot::Receiver<eyre::Result<()>>);
@@ -365,6 +433,7 @@ pub async fn begin_start(
         lobby_name: Some(request.lobby_name.clone()),
         game_port: Some(request.game_port),
         has_password: !request.password.is_empty(),
+        room_kind: Some(RoomKind::Lobby),
         ..MctierState::default()
     };
     report_preparation(PreparationStage::Downloading, None);
@@ -394,7 +463,7 @@ pub async fn begin_start(
         if let Some(ready) = ready.take() {
             let message = outcome.as_ref().err().map_or_else(
                 || "lobby operation cancelled".to_string(),
-                |error| format!("{error:#}"),
+                display_error,
             );
             let _ = ready.send(Err(eyre::eyre!(message)));
         }
@@ -406,20 +475,14 @@ pub async fn begin_start(
         {
             service.session = None;
             service.invite_context = None;
-            service.state.connect_address = None;
-            service.state.players.clear();
-            service.state.local_player_id = None;
-            service.state.voice_ice_server = None;
-            service.state.download_stage = None;
-            service.state.download_progress = None;
-            service.state.host_hint = None;
+            clear_room_state(&mut service.state);
             reset_preparation();
             if cancellation.is_cancelled() || outcome.is_ok() {
                 service.state = MctierState::default();
             } else {
                 service.state.status = Status::Error;
                 service.state.error_message =
-                    outcome.err().map(|error| format!("{error:#}"));
+                    outcome.as_ref().err().map(display_error);
             }
             multiplayer::release_provider(MultiplayerProvider::Mctier).await;
         }
@@ -466,6 +529,7 @@ pub async fn begin_start_direct(
         lobby_name: Some(request.room_name.clone()),
         game_port: Some(request.game_port),
         has_password: !request.password.is_empty(),
+        room_kind: Some(RoomKind::Direct),
         ..MctierState::default()
     };
     report_preparation(PreparationStage::Downloading, None);
@@ -494,7 +558,7 @@ pub async fn begin_start_direct(
         if let Some(ready) = readiness {
             let message = outcome.as_ref().err().map_or_else(
                 || "room operation cancelled".to_string(),
-                |error| format!("{error:#}"),
+                display_error,
             );
             let _ = ready.send(Err(eyre::eyre!(message)));
         }
@@ -510,9 +574,13 @@ pub async fn begin_start_direct(
             if cancellation.is_cancelled() || outcome.is_ok() {
                 service.state = MctierState::default();
             } else {
+                // A failed direct room must not leave the previous address,
+                // roster, or voice endpoint behind: the UI still renders those
+                // fields while `status` is `error`.
+                clear_room_state(&mut service.state);
                 service.state.status = Status::Error;
                 service.state.error_message =
-                    outcome.err().map(|error| format!("{error:#}"));
+                    outcome.as_ref().err().map(display_error);
             }
             multiplayer::release_provider(MultiplayerProvider::Direct).await;
         }

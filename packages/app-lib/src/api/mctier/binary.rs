@@ -138,6 +138,12 @@ pub fn extract(bytes: Vec<u8>, root: &Path) -> eyre::Result<PathBuf> {
         }
         if std::fs::read(&target).ok().as_deref() != Some(contents.as_slice()) {
             let temporary = root.join(format!(".{name}.download"));
+            // A crash between writing and renaming leaves the temp file behind,
+            // and `create_new` would then fail every later launch until the user
+            // cleaned a hidden file inside the component cache.
+            if std::fs::symlink_metadata(&temporary).is_ok() {
+                std::fs::remove_file(&temporary)?;
+            }
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)

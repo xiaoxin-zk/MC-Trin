@@ -938,11 +938,15 @@ async fn only_room_members_voice_signals_reach_the_renderer() {
 }
 
 /// Accepts the first session, drops it, then serves one more session on the
-/// same address so a reconnect can be observed.
-async fn signaling_reconnecting_once() -> String {
+/// same address so a reconnect can be observed. Every set-lobby-options the
+/// client sends is reported, so a test can assert the listing is re-applied.
+async fn signaling_reconnecting_once() -> (String, oneshot::Receiver<Vec<Value>>)
+{
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let url = format!("ws://{}", listener.local_addr().unwrap());
+    let (sender, received) = oneshot::channel();
     tokio::spawn(async move {
+        let mut visibility = Vec::new();
         // First session: established, then dropped mid-flight.
         let (stream, _) = listener.accept().await.unwrap();
         let mut socket = accept_async(stream).await.unwrap();
@@ -955,6 +959,7 @@ async fn signaling_reconnecting_once() -> String {
                 break;
             };
             if value["type"] == "set-lobby-options" {
+                visibility.push(value.clone());
                 socket
                     .send(Message::Text(
                         json!({
@@ -971,8 +976,11 @@ async fn signaling_reconnecting_once() -> String {
         }
         let _ = socket.close(None).await;
 
-        // Second session: the reconnect must be able to register again.
+        // Second session: the reconnect must be able to register again, and it
+        // must restate the room visibility instead of inheriting whatever the
+        // service defaults to for that fresh registration.
         let Ok((stream, _)) = listener.accept().await else {
+            let _ = sender.send(visibility);
             return;
         };
         let mut socket = accept_async(stream).await.unwrap();
@@ -984,19 +992,35 @@ async fn signaling_reconnecting_once() -> String {
             let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) else {
                 break;
             };
-            if value["type"] == "leave" {
-                return;
+            match value["type"].as_str() {
+                Some("set-lobby-options") => {
+                    visibility.push(value.clone());
+                    socket
+                        .send(Message::Text(
+                            json!({
+                                "type": "lobby-options-changed",
+                                "isPublic": value["isPublic"],
+                            })
+                            .to_string()
+                            .into(),
+                        ))
+                        .await
+                        .unwrap();
+                }
+                Some("leave") => break,
+                _ => {}
             }
         }
+        let _ = sender.send(visibility);
     });
-    url
+    (url, received)
 }
 
 #[tokio::test]
 async fn a_dropped_signaling_link_reconnects_instead_of_ending_the_room() {
     let _serial = multiplayer::SESSION_TEST.lock().await;
     let (directory, executable) = fixture();
-    let url = signaling_reconnecting_once().await;
+    let (url, visibility) = signaling_reconnecting_once().await;
     let mut input = request();
     input.signaling_server = url;
     input.game_port = minecraft().await;
@@ -1032,6 +1056,22 @@ async fn a_dropped_signaling_link_reconnects_instead_of_ending_the_room() {
         .unwrap()
         .unwrap()
         .unwrap();
+    // Re-registering creates a fresh session, so the host's listing has to be
+    // restated; otherwise a private room comes back advertised as public and a
+    // published one silently disappears from the directory.
+    let visibility = tokio::time::timeout(Duration::from_secs(10), visibility)
+        .await
+        .expect("the fake service must report every visibility request")
+        .unwrap();
+    assert_eq!(
+        visibility.len(),
+        2,
+        "the listing must be re-applied after reconnecting: {visibility:?}"
+    );
+    assert_eq!(visibility[0]["type"], "set-lobby-options");
+    assert_eq!(visibility[1]["type"], "set-lobby-options");
+    assert_eq!(visibility[1]["isPublic"], false);
+    assert_eq!(visibility[1]["serverNode"], "tcp://127.0.0.1:11010");
     let _ = directory;
 }
 
@@ -1066,6 +1106,101 @@ fn direct_room_validation_enforces_the_password_contract() {
     let mut nameless = direct_request();
     nameless.room_name = "ab".into();
     assert!(nameless.validate().is_err());
+
+    // The node reaches `--peers`; a typo must fail here, not after the download.
+    for node in [
+        "",
+        "node.example:11010",
+        "file:///etc/passwd",
+        "tcp://user:pass@node.example:11010",
+        "tcp://node.example:11010/path",
+    ] {
+        let mut input = direct_request();
+        input.server_node = node.into();
+        assert!(input.validate().is_err(), "{node:?}");
+    }
+}
+
+#[test]
+fn a_collision_rename_stays_inside_the_invite_name_limit() {
+    // The service suffixes a taken name, and the invite parser in the frontend
+    // rejects anything longer than 32 characters, so the rename must trim.
+    let requested = "a".repeat(MAX_LOBBY_NAME_CHARS);
+    for attempt in 0..8 {
+        let renamed = runtime::suffixed_lobby_name(&requested, attempt);
+        assert!(
+            renamed.chars().count() <= MAX_LOBBY_NAME_CHARS,
+            "{renamed} is {} chars",
+            renamed.chars().count()
+        );
+        assert!(renamed.starts_with('a'));
+        assert!(renamed.chars().count() > 1);
+    }
+    // Short names keep their whole base and only gain the suffix.
+    let renamed = runtime::suffixed_lobby_name("TestRoom", 0);
+    assert!(renamed.starts_with("TestRoom-"));
+    assert!(renamed.chars().count() <= MAX_LOBBY_NAME_CHARS);
+}
+
+#[test]
+fn a_stale_lobby_attempt_does_not_keep_the_previous_room_fields() {
+    let mut state = MctierState {
+        status: Status::Hosting,
+        virtual_ip: Some(Ipv4Addr::new(10, 126, 126, 7)),
+        connect_address: Some("127.0.0.1:25566".into()),
+        local_player_id: Some("a".repeat(64)),
+        voice_ice_server: Some("stun:10.126.126.7:5000".into()),
+        host_hint: Some(HostHint::GamePortClosed),
+        download_stage: Some(PreparationStage::Verifying),
+        download_progress: Some(42),
+        ..MctierState::default()
+    };
+    state.players.push(Player {
+        player_id: "b".repeat(64),
+        player_name: "Peer".into(),
+        virtual_ip: Some(Ipv4Addr::new(10, 126, 126, 8)),
+        session_generation: 1,
+    });
+
+    clear_room_state(&mut state);
+
+    // The status is deliberately kept: the caller decides whether the room
+    // ended cleanly or failed, and the error text lives next to it.
+    assert_eq!(state.status, Status::Hosting);
+    assert!(state.connect_address.is_none());
+    assert!(state.virtual_ip.is_none());
+    assert!(state.players.is_empty());
+    assert!(state.local_player_id.is_none());
+    assert!(state.voice_ice_server.is_none());
+    assert!(state.host_hint.is_none());
+    assert!(state.download_stage.is_none());
+    assert_eq!(state.download_progress, None);
+}
+
+#[test]
+fn address_collisions_are_detected_across_server_wordings() {
+    // The exact production string, plus the rewordings/translations a service
+    // update could ship; all of them are recoverable by retrying.
+    for message in [
+        "virtualIp 已被大厅内其他成员使用",
+        "virtualIp 已被占用",
+        "Virtual IP already in use",
+        "virtual ip is occupied by another member",
+        "虚拟IP已被使用",
+        "virtualIp conflict",
+    ] {
+        assert!(protocol::address_taken(message), "{message}");
+    }
+    // A rejection that is not about the address must fail the room instead of
+    // burning all 254 candidates on an error that will repeat every time.
+    for message in [
+        "room does not exist",
+        "lobbyName 已被占用",
+        "invalid signature",
+        "version too old",
+    ] {
+        assert!(!protocol::address_taken(message), "{message}");
+    }
 }
 
 #[test]

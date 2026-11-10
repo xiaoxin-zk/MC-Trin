@@ -10,7 +10,7 @@
 //! Consequence worth stating plainly in the UI: a direct room is never listed.
 //! It is joined by pasting the room code or typing the virtual address.
 
-use std::{net::Ipv4Addr, path::Path, process::Stdio, time::Duration};
+use std::{net::Ipv4Addr, path::Path, process::Stdio};
 
 use eyre::{Context, bail};
 use serde::{Deserialize, Serialize};
@@ -76,6 +76,9 @@ impl DirectRequest {
         if self.game_port == 0 {
             bail!("Minecraft port must be between 1 and 65535");
         }
+        // The node reaches `--peers`; validating it here turns a typo into a
+        // form error instead of a kernel failure after the download.
+        super::validate_peer_node(&self.server_node)?;
         if let Some(address) = self.host_address.as_deref() {
             address
                 .parse::<Ipv4Addr>()
@@ -188,6 +191,7 @@ pub async fn run(
 
     // The host owns the LAN port; a closed port is a warning, never a failed
     // room, because players routinely open the world after creating the room.
+    let mut host_hint_watcher = None;
     if !joining
         && TcpStream::connect((Ipv4Addr::LOCALHOST, request.game_port))
             .await
@@ -197,19 +201,11 @@ pub async fn run(
             state.host_hint = Some(HostHint::GamePortClosed);
         })
         .await;
-        let game_port = request.game_port;
-        tokio::spawn(async move {
-            for _ in 0..120 {
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                if TcpStream::connect((Ipv4Addr::LOCALHOST, game_port))
-                    .await
-                    .is_ok()
-                {
-                    update(generation, |state| state.host_hint = None).await;
-                    return;
-                }
-            }
-        });
+        host_hint_watcher = Some(runtime::GamePortWatcher::spawn(
+            generation,
+            request.game_port,
+            cancellation.clone(),
+        ));
     }
 
     let rpc_port = runtime::free_port().await?;
@@ -329,6 +325,9 @@ pub async fn run(
     };
 
     let _ = child.kill().await;
+    if let Some(watcher) = host_hint_watcher.take() {
+        watcher.stop().await;
+    }
     update(generation, |state| {
         state.status = Status::Idle;
         state.host_hint = None;

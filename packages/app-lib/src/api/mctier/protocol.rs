@@ -639,6 +639,33 @@ fn validate_candidate(value: &Value) -> eyre::Result<Value> {
     Ok(result)
 }
 
+/// Whether a registration rejection means "somebody else already owns this
+/// virtual address".
+///
+/// Retrying with the next candidate is a full recovery here, so the check must
+/// survive the service rephrasing, translating, or re-punctuating its message.
+/// Only messages that name the address are treated as collisions: every other
+/// rejection would fail again identically for each of the 254 candidates.
+pub(super) fn address_taken(message: &str) -> bool {
+    let message = message.to_lowercase();
+    let names_address = message.contains("virtualip")
+        || message.contains("virtual ip")
+        || message.contains("虚拟ip")
+        || message.contains("虚拟 ip")
+        || message.contains("地址");
+    let says_taken = message.contains("已被")
+        || message.contains("被占")
+        || message.contains("占用")
+        || message.contains("已使用")
+        || message.contains("in use")
+        || message.contains("already")
+        || message.contains("taken")
+        || message.contains("occupied")
+        || message.contains("duplicate")
+        || message.contains("conflict");
+    names_address && says_taken
+}
+
 pub async fn register(
     request: &StartRequest,
     identity: &Identity,
@@ -671,7 +698,7 @@ pub async fn register(
                 .filter(|c| !c.is_control())
                 .take(256)
                 .collect();
-            if safe == "virtualIp 已被大厅内其他成员使用" {
+            if address_taken(&safe) {
                 return Err(eyre::Report::new(VirtualAddressInUse));
             }
             bail!("lobby registration rejected: {safe}");

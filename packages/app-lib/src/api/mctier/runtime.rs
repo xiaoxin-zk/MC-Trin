@@ -43,6 +43,15 @@ const VISIBILITY_CONFIRMATION_WINDOW: Duration = if cfg!(test) {
 } else {
     Duration::from_millis(1500)
 };
+/// A directory read is a fresh short-lived connection to a public endpoint, so
+/// one slow sample is not evidence that the room is missing. Probe a few times
+/// before telling the host the listing is absent.
+const DIRECTORY_CONFIRMATION_ATTEMPTS: usize = 3;
+const DIRECTORY_CONFIRMATION_PAUSE: Duration = if cfg!(test) {
+    Duration::from_millis(20)
+} else {
+    Duration::from_millis(750)
+};
 
 fn stun_binding_response(
     request: &[u8],
@@ -150,6 +159,27 @@ fn spawn_voice_discovery(
     })
 }
 
+/// Build the renamed lobby used after a name collision.
+///
+/// The service suffixes are the host's only way back into a taken name, but the
+/// invite parser in the frontend accepts at most
+/// [`super::MAX_LOBBY_NAME_CHARS`] characters: appending to a name already at
+/// the limit produced a room whose invite code was rejected on the guest's
+/// machine. Trim the base instead so the result always fits.
+pub(super) fn suffixed_lobby_name(requested: &str, attempt: usize) -> String {
+    let suffix = format!("-{:04x}", rand::random::<u16>() ^ attempt as u16);
+    let base_limit = super::MAX_LOBBY_NAME_CHARS - suffix.chars().count();
+    let base: String = requested.chars().take(base_limit).collect();
+    // A trimmed base could end in '-' and read like a double suffix; the
+    // suffix alone keeps the name unique anyway.
+    let base = base.trim_end_matches('-');
+    if base.is_empty() {
+        format!("room{suffix}")
+    } else {
+        format!("{base}{suffix}")
+    }
+}
+
 pub(super) async fn register_with_retry(
     request: &StartRequest,
     mut identity: protocol::Identity,
@@ -194,10 +224,8 @@ pub(super) async fn register_with_retry(
             Err(protocol::RegistrationError::AddressInUse) => continue,
             Err(protocol::RegistrationError::Failed(error)) => {
                 if !renamed && lobby_name_taken(&format!("{error:#}")) {
-                    request.lobby_name = format!(
-                        "{requested_name}-{:04x}",
-                        rand::random::<u16>()
-                    );
+                    request.lobby_name =
+                        suffixed_lobby_name(&requested_name, attempt);
                     renamed = true;
                     continue;
                 }
@@ -245,6 +273,57 @@ pub fn arguments(
         ]);
     }
     arguments
+}
+
+/// Watches the host's LAN port until it opens, then clears the hint.
+///
+/// The probe is only meaningful while the room exists: it stops with the
+/// session's cancellation token, and dropping the guard aborts it, so an early
+/// `?` cannot leave a task polling a room that has already gone away.
+pub(super) struct GamePortWatcher(Option<JoinHandle<()>>);
+
+impl GamePortWatcher {
+    pub(super) fn spawn(
+        generation: u64,
+        game_port: u16,
+        cancellation: CancellationToken,
+    ) -> Self {
+        let worker = tokio::spawn(async move {
+            for _ in 0..120 {
+                tokio::select! {
+                    biased;
+                    _ = cancellation.cancelled() => return,
+                    _ = tokio::time::sleep(Duration::from_secs(3)) => {}
+                }
+                if cancellation.is_cancelled() {
+                    return;
+                }
+                if TcpStream::connect((Ipv4Addr::LOCALHOST, game_port))
+                    .await
+                    .is_ok()
+                {
+                    update(generation, |state| state.host_hint = None).await;
+                    return;
+                }
+            }
+        });
+        Self(Some(worker))
+    }
+
+    pub(super) async fn stop(mut self) {
+        if let Some(worker) = self.0.take() {
+            worker.abort();
+            let _ = worker.await;
+        }
+    }
+}
+
+impl Drop for GamePortWatcher {
+    fn drop(&mut self) {
+        if let Some(worker) = self.0.as_ref() {
+            worker.abort();
+        }
+    }
 }
 
 pub(super) async fn free_port() -> eyre::Result<u16> {
@@ -353,6 +432,7 @@ pub async fn run(
         let lobby_name = request.lobby_name.clone();
         update(generation, |state| state.lobby_name = Some(lobby_name)).await;
     }
+    let mut host_hint_watcher: Option<GamePortWatcher> = None;
     let forwarding = if request.mode == EntryMode::Join {
         let remote = registration
             .players
@@ -384,20 +464,15 @@ pub async fn run(
             })
             .await;
             // Clear the notice as soon as the player opens the world to LAN.
-            let game_port = request.game_port;
-            tokio::spawn(async move {
-                for _ in 0..120 {
-                    tokio::time::sleep(Duration::from_secs(3)).await;
-                    if TcpStream::connect((Ipv4Addr::LOCALHOST, game_port))
-                        .await
-                        .is_ok()
-                    {
-                        update(generation, |state| state.host_hint = None)
-                            .await;
-                        return;
-                    }
-                }
-            });
+            // The poller belongs to the session: without the cancellation arm it
+            // outlived the room and kept probing the game port for minutes
+            // after the host had left.
+            let watcher = GamePortWatcher::spawn(
+                generation,
+                request.game_port,
+                cancellation.clone(),
+            );
+            host_hint_watcher = Some(watcher);
         }
         None
     };
@@ -408,6 +483,9 @@ pub async fn run(
         .spawn()
         .wrap_err("could not start EasyTier")?;
     let mut voice_discovery: Option<VoiceDiscovery> = None;
+    // Frames read while a visibility change waits for its echo. The main loop
+    // replays them so no roster or voice frame is lost to that window.
+    let mut deferred = std::collections::VecDeque::new();
     let operation = async {
         wait_for_listener(&mut child, rpc_port).await?;
         if let Some((port, _)) = forwarding {
@@ -421,72 +499,23 @@ pub async fn run(
         // rooms stay listed even with a password: the server validates the
         // password when players join, and a service that refuses the option
         // must not take the room down.
-        let mut publish_outcome = PublishOutcome::Private;
-        if request.is_public {
-            match set_lobby_visibility(
-                &mut registration.socket,
-                &identity.id,
-                &request.server_node,
-                true,
-                Some(&request),
-                cancellation,
-            )
-            .await
-            {
-                Ok(outcome) => {
-                    publish_outcome = outcome;
-                    // The request is one-way, so confirm it against the
-                    // directory itself. A host that is told "unconfirmed"
-                    // otherwise has no way to know the room is missing.
-                    if outcome != PublishOutcome::Private {
-                        let listed = protocol::public_lobby_names(
-                            &request.signaling_server,
-                            VISIBILITY_CONFIRMATION_WINDOW * 4,
-                        )
-                        .await;
-                        match listed {
-                            Ok(names)
-                                if names.iter().any(|name| {
-                                    name == &request.lobby_name
-                                }) =>
-                            {
-                                publish_outcome = PublishOutcome::Published
-                            }
-                            Ok(_) => {
-                                tracing::warn!(
-                                    lobby = %request.lobby_name,
-                                    "the lobby service accepted the publish but does not list the room"
-                                );
-                                publish_outcome = PublishOutcome::NotListed;
-                            }
-                            Err(error) => {
-                                tracing::warn!(
-                                    %error,
-                                    "could not read the lobby directory to confirm the listing"
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(error) => {
-                    // The room itself is healthy; only its listing failed.
-                    tracing::warn!(%error, "the lobby could not be published publicly");
-                }
-            }
-        } else if let Err(error) = set_lobby_visibility(
+        let publish_outcome = match apply_visibility(
             &mut registration.socket,
             &identity.id,
-            &request.server_node,
-            false,
-            None,
+            &request,
+            request.is_public,
             cancellation,
+            &mut deferred,
         )
         .await
         {
-            // A service that refuses the option must not stop the room: the
-            // host still keeps the password, and the local state stays private.
-            tracing::warn!(%error, "could not unlist the lobby from the public list");
-        }
+            Ok(outcome) => outcome,
+            Err(error) => {
+                // The room itself is healthy; only its listing failed.
+                tracing::warn!(%error, "the lobby could not publish publicly");
+                PublishOutcome::Private
+            }
+        };
         voice_discovery = Some(VoiceDiscovery(Some(spawn_voice_discovery(
             generation,
             identity.ip,
@@ -525,13 +554,17 @@ pub async fn run(
                 Control(Option<ControlMessage>),
                 Message(eyre::Result<serde_json::Value>),
             }
-            let event = tokio::select! {
-                biased;
-                _ = cancellation.cancelled() => Event::Cancelled,
-                exit = child.wait() => Event::Exited(exit),
-                _ = heartbeat.tick() => Event::Heartbeat,
-                control = controls.recv(), if controls_open => Event::Control(control),
-                message = protocol::next_message(&mut registration.socket) => Event::Message(message),
+            let event = if let Some(message) = deferred.pop_front() {
+                Event::Message(Ok(message))
+            } else {
+                tokio::select! {
+                    biased;
+                    _ = cancellation.cancelled() => Event::Cancelled,
+                    exit = child.wait() => Event::Exited(exit),
+                    _ = heartbeat.tick() => Event::Heartbeat,
+                    control = controls.recv(), if controls_open => Event::Control(control),
+                    message = protocol::next_message(&mut registration.socket) => Event::Message(message),
+                }
             };
             match event {
                 Event::Cancelled => return Ok(()),
@@ -555,13 +588,13 @@ pub async fn run(
                             "only the active room host can change public visibility"
                         ))
                     } else {
-                        set_lobby_visibility(
+                        apply_visibility(
                             &mut registration.socket,
                             &identity.id,
-                            &request.server_node,
+                            &request,
                             is_public,
-                            Some(&request),
                             cancellation,
+                            &mut deferred,
                         )
                         .await
                     };
@@ -653,6 +686,32 @@ pub async fn run(
                     };
                     registration = session;
                     let players = registration.players.clone();
+                    // Re-registering does not restore the previous listing: the
+                    // service treats the reconnected socket as a fresh room, so
+                    // a private room would be re-advertised and a public one
+                    // would silently disappear from the directory. Re-apply the
+                    // visibility the host asked for, and report whatever the
+                    // service actually settled on.
+                    let publish_outcome = match apply_visibility(
+                        &mut registration.socket,
+                        &identity.id,
+                        &request,
+                        request.is_public,
+                        cancellation,
+                        &mut deferred,
+                    )
+                    .await
+                    {
+                        Ok(outcome) => outcome,
+                        Err(error) => {
+                            // Losing the listing must not take the room down.
+                            tracing::warn!(
+                                %error,
+                                "could not restore the lobby's public listing after reconnecting"
+                            );
+                            PublishOutcome::Private
+                        }
+                    };
                     update(generation, |state| {
                         state.status = if request.mode == EntryMode::Create {
                             Status::Hosting
@@ -661,6 +720,12 @@ pub async fn run(
                         };
                         state.error_message = None;
                         state.players = players;
+                        state.is_public = matches!(
+                            publish_outcome,
+                            PublishOutcome::Published
+                                | PublishOutcome::SentUnconfirmed
+                        );
+                        state.publish_outcome = publish_outcome;
                     })
                     .await;
                     continue;
@@ -738,6 +803,9 @@ pub async fn run(
     if let Some(discovery) = voice_discovery.take() {
         discovery.stop().await;
     }
+    if let Some(watcher) = host_hint_watcher.take() {
+        watcher.stop().await;
+    }
     let _ = child.kill().await;
     let _ = child.wait().await;
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
@@ -763,6 +831,10 @@ pub async fn run(
 /// list. The request is therefore optimistic: a rejection fails, a broadcast
 /// confirms, and silence means the service accepted the frame without echoing
 /// it — which must not take the host's room down.
+///
+/// Frames that are not the confirmation are handed back instead of being
+/// dropped: a roster update that arrives inside the confirmation window still
+/// has to reach the main loop.
 async fn set_lobby_visibility(
     socket: &mut protocol::Socket,
     player_id: &str,
@@ -770,6 +842,7 @@ async fn set_lobby_visibility(
     is_public: bool,
     request: Option<&StartRequest>,
     cancellation: &CancellationToken,
+    deferred: &mut std::collections::VecDeque<serde_json::Value>,
 ) -> eyre::Result<PublishOutcome> {
     let mut options = json!({
         "type": "set-lobby-options",
@@ -809,7 +882,7 @@ async fn set_lobby_visibility(
                 Some("kicked" | "version-too-old") => {
                     bail!("the signaling server ended this lobby session")
                 }
-                _ => {}
+                _ => deferred.push(message),
             }
         }
     })
@@ -829,6 +902,76 @@ async fn set_lobby_visibility(
         }
         Err(_) => Ok(PublishOutcome::Private),
     }
+}
+
+/// Re-apply the room's visibility and confirm a publish against the directory.
+///
+/// Shared by the initial registration, the visibility control, and the
+/// reconnect path: all three must leave `is_public`/`publish_outcome`
+/// describing what the service actually did, not what the socket request hoped.
+async fn apply_visibility(
+    socket: &mut protocol::Socket,
+    player_id: &str,
+    request: &StartRequest,
+    is_public: bool,
+    cancellation: &CancellationToken,
+    deferred: &mut std::collections::VecDeque<serde_json::Value>,
+) -> eyre::Result<PublishOutcome> {
+    let outcome = set_lobby_visibility(
+        socket,
+        player_id,
+        &request.server_node,
+        is_public,
+        is_public.then_some(request),
+        cancellation,
+        deferred,
+    )
+    .await?;
+    if is_public && outcome != PublishOutcome::Private {
+        return Ok(confirm_listing(request, outcome).await);
+    }
+    Ok(outcome)
+}
+
+/// Check the published room against the directory itself.
+///
+/// Publishing is one-way, so a host that is told "unconfirmed" has no way to
+/// know the room is missing. One directory read is a single sample of a public
+/// endpoint, so a negative answer is retried before it is reported.
+async fn confirm_listing(
+    request: &StartRequest,
+    sent: PublishOutcome,
+) -> PublishOutcome {
+    for attempt in 0..DIRECTORY_CONFIRMATION_ATTEMPTS {
+        if attempt > 0 {
+            tokio::time::sleep(DIRECTORY_CONFIRMATION_PAUSE).await;
+        }
+        match protocol::public_lobby_names(
+            &request.signaling_server,
+            VISIBILITY_CONFIRMATION_WINDOW * 4,
+        )
+        .await
+        {
+            Ok(names)
+                if names.iter().any(|name| name == &request.lobby_name) =>
+            {
+                return PublishOutcome::Published;
+            }
+            Ok(_) => continue,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    "could not read the lobby directory to confirm the listing"
+                );
+                return sent;
+            }
+        }
+    }
+    tracing::warn!(
+        lobby = %request.lobby_name,
+        "the lobby service accepted the publish but does not list the room"
+    );
+    PublishOutcome::NotListed
 }
 
 #[cfg(test)]
@@ -918,6 +1061,7 @@ mod tests {
         let (mut socket, _) =
             connect_async(format!("ws://{address}")).await.unwrap();
         let cancellation = CancellationToken::new();
+        let mut deferred = std::collections::VecDeque::new();
         let outcome = set_lobby_visibility(
             &mut socket,
             &"a".repeat(64),
@@ -925,6 +1069,7 @@ mod tests {
             true,
             None,
             &cancellation,
+            &mut deferred,
         )
         .await
         .unwrap();
@@ -956,6 +1101,7 @@ mod tests {
 
         let (mut socket, _) =
             connect_async(format!("ws://{address}")).await.unwrap();
+        let mut deferred = std::collections::VecDeque::new();
         let outcome = set_lobby_visibility(
             &mut socket,
             &"b".repeat(64),
@@ -963,6 +1109,7 @@ mod tests {
             true,
             None,
             &CancellationToken::new(),
+            &mut deferred,
         )
         .await
         .expect("silence is not a failure");
@@ -984,6 +1131,7 @@ mod tests {
 
         let (mut socket, _) =
             connect_async(format!("ws://{address}")).await.unwrap();
+        let mut deferred = std::collections::VecDeque::new();
         let outcome = set_lobby_visibility(
             &mut socket,
             &"c".repeat(64),
@@ -991,6 +1139,7 @@ mod tests {
             false,
             None,
             &CancellationToken::new(),
+            &mut deferred,
         )
         .await
         .unwrap();
@@ -1017,6 +1166,7 @@ mod tests {
 
         let (mut socket, _) =
             connect_async(format!("ws://{address}")).await.unwrap();
+        let mut deferred = std::collections::VecDeque::new();
         let error = set_lobby_visibility(
             &mut socket,
             &"d".repeat(64),
@@ -1024,6 +1174,7 @@ mod tests {
             true,
             None,
             &CancellationToken::new(),
+            &mut deferred,
         )
         .await
         .unwrap_err();

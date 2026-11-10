@@ -17,7 +17,10 @@ const signalingUrl = PUBLIC_LOBBY_SIGNALING_URL
 const maxResponseLength = 500_000
 const maxLobbyCount = 300
 const maxPlayerCount = 100_000
-const serverNodeProtocols = new Set(['tcp:', 'udp:', 'ws:', 'wss:', 'txt:'])
+// Must stay in step with `validate_endpoint` on the Rust side: it accepts only
+// tcp/udp/ws/wss peers, so anything else listed here would fail the join after
+// the directory had already been shown as joinable.
+const serverNodeProtocols = new Set(['tcp:', 'udp:', 'ws:', 'wss:'])
 
 function isSafeServerNode(value: unknown): value is string {
     if (typeof value !== 'string') return false
@@ -116,7 +119,13 @@ export function buildPublicLobbyJoinRequest(
     }
 }
 
-/** Fetches the public directory only; connection details and credentials are not exposed. */
+/**
+ * Fetches the public directory.
+ *
+ * NOTE: this still queries from the webview, so it bypasses the multiplayer
+ * proxy setting. Moving it to a backend command needs a shell IPC registration
+ * outside this module's scope.
+ */
 export function fetchPublicLobbies(
     timeoutMs = 8_000,
     signal?: AbortSignal,

@@ -3,8 +3,14 @@ import { LockIcon } from '@modrinth/assets'
 import { Button, CopyCode, defineMessages, StyledInput, useVIntl } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
-import { DEFAULT_MCTIER_NODE, type DirectRoomRequest, type MctierState } from '@/helpers/mctier'
-import { multiplayer, multiplayerErrorText, validLocalPort } from '@/helpers/multiplayer'
+import {
+    DEFAULT_MCTIER_NODE,
+    type DirectRoomRequest,
+    type MctierState,
+    isValidDirectServerNode,
+    parseDirectRoomCode,
+} from '@/helpers/mctier'
+import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'
 
 const props = defineProps<{ state?: MctierState }>()
 
@@ -21,32 +27,55 @@ const messages = defineMessages({
     password: { id: 'app.multiplayer.direct.password', defaultMessage: 'Room password' },
     playerName: { id: 'app.multiplayer.direct.player-name', defaultMessage: 'Player name' },
     port: { id: 'app.multiplayer.direct.port', defaultMessage: 'Minecraft port' },
+    guestPort: {
+        id: 'app.multiplayer.direct.guest-port',
+        defaultMessage: 'Host Minecraft port',
+    },
     node: { id: 'app.multiplayer.direct.node', defaultMessage: 'EasyTier node' },
     joinAddress: {
         id: 'app.multiplayer.direct.join-address',
-        defaultMessage: 'Host address (only when joining)',
+        defaultMessage: 'Host address or room code',
     },
     joinAddressHint: {
         id: 'app.multiplayer.direct.join-address-hint',
-        defaultMessage: 'Ask the host for the address shown in their room, such as 10.126.126.7',
+        defaultMessage:
+            'Paste the room code the host shared, or type the host address shown in their room, such as 10.126.126.7.',
     },
     create: { id: 'app.multiplayer.direct.create', defaultMessage: 'Create room' },
     join: { id: 'app.multiplayer.direct.join', defaultMessage: 'Join room' },
     leave: { id: 'app.multiplayer.direct.leave', defaultMessage: 'Leave room' },
+    cancel: { id: 'app.multiplayer.direct.cancel', defaultMessage: 'Cancel' },
     hostHint: {
         id: 'app.multiplayer.direct.host-hint',
         defaultMessage:
             'Open your world to LAN first and enter the port Minecraft shows. Guests join by the address below.',
     },
+    guestHint: {
+        id: 'app.multiplayer.direct.guest-hint',
+        defaultMessage:
+            'Enter the host’s LAN port and address. The host must keep the world open to LAN.',
+    },
     address: {
         id: 'app.multiplayer.direct.address',
         defaultMessage: 'Give this address to your guests',
+    },
+    guestAddress: {
+        id: 'app.multiplayer.direct.guest-address',
+        defaultMessage: 'Open this address in Minecraft',
     },
     roomCode: { id: 'app.multiplayer.direct.room-code', defaultMessage: 'Room code' },
     roomCodeHint: {
         id: 'app.multiplayer.direct.room-code-hint',
         defaultMessage:
-            'It bundles the room name, password, node, and port so a guest can paste it once.',
+            'It bundles the room name, node, host address, and port. The password is never part of it — share it separately.',
+    },
+    invalidCode: {
+        id: 'app.multiplayer.direct.invalid-code',
+        defaultMessage: 'That is not a direct room code or host address.',
+    },
+    invalidNode: {
+        id: 'app.multiplayer.direct.invalid-node',
+        defaultMessage: 'Enter a node address such as tcp://node.example:11010.',
     },
     invalid: {
         id: 'app.multiplayer.direct.invalid',
@@ -57,6 +86,11 @@ const messages = defineMessages({
         defaultMessage: 'A direct room needs a password.',
     },
     starting: { id: 'app.multiplayer.direct.starting', defaultMessage: 'Preparing the room…' },
+    gamePortClosed: {
+        id: 'app.multiplayer.direct.game-port-closed',
+        defaultMessage:
+            'Minecraft is not listening on port {port} yet. Open the world to LAN in game so friends can join.',
+    },
 })
 
 const roomName = ref('')
@@ -66,12 +100,23 @@ const port = ref('25565')
 const node = ref(DEFAULT_MCTIER_NODE)
 const joinAddress = ref('')
 const pending = ref(false)
+const stopping = ref(false)
 const error = ref('')
+/** Backend state errors carry transport detail; the UI shows one sentence. */
+const displayError = computed(() => error.value || sanitizeErrorText(props.state?.error_message ?? ''))
 
-const connected = computed(() => ['hosting', 'joined'].includes(props.state?.status ?? ''))
+/** The room this component created or joined, so the other provider's session
+ * is never rendered as this one's. */
+const ownsRoom = computed(() => props.state?.room_kind !== 'lobby')
+const connected = computed(
+    () => ownsRoom.value && ['hosting', 'joined'].includes(props.state?.status ?? ''),
+)
+const joiningRoom = computed(() => props.state?.mode === 'join')
 const roomCode = computed(() => {
     const state = props.state
-    if (!state?.lobby_name || !state.virtual_ip) return ''
+    // Only the host can hand out a code: for a guest the virtual address is
+    // their own, so a code built here would point other players at themselves.
+    if (joiningRoom.value || !ownsRoom.value || !state?.lobby_name || !state.virtual_ip) return ''
     // Keep the same shape the lobby invite uses so one paste handler can read
     // either kind of room.
     const params = new URLSearchParams({
@@ -79,22 +124,58 @@ const roomCode = computed(() => {
         node: node.value.trim(),
         port: String(state.game_port ?? 0),
     })
-    if (state.virtual_ip) params.set('host', state.virtual_ip)
+    params.set('host', state.virtual_ip)
     return `mctrin-direct://room?${params.toString()}`
 })
 
-const valid = computed(
+const baseValid = computed(
     () =>
-        /^[\p{L}\p{N}_-]{4,32}$/u.test(roomName.value) &&
         playerName.value.trim().length > 0 &&
         password.value.trim().length > 0 &&
-        validLocalPort(port.value) !== null,
+        validLocalPort(port.value) !== null &&
+        isValidDirectServerNode(node.value),
+)
+/** Creating needs the room definition the host types. */
+const canCreate = computed(
+    () => baseValid.value && /^[\p{L}\p{N}_-]{4,32}$/u.test(roomName.value),
+)
+/**
+ * Joining needs a room code or host address, not a typed room name: the code
+ * itself carries the name, so requiring both would force the guest to press
+ * the decode button before "Join room" became usable.
+ */
+const canJoin = computed(
+    () => baseValid.value && parseDirectRoomCode(joinAddress.value) !== null,
 )
 
 async function start(joining: boolean) {
-    if (!valid.value || pending.value) return
+    if (pending.value) return
+    if (!(joining ? canJoin.value : canCreate.value)) return
     const parsedPort = validLocalPort(port.value)
     if (parsedPort === null) return
+    if (!isValidDirectServerNode(node.value)) {
+        error.value = formatMessage(messages.invalidNode)
+        return
+    }
+    if (!joining && !/^[\p{L}\p{N}_-]{4,32}$/u.test(roomName.value)) {
+        error.value = formatMessage(messages.invalid)
+        return
+    }
+    let hostAddress: string | null = null
+    if (joining) {
+        // A pasted room code is only expanded here, so "Join room" works
+        // whether or not the guest pressed the code button first.
+        const parsed = parseDirectRoomCode(joinAddress.value)
+        if (!parsed) {
+            error.value = formatMessage(messages.invalidCode)
+            return
+        }
+        hostAddress = parsed.host_address
+        joinAddress.value = parsed.host_address
+        if (parsed.room_name && !roomName.value.trim()) roomName.value = parsed.room_name
+        if (parsed.server_node) node.value = parsed.server_node
+        if (parsed.game_port !== undefined) port.value = String(parsed.game_port)
+    }
     pending.value = true
     error.value = ''
     try {
@@ -103,8 +184,8 @@ async function start(joining: boolean) {
             password: password.value,
             player_name: playerName.value.trim(),
             server_node: node.value.trim(),
-            game_port: parsedPort,
-            host_address: joining ? joinAddress.value.trim() || null : null,
+            game_port: validLocalPort(port.value) ?? parsedPort,
+            host_address: hostAddress,
         }
         await multiplayer.startDirect(request)
     } catch (failure) {
@@ -114,11 +195,29 @@ async function start(joining: boolean) {
     }
 }
 
+/** Accept either a full room code or the bare address the host reads out. */
+function applyRoomCode() {
+    const parsed = parseDirectRoomCode(joinAddress.value)
+    if (!parsed) {
+        error.value = formatMessage(messages.invalidCode)
+        return
+    }
+    error.value = ''
+    joinAddress.value = parsed.host_address
+    if (parsed.room_name) roomName.value = parsed.room_name
+    if (parsed.server_node) node.value = parsed.server_node
+    if (parsed.game_port !== undefined) port.value = String(parsed.game_port)
+}
+
 async function stop() {
+    if (stopping.value) return
+    stopping.value = true
     try {
         await multiplayer.stop()
     } catch (failure) {
         error.value = multiplayerErrorText(failure)
+    } finally {
+        stopping.value = false
     }
 }
 </script>
@@ -135,13 +234,21 @@ async function stop() {
             </p>
         </div>
 
-        <p v-if="error || state?.error_message" class="m-0 text-sm text-red" role="alert">
-            {{ error || state?.error_message }}
+        <p v-if="displayError" class="m-0 text-sm text-red" role="alert">
+            {{ displayError }}
         </p>
 
         <template v-if="connected">
-            <p class="m-0 text-sm">{{ formatMessage(messages.address) }}</p>
+            <p class="m-0 text-sm">
+                {{ formatMessage(joiningRoom ? messages.guestAddress : messages.address) }}
+            </p>
             <CopyCode v-if="state?.connect_address" :text="state.connect_address" />
+            <p
+                v-if="state?.host_hint === 'game_port_closed'"
+                class="m-0 text-xs text-[var(--color-text-tertiary)]"
+            >
+                {{ formatMessage(messages.gamePortClosed, { port: state?.game_port ?? 0 }) }}
+            </p>
             <div v-if="roomCode" class="flex flex-col gap-2">
                 <h3 class="m-0 text-base font-semibold">{{ formatMessage(messages.roomCode) }}</h3>
                 <CopyCode :text="roomCode" />
@@ -149,7 +256,17 @@ async function stop() {
                     {{ formatMessage(messages.roomCodeHint) }}
                 </p>
             </div>
-            <Button @click="stop">{{ formatMessage(messages.leave) }}</Button>
+            <Button :disabled="stopping" @click="stop">{{ formatMessage(messages.leave) }}</Button>
+        </template>
+
+        <template
+            v-else-if="
+                pending ||
+                (ownsRoom && ['downloading', 'connecting'].includes(state?.status ?? ''))
+            "
+        >
+            <p class="m-0 text-sm" role="status">{{ formatMessage(messages.starting) }}</p>
+            <Button :disabled="stopping" @click="stop">{{ formatMessage(messages.cancel) }}</Button>
         </template>
 
         <form v-else class="grid gap-3 sm:grid-cols-2" @submit.prevent="start(false)">
@@ -174,38 +291,42 @@ async function stop() {
                 </span>
             </label>
             <label class="flex flex-col gap-1 text-sm">
-                <span>{{ formatMessage(messages.port) }}</span>
+                <span>{{ formatMessage(joinAddress.trim() ? messages.guestPort : messages.port) }}</span>
                 <StyledInput v-model="port" name="direct-port" inputmode="numeric" />
             </label>
             <label class="flex flex-col gap-1 text-sm sm:col-span-2">
                 <span>{{ formatMessage(messages.node) }}</span>
                 <StyledInput v-model="node" name="direct-node" />
+                <span
+                    v-if="node.trim() && !isValidDirectServerNode(node)"
+                    class="text-xs text-[var(--color-red)]"
+                >
+                    {{ formatMessage(messages.invalidNode) }}
+                </span>
             </label>
             <label class="flex flex-col gap-1 text-sm sm:col-span-2">
                 <span>{{ formatMessage(messages.joinAddress) }}</span>
-                <StyledInput v-model="joinAddress" name="direct-join-address" />
+                <div class="flex min-w-0 items-center gap-2">
+                    <StyledInput v-model="joinAddress" name="direct-join-address" />
+                    <Button type="quiet" size="sm" @click="applyRoomCode">{{
+                        formatMessage(messages.roomCode)
+                    }}</Button>
+                </div>
                 <span class="text-xs text-[var(--color-text-tertiary)]">
                     {{ formatMessage(messages.joinAddressHint) }}
                 </span>
             </label>
             <p class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
-                {{ formatMessage(messages.hostHint) }}
+                {{ formatMessage(joinAddress.trim() ? messages.guestHint : messages.hostHint) }}
             </p>
             <div class="flex flex-wrap gap-2 sm:col-span-2">
-                <Button :disabled="!valid || pending" @click="start(false)">
+                <Button :disabled="!canCreate || pending" @click="start(false)">
                     {{ formatMessage(messages.create) }}
                 </Button>
-                <Button
-                    type="outlined"
-                    :disabled="!valid || pending || !joinAddress.trim()"
-                    @click="start(true)"
-                >
+                <Button type="outlined" :disabled="!canJoin || pending" @click="start(true)">
                     {{ formatMessage(messages.join) }}
                 </Button>
             </div>
-            <p v-if="pending" class="m-0 text-sm sm:col-span-2" role="status">
-                {{ formatMessage(messages.starting) }}
-            </p>
         </form>
     </section>
 </template>

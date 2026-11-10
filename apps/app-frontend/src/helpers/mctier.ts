@@ -60,6 +60,20 @@ export interface MctierState {
     download_stage: MctierPreparationStage | null
     download_progress: number | null
     host_hint: 'game_port_closed' | null
+    /** Which provider owns the running session, so a tab cannot show the other
+     * provider's room as its own. Absent only when no session exists. */
+    room_kind?: MctierRoomKind | null
+}
+
+export type MctierRoomKind = 'lobby' | 'direct'
+
+/** What a pasted direct-room code resolved to. The host address is the only
+ * required part; the rest is filled in from the code when it carries it. */
+export interface ParsedDirectRoom {
+    host_address: string
+    room_name?: string
+    server_node?: string
+    game_port?: number
 }
 
 export const DEFAULT_MCTIER_SIGNALING = 'wss://mctier.pmhs.top/signaling'
@@ -74,6 +88,77 @@ function validServerNode(value: string): boolean {
     } catch {
         return false
     }
+}
+
+function serverNodeValue(value: string): string | null {
+    const trimmed = value.trim()
+    return validServerNode(trimmed) ? trimmed : null
+}
+
+const DIRECT_ROOM_CODE_PATTERN = /^mctrin-direct:\/\/room\/?\?(\S+)$/i
+
+/**
+ * Reads the code the direct room shows its host.
+ *
+ * Only `host` is mandatory: a code may have been shared before the room
+ * existed or be typed by hand. Anything malformed is rejected as a whole rather
+ * than silently joining a different room than the code named.
+ */
+export function parseDirectRoomCode(value: string): ParsedDirectRoom | null {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const query = DIRECT_ROOM_CODE_PATTERN.exec(trimmed)?.[1]
+    if (query) {
+        let params: URLSearchParams
+        try {
+            params = new URLSearchParams(query)
+        } catch {
+            return null
+        }
+        const host = params.get('host')?.trim() ?? ''
+        // The backend dials an overlay IPv4 address only; a hostname here would
+        // pass this parser and fail validation after the download.
+        if (!isIpv4(host)) return null
+        const name = params.get('name')?.trim() ?? ''
+        if (name && !/^[\p{L}\p{N}_-]{4,32}$/u.test(name)) return null
+        const node = params.get('node')?.trim() ?? ''
+        const serverNode = node ? serverNodeValue(node) : null
+        if (node && !serverNode) return null
+        const rawPort = params.get('port')?.trim() ?? ''
+        const gamePort = rawPort ? localPort(rawPort) : null
+        if (rawPort && gamePort === null) return null
+        return {
+            host_address: host,
+            ...(name ? { room_name: name } : {}),
+            ...(serverNode ? { server_node: serverNode } : {}),
+            ...(gamePort !== null ? { game_port: gamePort } : {}),
+        }
+    }
+
+    // A bare address is what a host reads out loud, so accept it too.
+    return isIpv4(trimmed) ? { host_address: trimmed } : null
+}
+
+function isIpv4(value: string): boolean {
+    const parts = value.split('.')
+    return (
+        parts.length === 4 &&
+        parts.every(
+            (part) => /^\d{1,3}$/.test(part) && Number(part) <= 255 && String(Number(part)) === part,
+        )
+    )
+}
+
+function localPort(value: string): number | null {
+    if (!/^\d+$/.test(value)) return null
+    const port = Number(value)
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null
+}
+
+/** Validate the EasyTier node the direct-room form sends to the kernel. */
+export function isValidDirectServerNode(value: string): boolean {
+    return serverNodeValue(value) !== null
 }
 
 function validSignalingServer(value: string): boolean {
