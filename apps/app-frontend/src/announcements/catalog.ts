@@ -30,6 +30,74 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-0.0.2-beta',
+        version: '0.0.2-beta',
+        publishedAt: '2026-11-11',
+        title: {
+            'en-US': 'MC-Trin 0.0.2-beta',
+            'zh-CN': 'MC-Trin 0.0.2-beta',
+        },
+        changes: {
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed the installer asking for two folders. A normal install keeps instances, saves and caches in a data subfolder beside the program and leaves them in place on uninstall; a portable install keeps everything together and removes it when you ask.',
+                    'zh-CN':
+                        '修复了安装程序要求选择两个文件夹的问题。普通安装会将实例、存档与缓存放在程序旁的 data 子文件夹中，卸载时默认保留；便携安装则全部放在一起，可选完全清理。',
+                },
+                {
+                    'en-US':
+                        'Fixed changing the application directory leaving existing instances on the old drive.',
+                    'zh-CN': '修复了更改应用目录后实例仍留在原盘的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed moving the backup repository failing on the database files SQLite keeps open.',
+                    'zh-CN': '修复了移动备份仓库时因 SQLite 临时文件而失败的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed modpack installation failing when a system proxy blocks the batched asset download; it now continues file by file.',
+                    'zh-CN':
+                        '修复了系统代理阻断批量资源下载时整合包安装失败的问题，现在会自动逐文件继续。',
+                },
+                {
+                    'en-US':
+                        'Fixed push-to-talk never unmuting the microphone, so holding the key transmitted nothing.',
+                    'zh-CN': '修复了按键说话不会打开麦克风的问题，之前按住按键实际上传不出声音。',
+                },
+                {
+                    'en-US':
+                        'Fixed the voice player count staying high after someone left, and unplugging a headset mid-call going unnoticed.',
+                    'zh-CN': '修复了有人离开后语音人数不下降、以及通话中拔掉耳机无法察觉的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed a private lobby becoming publicly listed again after a brief connection drop.',
+                    'zh-CN': '修复了网络短暂中断后私密房间重新出现在公开列表中的问题。',
+                },
+                {
+                    'en-US': 'Fixed the direct-room code being impossible to paste back in.',
+                    'zh-CN': '修复了直连房间码无法粘贴使用的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed the assistant changing instances without asking, and provider API keys appearing in error messages and notification history.',
+                    'zh-CN':
+                        '修复了助手未经确认就修改实例、以及服务商密钥出现在错误信息与通知历史中的问题。',
+                },
+            ],
+            changed: [
+                {
+                    'en-US':
+                        'Updates are delivered by downloading the next release from GitHub; the built-in updater and the automatic Discord notification are gone.',
+                    'zh-CN':
+                        '更新改为从 GitHub 下载新版本；内置自动更新与 Discord 自动通知已移除。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-1.10.1-beta.1',
         version: '1.10.1-beta.1',
         publishedAt: '2026-10-24',
