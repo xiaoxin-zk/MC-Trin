@@ -27,13 +27,26 @@ export type MctierVoiceSessionOptions = {
     /** Hands each remote playback stream to the caller (and null on detach)
      * so speaking detection can attach analysers outside the session. */
     onRemoteStream?: (playerId: string, stream: MediaStream | null) => void
+    /** Fires when the chosen sink could not be applied and playback fell back
+     * to the system default, so the owner can stop advertising the dead device. */
+    onOutputDeviceError?: () => void
 }
 
-const MAX_SIGNAL_BYTES = 256 * 1024
+/** These mirror the signalling frame limits in
+ * `packages/app-lib/src/api/mctier/protocol.rs`; a signal accepted here but
+ * rejected there fails the whole send, so the two must not drift. */
+export const MAX_SIGNAL_FRAME_BYTES = 128 * 1024
+export const MAX_SDP_BYTES = 64 * 1024
+export const MAX_ICE_CANDIDATE_BYTES = 4 * 1024
+
 const MAX_PENDING_CANDIDATES = 128
 const DEFAULT_OUTPUT_VOLUME = 1
 const DEFAULT_INPUT_VOLUME = 1
 const DEFAULT_PEER_VOLUME = 1
+
+function utf8Length(value: string): number {
+    return new TextEncoder().encode(value).length
+}
 
 /** Playback volume is stored as a 0-1 gain so the slider and the element agree. */
 function clampVolume(volume: number): number {
@@ -61,7 +74,7 @@ export function parseMctierVoiceSignal(
         return null
     }
     try {
-        if (JSON.stringify(value).length > MAX_SIGNAL_BYTES) return null
+        if (utf8Length(JSON.stringify(value) ?? '') > MAX_SIGNAL_FRAME_BYTES) return null
     } catch {
         return null
     }
@@ -73,7 +86,8 @@ export function parseMctierVoiceSignal(
             !description ||
             Array.isArray(description) ||
             typeof sdp !== 'string' ||
-            sdp.length > MAX_SIGNAL_BYTES
+            !sdp ||
+            utf8Length(sdp) > MAX_SDP_BYTES
         ) {
             return null
         }
@@ -89,7 +103,7 @@ export function parseMctierVoiceSignal(
             typeof ice !== 'object' ||
             Array.isArray(ice) ||
             typeof iceValue !== 'string' ||
-            iceValue.length > 16 * 1024
+            utf8Length(iceValue) > MAX_ICE_CANDIDATE_BYTES
         ) {
             return null
         }
@@ -105,6 +119,7 @@ export class MctierVoiceSession {
     private outputVolume = DEFAULT_OUTPUT_VOLUME
     private inputVolume = DEFAULT_INPUT_VOLUME
     private outputDeviceId: string | null = null
+    private microphoneEnabled = true
     private closed = false
     private audioContext: AudioContext | null = null
     private inputGain: GainNode | null = null
@@ -217,7 +232,8 @@ export class MctierVoiceSession {
     }
 
     setMicrophoneEnabled(enabled: boolean) {
-        if (this.closed) return
+        if (this.closed || this.microphoneEnabled === enabled) return
+        this.microphoneEnabled = enabled
         this.options.stream.getAudioTracks().forEach((track) => (track.enabled = enabled))
     }
 
@@ -257,18 +273,38 @@ export class MctierVoiceSession {
     }
 
     /** Routes playback to a specific output device. Browsers without
-     * `setSinkId` keep playing through the default device. */
-    async setOutputDevice(deviceId: string | null) {
+     * `setSinkId` keep playing through the default device. Returns false when
+     * the requested device could not be applied to at least one peer. */
+    async setOutputDevice(deviceId: string | null): Promise<boolean> {
         this.outputDeviceId = deviceId
+        let applied = true
         for (const peer of this.peers.values()) {
-            if (peer.audio) await this.applySink(peer.audio).catch(() => {})
+            if (!peer.audio) continue
+            applied = (await this.applySink(peer.audio)) && applied
         }
+        return applied
     }
 
-    private async applySink(audio: HTMLAudioElement) {
+    /** Applies the selected sink, falling back to the system default when the
+     * device has disappeared; a removed headset must not leave playback bound
+     * to a dead sink with no way back. */
+    private async applySink(audio: HTMLAudioElement): Promise<boolean> {
         const sink = (audio as SinkCapableAudio).setSinkId
-        if (!sink) return
-        await sink.call(audio, this.outputDeviceId ?? '')
+        if (!sink) return true
+        const deviceId = this.outputDeviceId
+        if (deviceId === null) {
+            await sink.call(audio, '').catch(() => {})
+            return true
+        }
+        try {
+            await sink.call(audio, deviceId)
+            return true
+        } catch {
+            this.outputDeviceId = null
+            this.options.onOutputDeviceError?.()
+            await sink.call(audio, '').catch(() => {})
+            return false
+        }
     }
 
     private ensurePeer(playerId: string): PeerConnectionState {
@@ -348,7 +384,7 @@ export class MctierVoiceSession {
     }
 
     private closePeer(playerId: string, peer: PeerConnectionState) {
-        this.peers.delete(playerId)
+        const wasTracked = this.peers.delete(playerId)
         this.options.onRemoteStream?.(playerId, null)
         peer.connection.onicecandidate = null
         peer.connection.ontrack = null
@@ -360,5 +396,8 @@ export class MctierVoiceSession {
             peer.audio.srcObject = null
             peer.audio.remove()
         }
+        // The change handlers are detached before closing, so the owner would
+        // otherwise never learn that this peer stopped existing.
+        if (wasTracked) this.options.onPeerState?.(playerId, 'closed')
     }
 }

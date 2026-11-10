@@ -10,9 +10,10 @@ import {
     DEFAULT_MCTIER_SIGNALING,
     type MctierInvite,
     type MctierState,
+    isValidDirectServerNode,
     parseMctierInviteCode,
 } from '@/helpers/mctier'
-import { multiplayer, multiplayerErrorText, validLocalPort } from '@/helpers/multiplayer'
+import { multiplayer, multiplayerErrorText, sanitizeErrorText, validLocalPort } from '@/helpers/multiplayer'
 
 const props = defineProps<{ state?: MctierState; initialInviteCode?: string }>()
 const { formatMessage } = useVIntl()
@@ -28,6 +29,10 @@ const messages = defineMessages({
     password: { id: 'app.multiplayer.mctier.password', defaultMessage: 'Lobby password' },
     port: { id: 'app.multiplayer.mctier.port', defaultMessage: 'Host Minecraft port' },
     node: { id: 'app.multiplayer.mctier.node', defaultMessage: 'EasyTier node' },
+    nodeInvalid: {
+        id: 'app.multiplayer.mctier.node-invalid',
+        defaultMessage: 'Enter a node address such as tcp://node.example:11010.',
+    },
     signaling: { id: 'app.multiplayer.mctier.signaling', defaultMessage: 'Lobby service' },
     host: { id: 'app.multiplayer.mctier.host', defaultMessage: 'Create lobby' },
     join: { id: 'app.multiplayer.mctier.join', defaultMessage: 'Join lobby' },
@@ -214,6 +219,15 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.unavailable-error',
         defaultMessage: 'Voice could not connect. Check the room network and microphone.',
     },
+    voiceInputDeviceLost: {
+        id: 'app.multiplayer.mctier.voice.input-device-lost',
+        defaultMessage: 'The microphone was disconnected. Reconnect it, then enable voice again.',
+    },
+    voiceOutputDeviceLost: {
+        id: 'app.multiplayer.mctier.voice.output-device-lost',
+        defaultMessage:
+            'The speaker was disconnected. Voice is playing through the system default.',
+    },
     voiceVolume: {
         id: 'app.multiplayer.mctier.voice.volume',
         defaultMessage: 'Output volume',
@@ -261,7 +275,7 @@ const messages = defineMessages({
     voicePushToTalkHint: {
         id: 'app.multiplayer.mctier.voice.push-to-talk-hint',
         defaultMessage:
-            'Hold the key or the button to transmit; the microphone stays muted otherwise.',
+            'Hold the key while this window has focus, or hold the on-screen button while in game; the microphone stays muted otherwise.',
     },
     voicePttKey: {
         id: 'app.multiplayer.mctier.voice.ptt-key',
@@ -287,6 +301,17 @@ const lobbyMaxPlayers = ref('')
 const pending = ref(false)
 const stopping = ref(false)
 const visibilityPending = ref(false)
+/** The checkbox follows a local value while the request is in flight: binding
+ * it to the polled state alone left the box ticked after a rejected change,
+ * because nothing in the binding changed to repaint it. */
+const visibilityChecked = ref(false)
+watch(
+    () => props.state?.is_public,
+    (isPublicNow) => {
+        if (!visibilityPending.value) visibilityChecked.value = isPublicNow ?? false
+    },
+    { immediate: true },
+)
 const publishOutcome = computed(
     () => props.state?.publish_outcome ?? (props.state?.is_public ? 'published' : 'private'),
 )
@@ -310,6 +335,8 @@ const visibilityOptions = [
 ]
 const inviteLoading = ref(false)
 const error = ref('')
+/** Backend state errors carry transport detail; the UI shows one sentence. */
+const displayError = computed(() => error.value || sanitizeErrorText(props.state?.error_message ?? ''))
 /** The directory cannot list a password-protected room, so publishing clears
  * the password instead of offering a combination the service ignores. */
 watch(isPublic, (isPublicNow) => {
@@ -318,7 +345,11 @@ watch(isPublic, (isPublicNow) => {
 const busy = computed(
     () => pending.value || ['downloading', 'connecting'].includes(props.state?.status ?? ''),
 )
-const connected = computed(() => ['hosting', 'joined'].includes(props.state?.status ?? ''))
+const connected = computed(
+    () =>
+        props.state?.room_kind !== 'direct' &&
+        ['hosting', 'joined'].includes(props.state?.status ?? ''),
+)
 const valid = computed(
     () =>
         /^[\p{L}\p{N}_-]{4,32}$/u.test(lobbyName.value) &&
@@ -394,16 +425,21 @@ function onPeerVolumeInput(event: Event, playerId: string) {
     voice.setPeerVolume(playerId, Number(target.value) / 100)
 }
 
-function onInputDeviceChange(event: Event) {
+async function onInputDeviceChange(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLSelectElement)) return
-    void voice.setInputDevice(target.value || null)
+    await voice.setInputDevice(target.value || null)
+    // A device that fails to open is not committed, so show the one in use.
+    target.value = voice.inputDeviceId.value ?? ''
 }
 
-function onOutputDeviceChange(event: Event) {
+async function onOutputDeviceChange(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLSelectElement)) return
-    void voice.setOutputDevice(target.value || null)
+    await voice.setOutputDevice(target.value || null)
+    // A sink that cannot be opened falls back to the system default, so the
+    // select must show what is actually playing.
+    target.value = voice.outputDeviceId.value ?? ''
 }
 
 function onPttToggle(event: Event) {
@@ -434,6 +470,11 @@ function onPttKeyChange(event: Event) {
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
     if (!valid.value || busy.value) return
+    const nodeAddress = (invite?.server_node ?? serverNode.value).trim()
+    if (!isValidDirectServerNode(nodeAddress)) {
+        error.value = formatMessage(messages.nodeInvalid)
+        return
+    }
     pending.value = true
     error.value = ''
     try {
@@ -442,7 +483,7 @@ async function start(mode: 'create' | 'join', invite?: MctierInvite) {
             lobby_name: invite?.lobby_name ?? lobbyName.value,
             password: invite?.password ?? password.value,
             player_name: playerName.value.trim(),
-            server_node: invite?.server_node ?? serverNode.value.trim(),
+            server_node: nodeAddress,
             signaling_server: invite?.signaling_server ?? signalingServer.value.trim(),
             game_port: validLocalPort(port.value)!,
             is_public: mode === 'create' && isPublic.value,
@@ -473,11 +514,16 @@ async function joinByInvite() {
 }
 
 async function updateVisibilityValue(next: boolean) {
+    const previous = visibilityChecked.value
+    visibilityChecked.value = next
     visibilityPending.value = true
     error.value = ''
     try {
         await multiplayer.setMctierPublic(next)
     } catch (failure) {
+        // Put the box back where the backend still is, otherwise the user sees
+        // "listed" for a room that was never published.
+        visibilityChecked.value = previous
         error.value = multiplayerErrorText(failure)
     } finally {
         visibilityPending.value = false
@@ -593,11 +639,11 @@ function prefillInviteFromDeepLink() {
         />
         <p v-if="hostHint" class="m-0 text-xs text-[var(--color-text-tertiary)]">{{ hostHint }}</p>
         <p
-            v-if="error || state?.error_message"
+            v-if="displayError"
             class="m-0 text-sm text-[var(--color-red)]"
             role="alert"
         >
-            {{ error || state?.error_message }}
+            {{ displayError }}
         </p>
         <template v-if="connected">
             <CopyCode v-if="state?.lobby_name" :text="state.lobby_name" />
@@ -625,7 +671,7 @@ function prefillInviteFromDeepLink() {
                             <input
                                 type="checkbox"
                                 class="h-4 w-4"
-                                :checked="state.is_public"
+                                :checked="visibilityChecked"
                                 :disabled="visibilityPending"
                                 @change="onVisibilityToggle"
                             />
@@ -911,7 +957,11 @@ function prefillInviteFromDeepLink() {
                                 ? messages.voiceErrorPermission
                                 : voice.error.value === 'unsupported'
                                   ? messages.voiceErrorUnsupported
-                                  : messages.voiceErrorUnavailable,
+                                  : voice.error.value === 'input-device-lost'
+                                    ? messages.voiceInputDeviceLost
+                                    : voice.error.value === 'output-device-lost'
+                                      ? messages.voiceOutputDeviceLost
+                                      : messages.voiceErrorUnavailable,
                         )
                     }}
                 </p>
@@ -1024,7 +1074,12 @@ function prefillInviteFromDeepLink() {
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.node)
                 }}<StyledInput v-model="serverNode" name="server-node"
-            /></label>
+                /><span
+                    v-if="serverNode.trim() && !isValidDirectServerNode(serverNode)"
+                    class="text-xs text-[var(--color-red)]"
+                >
+                    {{ formatMessage(messages.nodeInvalid) }}
+                </span></label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.signaling)
                 }}<StyledInput v-model="signalingServer" name="signaling-server"
@@ -1106,7 +1161,13 @@ function prefillInviteFromDeepLink() {
                     formatMessage(messages.join)
                 }}</Button>
             </div>
-            <label class="flex min-w-0 flex-col gap-1 text-sm sm:col-span-2">
+        </form>
+        <form
+            v-if="!connected && !busy"
+            class="flex min-w-0 flex-col gap-2 border-t border-solid border-surface-4 pt-4"
+            @submit.prevent="joinByInvite"
+        >
+            <label class="flex min-w-0 flex-col gap-1 text-sm">
                 {{ formatMessage(messages.inviteCode) }}
                 <StyledInput
                     v-model="inviteCodeInput"
@@ -1114,11 +1175,9 @@ function prefillInviteFromDeepLink() {
                     autocomplete="off"
                 />
             </label>
-            <div class="sm:col-span-2">
-                <Button :disabled="busy || !inviteCodeInput.trim()" @click="joinByInvite">{{
-                    formatMessage(messages.joinByInvite)
-                }}</Button>
-            </div>
+            <Button :disabled="busy || !inviteCodeInput.trim()" native-type="submit">{{
+                formatMessage(messages.joinByInvite)
+            }}</Button>
         </form>
     </section>
 </template>
