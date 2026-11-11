@@ -241,7 +241,16 @@ it('renders the MC-Trin room workflow by default', async () => {
     const wrapper = await rooms()
     expect(wrapper.text()).toContain('MC-Trin LAN lobby')
     expect(wrapper.text()).not.toContain('RedStone Online 2')
-    expect(wrapper.findAll('select')).toHaveLength(0)
+
+    const voicePanel = wrapper.find('[data-onboarding-id="mctier-voice"]')
+    expect(voicePanel.exists()).toBe(true)
+    const voiceSelects = voicePanel.findAll('select')
+    expect(voiceSelects.length).toBeGreaterThan(0)
+    // Selectors in the default view are expected for voice-device settings, but
+    // legacy provider selectors must not be rendered alongside the MC-Trin UI.
+    expect(wrapper.findAll('select')).toHaveLength(voiceSelects.length)
+    expect(wrapper.text()).not.toContain('Local Minecraft port')
+    expect(wrapper.text()).not.toContain('Relay node')
 })
 
 it('preserves a settings draft when visiting console and files, including a direct settings entry', async () => {
