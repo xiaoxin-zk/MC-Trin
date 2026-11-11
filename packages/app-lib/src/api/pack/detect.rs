@@ -216,7 +216,13 @@ fn open_error(path: &Path, error: impl std::fmt::Display) -> crate::Error {
 /// fast instead of relying on the caller's deadline.
 pub const MAX_DETECT_ENTRIES: usize = 200_000;
 
-fn check_entry_limit(total_entries: usize) -> crate::Result<()> {
+/// Rejects an archive whose central directory declares too many entries.
+///
+/// Shared with the CurseForge helpers: any lookup that walks the directory has
+/// to refuse a pathological entry count **before** the walk, not rely on the
+/// caller having checked. Doing it here keeps every caller's error wording and
+/// classification identical.
+pub(crate) fn check_entry_limit(total_entries: usize) -> crate::Result<()> {
     if total_entries > MAX_DETECT_ENTRIES {
         return Err(crate::ErrorKind::InputError(format!(
             "Modpack archive has {total_entries} entries, which exceeds the {MAX_DETECT_ENTRIES}-entry detection limit"
@@ -292,15 +298,15 @@ pub fn detect_local_pack_sync_cancellable(
         path.display(),
         bases
     );
-    // Built once so each `has` probe is O(1) instead of rescanning every name.
+    // Built once so each format probe is O(1) instead of rescanning every name.
     // Detection used to be O(bases x entries) and is now O(entries + bases).
     //
-    // Deliberately raw, not backslash-normalized: the historical `has()` check
-    // compared the decoded entry name verbatim against `{base}{file}`, and this
-    // keeps that exact match. `entry_index` below normalizes because the manifest
-    // reader must find a Windows-style path; the two lookups answer different
-    // questions, so they are not interchangeable.
-    let name_index = names.iter().map(String::as_str).collect::<HashSet<_>>();
+    // Entry names are normalized to `/` before indexing. Windows-produced
+    // archives spell the separator the other way, and every probe below builds
+    // its target with `/`, so an unnormalized index would simply never match
+    // them. Case and base ordering are untouched by normalization.
+    let name_index: HashSet<String> =
+        names.iter().map(|name| name.replace('\\', "/")).collect();
     let entry_index = build_entry_index(&names);
 
     for base in &bases {
@@ -378,7 +384,11 @@ fn candidate_bases(names: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     seen.insert(String::new());
     for name in names {
-        if let Some((first, rest)) = name.split_once('/')
+        // Archives written by Windows tooling may separate path segments with
+        // `\`. Treat both spellings alike so a wrapped pack is still found; the
+        // emitted base always uses `/`, which is what later lookups build.
+        let normalized = name.replace('\\', "/");
+        if let Some((first, rest)) = normalized.split_once('/')
             && !rest.is_empty()
             && !rest.contains('/')
         {
@@ -396,7 +406,8 @@ pub(crate) fn detect_at_base<R: std::io::Read + std::io::Seek>(
     names: &[String],
     base: &str,
 ) -> crate::Result<Option<DetectedLocalPack>> {
-    let index = names.iter().map(String::as_str).collect::<HashSet<_>>();
+    let index: HashSet<String> =
+        names.iter().map(|name| name.replace('\\', "/")).collect();
     let entry_index = build_entry_index(names);
     detect_at_base_indexed(archive, &index, &entry_index, base, None)
 }
@@ -408,7 +419,7 @@ pub(crate) fn detect_at_base<R: std::io::Read + std::io::Seek>(
 /// caller's `Vec`, not here).
 fn detect_at_base_indexed<R: std::io::Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-    names: &HashSet<&str>,
+    names: &HashSet<String>,
     entry_index: &HashMap<String, usize>,
     base: &str,
     cancellation: Option<&CancellationToken>,
@@ -621,7 +632,10 @@ fn read_entry_json<R: std::io::Read + std::io::Seek>(
 /// folder, returning the prefix of the folder containing `versions`.
 fn detect_plain_archive(names: &[String]) -> Option<DetectedLocalPack> {
     for name in names {
-        let segments: Vec<&str> = name.split('/').collect();
+        // Normalize before splitting: a Windows-produced archive spells the
+        // separator as `\`, and `versions/<id>/<id>.json` would never match.
+        let normalized = name.replace('\\', "/");
+        let segments: Vec<&str> = normalized.split('/').collect();
         if segments.len() < 3 {
             continue;
         }
@@ -684,7 +698,11 @@ fn detect_instance_folder(
 
     for name in names {
         check_cancellation(cancellation)?;
-        let segments: Vec<&str> = name.split('/').collect();
+        // Same normalization as the other scans, so `mods/<name>.jar` is still
+        // recognised when the archive uses `\` separators. The direct-child rule
+        // is unchanged: the jar must sit exactly one segment below `mods`.
+        let normalized = name.replace('\\', "/");
+        let segments: Vec<&str> = normalized.split('/').collect();
 
         for position in 0..segments.len() {
             if segments[position] != "mods" {
@@ -899,6 +917,33 @@ mod tests {
 
         assert_eq!(detected.format, LocalPackFormat::Mrpack);
         assert_eq!(detected.base_folder, "pack-1.0/");
+    }
+
+    #[test]
+    fn a_backslash_wrapped_pack_is_detected_end_to_end() {
+        // Windows-produced archives spell separators as `\\`. Detection must
+        // still find the wrapper base and the manifest, otherwise a valid pack
+        // is reported as "Unrecognized modpack format".
+        let (_dir, path) =
+            write_pack(&[("pack-1.0\\modrinth.index.json", b"{}")]);
+
+        let detected = detect_local_pack_sync(&path).unwrap();
+
+        assert_eq!(detected.format, LocalPackFormat::Mrpack);
+        assert_eq!(detected.base_folder, "pack-1.0/");
+    }
+
+    #[test]
+    fn a_backslash_plain_archive_is_detected_end_to_end() {
+        // The PlainArchive probe splits on `/`, so a backslash spelling has to
+        // be normalized before the `versions/<id>/<id>.json` check.
+        let (_dir, path) =
+            write_pack(&[("pack\\versions\\1.20.1\\1.20.1.json", b"{}")]);
+
+        let detected = detect_local_pack_sync(&path).unwrap();
+
+        assert_eq!(detected.format, LocalPackFormat::PlainArchive);
+        assert_eq!(detected.plain_version_id.as_deref(), Some("1.20.1"));
     }
 
     #[test]

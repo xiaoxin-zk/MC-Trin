@@ -372,6 +372,10 @@ pub(crate) fn read_modpack_manifest_at<R: Read + Seek>(
     cancellation: Option<&CancellationToken>,
 ) -> crate::Result<CurseForgeModpackManifest> {
     crate::api::pack::archive_util::check_cancellation(cancellation)?;
+    // Cap before walking the directory: the lookup below is linear in the entry
+    // count, so a pathological archive must be refused here rather than relying
+    // on each caller to have checked.
+    crate::api::pack::detect::check_entry_limit(archive.len())?;
     // Root first: an unwrapped pack must keep its exact previous behaviour, and
     // a stray `{base}manifest.json` must never shadow a real root manifest.
     //
@@ -634,6 +638,9 @@ pub async fn get_local_modpack_target_at(
             )
             .into());
         }
+        // Direct callers of this probe may not have checked the entry count, so
+        // the cap has to live here too, before any directory walk.
+        crate::api::pack::detect::check_entry_limit(archive.len())?;
         // Pass the token into the reader so the size-bounded manifest read also
         // observes a cancellation that lands while it is in flight.
         let manifest =

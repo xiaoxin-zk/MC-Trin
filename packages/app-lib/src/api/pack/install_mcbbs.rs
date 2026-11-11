@@ -72,7 +72,15 @@ fn join_arguments(value: &serde_json::Value) -> Vec<String> {
     }
 }
 
-/// Reads and parses the CurseForge manifest as the MCBBS fallback.
+/// Reads the fallback `manifest.json` and requires it to be MCBBS-shaped.
+///
+/// The CurseForge fallback is *not* parsed into [`McbbsManifest`]: that struct
+/// is all-optional, so a CurseForge manifest (which carries `minecraft.version`
+/// and `modLoaders`, never `addons`) would silently deserialize into an empty
+/// manifest and then fail later with a misleading "could not determine the
+/// version". Rather than broaden this parser, a manifest that is not
+/// MCBBS-shaped is rejected here with an explicit message, leaving CurseForge
+/// packs to the CurseForge installer that detection normally selects first.
 ///
 /// Shared by the "first manifest missing" and "first manifest unparsable"
 /// paths so both apply identical bounds and terminal-error rules.
@@ -87,7 +95,14 @@ async fn fallback_mcbbs_manifest(
         cancellation,
     )
     .await?;
-    Ok(serde_json::from_str(&contents)?)
+    let manifest: McbbsManifest = serde_json::from_str(&contents)?;
+    if manifest.addons.is_empty() {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Modpack archive is missing a usable {entry_name}: it is not an MCBBS manifest"
+        ))
+        .into());
+    }
+    Ok(manifest)
 }
 
 /// Whether a manifest-read failure must end the install instead of falling back.
@@ -97,8 +112,9 @@ async fn fallback_mcbbs_manifest(
 /// retrying would leave a second detached parse and would also mislabel the
 /// cause as a missing manifest.
 fn is_terminal_manifest_error(error: &crate::Error) -> bool {
+    let message = error.to_string();
     if crate::api::pack::detect::is_detection_timeout(error)
-        || error.to_string().contains("Install was canceled")
+        || message.contains("Install was canceled")
     {
         return true;
     }
@@ -106,7 +122,69 @@ fn is_terminal_manifest_error(error: &crate::Error) -> bool {
     // signal: falling back would open the archive a second time for a pack that
     // is already known to be malformed. Only a genuinely absent or unparsable
     // manifest may try the next name.
-    error.to_string().contains("is larger than the")
+    if message.contains("is larger than the") {
+        return true;
+    }
+    // Structural read failures mean the archive itself is broken, so the next
+    // manifest name cannot rescue it. These are distinct from "this entry is
+    // absent" (which must fall back) and from malformed JSON (which must also
+    // fall back, because it only proves the *contents* are not MCBBS).
+    is_archive_structurally_invalid(error, &message)
+}
+
+/// Whether a bounded-reader failure says the archive could not be read at all.
+///
+/// Matched precisely so an ordinary missing-entry or JSON-parse failure keeps
+/// its fallback behaviour: only the archive-level and entry-read diagnostics
+/// qualify.
+fn is_archive_structurally_invalid(
+    error: &crate::Error,
+    message: &str,
+) -> bool {
+    // Variant matches come first because they are exact: the bounded reader's
+    // own I/O failures (file open, decompression, a short/corrupt entry) are
+    // real `std::io`/`IOError` values, and no amount of retrying another
+    // manifest name can read them.
+    if matches!(
+        error.raw.as_ref(),
+        crate::ErrorKind::StdIOError(_) | crate::ErrorKind::IOError(_)
+    ) {
+        return true;
+    }
+    message.contains("Modpack archive is invalid:")
+        || message.contains("from modpack archive:")
+        // Both real cap rejections share this prefix: the on-disk size bound
+        // ("Modpack archive is {n} bytes, which exceeds the ...-byte limit") and
+        // the entry-count bound ("... {n} entries, which exceeds the ...-entry
+        // detection limit"). A cap is a property of this archive, so retrying
+        // another manifest name would just re-open the same oversized file.
+        || message.contains("which exceeds the ")
+}
+
+/// Result of inspecting the first manifest before any fallback decision.
+enum McbbsManifestDecision {
+    Parsed(McbbsManifest),
+    /// The CurseForge manifest must be tried; the optional error is the parse
+    /// failure that caused it, kept only for diagnostics.
+    Fallback(Option<serde_json::Error>),
+}
+
+/// Decides whether the first manifest is usable or the fallback must run.
+///
+/// Pure so the real branch can be asserted directly: a present-but-unparsable
+/// manifest is exactly as recoverable as an absent one, and neither may be
+/// confused with the terminal failures classified by
+/// [`is_terminal_manifest_error`].
+fn classify_mcbbs_manifest(contents: Option<String>) -> McbbsManifestDecision {
+    match contents {
+        Some(contents) => {
+            match serde_json::from_str::<McbbsManifest>(&contents) {
+                Ok(manifest) => McbbsManifestDecision::Parsed(manifest),
+                Err(error) => McbbsManifestDecision::Fallback(Some(error)),
+            }
+        }
+        None => McbbsManifestDecision::Fallback(None),
+    }
 }
 
 pub(crate) async fn install_mcbbs_pack_with_reporter(
@@ -138,23 +216,14 @@ pub(crate) async fn install_mcbbs_pack_with_reporter(
 
     // Parse before deciding to fall back: a manifest that exists but is not
     // valid MCBBS JSON means "wrong format", exactly like a missing one.
-    let manifest = match mcbbs_json
-        .as_deref()
-        .map(serde_json::from_str::<McbbsManifest>)
-    {
-        Some(Ok(manifest)) => manifest,
-        Some(Err(error)) => {
-            tracing::debug!(
-                "MCBBS manifest was unparsable ({error}); trying the CurseForge manifest"
-            );
-            fallback_mcbbs_manifest(
-                archive_path.clone(),
-                format!("{base_folder}{CURSEFORGE_MANIFEST}"),
-                mcbbs_cancellation,
-            )
-            .await?
-        }
-        None => {
+    let manifest = match classify_mcbbs_manifest(mcbbs_json) {
+        McbbsManifestDecision::Parsed(manifest) => manifest,
+        McbbsManifestDecision::Fallback(reason) => {
+            if let Some(error) = reason {
+                tracing::debug!(
+                    "MCBBS manifest was unparsable ({error}); trying the CurseForge manifest"
+                );
+            }
             fallback_mcbbs_manifest(
                 archive_path.clone(),
                 format!("{base_folder}{CURSEFORGE_MANIFEST}"),
@@ -337,18 +406,18 @@ pub(crate) async fn install_mcbbs_pack_with_reporter(
         lite_loader_as_adjunct
     {
         Some(
-			crate::launcher::get_loader_version_from_profile(
-				&game_version,
-				ModLoader::LiteLoader,
-				Some(&requested_version),
-			)
-			.await?
-			.ok_or_else(|| {
-				crate::ErrorKind::InputError(format!(
-					"No LiteLoader version {requested_version} supports Minecraft {game_version}"
-				))
-			})?,
-		)
+            crate::launcher::get_loader_version_from_profile(
+                &game_version,
+                ModLoader::LiteLoader,
+                Some(&requested_version),
+            )
+            .await?
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(format!(
+                    "No LiteLoader version {requested_version} supports Minecraft {game_version}"
+                ))
+            })?,
+        )
     } else {
         None
     };
@@ -802,15 +871,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_malformed_first_manifest_really_falls_back_to_the_second() {
-        // Full call path: the first manifest exists but is not MCBBS JSON, so
-        // the bounded reader succeeds and the parse fails. The fallback helper
-        // must then read and parse the CurseForge manifest for real.
+    async fn a_malformed_first_manifest_falls_back_to_a_mcbbs_shaped_second() {
+        // Full call path: the first manifest exists but is not JSON, so the
+        // bounded reader succeeds and the parse fails; the fallback manifest is
+        // then read for real. The fallback must be MCBBS-shaped, because this
+        // installer only understands `addons`.
         let bytes = build_archive(&[
             ("mcbbs.packmeta", b"{ not json"),
             (
                 "manifest.json",
-                br#"{"minecraft":{"version":"1.20.1"},"name":"Fallback Pack"}"#,
+                br#"{"name":"Fallback Pack","addons":[{"id":"game","version":"1.20.1"}]}"#,
             ),
         ]);
         let dir = tempfile::tempdir().unwrap();
@@ -823,9 +893,41 @@ mod tests {
             tokio_util::sync::CancellationToken::new(),
         )
         .await
-        .expect("the CurseForge manifest is valid");
+        .expect("an MCBBS-shaped fallback manifest is usable");
 
         assert_eq!(manifest.name.as_deref(), Some("Fallback Pack"));
+        assert_eq!(manifest.addons.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_curseforge_shaped_fallback_is_rejected_explicitly() {
+        // A CurseForge manifest has `minecraft.version` and no `addons`. Parsing
+        // it into `McbbsManifest` would silently yield an empty manifest and fail
+        // later with a misleading "could not determine the version", so it is
+        // rejected here instead of being half-accepted.
+        let bytes = build_archive(&[
+            ("mcbbs.packmeta", b"{ not json"),
+            (
+                "manifest.json",
+                br#"{"minecraft":{"version":"1.20.1"},"name":"Fallback Pack"}"#,
+            ),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pack.zip");
+        std::fs::write(&path, bytes).unwrap();
+
+        let error = fallback_mcbbs_manifest(
+            path,
+            "manifest.json".to_string(),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("not an MCBBS manifest"),
+            "expected the shape rejection, got: {error}"
+        );
     }
 
     #[tokio::test]
@@ -849,5 +951,115 @@ mod tests {
             error.to_string().contains("missing"),
             "expected the missing-entry error, got: {error}"
         );
+    }
+
+    #[test]
+    fn the_real_branch_falls_back_when_the_first_manifest_is_malformed() {
+        // Exercises the exact decision the installer makes, not a copy of it:
+        // a manifest that exists but is not valid MCBBS JSON must select the
+        // CurseForge fallback.
+        let decision = classify_mcbbs_manifest(Some("{ not json".to_string()));
+
+        assert!(
+            matches!(decision, McbbsManifestDecision::Fallback(Some(_))),
+            "malformed MCBBS manifest must request the fallback"
+        );
+    }
+
+    #[test]
+    fn the_real_branch_falls_back_when_the_first_manifest_is_absent() {
+        let decision = classify_mcbbs_manifest(None);
+        assert!(matches!(decision, McbbsManifestDecision::Fallback(None)));
+    }
+
+    #[test]
+    fn the_real_branch_accepts_a_valid_first_manifest() {
+        let decision = classify_mcbbs_manifest(Some(
+            r#"{"name":"MCBBS Pack","addons":[]}"#.to_string(),
+        ));
+        assert!(matches!(decision, McbbsManifestDecision::Parsed(_)));
+    }
+
+    #[test]
+    fn an_archive_structural_failure_is_terminal() {
+        // A bounded reader that cannot read the archive at all must not be
+        // downgraded into a fallback attempt. The strings below are the
+        // reachable ones: `archive_error` for a corrupt archive, and the two
+        // real cap rejections that the reader can actually return.
+        for message in [
+            "Modpack archive is invalid: invalid Zip archive: Could not find central directory end",
+            "Modpack archive is 17179869184 bytes, which exceeds the 8589934592-byte limit",
+            "Modpack archive has 250000 entries, which exceeds the 200000-entry detection limit",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                is_terminal_manifest_error(&error),
+                "expected terminal: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_entry_and_unparsable_json_still_fall_back() {
+        // The two recoverable shapes must stay recoverable.
+        for message in [
+            "Modpack archive is missing mcbbs.packmeta",
+            "expected value at line 1 column 1",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                !is_terminal_manifest_error(&error),
+                "must stay recoverable: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_reader_io_failures_are_terminal() {
+        // The bounded reader propagates real I/O failures (open failure,
+        // decompression failure, a short entry) as `IOError`/`StdIOError`.
+        // Retrying another manifest name would reopen the same broken archive.
+        let io_error: crate::Error = crate::ErrorKind::StdIOError(
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "bad crc"),
+        )
+        .into();
+        assert!(is_terminal_manifest_error(&io_error));
+
+        let fs_error: crate::Error =
+            crate::ErrorKind::IOError(crate::util::io::IOError::with_path(
+                std::io::Error::new(std::io::ErrorKind::NotFound, "gone"),
+                std::path::Path::new("pack.zip"),
+            ))
+            .into();
+        assert!(is_terminal_manifest_error(&fs_error));
+    }
+
+    #[test]
+    fn a_cap_rejection_is_terminal_for_both_bounds() {
+        // The two reachable cap messages the bounded reader can return.
+        for message in [
+            "Modpack archive is 17179869184 bytes, which exceeds the 8589934592-byte limit",
+            "Modpack archive has 250000 entries, which exceeds the 200000-entry detection limit",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                is_terminal_manifest_error(&error),
+                "expected terminal: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_serde_json_failure_is_never_treated_as_structural() {
+        // JSON parse errors are `JSONError`, not I/O, and must keep falling back
+        // to the CurseForge manifest.
+        let parse: crate::Error =
+            serde_json::from_str::<McbbsManifest>("{ nope")
+                .unwrap_err()
+                .into();
+        assert!(!is_terminal_manifest_error(&parse));
     }
 }

@@ -31,6 +31,12 @@ const PACK_ARCHIVE_SCAN_CHUNK_BYTES: usize = 256 * 1024;
 /// Returned when the cooperative cancellation flag stopped the scan early.
 const PACK_ARCHIVE_SCAN_CANCELLED: &str = "Modpack archive scan was canceled";
 
+/// The single "this archive is not a pack I recognise" message.
+///
+/// Shared so the child loop can tell an ordinary "wrong candidate" apart from a
+/// real format-specific failure instead of treating every error as retryable.
+const UNRECOGNIZED_PACK_FORMAT: &str = "Unrecognized modpack format: no known pack manifest was found in the archive";
+
 #[cfg(test)]
 thread_local! {
     /// Test seam: invoked after each nested archive member is fully written,
@@ -143,8 +149,7 @@ fn scan_sub_archives_inner(
     let file = std::fs::File::open(archive)?;
     let Ok(mut zip) = zip::ZipArchive::new(file) else {
         return Err(crate::ErrorKind::InputError(
-            "Unrecognized modpack format: no known pack manifest was found in the archive"
-                .to_string(),
+            UNRECOGNIZED_PACK_FORMAT.to_string(),
         )
         .into());
     };
@@ -387,6 +392,21 @@ async fn detect_local_pack_with_deadline(
         .await
 }
 
+/// Whether a child-candidate failure is the ordinary "not a pack" answer.
+///
+/// Only this exact message may fall through to the next candidate. Anything
+/// else — an unsupported loader, a missing Minecraft version, an invalid
+/// CurseForge target, a deadline, a cancellation — is a real failure about a
+/// candidate we already identified, and retrying would hide it behind a final
+/// "unrecognized format" error.
+///
+/// The comparison is exact rather than `contains`, so a format-specific error
+/// that happens to quote this sentence inside its own message cannot be
+/// mistaken for a retryable candidate.
+fn is_unrecognized_format_error(error: &crate::Error) -> bool {
+    error.to_string() == UNRECOGNIZED_PACK_FORMAT
+}
+
 /// Whether a detection failure must end the install instead of falling back.
 ///
 /// Only "no manifest I recognise" may fall through to the recursive nested
@@ -554,7 +574,7 @@ pub(super) async fn install_pack(
                     // phase is supposed to avoid: the work would continue with
                     // nobody waiting for it. Only a genuine "unknown format"
                     // falls through to the nested scan.
-                    if is_terminal_detection_error(&detect_error) {
+                    if !is_unrecognized_format_error(&detect_error) {
                         return Err(detect_error);
                     }
                     // No format recognised — try recursive extraction
@@ -622,7 +642,8 @@ async fn install_local_pack_file_recursive(
         Err(error) if is_terminal_detection_error(&error) => {
             return Err(error);
         }
-        Err(_) => {}
+        Err(error) if is_unrecognized_format_error(&error) => {}
+        Err(error) => return Err(error),
     }
 
     // If standard detection failed and we're not at max depth, try to look for
@@ -761,10 +782,13 @@ async fn install_local_pack_file_recursive(
 
             match result {
                 Ok(outcome) => return Ok(outcome),
+                // A deadline, cancellation, scan budget/lied-size failure is
+                // terminal even if its message somehow matched the retry case.
                 Err(error) if is_terminal_detection_error(&error) => {
                     return Err(error);
                 }
-                Err(_) => continue,
+                Err(error) if is_unrecognized_format_error(&error) => continue,
+                Err(error) => return Err(error),
             }
         }
 
@@ -772,10 +796,7 @@ async fn install_local_pack_file_recursive(
     }
 
     // If all else fails, return error
-    Err(ErrorKind::InputError(
-        "Unrecognized modpack format: no known pack manifest was found in the archive"
-            .to_string(),
-    ).into())
+    Err(ErrorKind::InputError(UNRECOGNIZED_PACK_FORMAT.to_string()).into())
 }
 
 /// Dispatches a local non-mrpack modpack file to its format-specific
@@ -1097,11 +1118,9 @@ mod archive_scan_tests {
     fn an_unrecognised_format_still_falls_back_to_the_nested_scan() {
         // The ordinary "no manifest found" case has to keep working: this is
         // what lets a wrapper folder or a bundled pack install.
-        let unrecognised: crate::Error = crate::ErrorKind::InputError(
-            "Unrecognized modpack format: no known pack manifest was found in the archive"
-                .to_string(),
-        )
-        .into();
+        let unrecognised: crate::Error =
+            crate::ErrorKind::InputError(UNRECOGNIZED_PACK_FORMAT.to_string())
+                .into();
         assert!(!is_terminal_detection_error(&unrecognised));
     }
 
@@ -1700,5 +1719,58 @@ mod archive_scan_tests {
                 "expected terminal: {message}"
             );
         }
+    }
+
+    #[test]
+    fn only_the_exact_unrecognized_message_is_retryable() {
+        // The child loop may try the next candidate only for this exact answer.
+        let unknown: crate::Error =
+            crate::ErrorKind::InputError(UNRECOGNIZED_PACK_FORMAT.to_string())
+                .into();
+        assert!(is_unrecognized_format_error(&unknown));
+    }
+
+    #[test]
+    fn a_semantic_format_error_is_not_retryable() {
+        // A candidate that *was* identified but is unsupported must surface,
+        // otherwise the final error becomes a misleading "unrecognized format".
+        for message in [
+            "CurseForge modpack uses unsupported loader quilt",
+            "Could not determine the Minecraft version of archived instance pack-1.0",
+            "MCBBS modpack declares multiple primary loaders",
+            "Modpack archive is missing modrinth.index.json",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                !is_unrecognized_format_error(&error),
+                "must propagate, not retry: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_message_quoting_the_unrecognized_sentence_is_still_not_retryable() {
+        // The comparison is exact, so an error that merely embeds the sentence
+        // keeps its own (more specific) meaning.
+        let quoted: crate::Error = crate::ErrorKind::InputError(format!(
+            "failed to install candidate: {UNRECOGNIZED_PACK_FORMAT}"
+        ))
+        .into();
+        assert!(!is_unrecognized_format_error(&quoted));
+    }
+
+    #[test]
+    fn timeout_and_cancellation_are_not_retryable() {
+        // They are not "unrecognized", so the loop returns them immediately.
+        let timeout = crate::api::pack::detect::detection_timeout_error();
+        let cancelled: crate::Error =
+            crate::ErrorKind::OtherError("Install was canceled".to_string())
+                .into();
+        assert!(!is_unrecognized_format_error(&timeout));
+        assert!(!is_unrecognized_format_error(&cancelled));
+        // ...and the terminal classifier still catches both.
+        assert!(is_terminal_detection_error(&timeout));
+        assert!(is_terminal_detection_error(&cancelled));
     }
 }
