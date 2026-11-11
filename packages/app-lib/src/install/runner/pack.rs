@@ -404,7 +404,17 @@ async fn detect_local_pack_with_deadline(
 /// that happens to quote this sentence inside its own message cannot be
 /// mistaken for a retryable candidate.
 fn is_unrecognized_format_error(error: &crate::Error) -> bool {
-    error.to_string() == UNRECOGNIZED_PACK_FORMAT
+    // Match the payload, not the rendered message: `ErrorKind::InputError` is
+    // declared as `#[error("Invalid input: {0}")]`, so `to_string()` carries an
+    // "Invalid input: " prefix and an equality test against the constant would
+    // never succeed. Comparing the variant payload also keeps this immune to
+    // `with_context`, which appends to the rendered message but leaves the raw
+    // kind untouched.
+    matches!(
+        error.raw.as_ref(),
+        crate::ErrorKind::InputError(message)
+            if message == UNRECOGNIZED_PACK_FORMAT
+    )
 }
 
 /// Whether a detection failure must end the install instead of falling back.
@@ -1728,6 +1738,34 @@ mod archive_scan_tests {
             crate::ErrorKind::InputError(UNRECOGNIZED_PACK_FORMAT.to_string())
                 .into();
         assert!(is_unrecognized_format_error(&unknown));
+
+        // The rendered message carries the `Invalid input: ` prefix from the
+        // enum's `#[error]` attribute, which is exactly why this classifier
+        // compares the payload rather than `to_string()`.
+        assert_ne!(unknown.to_string(), UNRECOGNIZED_PACK_FORMAT);
+        assert!(unknown.to_string().contains(UNRECOGNIZED_PACK_FORMAT));
+    }
+
+    #[test]
+    fn unrecognized_detection_survives_an_attached_context() {
+        // `with_context` appends to the rendered message but leaves the raw
+        // kind untouched, so the retry decision stays stable.
+        let with_context: crate::Error =
+            crate::ErrorKind::InputError(UNRECOGNIZED_PACK_FORMAT.to_string())
+                .into();
+        let with_context = with_context.with_context("while reading candidate");
+        assert!(is_unrecognized_format_error(&with_context));
+    }
+
+    #[test]
+    fn a_different_input_error_payload_is_not_retryable() {
+        // Same variant, different payload: must not be mistaken for the one
+        // retryable answer.
+        let other: crate::Error = crate::ErrorKind::InputError(format!(
+            "{UNRECOGNIZED_PACK_FORMAT} (details follow)"
+        ))
+        .into();
+        assert!(!is_unrecognized_format_error(&other));
     }
 
     #[test]
