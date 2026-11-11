@@ -3,6 +3,7 @@ import { describe, test } from 'node:test'
 
 import {
     combineCrashLogs,
+    logShareLeavesMachine,
     type CrashLogFile,
     crashLogLabel,
     preferredCrashLogKey,
@@ -20,22 +21,54 @@ const files: CrashLogFile[] = [
 ]
 
 describe('Minecraft crash log selection', () => {
-    test('enables automatic LogShare analysis only from source and auto-upload settings', () => {
+    test('enables automatic LogShare analysis only after an explicit opt-in', () => {
         assert.equal(
             shouldUseLogShareAutoAnalysis({
                 ai_source: 'logshare',
                 auto_upload: true,
                 no_storage: true,
+                remote_consent: true,
             }),
             true,
         )
         assert.equal(
-            shouldUseLogShareAutoAnalysis({ ai_source: 'logshare', auto_upload: false }),
+            shouldUseLogShareAutoAnalysis({
+                ai_source: 'logshare',
+                auto_upload: false,
+                remote_consent: true,
+            }),
             false,
         )
         assert.equal(
-            shouldUseLogShareAutoAnalysis({ ai_source: 'custom', auto_upload: true }),
+            shouldUseLogShareAutoAnalysis({
+                ai_source: 'custom',
+                auto_upload: true,
+                remote_consent: true,
+            }),
             false,
+        )
+    })
+
+    test('never uploads from a stored cloud source the user did not confirm', () => {
+        // An install upgraded from a build that defaulted to LogShare still has
+        // `ai_source: 'logshare'` and `auto_upload: true` persisted, but no
+        // consent marker. Nothing may leave the machine.
+        assert.equal(
+            shouldUseLogShareAutoAnalysis({ ai_source: 'logshare', auto_upload: true }),
+            false,
+        )
+        assert.equal(
+            shouldUseLogShareAutoAnalysis({
+                ai_source: 'logshare',
+                auto_upload: true,
+                remote_consent: false,
+            }),
+            false,
+        )
+        assert.equal(logShareLeavesMachine({ ai_source: 'logshare' }), false)
+        assert.equal(
+            logShareLeavesMachine({ ai_source: 'logshare', remote_consent: true }),
+            true,
         )
     })
 

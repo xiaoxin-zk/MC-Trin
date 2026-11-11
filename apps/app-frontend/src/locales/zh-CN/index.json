@@ -11352,10 +11352,10 @@
     "message": "AI 分析来源"
   },
   "app.log-share.settings.auto-upload": {
-    "message": "自动上传以获取结构化摘要"
+    "message": "崩溃后自动上传到 LogShare"
   },
   "app.log-share.settings.auto-upload-description": {
-    "message": "崩溃后自动将日志上传到 LogShare，无需先启动 AI 分析。"
+    "message": "仅控制崩溃后是否自动上传，不会授予或撤销发送日志到 LogShare 的许可，请使用下方的许可设置。会移除你的 Minecraft 令牌和电脑用户名，但服务器地址、聊天内容和模组名称不会被移除。"
   },
   "app.log-share.settings.multi-file": {
     "message": "多文件上传"
@@ -11364,13 +11364,28 @@
     "message": "同时上传 latest.log、崩溃报告、hs_err 以及启动器日志。"
   },
   "app.log-share.settings.no-storage": {
-    "message": "不落盘直接分析"
+    "message": "请求 LogShare 不保存日志"
   },
   "app.log-share.settings.no-storage-description": {
-    "message": "直接提交内容进行分析并跳过存储上传。会关闭自动摘要。"
+    "message": "完整日志仍会上传到 api.logshare.cn。此项只是请求 LogShare 不要保存副本；启动器无法核实该服务实际保留了什么。会关闭自动摘要。"
   },
   "app.log-share.settings.share-provider": {
     "message": "日志分享服务"
+  },
+  "app.log-share.settings.grant-consent": {
+    "message": "允许上传到 LogShare"
+  },
+  "app.log-share.settings.remote-consent": {
+    "message": "允许上传到 LogShare"
+  },
+  "app.log-share.settings.remote-consent-granted": {
+    "message": "已允许向 LogShare 上传：崩溃日志内容可能发送到 api.logshare.cn。撤销此许可可停止 LogShare 上传；单独配置的 AI 服务仍可能收到选定的分析片段。"
+  },
+  "app.log-share.settings.remote-consent-revoked": {
+    "message": "LogShare 权限已关闭。未允许前不会向 LogShare 发送日志；单独配置的 AI 服务仍可能收到选定的分析片段。"
+  },
+  "app.log-share.settings.revoke-consent": {
+    "message": "撤销 LogShare 许可"
   },
   "app.log-share.settings.show-progress": {
     "message": "显示 AI 分析进度"
@@ -11510,8 +11525,20 @@
   "app.logagent.controls.start": {
     "message": "开始分析"
   },
+  "app.logagent.local-model-notice": {
+    "message": "不会把日志上传到 LogShare，且未配置 AI 服务商，因此规则分析完全在本机进行。"
+  },
+  "app.logagent.local-only-notice": {
+    "message": "不会把日志上传到 LogShare。你配置的 AI 服务商可能会收到用于分析的片段。"
+  },
+  "app.logagent.remote-consent-action": {
+    "message": "允许上传到 LogShare"
+  },
+  "app.logagent.remote-consent-required": {
+    "message": "在你允许 LogShare 之前，崩溃分析只在本机进行。目前没有上传任何内容。"
+  },
   "app.logagent.picker.cloud-hint": {
-    "message": "将崩溃日志发送到 LogShare 分析。"
+    "message": "上传完整的崩溃日志到 api.logshare.cn 进行分析。只有在你确认后才会启用。"
   },
   "app.logagent.picker.label": {
     "message": "分析来源"
@@ -11558,8 +11585,17 @@
   "app.logagent.settings.tour": {
     "message": "了解分析来源"
   },
+  "app.logagent.source-remote-hint-no-storage": {
+    "message": "仅在你打开此项后：完整的崩溃日志会上传到 api.logshare.cn 进行分析。请求 LogShare 不保存副本并不会减少发送的内容，启动器也无法核实该服务实际保留了什么。上传前会移除你的 Minecraft 令牌和电脑用户名；服务器地址、聊天内容和模组名称不会被移除。"
+  },
+  "app.logagent.source-remote": {
+    "message": "LogShare（上传日志）"
+  },
+  "app.logagent.source-remote-hint": {
+    "message": "仅在你允许后：完整的崩溃日志会上传到 api.logshare.cn，并在那里分析和保存。上传前会移除你的 Minecraft 令牌和电脑用户名，但服务器地址、聊天内容和模组名称不会被移除。"
+  },
   "app.logagent.source-cloud": {
-    "message": "云端 LogShare"
+    "message": "LogShare（上传完整日志）"
   },
   "app.logagent.source-cloud-hint": {
     "message": "崩溃日志会发送到 LogShare 进行云端分析。"
@@ -11822,14 +11858,17 @@
   "app.minecraft-crash.share-failed": {
     "message": "导出分享失败"
   },
+  "app.minecraft-crash.share-destination": {
+    "message": "点击分享会将崩溃日志内容上传到外部服务：选择且已允许时使用 LogShare；选择 mclo.gs 或作为回退时会发送到公开的 mclo.gs。超过 9 MiB 的 mclo.gs 上传内容会裁剪为末尾 9 MiB。请确认接受后再分享。"
+  },
   "app.minecraft-crash.share-fallback": {
-    "message": "LogShare 不可用，已改用 mclo.gs 分享诊断信息。"
+    "message": "无法使用 LogShare，诊断日志已上传到 mclo.gs。mclo.gs 会生成公开链接；超过 9 MiB 的内容会裁剪为末尾 9 MiB。"
   },
   "app.minecraft-crash.share-ready": {
     "message": "诊断链接已准备好分享"
   },
   "app.minecraft-crash.share-truncated": {
-    "message": "诊断日志过大，已自动截取最后 9MB 上传。"
+    "message": "诊断日志过大，仅上传了末尾 9 MiB。"
   },
   "app.minecraft-crash.sharing-diagnostic": {
     "message": "正在导出分享……"
@@ -12203,6 +12242,21 @@
   "app.multiplayer.mctier.name": {
     "message": "房间名称"
   },
+  "app.multiplayer.mctier.name-invalid": {
+    "message": "房间名称需为 4-32 个字符，只能包含字母、数字、下划线或连字符。"
+  },
+  "app.multiplayer.mctier.name-missing": {
+    "message": "请输入房间名称，让好友能够找到房间："
+  },
+  "app.multiplayer.mctier.signaling-invalid": {
+    "message": "房间服务地址必须使用 wss://；仅本机（localhost、127.0.0.1、[::1]）可使用 ws://。"
+  },
+  "app.multiplayer.mctier.player-invalid": {
+    "message": "玩家名称需为 1-64 个字符，且不能包含控制字符。"
+  },
+  "app.multiplayer.mctier.player-missing": {
+    "message": "请输入好友将看到的玩家名称。"
+  },
   "app.multiplayer.mctier.node-invalid": {
     "message": "请输入有效的节点地址，例如 tcp://1.2.3.4:11010。"
   },
@@ -12223,6 +12277,9 @@
   },
   "app.multiplayer.mctier.port": {
     "message": "房主 Minecraft 端口"
+  },
+  "app.multiplayer.mctier.port-invalid": {
+    "message": "Minecraft 端口必须在 1 到 65535 之间。"
   },
   "app.multiplayer.mctier.private-password-hint": {
     "message": "私密房间不会出现在公开大厅，加入需要填写房间密码。"

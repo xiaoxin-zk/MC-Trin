@@ -234,6 +234,55 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  # This focused job repeats dependency setup because it is an independent,
+  # required check; sharing the desktop matrix build would hide failures inside
+  # a slower matrix check and make the named regression signal unavailable.
+  feature-regression:
+    name: Feature regression checks
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SQLX_OFFLINE: true
+      RUST_MIN_STACK: 16777216
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+      - name: Setup desktop build
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          profile: ci
+          save-cache: false
+          resources: 'false'
+      - name: Run modpack installation regression tests
+        run: cargo test --package theseus --lib api::pack::install_mrpack -- --test-threads=1
+      - name: Run pack installation regression tests
+        run: cargo test --package theseus --lib install::runner::pack -- --test-threads=1
+      - name: Run MCTier regression tests
+        run: cargo test --package theseus --lib api::mctier -- --test-threads=1
+      - name: Run log-sharing regression tests
+        run: cargo test --package theseus --lib api::logs::logshare -- --test-threads=1
+      - name: Run analysis-settings regression tests
+        run: cargo test --package theseus --lib api::logs::analysis_settings -- --test-threads=1
+      - name: Run log-agent regression tests
+        run: cargo test --package theseus --lib api::logs::logagent -- --test-threads=1
+      - name: Install Chromium for focused visual tests
+        timeout-minutes: 10
+        run: pnpm --filter @modrinth/app-frontend exec playwright install --with-deps chromium
+      - name: Run focused MCTier and crash-consent visual specs
+        run: >-
+          pnpm --filter @modrinth/app-frontend exec vitest run
+          --config vitest.config.ts
+          src/components/multiplayer/MctierRooms.visual.spec.ts
+          src/composables/useMctierVoice.visual.spec.ts
+          src/components/ui/settings/LogShareSettings.visual.spec.ts
+          src/components/ui/MinecraftCrashModal.visual.spec.ts
+      - name: Run installer UI regression tests
+        run: node --test apps/installer-ui/tests/installer-ui.test.cjs
+
   desktop:
     name: Build and test desktop application
     needs: [changes, guardrails, resources, fast]
@@ -276,6 +325,7 @@ jobs:
       - name: Check for dead alpha utilities
         run: node scripts/axolotl/check-dead-utilities.mjs
       - name: Test version metadata writes
+        if: runner.os != 'Linux'
         run: cargo test --package theseus writing_version_info_creates_missing_parent_directory
       # The whole theseus suite runs here rather than in a dedicated job: this
       # job has already compiled the test binaries, while a standalone job spent
@@ -413,6 +463,7 @@ jobs:
         guardrails,
         fast,
         frontend,
+        feature-regression,
         resources,
         desktop,
       ]
@@ -424,6 +475,17 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: .nvmrc
+      - name: Require focused feature regressions to pass
+        env:
+          FEATURE_REGRESSION_RESULT: ${{ needs.feature-regression.result }}
+          DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
+        run: |
+          expected=success
+          if [ "$DESKTOP_SCOPE" != true ]; then expected=skipped; fi
+          if [ "$FEATURE_REGRESSION_RESULT" != "$expected" ]; then
+            echo "feature-regression: expected $expected, received $FEATURE_REGRESSION_RESULT" >&2
+            exit 1
+          fi
       - name: Require all selected checks to pass
         env:
           RESULTS: ${{ toJSON(needs) }}

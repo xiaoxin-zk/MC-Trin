@@ -33,6 +33,7 @@ vi.mock('@modrinth/ui', async () => {
                 h('input', {
                     name: props.name,
                     type: props.type ?? 'text',
+                    maxlength: props.maxlength,
                     value: props.modelValue,
                     onInput: (event: Event) =>
                         emit('update:modelValue', (event.target as HTMLInputElement).value),
@@ -135,16 +136,23 @@ function fillRequired(wrapper: VueWrapper) {
     )
 }
 
+function button(wrapper: VueWrapper, text: string) {
+    const found = wrapper.findAll('button').find((candidate) => candidate.text() === text)
+    if (!found) throw new Error(`No button labelled "${text}"`)
+    return found
+}
+
+const voicePanel = '[data-onboarding-id="mctier-voice"]'
+/** The bordered card that only makes sense while a call is up. */
+const voiceSessionCard = `${voicePanel} > div.rounded-lg.border`
+
 it('validates fields and starts a host session with the expected DTO', async () => {
     const wrapper = page()
-    await wrapper.get('button').trigger('click')
+    await button(wrapper, 'Create lobby').trigger('click')
     expect(fixture.start).not.toHaveBeenCalled()
 
     await fillRequired(wrapper)
-    await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Create lobby')!
-        .trigger('click')
+    await button(wrapper, 'Create lobby').trigger('click')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith({
         mode: 'create',
@@ -158,6 +166,65 @@ it('validates fields and starts a host session with the expected DTO', async () 
         description: null,
         max_players: null,
     })
+})
+
+it('explains why Create is disabled instead of silently ignoring the click', async () => {
+    const wrapper = page()
+    const createForm = '[data-onboarding-id="mctier-create-form"]'
+
+    // (a) A fresh form has no lobby name. Create is disabled, and the form says
+    // which field is missing rather than leaving a dead button with no message.
+    const blocked = wrapper.get(`${createForm} [role="status"]`)
+    expect(blocked.text()).toContain('Enter a lobby name so friends can find the room')
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    // The reason carries its own fix: one click fills a valid generated name.
+    await wrapper.get(`${createForm} [role="status"] button`).trigger('click')
+    await flushPromises()
+
+    // (b) The generated name is valid, so the reason disappears and Create is live.
+    const name = wrapper.get('input[name="lobby-name"]').element as HTMLInputElement
+    expect(name.value).toMatch(/^mc-[a-z0-9]{6}$/u)
+    expect(wrapper.find(`${createForm} [role="status"]`).exists()).toBe(false)
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeUndefined()
+
+    // (c) A typed name that breaks the 4-32 character rule shows its own reason.
+    await wrapper.get('input[name="lobby-name"]').setValue('ab')
+    await flushPromises()
+
+    const invalid = wrapper.get(`${createForm} [role="status"]`)
+    expect(invalid.text()).toContain(
+        'Lobby names use 4-32 letters, numbers, underscores, or hyphens.',
+    )
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    // (d) Symbol-only names are 4 characters long but have no letter or number.
+    // The backend rejects them, so the form must refuse them with the same
+    // reason instead of letting the request fail after the kernel starts.
+    await wrapper.get('input[name="lobby-name"]').setValue('____')
+    await flushPromises()
+
+    const symbolOnly = wrapper.get(`${createForm} [role="status"]`)
+    expect(symbolOnly.text()).toContain(
+        'Lobby names use 4-32 letters, numbers, underscores, or hyphens.',
+    )
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+})
+
+it('uses Unicode code-point limits without truncating names by UTF-16 units', async () => {
+    const wrapper = page()
+    const lobbyName = wrapper.get('input[name="lobby-name"]')
+    const playerName = wrapper.get('input[name="player-name"]')
+
+    expect((lobbyName.element as HTMLInputElement).maxLength).toBe(-1)
+    expect((playerName.element as HTMLInputElement).maxLength).toBe(-1)
+    await lobbyName.setValue('𝟘'.repeat(32))
+    await playerName.setValue('😀'.repeat(64))
+    await flushPromises()
+
+    expect([...(lobbyName.element as HTMLInputElement).value]).toHaveLength(32)
+    expect([...(playerName.element as HTMLInputElement).value]).toHaveLength(64)
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeUndefined()
 })
 
 it('shows the verified address and leaves a running session', async () => {
@@ -175,16 +242,13 @@ it('shows the verified address and leaves a running session', async () => {
     })
     expect(wrapper.text()).toContain('Minecraft connection verified')
     expect(wrapper.text()).toContain('127.0.0.1:25566')
-    await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Leave lobby')!
-        .trigger('click')
+    await button(wrapper, 'Leave lobby').trigger('click')
     expect(fixture.stop).toHaveBeenCalledOnce()
 })
 
 it('cancels an in-progress network operation', async () => {
     const wrapper = page({ ...idle, status: 'connecting' })
-    await wrapper.get('button').trigger('click')
+    await button(wrapper, 'Cancel connection').trigger('click')
     expect(fixture.stop).toHaveBeenCalledOnce()
 })
 
@@ -228,10 +292,7 @@ it('keeps public rooms passwordless and sends the chosen visibility', async () =
     await fillRequired(wrapper)
     await wrapper.get('input[name="lobby-password"]').setValue('')
     await wrapper.get('input[name="public-lobby"]').setValue(true)
-    await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Create lobby')!
-        .trigger('click')
+    await button(wrapper, 'Create lobby').trigger('click')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -251,10 +312,7 @@ it('clears the password when the room is listed publicly', async () => {
     await wrapper.get('input[name="public-lobby"]').setValue(true)
     await flushPromises()
     expect((wrapper.get('input[name="lobby-password"]').element as HTMLInputElement).value).toBe('')
-    await wrapper
-        .findAll('button')
-        .find((button) => button.text() === 'Create lobby')!
-        .trigger('click')
+    await button(wrapper, 'Create lobby').trigger('click')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -299,21 +357,47 @@ it('shows a generated host invite and sends visibility changes to the backend', 
     expect(wrapper.text()).toContain('Invite code')
     expect(wrapper.text()).toContain(inviteCode)
 
-    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper
+        .get('[data-onboarding-id="mctier-publish-state"] input[type="checkbox"]')
+        .setValue(true)
     expect(fixture.setPublic).toHaveBeenCalledWith(true)
 })
 
-it('shows voice controls only after the lobby session is active', async () => {
-    const idleWrapper = page()
-    expect(idleWrapper.text()).not.toContain('Enable voice')
+it('offers the voice panel while a room is still being created', async () => {
+    const wrapper = page({ ...idle, status: 'connecting' })
+    await flushPromises()
 
-    const activeWrapper = page({
+    expect(wrapper.find(voicePanel).exists()).toBe(true)
+    expect(wrapper.text()).toContain('Room voice')
+    expect(wrapper.find(`${voicePanel} select`).exists()).toBe(true)
+    expect(wrapper.text()).toContain('Push-to-talk')
+    // Device selection is the point of the pre-connect panel, so it must not be
+    // wrapped in the session card that has nothing to show yet.
+    expect(wrapper.find(voiceSessionCard).exists()).toBe(false)
+    // Nothing to signal from yet, so the call itself stays disabled.
+    expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeDefined()
+})
+
+it('offers a working voice panel once the room is connected', async () => {
+    const wrapper = page({
         ...idle,
         status: 'hosting',
         mode: 'create',
+        lobby_name: 'TestRoom',
         local_player_id: 'a'.repeat(64),
     })
     await flushPromises()
-    expect(activeWrapper.text()).toContain('Room voice')
-    expect(activeWrapper.text()).toContain('Enable voice')
+
+    expect(wrapper.find(voicePanel).exists()).toBe(true)
+    expect(wrapper.text()).toContain('Room voice')
+    expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeUndefined()
+})
+
+it('keeps the voice panel reachable from the idle lobby form', async () => {
+    const wrapper = page()
+    await flushPromises()
+
+    expect(wrapper.find(voicePanel).exists()).toBe(true)
+    expect(wrapper.find('input[name="lobby-name"]').exists()).toBe(true)
+    expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeDefined()
 })

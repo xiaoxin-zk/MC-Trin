@@ -76,6 +76,23 @@ fn registration_proof_uses_the_public_v3_format_and_separate_application_metadat
     assert!(identity.registration("invalid", &request).is_err());
 }
 
+/// The defaults the UI prefills must survive the request validation they are
+/// sent through. A validator that rejects them makes room creation impossible
+/// before any network work starts, and the form only disables its buttons, so
+/// the player sees a room that cannot be created and no reason why.
+#[test]
+fn the_shipped_defaults_pass_request_validation() {
+    let mut input = request();
+    input.server_node = DEFAULT_NODE.to_string();
+    input.signaling_server = DEFAULT_SIGNALING.to_string();
+    input.lobby_name = "mc-abc234".into();
+    input
+        .validate()
+        .expect("the shipped node and signalling defaults must be valid");
+    assert!(validate_peer_node(DEFAULT_NODE).is_ok());
+    assert!(validate_endpoint(DEFAULT_SIGNALING, true).is_ok());
+}
+
 #[test]
 fn request_validation_rejects_unsafe_urls_and_invalid_room_values() {
     assert!(request().validate().is_ok());

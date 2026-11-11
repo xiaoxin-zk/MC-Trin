@@ -18,11 +18,18 @@ pub async fn get_crash_analysis_ai_settings()
     )
     .fetch_one(&state.pool)
     .await?;
+    // A stored `logshare` only survives if the user explicitly consented.
+    // Otherwise the row predates the opt-in (or was left by a revoke) and the
+    // effective source reported to the UI must stay local.
+    let ai_source = effective_ai_source(
+        &row.3,
+        super::logshare::remote_consent_recorded(&state.pool).await,
+    );
     Ok(CrashAnalysisAiSettings {
         enabled: row.0 != 0,
         provider_id: row.1,
         model_id: row.2,
-        ai_source: row.3,
+        ai_source: ai_source.to_string(),
     })
 }
 
@@ -52,15 +59,30 @@ async fn save_settings(
         .bind(ai_source)
         .execute(&mut *transaction)
         .await?;
+    // Selecting the remote source only records a preference. Sending logs is a
+    // separate, explicit opt-in handled by `update_log_share_settings`, so a
+    // settings save that merely carries an inherited value cannot consent.
     transaction.commit().await?;
     Ok(())
 }
 
-fn normalize_ai_source(ai_source: &str) -> &str {
-    if ai_source == "custom" {
-        "custom"
+/// Only an explicit remote choice selects LogShare. Every other value, including
+/// an empty or unexpected one, keeps crash analysis on this machine.
+fn normalize_ai_source(ai_source: &str) -> &'static str {
+    if ai_source == super::logshare::REMOTE_AI_SOURCE {
+        super::logshare::REMOTE_AI_SOURCE
     } else {
-        "logshare"
+        super::logshare::LOCAL_AI_SOURCE
+    }
+}
+
+/// Effective source for a stored row: remote needs both the stored value and a
+/// recorded consent, so a legacy row reads as local.
+fn effective_ai_source(stored: &str, consent: bool) -> &'static str {
+    if consent {
+        normalize_ai_source(stored)
+    } else {
+        super::logshare::LOCAL_AI_SOURCE
     }
 }
 
@@ -68,11 +90,29 @@ fn normalize_ai_source(ai_source: &str) -> &str {
 mod tests {
     use super::*;
 
+    #[test]
+    fn crash_analysis_is_local_unless_the_user_explicitly_chose_logshare() {
+        assert_eq!(normalize_ai_source(""), "custom");
+        assert_eq!(normalize_ai_source("custom"), "custom");
+        assert_eq!(normalize_ai_source("something-else"), "custom");
+        assert_eq!(normalize_ai_source("logshare"), "logshare");
+    }
+
+    #[test]
+    fn the_stored_settings_default_to_local_analysis() {
+        let settings = super::super::logshare::LogShareSettings::default();
+        assert_eq!(settings.ai_source, "custom");
+        assert!(
+            !settings.auto_upload,
+            "no crash log may leave the machine before the user opts in"
+        );
+    }
+
     #[tokio::test]
     async fn saves_authoritative_source_and_mirror_atomically() {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::query("CREATE TABLE crash_analysis_ai_settings (id INTEGER PRIMARY KEY, enabled BOOLEAN, provider_id TEXT, model_id TEXT, ai_source TEXT)").execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO crash_analysis_ai_settings VALUES (0, 0, '', '', 'logshare')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO crash_analysis_ai_settings VALUES (0, 0, '', '', 'custom')").execute(&pool).await.unwrap();
         let settings = CrashAnalysisAiSettings {
             enabled: true,
             provider_id: " provider ".into(),
@@ -86,9 +126,9 @@ mod tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(source, "logshare");
+        assert_eq!(source, "custom");
         sqlx::query("CREATE TABLE log_share_settings (id INTEGER PRIMARY KEY, ai_source TEXT)").execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO log_share_settings VALUES (0, 'logshare')")
+        sqlx::query("INSERT INTO log_share_settings VALUES (0, 'custom')")
             .execute(&pool)
             .await
             .unwrap();

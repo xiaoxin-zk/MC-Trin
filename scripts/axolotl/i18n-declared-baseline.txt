@@ -2852,13 +2852,18 @@ app.multiplayer.mctier.joined
 app.multiplayer.mctier.leave
 app.multiplayer.mctier.lobby-description
 app.multiplayer.mctier.max-players
+app.multiplayer.mctier.name-invalid
+app.multiplayer.mctier.name-missing
 app.multiplayer.mctier.name
 app.multiplayer.mctier.node
 app.multiplayer.mctier.node-invalid
 app.multiplayer.mctier.open-private-hint
 app.multiplayer.mctier.password
+app.multiplayer.mctier.player-invalid
+app.multiplayer.mctier.player-missing
 app.multiplayer.mctier.player
 app.multiplayer.mctier.players
+app.multiplayer.mctier.port-invalid
 app.multiplayer.mctier.port
 app.multiplayer.mctier.private-password-hint
 app.multiplayer.mctier.public-no-password
@@ -2871,6 +2876,7 @@ app.multiplayer.mctier.publish-published
 app.multiplayer.mctier.publish-unconfirmed
 app.multiplayer.mctier.random-name
 app.multiplayer.mctier.random-password
+app.multiplayer.mctier.signaling-invalid
 app.multiplayer.mctier.signaling
 app.multiplayer.mctier.stage.downloading
 app.multiplayer.mctier.stage.extracting

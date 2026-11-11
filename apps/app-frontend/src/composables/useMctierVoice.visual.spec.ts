@@ -405,3 +405,21 @@ it('stops a one-way call when the capture device disappears', async () => {
     expect(voice.active.value).toBe(false)
     expect(voice.error.value).toBe('input-device-lost')
 })
+
+it('clears a finished call error when the next room starts', async () => {
+    const { stream, track } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    voice.syncRoom(roomState())
+    await voice.start(roomState())
+    track.readyState = 'ended'
+    track.onended?.(new Event('ended'))
+    expect(voice.error.value).toBe('input-device-lost')
+
+    // The panel is always on screen, so a complaint about the previous room has
+    // to go away once a new room lifecycle begins.
+    voice.syncRoom({ ...roomState(), status: 'connecting' })
+
+    expect(voice.error.value).toBeNull()
+})

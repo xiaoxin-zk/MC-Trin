@@ -33,6 +33,13 @@ type LogShareSettings = {
     multi_file: boolean
     no_storage: boolean
     show_progress: boolean
+    remote_consent: boolean
+    /**
+     * Explicit consent change (`grant` / `revoke`). Only set by a deliberate
+     * user action; every other save omits it, so saving the page can never
+     * change upload permission.
+     */
+    consent_action?: 'grant' | 'revoke'
 }
 
 const { formatMessage } = useVIntl()
@@ -41,17 +48,18 @@ const replayOnboarding = inject<(mode: 'logagent') => Promise<void>>('replayOnbo
 const { handleError } = injectNotificationManager()
 const settings = ref<LogShareSettings>({
     share_provider: 'logshare',
-    ai_source: 'logshare',
-    auto_upload: true,
+    ai_source: 'custom',
+    auto_upload: false,
     multi_file: true,
     no_storage: false,
     show_progress: true,
+    remote_consent: false,
 })
 const aiSettings = ref<AnalysisSettings>({
     enabled: false,
     provider_id: '',
     model_id: '',
-    ai_source: 'logshare',
+    ai_source: 'custom',
 })
 const loading = ref(true)
 const saving = ref(false)
@@ -112,11 +120,34 @@ const messages = defineMessages({
     },
     autoUpload: {
         id: 'app.log-share.settings.auto-upload',
-        defaultMessage: 'Upload to get a structured summary automatically',
+        defaultMessage: 'Upload to LogShare automatically after a crash',
     },
     autoUploadDescription: {
         id: 'app.log-share.settings.auto-upload-description',
-        defaultMessage: 'Uploads logs to LogShare after a crash, before you start AI analysis.',
+        defaultMessage:
+            'Only controls automatic uploads after a crash. It does not grant or revoke permission to send logs to LogShare — use the permission row below for that. Your Minecraft token and computer username are removed, but server addresses, chat and mod names are not.',
+    },
+    remoteConsent: {
+        id: 'app.log-share.settings.remote-consent',
+        defaultMessage: 'Allow LogShare uploads',
+    },
+    remoteConsentGranted: {
+        id: 'app.log-share.settings.remote-consent-granted',
+        defaultMessage:
+            'LogShare uploads are allowed: crash-log content may be sent to api.logshare.cn. Revoke this to stop LogShare uploads; a separately configured AI provider may still receive selected excerpts.',
+    },
+    remoteConsentRevoked: {
+        id: 'app.log-share.settings.remote-consent-revoked',
+        defaultMessage:
+            'LogShare permission is off. No logs are sent to LogShare until you allow it; a separately configured AI provider may still receive selected excerpts.',
+    },
+    revokeConsent: {
+        id: 'app.log-share.settings.revoke-consent',
+        defaultMessage: 'Revoke LogShare permission',
+    },
+    grantConsent: {
+        id: 'app.log-share.settings.grant-consent',
+        defaultMessage: 'Allow LogShare uploads',
     },
     multiFile: { id: 'app.log-share.settings.multi-file', defaultMessage: 'Multi-file upload' },
     multiFileDescription: {
@@ -125,12 +156,12 @@ const messages = defineMessages({
     },
     noStorage: {
         id: 'app.log-share.settings.no-storage',
-        defaultMessage: 'Analyze without storing logs',
+        defaultMessage: 'Ask LogShare not to store the logs',
     },
     noStorageDescription: {
         id: 'app.log-share.settings.no-storage-description',
         defaultMessage:
-            'Submit content directly for analysis and skip the stored upload. Disables the automatic summary.',
+            'The full logs are still uploaded to api.logshare.cn. This only requests that LogShare not keep a stored copy; the launcher cannot verify what the service retains. Disables the automatic summary.',
     },
     showProgress: {
         id: 'app.log-share.settings.show-progress',
@@ -202,8 +233,38 @@ async function saveAI(next: AnalysisSettings): Promise<void> {
     }
 }
 
+/** Grants or revokes LogShare permission, independently of auto-upload. */
+async function setRemoteConsent(enabled: boolean): Promise<void> {
+    if (saving.value) return
+    saving.value = true
+    emit('savingChange', true)
+    const { consent_action: _ignored, ...rest } = settings.value
+    const next: LogShareSettings = {
+        ...rest,
+        // Revoking also returns the stored preference to local, mirroring the
+        // backend, so the toggle cannot keep showing an upload that will be
+        // refused.
+        auto_upload: enabled ? rest.auto_upload : false,
+        consent_action: enabled ? 'grant' : 'revoke',
+    }
+    try {
+        await update_log_share_settings(next)
+        const refreshed = await get_log_share_settings()
+        settings.value = refreshed
+        aiSettings.value = await get_crash_analysis_ai_settings()
+    } catch (error) {
+        handleError(error)
+    } finally {
+        saving.value = false
+        emit('savingChange', false)
+    }
+}
+
 function updateShare(patch: Partial<LogShareSettings>): void {
-    void saveShare({ ...settings.value, ...patch })
+    // `consent_action` is never carried over from the previous state: only a
+    // deliberate switch below supplies one.
+    const { consent_action: _ignored, ...rest } = settings.value
+    void saveShare({ ...rest, ...patch })
 }
 
 function selectShareProvider(value: unknown): void {
@@ -361,9 +422,45 @@ onMounted(async () => {
                         ><Toggle
                             id="log-share-auto-upload"
                             :model-value="settings.auto_upload"
-                            :disabled="saving || settings.no_storage"
+                            :disabled="saving || settings.no_storage || !settings.remote_consent"
                             @update:model-value="updateShare({ auto_upload: !!$event })"
                     /></template>
+                </SettingsRow>
+            </div>
+            <!-- Kept outside the source branch: permission must stay revocable
+                 even when the selected source is local. -->
+            <div v-if="!localSetup" data-onboarding-id="logagent-settings-consent">
+                <SettingsRow>
+                    <template #label>{{ formatMessage(messages.remoteConsent) }}</template>
+                    <template #description>
+                        {{
+                            formatMessage(
+                                settings.remote_consent
+                                    ? messages.remoteConsentGranted
+                                    : messages.remoteConsentRevoked,
+                            )
+                        }}
+                    </template>
+                    <template #control>
+                        <Button
+                            :id="
+                                settings.remote_consent
+                                    ? 'log-share-revoke-consent'
+                                    : 'log-share-grant-consent'
+                            "
+                            type="outlined"
+                            :disabled="saving"
+                            @click="setRemoteConsent(!settings.remote_consent)"
+                        >
+                            {{
+                                formatMessage(
+                                    settings.remote_consent
+                                        ? messages.revokeConsent
+                                        : messages.grantConsent,
+                                )
+                            }}
+                        </Button>
+                    </template>
                 </SettingsRow>
             </div>
         </SettingsSection>

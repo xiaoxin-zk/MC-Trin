@@ -48,6 +48,7 @@ import {
     logshare_get_insights,
     logshare_upload_crash,
     record_shared_log,
+    update_log_share_settings,
 } from '@/helpers/logs'
 import { shouldShowMinecraftCrash } from '@/helpers/process.js'
 import { visibleDraft } from '@/logagent/progress'
@@ -95,6 +96,8 @@ interface LogShareSettings {
     share_provider: 'logshare' | 'mclogs'
     ai_source: 'logshare' | 'custom'
     auto_upload: boolean
+    remote_consent?: boolean
+    consent_action?: 'grant' | 'revoke'
     multi_file: boolean
     no_storage: boolean
     show_progress: boolean
@@ -124,8 +127,8 @@ let analysisVersion = 0
 let summaryGeneration = 0
 let crashLogsPromise: Promise<void> | null = null
 let uploadTicketPromise: Promise<LogShareTicket | null> | null = null
-const defaultSource = ref<AnalysisSource>('logshare')
-const selectedSource = ref<AnalysisSource>('logshare')
+const defaultSource = ref<AnalysisSource>('custom')
+const selectedSource = ref<AnalysisSource>('custom')
 const localAvailable = ref(false)
 const configuredModel = ref('')
 const configuredProvider = ref('')
@@ -156,11 +159,13 @@ const aiStatus = computed(() => {
     return formatMessage(messages.aiWorking)
 })
 const logShareSettingsLoaded = ref(false)
+const uploadConsentSaving = ref(false)
 
 const logShareSettings = ref<LogShareSettings>({
     share_provider: 'logshare',
-    ai_source: 'logshare',
-    auto_upload: true,
+    ai_source: 'custom',
+    auto_upload: false,
+    remote_consent: false,
     multi_file: true,
     no_storage: false,
     show_progress: true,
@@ -216,10 +221,38 @@ const messages = defineMessages({
         defaultMessage: 'Reviewing the evidence and preparing the next step…',
     },
     sourceLocal: { id: 'app.logagent.source-local', defaultMessage: 'Local LogAgent' },
-    sourceCloud: { id: 'app.logagent.source-cloud', defaultMessage: 'Cloud LogShare' },
+    sourceCloud: {
+        id: 'app.logagent.source-remote',
+        defaultMessage: 'LogShare (uploads logs)',
+    },
     sourceCloudHint: {
-        id: 'app.logagent.source-cloud-hint',
-        defaultMessage: 'Crash logs are sent to LogShare for cloud analysis.',
+        id: 'app.logagent.source-remote-hint',
+        defaultMessage:
+            'Only after you turn this on: the full crash logs are uploaded to api.logshare.cn, where they are analysed and stored. Your Minecraft token and computer username are removed first, but server addresses, chat and mod names are not.',
+    },
+    sourceCloudHintNoStorage: {
+        id: 'app.logagent.source-remote-hint-no-storage',
+        defaultMessage:
+            'Only after you turn this on: the full crash logs are uploaded to api.logshare.cn for analysis. Retention without a stored copy is requested, but the service still receives the complete logs. Your Minecraft token and computer username are removed first; server addresses, chat and mod names are not.',
+    },
+    remoteConsentRequired: {
+        id: 'app.logagent.remote-consent-required',
+        defaultMessage:
+            'Crash analysis stays on this computer until you allow LogShare. Nothing has been uploaded.',
+    },
+    remoteConsentAction: {
+        id: 'app.logagent.remote-consent-action',
+        defaultMessage: 'Allow LogShare upload',
+    },
+    localOnlyNotice: {
+        id: 'app.logagent.local-only-notice',
+        defaultMessage:
+            'No logs are uploaded to LogShare. The AI provider you configured may receive the excerpts selected for analysis.',
+    },
+    localModelNotice: {
+        id: 'app.logagent.local-model-notice',
+        defaultMessage:
+            'No logs are uploaded to LogShare, and no AI provider is configured, so the rule-based analysis stays on this computer.',
     },
     aiPreparing: {
         id: 'app.logagent.preparing',
@@ -424,7 +457,7 @@ const messages = defineMessages({
     },
     shareTruncated: {
         id: 'app.minecraft-crash.share-truncated',
-        defaultMessage: 'The diagnostic log is too large, so only the last 9 MB was uploaded.',
+        defaultMessage: 'The diagnostic log is too large, so only the last 9 MiB was uploaded.',
     },
     shareCopied: {
         id: 'app.minecraft-crash.share-copied',
@@ -436,7 +469,13 @@ const messages = defineMessages({
     },
     shareFallback: {
         id: 'app.minecraft-crash.share-fallback',
-        defaultMessage: 'LogShare is unavailable, so the diagnostic was shared via mclo.gs.',
+        defaultMessage:
+            'LogShare could not be used, so the diagnostic was uploaded to mclo.gs. mclo.gs creates a public link and trims uploads over 9 MiB to the last 9 MiB.',
+    },
+    shareDestination: {
+        id: 'app.minecraft-crash.share-destination',
+        defaultMessage:
+            'Clicking Share uploads crash-log content to an external service: LogShare when selected and allowed, or public mclo.gs when selected or used as a fallback. mclo.gs trims uploads over 9 MiB to the last 9 MiB. Share only if you accept this.',
     },
     copyLink: {
         id: 'app.minecraft-crash.copy-link',
@@ -1122,8 +1161,32 @@ function selectAnalysisSource(value: unknown): void {
     logShareSummaryState.value = 'idle'
     logShareSummary.value = ''
     logShareSummaryError.value = ''
-    if (next === 'logshare' && payload.value.instance_id)
+    // Without a recorded opt-in the user gets the consent button instead, so
+    // nothing is uploaded merely by picking the cloud source.
+    if (next === 'logshare' && logShareSettings.value.remote_consent && payload.value.instance_id)
         void loadLogShareSummary(payload.value.instance_id)
+}
+
+async function allowLogShareUpload(): Promise<void> {
+    if (uploadConsentSaving.value) return
+    uploadConsentSaving.value = true
+    try {
+        const next: LogShareSettings = {
+            ...logShareSettings.value,
+            remote_consent: true,
+            consent_action: 'grant',
+        }
+        await update_log_share_settings(next)
+        logShareSettings.value = { ...next, consent_action: undefined }
+        if (payload.value.instance_id) void loadLogShareSummary(payload.value.instance_id)
+    } catch (error) {
+        addNotification({
+            title: errorMessage(error),
+            type: 'error',
+        })
+    } finally {
+        uploadConsentSaving.value = false
+    }
 }
 
 function openAnalysisSettings(): void {
@@ -1444,12 +1507,47 @@ defineExpose({
                                           provider: configuredProvider,
                                       })
                                     : formatMessage(messages.modelMissing)
-                                : formatMessage(messages.sourceCloudHint)
+                                : formatMessage(
+                                      logShareSettings.no_storage
+                                          ? messages.sourceCloudHintNoStorage
+                                          : messages.sourceCloudHint,
+                                  )
+                        }}
+                    </p>
+                    <p
+                        v-if="selectedSource === 'logshare' && !logShareSettings.remote_consent"
+                        class="m-0 text-xs leading-relaxed text-amber"
+                        data-crash-analysis="consent-required"
+                    >
+                        {{ formatMessage(messages.remoteConsentRequired) }}
+                    </p>
+                    <p
+                        v-else-if="selectedSource === 'custom'"
+                        class="m-0 text-xs leading-relaxed text-[var(--color-text-tertiary)]"
+                        data-crash-analysis="local-only"
+                    >
+                        {{
+                            formatMessage(
+                                configuredProvider
+                                    ? messages.localOnlyNotice
+                                    : messages.localModelNotice,
+                            )
                         }}
                     </p>
                     <Button v-if="aiLoading" type="outlined" @click="agent.cancel">{{
                         formatMessage(messages.aiCancel)
                     }}</Button>
+                    <Button
+                        v-else-if="
+                            selectedSource === 'logshare' && !logShareSettings.remote_consent
+                        "
+                        type="colored"
+                        color="brand"
+                        data-crash-analysis="consent-action"
+                        @click="allowLogShareUpload"
+                    >
+                        {{ formatMessage(messages.remoteConsentAction) }}
+                    </Button>
                     <Button
                         v-else-if="aiAvailable"
                         type="colored"
@@ -1483,6 +1581,9 @@ defineExpose({
                             formatMessage(messages.viewModChanges)
                         }}</Button>
                     </div>
+                    <p class="m-0 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                        {{ formatMessage(messages.shareDestination) }}
+                    </p>
                     <div
                         v-if="shareUrl"
                         class="flex items-center gap-2 rounded-lg bg-surface-2 p-3"

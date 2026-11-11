@@ -8,6 +8,10 @@ use super::crash_analysis::collect_crash_logs;
 use crate::State;
 
 const LOGSHARE_BASE_URL: &str = "https://api.logshare.cn";
+/// Analysis source that keeps crash analysis on this machine.
+pub(crate) const LOCAL_AI_SOURCE: &str = "custom";
+/// Analysis source that sends crash logs to LogShare.
+pub(crate) const REMOTE_AI_SOURCE: &str = "logshare";
 const LOGSHARE_AI_READ_TIMEOUT_SECS: u64 = 300;
 const LOGSHARE_SOURCE_PREFIX: &str = "axolotl";
 
@@ -19,17 +23,31 @@ pub struct LogShareSettings {
     pub multi_file: bool,
     pub no_storage: bool,
     pub show_progress: bool,
+    /// Whether the user has explicitly allowed crash logs to be sent to
+    /// LogShare. Output only: `skip_deserializing` means echoing this struct
+    /// back can never grant permission.
+    #[serde(default, skip_deserializing)]
+    pub remote_consent: bool,
+    /// Explicit consent action carried by an input payload: `"grant"` or
+    /// `"revoke"`. Absent in every ordinary settings round-trip, so saving the
+    /// settings cannot change upload permission by accident.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consent_action: Option<String>,
 }
 
 impl Default for LogShareSettings {
     fn default() -> Self {
         Self {
             share_provider: "logshare".to_string(),
-            ai_source: "logshare".to_string(),
-            auto_upload: true,
+            // Analysis is local until the user explicitly opts into the
+            // remote service.
+            ai_source: LOCAL_AI_SOURCE.to_string(),
+            auto_upload: false,
             multi_file: true,
             no_storage: false,
             show_progress: true,
+            remote_consent: false,
+            consent_action: None,
         }
     }
 }
@@ -78,6 +96,113 @@ struct UploadBody {
     source: String,
 }
 
+/// Marker recording that the user chose to send crash logs to LogShare.
+///
+/// Until it exists, a stored `ai_source` of `logshare` is treated as not
+/// consented: that value can predate the opt-in requirement, so it alone must
+/// never authorize an upload.
+const REMOTE_CONSENT_METADATA_KEY: &str = "crash_analysis_remote_consent";
+
+async fn record_remote_consent<'e, E>(executor: E) -> crate::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    sqlx::query(
+        "INSERT INTO app_metadata (key, value, updated_at)
+         VALUES (?, '1', unixepoch())
+         ON CONFLICT(key) DO UPDATE SET
+             value = excluded.value,
+             updated_at = excluded.updated_at",
+    )
+    .bind(REMOTE_CONSENT_METADATA_KEY)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Removes the marker so every LogShare content path is refused again.
+async fn revoke_remote_consent<'e, E>(executor: E) -> crate::Result<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    sqlx::query("DELETE FROM app_metadata WHERE key = ?")
+        .bind(REMOTE_CONSENT_METADATA_KEY)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
+/// The whole consent decision, as a pure function of the stored marker.
+///
+/// Kept separate from the query so the decision itself can be tested directly:
+/// absent, NULL, empty, foreign or revoked markers all deny, and only the
+/// literal `"1"` allows a remote call.
+fn remote_consent_allowed(marker: Option<&str>) -> bool {
+    matches!(marker, Some("1"))
+}
+
+pub(super) async fn remote_consent_recorded<'e, E>(executor: E) -> bool
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let marker = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM app_metadata WHERE key = ?",
+    )
+    .bind(REMOTE_CONSENT_METADATA_KEY)
+    .fetch_optional(executor)
+    .await
+    .ok()
+    .flatten();
+    remote_consent_allowed(marker.as_deref())
+}
+
+/// Fails unless the user explicitly opted into sending crash logs to LogShare.
+///
+/// Takes the pool directly so the fail-closed decision can be exercised without
+/// the global `State`, and so every network path can call it before doing any
+/// work at all.
+/// Every function that can put log content on the wire must call this before
+/// it builds a client, serializes a body, or formats log text. Call sites:
+/// `upload_crash`, `analyse_crash_direct`, `analyze_snapshot`, and
+/// `logagent::cloud` (before it materializes the snapshot).
+pub(super) async fn ensure_remote_consent(
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<()> {
+    if remote_consent_recorded(pool).await {
+        return Ok(());
+    }
+    Err(crate::ErrorKind::InputError(
+        "Sending crash logs to LogShare requires your explicit approval. \
+         Allow LogShare upload in crash analysis settings first."
+            .to_string(),
+    )
+    .into())
+}
+
+/// Consent check for call sites that only hold the global state.
+async fn ensure_remote_consent_here() -> crate::Result<()> {
+    let state = State::get().await?;
+    ensure_remote_consent(&state.pool).await
+}
+
+/// Applies the consent gate to persisted settings.
+///
+/// Rows written before the opt-in existed, and rows left behind after a revoke,
+/// still say `ai_source = "logshare"` and `auto_upload = true`. Returning those
+/// verbatim would present a remote default the user never chose, so the
+/// effective value stays local until consent is recorded.
+fn effective_settings(
+    mut settings: LogShareSettings,
+    consent: bool,
+) -> LogShareSettings {
+    settings.remote_consent = consent;
+    if !consent {
+        settings.ai_source = LOCAL_AI_SOURCE.to_string();
+        settings.auto_upload = false;
+    }
+    settings
+}
+
 pub async fn get_log_share_settings() -> crate::Result<LogShareSettings> {
     let state = State::get().await?;
     let row = sqlx::query_as::<_, (String, String, i64, i64, i64, i64)>(
@@ -85,21 +210,40 @@ pub async fn get_log_share_settings() -> crate::Result<LogShareSettings> {
     )
     .fetch_one(&state.pool)
     .await?;
-    Ok(LogShareSettings {
-        share_provider: row.0,
-        ai_source: row.1,
-        auto_upload: row.2 != 0,
-        multi_file: row.3 != 0,
-        no_storage: row.4 != 0,
-        show_progress: row.5 != 0,
-    })
+    let consent = remote_consent_recorded(&state.pool).await;
+    Ok(effective_settings(
+        LogShareSettings {
+            share_provider: row.0,
+            ai_source: row.1,
+            auto_upload: row.2 != 0,
+            multi_file: row.3 != 0,
+            no_storage: row.4 != 0,
+            show_progress: row.5 != 0,
+            remote_consent: consent,
+        },
+        consent,
+    ))
 }
 
 pub async fn update_log_share_settings(
     settings: LogShareSettings,
 ) -> crate::Result<()> {
     let settings = normalize_settings(settings);
+    let consent_action = match settings.consent_action.as_deref() {
+        None | Some("") => None,
+        Some("grant") => Some(true),
+        Some("revoke") => Some(false),
+        Some(_) => {
+            return Err(crate::ErrorKind::InputError(
+                "Unknown consent action".to_string(),
+            )
+            .into());
+        }
+    };
     let state = State::get().await?;
+    // Settings and consent move together, so a partial write cannot leave the
+    // UI showing one state and the gate enforcing another.
+    let mut transaction = state.pool.begin().await?;
     sqlx::query(
         "UPDATE log_share_settings SET share_provider = ?, auto_upload = ?, multi_file = ?, no_storage = ?, show_progress = ? WHERE id = 0",
     )
@@ -108,8 +252,32 @@ pub async fn update_log_share_settings(
     .bind(settings.multi_file)
     .bind(settings.no_storage)
     .bind(settings.show_progress)
-    .execute(&state.pool)
+    .execute(&mut *transaction)
     .await?;
+    // Only an explicit `consent_action` changes permission. An ordinary
+    // settings round-trip carries none, so saving the page can neither grant
+    // nor revoke it. Revoking also drops the stored preference to local with
+    // automatic upload off, so the row and the enforced state agree.
+    match consent_action {
+        Some(true) => record_remote_consent(&mut *transaction).await?,
+        Some(false) => {
+            revoke_remote_consent(&mut *transaction).await?;
+            sqlx::query(
+                "UPDATE log_share_settings SET ai_source = ?, auto_upload = 0 WHERE id = 0",
+            )
+            .bind(LOCAL_AI_SOURCE)
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query(
+                "UPDATE crash_analysis_ai_settings SET ai_source = ? WHERE id = 0",
+            )
+            .bind(LOCAL_AI_SOURCE)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        None => {}
+    }
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -117,8 +285,8 @@ fn normalize_settings(mut settings: LogShareSettings) -> LogShareSettings {
     if settings.share_provider != "logshare" {
         settings.share_provider = "mclogs".to_string();
     }
-    if settings.ai_source != "logshare" {
-        settings.ai_source = "custom".to_string();
+    if settings.ai_source != REMOTE_AI_SOURCE {
+        settings.ai_source = LOCAL_AI_SOURCE.to_string();
     }
     settings
 }
@@ -233,6 +401,8 @@ async fn request_client() -> crate::Result<reqwest::Client> {
 pub async fn upload_crash(
     instance_id: &str,
 ) -> crate::Result<LogShareUploadResponse> {
+    // Guard first: it must run before `prepare_upload` reads any log file.
+    ensure_remote_consent_here().await?;
     let prepared = prepare_upload(instance_id).await?;
     upload_prepared(&prepared).await
 }
@@ -323,6 +493,8 @@ pub async fn get_insights(id: &str) -> crate::Result<Value> {
 }
 
 pub async fn analyse_crash_direct(instance_id: &str) -> crate::Result<Value> {
+    // Guard first: no log is read, formatted or serialized before it passes.
+    ensure_remote_consent_here().await?;
     let prepared = prepare_upload(instance_id).await?;
     let client = request_client().await?;
     let response = client
@@ -384,6 +556,8 @@ pub(super) async fn analyze_snapshot(
     ticket: Option<LogShareUploadResponse>,
     emit: impl Fn(&str, Value) + Send + Sync,
 ) -> crate::Result<super::logagent::CloudResult> {
+    // Guard first: the combined body is only assembled after it passes.
+    ensure_remote_consent_here().await?;
     let content = files
         .iter()
         .map(|(name, content)| format!("===== {name} =====\n{content}"))
@@ -658,5 +832,261 @@ fn parse_sse_block(block: &str) -> Option<ParsedEvent> {
                 error: None,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn memory_pool() -> sqlx::SqlitePool {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE app_metadata (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL DEFAULT 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn an_inherited_remote_source_never_counts_as_consent() {
+        // A database upgraded from a build that shipped the remote default
+        // still holds `ai_source = 'logshare'` and `auto_upload = 1`, but there
+        // is no consent marker. That combination must not authorize an upload.
+        let pool = memory_pool().await;
+        sqlx::query(
+            "CREATE TABLE log_share_settings (id INTEGER PRIMARY KEY, share_provider TEXT, ai_source TEXT, auto_upload INTEGER, multi_file INTEGER, metadata_enabled INTEGER, no_storage INTEGER, show_progress INTEGER)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO log_share_settings VALUES (0, 'logshare', 'logshare', 1, 1, 1, 0, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(!remote_consent_recorded(&pool).await);
+    }
+
+    /// The three public egress functions must open with the gate. This is a
+    /// structural pin: it reads this file's own source, so moving the guard
+    /// below a log read, a body serialization or a client build fails here
+    /// instead of only in a live-credential environment.
+    #[test]
+    fn every_egress_function_starts_with_the_consent_guard() {
+        const SOURCE: &str = include_str!("logshare.rs");
+        for (signature, label) in [
+            ("pub async fn upload_crash(", "upload_crash"),
+            ("pub async fn analyse_crash_direct(", "analyse_crash_direct"),
+            ("pub(super) async fn analyze_snapshot(", "analyze_snapshot"),
+        ] {
+            let start = SOURCE
+                .find(signature)
+                .unwrap_or_else(|| panic!("{label} not found"));
+            let body = &SOURCE[start..];
+            let brace = body.find('{').expect("fn body");
+            // Skip the signature line, comments and blank lines.
+            let first_statement = body[brace + 1..]
+                .lines()
+                .map(str::trim)
+                .find(|line| {
+                    !line.is_empty()
+                        && !line.starts_with("//")
+                        && !line.starts_with("///")
+                })
+                .unwrap_or_default();
+            assert_eq!(
+                first_statement, "ensure_remote_consent_here().await?;",
+                "{label} must call the consent gate before doing any work"
+            );
+        }
+    }
+
+    #[test]
+    fn the_consent_decision_allows_only_a_positive_marker() {
+        assert!(!remote_consent_allowed(None));
+        assert!(!remote_consent_allowed(Some("")));
+        assert!(!remote_consent_allowed(Some("0")));
+        assert!(!remote_consent_allowed(Some("true")));
+        assert!(!remote_consent_allowed(Some("2")));
+        assert!(remote_consent_allowed(Some("1")));
+    }
+
+    #[tokio::test]
+    async fn the_gate_refuses_a_legacy_remote_row_before_any_request() {
+        // The fail-closed assertion: the gate itself, not merely the absence of
+        // a marker, must refuse the legacy combination. It runs before
+        // `prepare_upload`, so no client is built and no byte is sent.
+        let pool = memory_pool().await;
+        sqlx::query(
+            "CREATE TABLE log_share_settings (id INTEGER PRIMARY KEY, share_provider TEXT, ai_source TEXT, auto_upload INTEGER, multi_file INTEGER, metadata_enabled INTEGER, no_storage INTEGER, show_progress INTEGER)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO log_share_settings VALUES (0, 'logshare', 'logshare', 1, 1, 1, 0, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let error = ensure_remote_consent(&pool).await.unwrap_err();
+        assert!(
+            format!("{error}").contains("explicit approval"),
+            "got: {error}"
+        );
+
+        record_remote_consent(&pool).await.unwrap();
+        assert!(ensure_remote_consent(&pool).await.is_ok());
+
+        revoke_remote_consent(&pool).await.unwrap();
+        assert!(
+            ensure_remote_consent(&pool).await.is_err(),
+            "revoking consent must close every LogShare content path again"
+        );
+    }
+
+    #[tokio::test]
+    async fn revoking_consent_removes_the_marker() {
+        let pool = memory_pool().await;
+        record_remote_consent(&pool).await.unwrap();
+        assert!(remote_consent_recorded(&pool).await);
+
+        revoke_remote_consent(&pool).await.unwrap();
+        assert!(!remote_consent_recorded(&pool).await);
+        let rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM app_metadata WHERE key = ?",
+        )
+        .bind(REMOTE_CONSENT_METADATA_KEY)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(rows, 0, "the marker row itself must be gone");
+        // Revoking twice is harmless.
+        revoke_remote_consent(&pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn legacy_rows_are_reported_as_local_until_consent_exists() {
+        let legacy = LogShareSettings {
+            ai_source: REMOTE_AI_SOURCE.to_string(),
+            auto_upload: true,
+            ..LogShareSettings::default()
+        };
+
+        let without = effective_settings(legacy.clone(), false);
+        assert_eq!(without.ai_source, LOCAL_AI_SOURCE);
+        assert!(!without.auto_upload, "a legacy row must not auto-upload");
+        assert!(!without.remote_consent);
+
+        let with = effective_settings(legacy, true);
+        assert_eq!(with.ai_source, REMOTE_AI_SOURCE);
+        assert!(
+            with.auto_upload,
+            "an explicit opt-in keeps the user's choice"
+        );
+        assert!(with.remote_consent);
+    }
+
+    #[tokio::test]
+    async fn an_explicit_save_records_consent() {
+        let pool = memory_pool().await;
+        record_remote_consent(&pool).await.unwrap();
+        assert!(remote_consent_recorded(&pool).await);
+        // A second save must not fail on the existing row.
+        record_remote_consent(&pool).await.unwrap();
+        assert!(remote_consent_recorded(&pool).await);
+    }
+
+    #[test]
+    fn only_an_explicit_action_changes_consent() {
+        // An ordinary round-trip: `consent_action` is absent, and echoing
+        // `remote_consent = true` back must not be read as a grant.
+        let echoed = LogShareSettings {
+            remote_consent: true,
+            consent_action: None,
+            ..LogShareSettings::default()
+        };
+        let json = serde_json::to_value(&echoed).unwrap();
+        assert_eq!(json.get("consent_action"), None);
+
+        // Because the field is not deserialized, even a payload that tries to
+        // set it is ignored.
+        let parsed: LogShareSettings =
+            serde_json::from_value(serde_json::json!({
+                "share_provider": "logshare",
+                "ai_source": "custom",
+                "auto_upload": false,
+                "multi_file": true,
+                "no_storage": false,
+                "show_progress": true,
+                "remote_consent": true,
+            }))
+            .unwrap();
+        assert!(
+            !parsed.remote_consent,
+            "a settings payload must not be able to grant consent"
+        );
+        assert!(parsed.consent_action.is_none());
+    }
+
+    #[tokio::test]
+    async fn revoking_resets_the_stored_preference_to_local() {
+        let pool = memory_pool().await;
+        sqlx::query(
+            "CREATE TABLE log_share_settings (id INTEGER PRIMARY KEY, share_provider TEXT, ai_source TEXT, auto_upload INTEGER, multi_file INTEGER, metadata_enabled INTEGER, no_storage INTEGER, show_progress INTEGER)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO log_share_settings VALUES (0, 'logshare', 'logshare', 1, 1, 1, 0, 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        record_remote_consent(&pool).await.unwrap();
+
+        // Mirror of the revoke branch in `update_log_share_settings`.
+        let mut transaction = pool.begin().await.unwrap();
+        revoke_remote_consent(&mut *transaction).await.unwrap();
+        sqlx::query(
+            "UPDATE log_share_settings SET ai_source = ?, auto_upload = 0 WHERE id = 0",
+        )
+        .bind(LOCAL_AI_SOURCE)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+        transaction.commit().await.unwrap();
+
+        let row: (String, i64) =
+            sqlx::query_as("SELECT ai_source, auto_upload FROM log_share_settings WHERE id = 0")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(row, (LOCAL_AI_SOURCE.to_string(), 0));
+        assert!(!remote_consent_recorded(&pool).await);
+        assert!(ensure_remote_consent(&pool).await.is_err());
+    }
+
+    #[test]
+    fn saving_settings_keeps_an_unknown_source_local() {
+        let normalized = normalize_settings(LogShareSettings {
+            ai_source: "not-a-source".to_string(),
+            ..LogShareSettings::default()
+        });
+        assert_eq!(normalized.ai_source, LOCAL_AI_SOURCE);
+    }
+
+    #[test]
+    fn the_shipped_defaults_do_not_upload_crash_logs() {
+        let settings = LogShareSettings::default();
+        assert_eq!(settings.ai_source, LOCAL_AI_SOURCE);
+        assert!(!settings.auto_upload);
     }
 }

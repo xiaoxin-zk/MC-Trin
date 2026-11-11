@@ -20,6 +20,7 @@ const calls = vi.hoisted(() => ({
         ai_source: 'custom',
     },
     chinese: false,
+    remoteConsent: false,
 }))
 
 vi.mock('@modrinth/ui', async () => ({
@@ -64,13 +65,25 @@ vi.mock('@/helpers/logs', () => ({
     get_log_share_settings: async () => ({
         share_provider: 'logshare',
         ai_source: 'custom',
-        auto_upload: true,
+        auto_upload: false,
         multi_file: true,
         no_storage: false,
         show_progress: true,
+        remote_consent: calls.remoteConsent,
     }),
-    update_crash_analysis_ai_settings: calls.saveAI,
-    update_log_share_settings: calls.saveShare,
+    // Track the saved source so a post-save refresh sees the same state, just
+    // as the backend would.
+    update_crash_analysis_ai_settings: async (next: { ai_source: string }) => {
+        await calls.saveAI(next)
+        calls.settings.ai_source = next.ai_source
+    },
+    // Mirrors the backend: a consent action changes what the next read returns,
+    // so the component's refresh-after-save sees a coherent state.
+    update_log_share_settings: async (next: { consent_action?: string }) => {
+        await calls.saveShare(next)
+        if (next.consent_action === 'grant') calls.remoteConsent = true
+        if (next.consent_action === 'revoke') calls.remoteConsent = false
+    },
 }))
 
 const wrappers: ReturnType<typeof mount>[] = []
@@ -79,6 +92,7 @@ afterEach(() => {
     vi.clearAllMocks()
     calls.chinese = false
     calls.settings.ai_source = 'custom'
+    calls.remoteConsent = false
 })
 
 async function render(width = 900, localSetup = false) {
@@ -148,6 +162,69 @@ it('configures local analysis from a cloud default without changing the saved so
     await vi.waitFor(() => expect(calls.saveAI).toHaveBeenCalledTimes(1))
     expect(calls.saveAI.mock.calls[0][0].ai_source).toBe('logshare')
     expect(wrapper.emitted('savingChange')?.[0]).toEqual([true])
+})
+
+it('records consent only from the permission control, never from the source choice', async () => {
+    const wrapper = await render()
+    // Choosing the remote source is only a preference; it must not consent.
+    await wrapper.get('button[value="logshare"]').trigger('click')
+    await vi.waitFor(() => expect(wrapper.find('#log-share-grant-consent').exists()).toBe(true))
+    expect(calls.saveShare).not.toHaveBeenCalled()
+    // The dedicated permission button is the explicit opt-in.
+    await wrapper.get('#log-share-grant-consent').trigger('click')
+    await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(1))
+    expect(calls.saveShare.mock.calls[0][0].consent_action).toBe('grant')
+})
+
+it('offers remote permission while keeping local analysis selected', async () => {
+    const wrapper = await render()
+    expect(wrapper.get('button[value="custom"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.find('#log-share-grant-consent').exists()).toBe(true)
+
+    await wrapper.get('#log-share-grant-consent').trigger('click')
+    await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(1))
+    expect(calls.saveShare.mock.calls[0][0].consent_action).toBe('grant')
+    expect(calls.saveAI).not.toHaveBeenCalled()
+    expect(wrapper.get('button[value="custom"]').attributes('aria-checked')).toBe('true')
+})
+
+it('keeps the auto-upload toggle separate from the permission control', async () => {
+    const wrapper = await render()
+    await wrapper.get('button[value="logshare"]').trigger('click')
+    await vi.waitFor(() => expect(wrapper.find('#log-share-grant-consent').exists()).toBe(true))
+    // No permission yet: the automatic-upload switch cannot be operated, so it
+    // can never be the thing that grants consent by accident.
+    expect(wrapper.get('#log-share-auto-upload').attributes('disabled')).toBeDefined()
+    await wrapper.get('#log-share-grant-consent').trigger('click')
+    await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(1))
+    expect(calls.saveShare.mock.calls[0][0].consent_action).toBe('grant')
+    // After the grant the switch becomes usable, and toggling it must not carry
+    // any consent action of its own.
+    await vi.waitFor(() =>
+        expect(wrapper.get('#log-share-auto-upload').attributes('disabled')).toBeUndefined(),
+    )
+    await wrapper.get('#log-share-auto-upload').trigger('click')
+    await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(2))
+    expect(calls.saveShare.mock.calls[1][0].consent_action).toBeUndefined()
+})
+
+it('revokes consent without first toggling auto-upload on', async () => {
+    // Start from a consented account whose automatic upload is already off, the
+    // case that previously had no way to revoke.
+    calls.settings.ai_source = 'custom'
+    calls.remoteConsent = true
+    calls.saveShare.mockClear()
+    const wrapper = await render()
+    // Consented but automatic upload deliberately off: the state that used to
+    // leave the user with no revoke path.
+    // The revoke control is reachable while local analysis remains selected and
+    // auto-upload is still off.
+    expect(wrapper.get('button[value="custom"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('#log-share-auto-upload').attributes('disabled')).toBeUndefined()
+    await wrapper.get('#log-share-revoke-consent').trigger('click')
+    await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(1))
+    expect(calls.saveShare.mock.calls[0][0].consent_action).toBe('revoke')
+    expect(calls.saveShare.mock.calls[0][0].auto_upload).toBe(false)
 })
 
 it('keeps source choices readable at desktop and narrow widths', async () => {

@@ -18,6 +18,7 @@ export function validateCiResults(jobs) {
     for (const [name, scope] of [
         ['fast', 'desktop'],
         ['frontend', 'frontend'],
+        ['feature-regression', 'desktop'],
         ['resources', 'desktop'],
         ['desktop', 'desktop'],
     ]) {

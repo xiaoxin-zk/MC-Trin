@@ -329,3 +329,133 @@ test('long uninstall failure details scroll vertically while actions remain avai
 		await browser.close()
 	}
 })
+
+const previewDir = String.raw`D:\mc\MC-trin`
+
+test('the data folder preview follows every choice that changes it', async () => {
+	const browser = await chromium.launch({ headless: true })
+	try {
+		const { page, errors } = await openPage(browser, { freshInstall: true })
+		await page.locator('#primary-action').click()
+
+		// Browse assigns the field programmatically, which fires no input event,
+		// so the preview has to be refreshed by the handler itself.
+		await page.evaluate(
+			(dir) =>
+				window.axolotlInstaller.receive({
+					type: 'pathSelected',
+					target: 'install',
+					path: dir,
+				}),
+			previewDir,
+		)
+		assert.equal(
+			await page.locator('#data-path').textContent(),
+			String.raw`D:\mc\MC-trin\data`,
+		)
+
+		// Typing into the field does fire input, and must update it too.
+		await page.locator('#install-dir').fill(String.raw`E:\Games\MC`)
+		assert.equal(
+			await page.locator('#data-path').textContent(),
+			String.raw`E:\Games\MC\data`,
+		)
+
+		// A portable install keeps everything beside the program.
+		await page.locator('#portable-mode').check()
+		assert.equal(await page.locator('#data-path').textContent(), String.raw`E:\Games\MC`)
+
+		// Trailing separators are normalised rather than doubled, including a
+		// run of them, and the submitted folder is normalised the same way.
+		await page.locator('#portable-mode').uncheck()
+		await page.locator('#install-dir').fill('D:\\mc\\MC-trin\\\\')
+		assert.equal(
+			await page.locator('#data-path').textContent(),
+			String.raw`D:\mc\MC-trin\data`,
+		)
+		await page.locator('#portable-mode').check()
+		assert.equal(await page.locator('#data-path').textContent(), previewDir)
+
+		// Forward slashes are folded to backslashes, and a trailing one is
+		// dropped, so the preview is spelled the way NSIS canonicalises the path
+		// instead of mixing both separators into `D:/mc/MC-trin\data`.
+		await page.locator('#portable-mode').uncheck()
+		await page.locator('#install-dir').fill('D:/mc/MC-trin/')
+		assert.equal(
+			await page.locator('#data-path').textContent(),
+			String.raw`D:\mc\MC-trin\data`,
+		)
+		// The submitted folder uses the same canonical spelling, so the request
+		// cannot disagree with what the preview promised.
+		await page.locator('#primary-action').click()
+		const slashRequest = await page.evaluate(() => window.testCommands.pop())
+		assert.equal(slashRequest.command, 'install')
+		assert.equal(slashRequest.installDir, previewDir)
+
+		// A drive root keeps its separator instead of collapsing to `D:`.
+		await page.locator('#portable-mode').uncheck()
+		await page.locator('#install-dir').fill('D:\\')
+		assert.equal(await page.locator('#data-path').textContent(), 'D:\\data')
+
+		// UNC separators are folded too, and the share root stays intact.
+		await page.locator('#install-dir').fill('//server/share/')
+		assert.equal(
+			await page.locator('#data-path').textContent(),
+			String.raw`\\server\share\data`,
+		)
+		await page.locator('#primary-action').click()
+		const uncRequest = await page.evaluate(() => window.testCommands.pop())
+		assert.equal(uncRequest.command, 'install')
+		assert.equal(uncRequest.installDir, String.raw`\\server\share`)
+
+		await page.locator('#install-dir').fill(String.raw`D:\mc\MC-trin\\`)
+		await page.locator('#primary-action').click()
+		const request = await page.evaluate(() => window.testCommands.pop())
+		assert.equal(request.command, 'install')
+		assert.equal(request.installDir, previewDir)
+		assert.deepEqual(errors, [])
+		await page.close()
+	} finally {
+		await browser.close()
+	}
+})
+
+test('an update derives the recorded layout and cannot move its folder', async () => {
+	const browser = await chromium.launch({ headless: true })
+	try {
+		const portable = await openPage(browser, {
+			freshInstall: false,
+			portable: true,
+			installDir: previewDir,
+		})
+		await portable.page.locator('#primary-action').click()
+		assert.equal(await portable.page.locator('#portable-mode').isChecked(), true)
+		assert.equal(await portable.page.locator('#data-path').textContent(), previewDir)
+		// An update installs over the folder NSIS detected the layout for, so
+		// the preview and the request cannot drift to a different one.
+		assert.equal(await portable.page.locator('#install-dir').isEditable(), false)
+		assert.equal(await portable.page.locator('#browse-install').isDisabled(), true)
+		await portable.page.locator('#primary-action').click()
+		const portableRequest = await portable.page.evaluate(() => window.testCommands.pop())
+		assert.equal(portableRequest.installDir, previewDir)
+		assert.equal(portableRequest.portable, true)
+		assert.deepEqual(portable.errors, [])
+		await portable.page.close()
+
+		const normal = await openPage(browser, {
+			freshInstall: false,
+			portable: false,
+			installDir: previewDir,
+		})
+		await normal.page.locator('#primary-action').click()
+		assert.equal(await normal.page.locator('#portable-mode').isChecked(), false)
+		assert.equal(
+			await normal.page.locator('#data-path').textContent(),
+			String.raw`D:\mc\MC-trin\data`,
+		)
+		assert.deepEqual(normal.errors, [])
+		await normal.page.close()
+	} finally {
+		await browser.close()
+	}
+})

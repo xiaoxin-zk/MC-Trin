@@ -5025,7 +5025,7 @@
     "message": "診斷連結已準備好分享"
   },
   "app.minecraft-crash.share-truncated": {
-    "message": "診斷日誌過大，已自動擷取最後 9MB 上傳。"
+    "message": "診斷日誌過大，僅上傳末尾 9 MiB。"
   },
   "app.minecraft-crash.sharing-diagnostic": {
     "message": "正在匯出分享……"

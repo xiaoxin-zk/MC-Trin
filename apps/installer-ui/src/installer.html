@@ -1318,7 +1318,6 @@
                 version: 'v2.0.0 (Preview)',
                 logoDataUrl: '../../app/icons/128x128.png',
                 installDir: 'C:\\Program Files\\MC-Trin',
-                resourceDir: 'C:\\Users\\Admin\\AppData\\Roaming\\axolotl-launcher',
                 freshInstall: false,
                 uninstall: false,
                 portable: false,
@@ -1540,17 +1539,75 @@
             if ($('#version')) $('#version').textContent = boot.version
             if ($('#package-version')) $('#package-version').textContent = boot.version
             $('#install-dir').value = boot.installDir
-            if (boot.freshInstall) syncDataDir()
+            // The layout NSIS detected (recorded value, or a marker folder for
+            // an install made before that value existed) describes exactly the
+            // folder it examined, so it is remembered next to that folder and
+            // only applied while the selection still points at it.
+            const detectedInstallDir = normalizeInstallPath(
+                (boot.installDir || '').trim(),
+            )
+            $('#portable-mode').checked = Boolean(boot.portable)
+            // The checkbox starts from the detected layout, not from the user,
+            // so a later change of folder must be able to clear it. Once the
+            // user has touched it, the choice is theirs and is left alone.
+            let portableTouched = false
+            // Mirrors AxlDetectPortableLayout in installer.nsi step for step,
+            // so the preview and the submitted folder are spelled the same way
+            // the detector will read them back: forward slashes are folded to
+            // backslashes, then trailing separators are dropped. Interior
+            // repeats are kept as typed, because the NSIS macro keeps them.
+            function normalizeInstallPath(path) {
+                let normalized = path.replace(/\//g, '\\')
+                while (normalized.length > 3 && normalized.endsWith('\\')) {
+                    normalized = normalized.slice(0, -1)
+                }
+                return normalized
+            }
             function dataDirFor(installDir) {
-                return $('#portable-mode').checked ? installDir : `${installDir}\\data`
+                const base = normalizeInstallPath(installDir || '')
+                if (!base) return ''
+                // `D:` is drive-relative, not a folder. Rust rejects it as not
+                // absolute, so showing `D:\data` here would advertise a
+                // location the install will refuse; the field stays blank and
+                // the submit reports why.
+                if (/^[A-Za-z]:$/.test(base)) return ''
+                if ($('#portable-mode').checked) return base
+                // Only a root still ends in a separator after normalising, and
+                // joining there would double it; every other path was trimmed.
+                return base.endsWith('\\') ? `${base}data` : `${base}\\data`
+            }
+            // The same normalised value feeds the preview, the summary and the
+            // request, so none of them can disagree or carry a trailing
+            // separator into /INSTALL_DIR=.
+            function currentInstallDir() {
+                return normalizeInstallPath($('#install-dir').value.trim())
+            }
+            // Windows paths are case-insensitive, so the comparison is too.
+            function sameFolder(left, right) {
+                return left.toLowerCase() === right.toLowerCase()
+            }
+            function selectionChanged() {
+                return !sameFolder(currentInstallDir(), detectedInstallDir)
+            }
+            // A recorded or marker-derived layout describes one folder only, so
+            // it must not be applied to another one the user has picked since -
+            // otherwise a portable install left in the default location would
+            // pre-tick a fresh install into a different folder.
+            function syncDetectedLayout() {
+                if (portableTouched || !selectionChanged()) return
+                $('#portable-mode').checked = false
             }
             function syncDataDir() {
-                const installDir = $('#install-dir').value.trim()
-                $('#data-path').textContent = dataDirFor(installDir)
+                syncDetectedLayout()
+                $('#data-path').textContent = dataDirFor(currentInstallDir())
                 $('#portable-note').textContent = $('#portable-mode').checked
                     ? t.portableHint
                     : t.dataSubfolderNotice
             }
+            // The preview is derived, never typed, so it is refreshed for every
+            // state that feeds the derivation - including the first paint, where
+            // an update hides the field but still submits a value.
+            syncDataDir()
             if (boot.uninstall) {
                 document.body.classList.add('is-uninstalling')
                 $('#uninstall-directory').textContent = boot.installDir
@@ -1568,6 +1625,13 @@
             }
 
             if (!boot.freshInstall) {
+                // An update replaces the files of the existing installation, so
+                // its folder is fixed: letting it be edited would install over
+                // one folder while abandoning another, and would also detach the
+                // layout NSIS detected from the folder it was detected for.
+                $('#install-dir').readOnly = true
+                $('#install-dir').setAttribute('aria-readonly', 'true')
+                $('#browse-install').disabled = true
                 $('#resource-field').classList.add('hidden')
                 $('#existing-notice').classList.remove('hidden')
                 $('#configure-title').textContent = t.updateTitle
@@ -1668,8 +1732,7 @@
                 state.launchAfter = $('#launch-after').checked
                 post({
                     command: 'install',
-                    installDir: $('#install-dir').value.trim(),
-                    resourceDir: $('#data-path').textContent.trim(),
+                    installDir: currentInstallDir(),
                     portable: $('#portable-mode').checked,
                     desktopShortcut: $('#desktop-shortcut').checked,
                     launchAfter: state.launchAfter,
@@ -1722,7 +1785,10 @@
                 post({ command: 'browse', target: 'install', current: $('#install-dir').value }),
             )
             $('#install-dir').addEventListener('input', syncDataDir)
-            $('#portable-mode').addEventListener('change', syncDataDir)
+            $('#portable-mode').addEventListener('change', () => {
+                portableTouched = true
+                syncDataDir()
+            })
             $('#launch-after').addEventListener('change', () => {
                 state.launchAfter = $('#launch-after').checked
                 renderFooter()
@@ -1746,7 +1812,11 @@
             window.axolotlInstaller = {
                 receive(message) {
                     if (message.type === 'pathSelected') {
-                        $(`#${message.target}-dir`).value = message.path
+                        const field = $(`#${message.target}-dir`)
+                        if (field) field.value = message.path
+                        // Assigning `value` does not fire `input`, so the derived
+                        // preview has to be refreshed explicitly.
+                        syncDataDir()
                     } else if (message.type === 'validationError') {
                         setScreen('configure')
                         $('#field-error').textContent = t[message.code] || t.absolutePath
@@ -1759,8 +1829,8 @@
                         $('#progress-detail').textContent = boot.uninstall
                             ? t.uninstallWait
                             : t.progressWait
-                        $('#install-summary').textContent = $('#install-dir').value
-                        $('#resource-summary').textContent = $('#data-path').textContent
+                        $('#install-summary').textContent = currentInstallDir()
+                        $('#resource-summary').textContent = dataDirFor(currentInstallDir())
                         $('#resource-summary-row').classList.toggle(
                             'hidden',
                             boot.uninstall || !boot.freshInstall,

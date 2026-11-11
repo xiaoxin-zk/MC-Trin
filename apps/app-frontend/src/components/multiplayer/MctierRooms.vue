@@ -9,6 +9,9 @@ import {
     DEFAULT_MCTIER_NODE,
     DEFAULT_MCTIER_SIGNALING,
     isValidDirectServerNode,
+    isValidMctierLobbyName,
+    isValidMctierPlayerName,
+    isValidMctierSignalingServer,
     type MctierInvite,
     type MctierState,
     parseMctierInviteCode,
@@ -37,6 +40,32 @@ const messages = defineMessages({
     nodeInvalid: {
         id: 'app.multiplayer.mctier.node-invalid',
         defaultMessage: 'Enter a node address such as tcp://node.example:11010.',
+    },
+    nameMissing: {
+        id: 'app.multiplayer.mctier.name-missing',
+        defaultMessage: 'Enter a lobby name so friends can find the room:',
+    },
+    nameInvalid: {
+        id: 'app.multiplayer.mctier.name-invalid',
+        defaultMessage: 'Lobby names use 4-32 letters, numbers, underscores, or hyphens.',
+    },
+    playerMissing: {
+        id: 'app.multiplayer.mctier.player-missing',
+        defaultMessage: 'Enter the player name friends will see.',
+    },
+    playerInvalid: {
+        id: 'app.multiplayer.mctier.player-invalid',
+        defaultMessage:
+            'Player names must be 1-64 characters and cannot contain control characters.',
+    },
+    portInvalid: {
+        id: 'app.multiplayer.mctier.port-invalid',
+        defaultMessage: 'Minecraft port must be between 1 and 65535.',
+    },
+    signalingInvalid: {
+        id: 'app.multiplayer.mctier.signaling-invalid',
+        defaultMessage:
+            'Lobby service must use wss://, or ws:// only on this machine (localhost, 127.0.0.1, [::1]).',
     },
     signaling: { id: 'app.multiplayer.mctier.signaling', defaultMessage: 'Lobby service' },
     host: { id: 'app.multiplayer.mctier.host', defaultMessage: 'Create lobby' },
@@ -292,6 +321,15 @@ const messages = defineMessages({
     },
 })
 
+const randomAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
+function randomCode(length: number) {
+    const bytes = new Uint8Array(length)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, (byte) => randomAlphabet[byte % randomAlphabet.length]).join('')
+}
+function generateLobbyName() {
+    lobbyName.value = `mc-${randomCode(6)}`
+}
 const lobbyName = ref('')
 const playerName = ref('Player')
 const password = ref('')
@@ -357,26 +395,45 @@ const connected = computed(
         props.state?.room_kind !== 'direct' &&
         ['hosting', 'joined'].includes(props.state?.status ?? ''),
 )
+/** Voice joins the peers in the room, so the panel is always configurable but
+ * the call itself waits until the backend has a local player to signal from. */
+const canStartVoice = computed(() => Boolean(props.state?.local_player_id))
 const valid = computed(
     () =>
-        /^[\p{L}\p{N}_-]{4,32}$/u.test(lobbyName.value) &&
-        playerName.value.trim().length > 0 &&
-        validLocalPort(port.value) !== null,
+        isValidMctierLobbyName(lobbyName.value) &&
+        isValidMctierPlayerName(playerName.value) &&
+        validLocalPort(port.value) !== null &&
+        isValidDirectServerNode(serverNode.value) &&
+        isValidMctierSignalingServer(signalingServer.value),
 )
+/**
+ * Why the room cannot be started yet, in the player's words.
+ *
+ * `valid` alone only greys out the button, and a disabled button never explains
+ * itself: a first-time host saw "create does nothing" with no message. Every
+ * branch here is a field the player can act on.
+ */
+const blockReason = computed(() => {
+    if (!lobbyName.value.trim()) return formatMessage(messages.nameMissing)
+    if (!isValidMctierLobbyName(lobbyName.value)) {
+        return formatMessage(messages.nameInvalid)
+    }
+    if (!playerName.value.trim()) return formatMessage(messages.playerMissing)
+    if (!isValidMctierPlayerName(playerName.value)) {
+        return formatMessage(messages.playerInvalid)
+    }
+    if (validLocalPort(port.value) === null) return formatMessage(messages.portInvalid)
+    if (!isValidDirectServerNode(serverNode.value)) return formatMessage(messages.nodeInvalid)
+    if (!isValidMctierSignalingServer(signalingServer.value)) {
+        return formatMessage(messages.signalingInvalid)
+    }
+    return ''
+})
 const playerLimit = computed(() => {
     const parsed = Number.parseInt(lobbyMaxPlayers.value, 10)
     if (!Number.isFinite(parsed) || parsed < 2) return null
     return Math.min(parsed, 100)
 })
-const randomAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
-function randomCode(length: number) {
-    const bytes = new Uint8Array(length)
-    crypto.getRandomValues(bytes)
-    return Array.from(bytes, (byte) => randomAlphabet[byte % randomAlphabet.length]).join('')
-}
-function generateLobbyName() {
-    lobbyName.value = `mc-${randomCode(6)}`
-}
 function generatePassword() {
     password.value = randomCode(10)
 }
@@ -476,10 +533,31 @@ function onPttKeyChange(event: Event) {
 }
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
-    if (!valid.value || busy.value) return
+    if (busy.value) return
+    if (!valid.value) {
+        // Report instead of returning silently: a click that does nothing is
+        // indistinguishable from a crashed form.
+        error.value = blockReason.value
+        return
+    }
     const nodeAddress = (invite?.server_node ?? serverNode.value).trim()
     if (!isValidDirectServerNode(nodeAddress)) {
         error.value = formatMessage(messages.nodeInvalid)
+        return
+    }
+    const signalingAddress = (invite?.signaling_server ?? signalingServer.value).trim()
+    if (!isValidMctierSignalingServer(signalingAddress)) {
+        error.value = formatMessage(messages.signalingInvalid)
+        return
+    }
+    // The invite supplies its own name, which never passed the form predicates.
+    const roomName = invite?.lobby_name ?? lobbyName.value
+    if (!isValidMctierLobbyName(roomName)) {
+        error.value = formatMessage(messages.nameInvalid)
+        return
+    }
+    if (!isValidMctierPlayerName(playerName.value)) {
+        error.value = formatMessage(messages.playerInvalid)
         return
     }
     pending.value = true
@@ -487,7 +565,7 @@ async function start(mode: 'create' | 'join', invite?: MctierInvite) {
     try {
         await multiplayer.startMctier({
             mode,
-            lobby_name: invite?.lobby_name ?? lobbyName.value,
+            lobby_name: roomName,
             password: invite?.password ?? password.value,
             player_name: playerName.value.trim(),
             server_node: nodeAddress,
@@ -591,6 +669,9 @@ watch(voiceRoomKey, () => voice.syncRoom(props.state), { immediate: true })
 
 onMounted(() => {
     prefillInviteFromDeepLink()
+    // The panel is configurable before the room exists, so the lists have to be
+    // filled on mount; waiting for a session left both selectors empty.
+    void voice.refreshDevices()
     void listen<unknown>('mctier-voice-signal', (event) => {
         void voice.receiveSignal(event.payload)
     })
@@ -648,6 +729,224 @@ function prefillInviteFromDeepLink() {
         <p v-if="displayError" class="m-0 text-sm text-[var(--color-red)]" role="alert">
             {{ displayError }}
         </p>
+        <section
+            class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-4"
+            data-onboarding-id="mctier-voice"
+        >
+            <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 class="m-0 text-base font-semibold">
+                        {{ formatMessage(messages.voiceTitle) }}
+                    </h3>
+                    <p class="mb-0 mt-1 text-sm text-[var(--color-text-tertiary)]">
+                        {{ formatMessage(messages.voiceDescription) }}
+                    </p>
+                </div>
+                <div class="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                        v-if="!voice.active.value"
+                        type="outlined"
+                        :disabled="voice.starting.value || !canStartVoice"
+                        @click="startVoice"
+                    >
+                        <MicrophoneIcon />
+                        {{ formatMessage(messages.voiceStart) }}
+                    </Button>
+                    <template v-else>
+                        <Button type="outlined" @click="voice.toggleMute">
+                            <XIcon v-if="voice.muted.value" />
+                            <MicrophoneIcon v-else />
+                            {{
+                                formatMessage(
+                                    voice.muted.value ? messages.voiceUnmute : messages.voiceMute,
+                                )
+                            }}
+                        </Button>
+                        <Button type="quiet" @click="voice.stop">
+                            <XIcon />
+                            {{ formatMessage(messages.voiceStop) }}
+                        </Button>
+                    </template>
+                </div>
+            </div>
+            <p v-if="voice.active.value" class="m-0 text-sm" role="status">
+                {{
+                    voice.connectedPeers.value
+                        ? formatMessage(messages.voiceConnected, {
+                              count: voice.connectedPeers.value,
+                          })
+                        : formatMessage(messages.voiceWaiting)
+                }}
+            </p>
+            <!-- Session meters only make sense while a call is up; the device
+                 pickers below stay outside this card so they can be set first. -->
+            <div
+                v-if="voice.active.value"
+                class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
+            >
+                <label class="flex min-w-0 items-center gap-2 text-sm">
+                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceVolume) }}</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        class="min-w-0 flex-1"
+                        :value="Math.round(voice.outputVolume.value * 100)"
+                        :aria-label="formatMessage(messages.voiceVolume)"
+                        @input="onVolumeInput"
+                    />
+                    <span class="w-10 shrink-0 text-right tabular-nums">
+                        {{ Math.round(voice.outputVolume.value * 100) }}%
+                    </span>
+                </label>
+                <label class="flex min-w-0 items-center gap-2 text-sm">
+                    <span class="w-24 shrink-0">{{
+                        formatMessage(messages.voiceInputVolume)
+                    }}</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        class="min-w-0 flex-1"
+                        :value="Math.round(voice.inputVolume.value * 100)"
+                        :aria-label="formatMessage(messages.voiceInputVolume)"
+                        @input="onInputVolumeInput"
+                    />
+                    <span class="w-10 shrink-0 text-right tabular-nums">
+                        {{ Math.round(voice.inputVolume.value * 100) }}%
+                    </span>
+                </label>
+                <div class="flex min-w-0 items-center gap-2 text-sm">
+                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceMicLevel) }}</span>
+                    <div
+                        class="h-1.5 min-w-0 flex-1 overflow-hidden rounded bg-surface-5"
+                        role="meter"
+                        :aria-valuenow="voice.inputLevel.value"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        :aria-label="formatMessage(messages.voiceMicLevel)"
+                    >
+                        <div
+                            class="h-full bg-brand"
+                            :style="{ width: `${voice.inputLevel.value}%` }"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="flex min-w-0 flex-col gap-3">
+                <label class="flex min-w-0 items-center gap-2 text-sm">
+                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceMicrophone) }}</span>
+                    <select
+                        class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
+                        :value="voice.inputDeviceId.value ?? ''"
+                        :aria-label="formatMessage(messages.voiceMicrophone)"
+                        @change="onInputDeviceChange"
+                    >
+                        <option value="">
+                            {{ formatMessage(messages.voiceSystemDefault) }}
+                        </option>
+                        <option
+                            v-for="device in voice.inputDevices.value"
+                            :key="device.deviceId"
+                            :value="device.deviceId"
+                        >
+                            {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
+                        </option>
+                    </select>
+                </label>
+                <label
+                    v-if="voice.outputDevices.value.length"
+                    class="flex min-w-0 items-center gap-2 text-sm"
+                >
+                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceSpeaker) }}</span>
+                    <select
+                        class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
+                        :value="voice.outputDeviceId.value ?? ''"
+                        :aria-label="formatMessage(messages.voiceSpeaker)"
+                        @change="onOutputDeviceChange"
+                    >
+                        <option value="">
+                            {{ formatMessage(messages.voiceSystemDefault) }}
+                        </option>
+                        <option
+                            v-for="device in voice.outputDevices.value"
+                            :key="device.deviceId"
+                            :value="device.deviceId"
+                        >
+                            {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
+                        </option>
+                    </select>
+                </label>
+                <div
+                    class="flex min-w-0 flex-col gap-2 border-t border-solid border-surface-4 pt-2"
+                >
+                    <label class="flex min-w-0 items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4"
+                            :checked="voice.pushToTalk.value"
+                            @change="onPttToggle"
+                        />
+                        <span>{{ formatMessage(messages.voicePushToTalk) }}</span>
+                    </label>
+                    <label
+                        v-if="voice.pushToTalk.value"
+                        class="flex min-w-0 items-center gap-2 text-sm"
+                    >
+                        <span class="w-24 shrink-0">{{ formatMessage(messages.voicePttKey) }}</span>
+                        <select
+                            class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
+                            :value="voice.pushToTalkKey.value"
+                            :aria-label="formatMessage(messages.voicePttKey)"
+                            @change="onPttKeyChange"
+                        >
+                            <option
+                                v-for="option in PTT_KEY_OPTIONS"
+                                :key="option.code"
+                                :value="option.code"
+                            >
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </label>
+                    <p
+                        v-if="voice.pushToTalk.value"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                    >
+                        {{ formatMessage(messages.voicePushToTalkHint) }}
+                    </p>
+                    <button
+                        v-if="voice.pushToTalk.value"
+                        type="button"
+                        class="min-w-0 cursor-pointer select-none rounded-md border border-solid border-brand px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]"
+                        :class="voice.pttHeld.value ? 'bg-brand' : 'bg-surface-2'"
+                        @pointerdown.prevent="voice.setPttHeld(true)"
+                        @pointerup="voice.setPttHeld(false)"
+                        @pointerleave="voice.setPttHeld(false)"
+                        @pointercancel="voice.setPttHeld(false)"
+                    >
+                        {{ formatMessage(messages.voicePushToTalkHold) }}
+                    </button>
+                </div>
+            </div>
+            <p v-if="voice.error.value" class="m-0 text-sm text-red" role="alert">
+                {{
+                    formatMessage(
+                        voice.error.value === 'permission'
+                            ? messages.voiceErrorPermission
+                            : voice.error.value === 'unsupported'
+                              ? messages.voiceErrorUnsupported
+                              : voice.error.value === 'input-device-lost'
+                                ? messages.voiceInputDeviceLost
+                                : voice.error.value === 'output-device-lost'
+                                  ? messages.voiceOutputDeviceLost
+                                  : messages.voiceErrorUnavailable,
+                    )
+                }}
+            </p>
+        </section>
         <template v-if="connected">
             <CopyCode v-if="state?.lobby_name" :text="state.lobby_name" />
             <template v-if="state?.mode === 'create'">
@@ -745,230 +1044,6 @@ function prefillInviteFromDeepLink() {
                 <p class="m-0 text-sm">{{ formatMessage(messages.address) }}</p>
                 <CopyCode :text="state.connect_address" />
             </template>
-            <section
-                class="flex min-w-0 flex-col gap-3 border-t border-solid border-surface-4 pt-4"
-                data-onboarding-id="mctier-voice"
-            >
-                <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <h3 class="m-0 text-base font-semibold">
-                            {{ formatMessage(messages.voiceTitle) }}
-                        </h3>
-                        <p class="mb-0 mt-1 text-sm text-[var(--color-text-tertiary)]">
-                            {{ formatMessage(messages.voiceDescription) }}
-                        </p>
-                    </div>
-                    <div class="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                            v-if="!voice.active.value"
-                            type="outlined"
-                            :disabled="voice.starting.value"
-                            @click="startVoice"
-                        >
-                            <MicrophoneIcon />
-                            {{ formatMessage(messages.voiceStart) }}
-                        </Button>
-                        <template v-else>
-                            <Button type="outlined" @click="voice.toggleMute">
-                                <XIcon v-if="voice.muted.value" />
-                                <MicrophoneIcon v-else />
-                                {{
-                                    formatMessage(
-                                        voice.muted.value
-                                            ? messages.voiceUnmute
-                                            : messages.voiceMute,
-                                    )
-                                }}
-                            </Button>
-                            <Button type="quiet" @click="voice.stop">
-                                <XIcon />
-                                {{ formatMessage(messages.voiceStop) }}
-                            </Button>
-                        </template>
-                    </div>
-                </div>
-                <p v-if="voice.active.value" class="m-0 text-sm" role="status">
-                    {{
-                        voice.connectedPeers.value
-                            ? formatMessage(messages.voiceConnected, {
-                                  count: voice.connectedPeers.value,
-                              })
-                            : formatMessage(messages.voiceWaiting)
-                    }}
-                </p>
-                <div
-                    v-if="voice.active.value"
-                    class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
-                >
-                    <label class="flex min-w-0 items-center gap-2 text-sm">
-                        <span class="w-24 shrink-0">{{ formatMessage(messages.voiceVolume) }}</span>
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="min-w-0 flex-1"
-                            :value="Math.round(voice.outputVolume.value * 100)"
-                            :aria-label="formatMessage(messages.voiceVolume)"
-                            @input="onVolumeInput"
-                        />
-                        <span class="w-10 shrink-0 text-right tabular-nums">
-                            {{ Math.round(voice.outputVolume.value * 100) }}%
-                        </span>
-                    </label>
-                    <label class="flex min-w-0 items-center gap-2 text-sm">
-                        <span class="w-24 shrink-0">{{
-                            formatMessage(messages.voiceInputVolume)
-                        }}</span>
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="min-w-0 flex-1"
-                            :value="Math.round(voice.inputVolume.value * 100)"
-                            :aria-label="formatMessage(messages.voiceInputVolume)"
-                            @input="onInputVolumeInput"
-                        />
-                        <span class="w-10 shrink-0 text-right tabular-nums">
-                            {{ Math.round(voice.inputVolume.value * 100) }}%
-                        </span>
-                    </label>
-                    <div class="flex min-w-0 items-center gap-2 text-sm">
-                        <span class="w-24 shrink-0">{{
-                            formatMessage(messages.voiceMicLevel)
-                        }}</span>
-                        <div
-                            class="h-1.5 min-w-0 flex-1 overflow-hidden rounded bg-surface-5"
-                            role="meter"
-                            :aria-valuenow="voice.inputLevel.value"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                            :aria-label="formatMessage(messages.voiceMicLevel)"
-                        >
-                            <div
-                                class="h-full bg-brand"
-                                :style="{ width: `${voice.inputLevel.value}%` }"
-                            />
-                        </div>
-                    </div>
-                    <label class="flex min-w-0 items-center gap-2 text-sm">
-                        <span class="w-24 shrink-0">{{
-                            formatMessage(messages.voiceMicrophone)
-                        }}</span>
-                        <select
-                            class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
-                            :value="voice.inputDeviceId.value ?? ''"
-                            :aria-label="formatMessage(messages.voiceMicrophone)"
-                            @change="onInputDeviceChange"
-                        >
-                            <option value="">
-                                {{ formatMessage(messages.voiceSystemDefault) }}
-                            </option>
-                            <option
-                                v-for="device in voice.inputDevices.value"
-                                :key="device.deviceId"
-                                :value="device.deviceId"
-                            >
-                                {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
-                            </option>
-                        </select>
-                    </label>
-                    <label
-                        v-if="voice.outputDevices.value.length"
-                        class="flex min-w-0 items-center gap-2 text-sm"
-                    >
-                        <span class="w-24 shrink-0">{{
-                            formatMessage(messages.voiceSpeaker)
-                        }}</span>
-                        <select
-                            class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
-                            :value="voice.outputDeviceId.value ?? ''"
-                            :aria-label="formatMessage(messages.voiceSpeaker)"
-                            @change="onOutputDeviceChange"
-                        >
-                            <option value="">
-                                {{ formatMessage(messages.voiceSystemDefault) }}
-                            </option>
-                            <option
-                                v-for="device in voice.outputDevices.value"
-                                :key="device.deviceId"
-                                :value="device.deviceId"
-                            >
-                                {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
-                            </option>
-                        </select>
-                    </label>
-                    <div
-                        class="flex min-w-0 flex-col gap-2 border-t border-solid border-surface-4 pt-2"
-                    >
-                        <label class="flex min-w-0 items-center gap-2 text-sm">
-                            <input
-                                type="checkbox"
-                                class="h-4 w-4"
-                                :checked="voice.pushToTalk.value"
-                                @change="onPttToggle"
-                            />
-                            <span>{{ formatMessage(messages.voicePushToTalk) }}</span>
-                        </label>
-                        <label
-                            v-if="voice.pushToTalk.value"
-                            class="flex min-w-0 items-center gap-2 text-sm"
-                        >
-                            <span class="w-24 shrink-0">{{
-                                formatMessage(messages.voicePttKey)
-                            }}</span>
-                            <select
-                                class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
-                                :value="voice.pushToTalkKey.value"
-                                :aria-label="formatMessage(messages.voicePttKey)"
-                                @change="onPttKeyChange"
-                            >
-                                <option
-                                    v-for="option in PTT_KEY_OPTIONS"
-                                    :key="option.code"
-                                    :value="option.code"
-                                >
-                                    {{ option.label }}
-                                </option>
-                            </select>
-                        </label>
-                        <p
-                            v-if="voice.pushToTalk.value"
-                            class="m-0 text-xs text-[var(--color-text-tertiary)]"
-                        >
-                            {{ formatMessage(messages.voicePushToTalkHint) }}
-                        </p>
-                        <button
-                            v-if="voice.pushToTalk.value"
-                            type="button"
-                            class="min-w-0 cursor-pointer select-none rounded-md border border-solid border-brand px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]"
-                            :class="voice.pttHeld.value ? 'bg-brand' : 'bg-surface-2'"
-                            @pointerdown.prevent="voice.setPttHeld(true)"
-                            @pointerup="voice.setPttHeld(false)"
-                            @pointerleave="voice.setPttHeld(false)"
-                            @pointercancel="voice.setPttHeld(false)"
-                        >
-                            {{ formatMessage(messages.voicePushToTalkHold) }}
-                        </button>
-                    </div>
-                </div>
-                <p v-if="voice.error.value" class="m-0 text-sm text-red" role="alert">
-                    {{
-                        formatMessage(
-                            voice.error.value === 'permission'
-                                ? messages.voiceErrorPermission
-                                : voice.error.value === 'unsupported'
-                                  ? messages.voiceErrorUnsupported
-                                  : voice.error.value === 'input-device-lost'
-                                    ? messages.voiceInputDeviceLost
-                                    : voice.error.value === 'output-device-lost'
-                                      ? messages.voiceOutputDeviceLost
-                                      : messages.voiceErrorUnavailable,
-                        )
-                    }}
-                </p>
-            </section>
             <h3 class="m-0 text-base font-semibold">{{ formatMessage(messages.players) }}</h3>
             <ul class="m-0 list-none p-0">
                 <li
@@ -1042,7 +1117,7 @@ function prefillInviteFromDeepLink() {
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.name) }}
                 <div class="flex min-w-0 items-center gap-2">
-                    <StyledInput v-model="lobbyName" name="lobby-name" :maxlength="32" />
+                    <StyledInput v-model="lobbyName" name="lobby-name" />
                     <Button type="quiet" size="sm" @click="generateLobbyName">{{
                         formatMessage(messages.randomName)
                     }}</Button>
@@ -1050,7 +1125,7 @@ function prefillInviteFromDeepLink() {
             </label>
             <label class="flex flex-col gap-1 text-sm"
                 >{{ formatMessage(messages.player)
-                }}<StyledInput v-model="playerName" name="player-name" :maxlength="64"
+                }}<StyledInput v-model="playerName" name="player-name"
             /></label>
             <label class="flex flex-col gap-1 text-sm">
                 <span>{{ formatMessage(messages.password) }}</span>
@@ -1155,6 +1230,21 @@ function prefillInviteFromDeepLink() {
             </p>
             <p class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2">
                 {{ formatMessage(messages.hostHint) }}
+            </p>
+            <p
+                v-if="blockReason"
+                class="m-0 text-sm text-[var(--color-text-tertiary)] sm:col-span-2"
+                role="status"
+            >
+                {{ blockReason }}
+                <button
+                    v-if="!lobbyName.trim()"
+                    type="button"
+                    class="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-brand underline"
+                    @click="generateLobbyName"
+                >
+                    {{ formatMessage(messages.randomName) }}
+                </button>
             </p>
             <div class="flex flex-wrap gap-2 sm:col-span-2">
                 <Button :disabled="!valid" @click="start('create')">{{

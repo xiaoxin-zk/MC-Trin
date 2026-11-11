@@ -7,12 +7,29 @@ export interface CrashLogFile {
 
 const RUN_ASSOCIATION_WINDOW_SECONDS = 3 * 60
 
+/**
+ * Crash logs may only be sent to LogShare after the user explicitly opted in.
+ *
+ * `remote_consent` is recorded by the backend when the user saves the settings,
+ * so a stored `ai_source: 'logshare'` inherited from an older build cannot, on
+ * its own, start uploading.
+ */
 export function shouldUseLogShareAutoAnalysis(settings: {
     ai_source: 'logshare' | 'custom'
     auto_upload: boolean
     no_storage?: boolean
+    remote_consent?: boolean
 }): boolean {
+    if (settings.remote_consent !== true) return false
     return settings.ai_source === 'logshare' && settings.auto_upload
+}
+
+/** Whether a remote analysis can run at all, for the visible data-flow notice. */
+export function logShareLeavesMachine(settings: {
+    ai_source: 'logshare' | 'custom'
+    remote_consent?: boolean
+}): boolean {
+    return settings.ai_source === 'logshare' && settings.remote_consent === true
 }
 
 function isRelevantLog(file: CrashLogFile): boolean {

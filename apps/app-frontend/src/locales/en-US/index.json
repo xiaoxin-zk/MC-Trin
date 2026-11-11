@@ -7437,10 +7437,10 @@
     "message": "Analyzing with LogAgent…"
   },
   "app.log-share.settings.auto-upload": {
-    "message": "Upload to get a structured summary automatically"
+    "message": "Upload to LogShare automatically after a crash"
   },
   "app.log-share.settings.auto-upload-description": {
-    "message": "Uploads logs to LogShare after a crash, before you start AI analysis."
+    "message": "Only controls automatic uploads after a crash. It does not grant or revoke permission to send logs to LogShare - use the permission row below for that. Your Minecraft token and computer username are removed, but server addresses, chat and mod names are not."
   },
   "app.log-share.settings.multi-file": {
     "message": "Multi-file upload"
@@ -7449,13 +7449,28 @@
     "message": "Upload latest.log, crash reports, hs_err and launcher logs together."
   },
   "app.log-share.settings.no-storage": {
-    "message": "Analyze without storing logs"
+    "message": "Ask LogShare not to store the logs"
   },
   "app.log-share.settings.no-storage-description": {
-    "message": "Submit content directly for analysis and skip the stored upload. Disables the automatic summary."
+    "message": "The full logs are still uploaded to api.logshare.cn. This only requests that LogShare not keep a stored copy; the launcher cannot verify what the service retains. Disables the automatic summary."
   },
   "app.log-share.settings.share-provider": {
     "message": "Log sharing service"
+  },
+  "app.log-share.settings.grant-consent": {
+    "message": "Allow LogShare uploads"
+  },
+  "app.log-share.settings.remote-consent": {
+    "message": "Allow LogShare uploads"
+  },
+  "app.log-share.settings.remote-consent-granted": {
+    "message": "LogShare uploads are allowed: crash-log content may be sent to api.logshare.cn. Revoke this to stop LogShare uploads; a separately configured AI provider may still receive selected excerpts."
+  },
+  "app.log-share.settings.remote-consent-revoked": {
+    "message": "LogShare permission is off. No logs are sent to LogShare until you allow it; a separately configured AI provider may still receive selected excerpts."
+  },
+  "app.log-share.settings.revoke-consent": {
+    "message": "Revoke LogShare permission"
   },
   "app.log-share.settings.show-progress": {
     "message": "Show AI analysis progress"
@@ -7592,8 +7607,20 @@
   "app.logagent.controls.start": {
     "message": "Start analysis"
   },
+  "app.logagent.local-model-notice": {
+    "message": "No logs are uploaded to LogShare, and no AI provider is configured, so the rule-based analysis stays on this computer."
+  },
+  "app.logagent.local-only-notice": {
+    "message": "No logs are uploaded to LogShare. The AI provider you configured may receive the excerpts selected for analysis."
+  },
+  "app.logagent.remote-consent-action": {
+    "message": "Allow LogShare upload"
+  },
+  "app.logagent.remote-consent-required": {
+    "message": "Crash analysis stays on this computer until you allow LogShare. Nothing has been uploaded."
+  },
   "app.logagent.picker.cloud-hint": {
-    "message": "Sends crash logs to LogShare for analysis."
+    "message": "Uploads the full crash logs to api.logshare.cn for analysis. Only after you confirm."
   },
   "app.logagent.picker.label": {
     "message": "Analysis source"
@@ -7640,8 +7667,17 @@
   "app.logagent.settings.tour": {
     "message": "About analysis sources"
   },
+  "app.logagent.source-remote-hint-no-storage": {
+    "message": "Only after you turn this on: the full crash logs are uploaded to api.logshare.cn for analysis. Requesting that LogShare not keep a stored copy does not reduce what is sent, and the launcher cannot verify what the service retains. Your Minecraft token and computer username are removed first; server addresses, chat and mod names are not."
+  },
+  "app.logagent.source-remote": {
+    "message": "LogShare (uploads logs)"
+  },
+  "app.logagent.source-remote-hint": {
+    "message": "Only after you allow it: the full crash logs are uploaded to api.logshare.cn, where they are analysed and stored. Your Minecraft token and computer username are removed first, but server addresses, chat and mod names are not."
+  },
   "app.logagent.source-cloud": {
-    "message": "Cloud LogShare"
+    "message": "LogShare (full log upload)"
   },
   "app.logagent.source-cloud-hint": {
     "message": "Crash logs are sent to LogShare for cloud analysis."
@@ -7904,14 +7940,17 @@
   "app.minecraft-crash.share-failed": {
     "message": "Failed to share the diagnostic"
   },
+  "app.minecraft-crash.share-destination": {
+    "message": "Clicking Share uploads crash-log content to an external service: LogShare when selected and allowed, or public mclo.gs when selected or used as a fallback. mclo.gs trims uploads over 9 MiB to the last 9 MiB. Share only if you accept this."
+  },
   "app.minecraft-crash.share-fallback": {
-    "message": "LogShare is unavailable, so the diagnostic was shared via mclo.gs."
+    "message": "LogShare could not be used, so the diagnostic was uploaded to mclo.gs. mclo.gs creates a public link and trims uploads over 9 MiB to the last 9 MiB."
   },
   "app.minecraft-crash.share-ready": {
     "message": "Diagnostic link is ready to share"
   },
   "app.minecraft-crash.share-truncated": {
-    "message": "The diagnostic log is too large, so only the last 9 MB was uploaded."
+    "message": "The diagnostic log is too large, so only the last 9 MiB was uploaded."
   },
   "app.minecraft-crash.sharing-diagnostic": {
     "message": "Sharing diagnostic..."
@@ -8282,6 +8321,21 @@
   "app.multiplayer.mctier.name": {
     "message": "Lobby name"
   },
+  "app.multiplayer.mctier.name-invalid": {
+    "message": "Lobby names use 4-32 letters, numbers, underscores, or hyphens."
+  },
+  "app.multiplayer.mctier.name-missing": {
+    "message": "Enter a lobby name so friends can find the room:"
+  },
+  "app.multiplayer.mctier.signaling-invalid": {
+    "message": "Lobby service must use wss://, or ws:// only on this machine (localhost, 127.0.0.1, [::1])."
+  },
+  "app.multiplayer.mctier.player-invalid": {
+    "message": "Player names must be 1-64 characters and cannot contain control characters."
+  },
+  "app.multiplayer.mctier.player-missing": {
+    "message": "Enter the player name friends will see."
+  },
   "app.multiplayer.mctier.node-invalid": {
     "message": "Enter a valid node address, for example tcp://1.2.3.4:11010."
   },
@@ -8302,6 +8356,9 @@
   },
   "app.multiplayer.mctier.port": {
     "message": "Host Minecraft port"
+  },
+  "app.multiplayer.mctier.port-invalid": {
+    "message": "Minecraft port must be between 1 and 65535."
   },
   "app.multiplayer.mctier.private-password-hint": {
     "message": "Private rooms stay out of the public lobby and require the room password to join."

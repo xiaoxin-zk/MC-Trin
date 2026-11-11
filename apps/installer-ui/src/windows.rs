@@ -43,7 +43,6 @@ const UNINSTALLER_NAME: &str = "uninstall.exe";
 struct Bootstrap {
     version: String,
     install_dir: String,
-    resource_dir: String,
     fresh_install: bool,
     language: Language,
     logo_data_url: String,
@@ -68,7 +67,6 @@ struct Arguments {
 #[serde(rename_all = "camelCase")]
 struct InstallRequest {
     install_dir: String,
-    resource_dir: String,
     #[serde(default)]
     portable: bool,
     desktop_shortcut: bool,
@@ -411,7 +409,6 @@ fn parse_arguments() -> Result<Arguments, String> {
     let mut installer = None;
     let mut version = None;
     let mut install_dir = None;
-    let mut resource_dir = None;
     let mut fresh_install = true;
     let mut uninstall = false;
     let mut language = Language::En;
@@ -430,9 +427,6 @@ fn parse_arguments() -> Result<Arguments, String> {
             "--version" => version = Some(value.to_string_lossy().into_owned()),
             "--install-dir" => {
                 install_dir = Some(value.to_string_lossy().into_owned())
-            }
-            "--resource-dir" => {
-                resource_dir = Some(value.to_string_lossy().into_owned())
             }
             "--fresh-install" => fresh_install = value != "0",
             "--portable" => portable = value == "1",
@@ -464,7 +458,6 @@ fn parse_arguments() -> Result<Arguments, String> {
         bootstrap: Bootstrap {
             version: version.unwrap_or_default(),
             install_dir: install_dir.unwrap_or_default(),
-            resource_dir: resource_dir.unwrap_or_default(),
             fresh_install,
             language,
             logo_data_url: format!(
@@ -984,7 +977,7 @@ mod tests {
     #[test]
     fn install_request_includes_launch_after_choice() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","resourceDir":"C:\\AxolotlData","desktopShortcut":true,"launchAfter":true}"#,
+            r#"{"command":"install","installDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":true}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {
@@ -997,7 +990,7 @@ mod tests {
     #[test]
     fn install_request_carries_the_portable_choice() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","resourceDir":"C:\\Axolotl","portable":true,"desktopShortcut":true,"launchAfter":false}"#,
+            r#"{"command":"install","installDir":"C:\\Axolotl","portable":true,"desktopShortcut":true,"launchAfter":false}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {
@@ -1010,7 +1003,7 @@ mod tests {
     #[test]
     fn a_request_without_the_portable_flag_means_a_normal_install() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","resourceDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":false}"#,
+            r#"{"command":"install","installDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":false}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {

@@ -270,6 +270,13 @@ pub async fn prepare(
     if !matches!(source.as_str(), "custom" | "logshare" | "assistant") {
         return Err(error("Unknown analysis source"));
     }
+    // A remote run reads and materializes crash logs during preparation, so the
+    // opt-in is checked here as well as in `cloud`: without consent no log file
+    // is even read. Local sources never reach LogShare and are unaffected.
+    if source == "logshare" {
+        let state = State::get().await?;
+        super::logshare::ensure_remote_consent(&state.pool).await?;
+    }
     let session = Arc::new(Session {
         created: Instant::now(),
         cancel: CancellationToken::new(),
@@ -1045,6 +1052,12 @@ pub async fn cloud(
     if session.source != "logshare" {
         return Err(error("Cloud analysis was not selected for this run"));
     }
+    // Refuse before the snapshot is materialized. The snapshot is only memory
+    // and no request has been made yet, but checking first keeps the rule that
+    // nothing about the logs is assembled for a remote service the user has
+    // not allowed.
+    let state = State::get().await?;
+    super::logshare::ensure_remote_consent(&state.pool).await?;
     let _lock = session.turn_lock.lock().await;
     let snapshot = session.snapshot()?;
     let files = snapshot
@@ -1091,6 +1104,51 @@ mod tests {
             approval: approval.map(str::to_string),
             approval_request: None,
         }
+    }
+
+    /// Structural pin: `cloud` must consult the consent gate before it touches
+    /// the snapshot, and `prepare` must gate a `logshare` run before any crash
+    /// log is read. Both are read from this module's own source, so reordering
+    /// the guard below `session.snapshot()` or below `analyze_crash` fails here.
+    #[test]
+    fn remote_analysis_checks_consent_before_reading_or_materializing_logs() {
+        const SOURCE: &str = include_str!("mod.rs");
+
+        fn body_after<'a>(source: &'a str, signature: &str) -> &'a str {
+            let start = source
+                .find(signature)
+                .unwrap_or_else(|| panic!("{signature} not found"));
+            &source[start..]
+        }
+
+        let cloud = body_after(SOURCE, "pub async fn cloud(");
+        let cloud_gate = cloud
+            .find("ensure_remote_consent")
+            .expect("cloud must call the consent gate");
+        let cloud_snapshot = cloud
+            .find("session.snapshot()?")
+            .expect("cloud must materialize the snapshot");
+        assert!(
+            cloud_gate < cloud_snapshot,
+            "cloud must check consent before session.snapshot()"
+        );
+
+        let prepare = body_after(SOURCE, "pub async fn prepare(");
+        let prepare_gate = prepare
+            .find("ensure_remote_consent")
+            .expect("prepare must gate a logshare run");
+        let prepare_crash = prepare
+            .find("prepare_snapshot(")
+            .expect("prepare must delegate to prepare_snapshot");
+        assert!(
+            prepare_gate < prepare_crash,
+            "prepare must check consent before prepare_snapshot reads crash logs"
+        );
+        // The gate must only apply to the remote source.
+        assert!(
+            prepare[..prepare_gate].contains("source == \"logshare\""),
+            "the prepare-time gate must be conditional on the logshare source"
+        );
     }
 
     #[tokio::test]

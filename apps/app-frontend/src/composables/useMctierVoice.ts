@@ -715,6 +715,13 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             stop()
             return
         }
+        // The panel is visible before a call starts, so a failure left over from
+        // the previous room would otherwise be the first thing a new room shows.
+        // Only a real status transition clears it: a live device failure keeps
+        // its status, and its message has to stay readable.
+        if (!active.value && !starting.value && lastState?.status !== state.status) {
+            error.value = null
+        }
         lastState = state
         const nextLocalPlayerId = state.local_player_id
         if (roomLocalPlayerId && nextLocalPlayerId && roomLocalPlayerId !== nextLocalPlayerId) {

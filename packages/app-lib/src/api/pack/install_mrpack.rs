@@ -489,6 +489,28 @@ async fn load_modpack_file_infos(
     *file_infos_by_hash.lock().await = Some(loaded);
 }
 
+/// Upper bound for resolving localized modpack file names.
+///
+/// The lookup goes through the resource service, which may run a legacy cache
+/// import and a provider request. Neither is needed to install the pack: titles
+/// only decide the on-disk display name, so a slow lookup must not keep the job
+/// on the parsing phase. Manifest names are used instead.
+const LOCALIZED_TITLES_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(60);
+
+/// Copies the resolved hash metadata out of its mutex.
+///
+/// Callers must resolve titles, or do anything else that awaits, from the
+/// returned owned map — never from a guard. This exists so that rule is a
+/// single function a test can pin, instead of a scoping convention that is easy
+/// to break again.
+async fn file_info_snapshot(
+    file_infos_by_hash: &Arc<Mutex<Option<HashMap<String, ModrinthHashMatch>>>>,
+) -> Option<HashMap<String, ModrinthHashMatch>> {
+    let guard = file_infos_by_hash.lock().await;
+    guard.clone()
+}
+
 /// Maps manifest file hashes to sanitized Chinese titles by resolving the
 /// files' Modrinth projects from cache. Failures only disable the naming.
 async fn resolve_chinese_titles_by_sha1(
@@ -1108,30 +1130,97 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         // Chinese titles shape the on-disk file names, so they must be known
         // before any download starts. All other installs resolve them lazily
         // on the first completed file.
+        // Same bound as the title lookup below, for the same reason: this is a
+        // cache/provider query only used to name files. `fetch_json_with_pool`
+        // applies `METADATA_REQUEST_TIMEOUT` only when the URL infers as
+        // `Metadata` or `Loader`, and an `api.modrinth.com` URL infers as
+        // `Modrinth`, so nothing downstream bounds this call. On timeout the
+        // map stays unset and the `None` arm below uses manifest names.
+        match tokio::time::timeout(
+            LOCALIZED_TITLES_TIMEOUT,
+            load_modpack_file_infos(
+                &file_infos_by_hash,
+                &file_infos_loading,
+                &file_info_hashes,
+                state.pool.clone(),
+                &state.api_semaphore,
+            ),
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(_) => tracing::warn!(
+                timeout_seconds = LOCALIZED_TITLES_TIMEOUT.as_secs(),
+                "Timed out loading modpack file metadata; keeping manifest file names"
+            ),
+        }
+        // Clone the map out and release the guard before resolving titles: the
+        // resolver reaches the resource service, which may run the legacy cache
+        // import and a provider query. Holding this mutex across that await
+        // parks every later reader — including the content verification workers
+        // that need the same map — for as long as the slowest provider takes.
+        match file_info_snapshot(&file_infos_by_hash).await {
+            // Localized names are cosmetic. A missing map only means the
+            // lookup raced an early return, so fall back to manifest names
+            // instead of failing the whole install on an `expect`.
+            Some(infos) => {
+                // The resource service owns a cache import and a provider
+                // query, neither of which this layer can bound. Titles only
+                // rename files on disk, so a lookup that overruns is dropped
+                // rather than allowed to hold the install on this phase.
+                match tokio::time::timeout(
+                    LOCALIZED_TITLES_TIMEOUT,
+                    resolve_chinese_titles_by_sha1(&infos, state),
+                )
+                .await
+                {
+                    Ok(titles) => titles,
+                    Err(_) => {
+                        tracing::warn!(
+                            timeout_seconds =
+                                LOCALIZED_TITLES_TIMEOUT.as_secs(),
+                            "Timed out resolving localized modpack file names; keeping manifest names"
+                        );
+                        HashMap::new()
+                    }
+                }
+            }
+            None => {
+                tracing::debug!(
+                    "Modpack file metadata was unavailable; keeping manifest file names"
+                );
+                HashMap::new()
+            }
+        }
+    } else {
+        HashMap::new()
+    });
+    // Resolve and cache the shared hash metadata before the Minecraft install
+    // and content database writes begin competing for SQLite's single writer.
+    //
+    // Bounded for the same reason as the title lookup, and this call is the one
+    // every locale reaches. Losing it costs the Modrinth provenance recorded on
+    // content rows (`:1455-1461`), not the download: URLs, sizes and hashes all
+    // come from the parsed manifest. A pack that cannot record provenance is
+    // still a correct install, so a stall here must not hold the phase.
+    match tokio::time::timeout(
+        LOCALIZED_TITLES_TIMEOUT,
         load_modpack_file_infos(
             &file_infos_by_hash,
             &file_infos_loading,
             &file_info_hashes,
             state.pool.clone(),
             &state.api_semaphore,
-        )
-        .await;
-        let infos = file_infos_by_hash.lock().await;
-        let infos = infos.as_ref().expect("file metadata was just loaded");
-        resolve_chinese_titles_by_sha1(infos, state).await
-    } else {
-        HashMap::new()
-    });
-    // Resolve and cache the shared hash metadata before the Minecraft install
-    // and content database writes begin competing for SQLite's single writer.
-    load_modpack_file_infos(
-        &file_infos_by_hash,
-        &file_infos_loading,
-        &file_info_hashes,
-        state.pool.clone(),
-        &state.api_semaphore,
+        ),
     )
-    .await;
+    .await
+    {
+        Ok(()) => {}
+        Err(_) => tracing::warn!(
+            timeout_seconds = LOCALIZED_TITLES_TIMEOUT.as_secs(),
+            "Timed out loading modpack file metadata; content will install without Modrinth provenance"
+        ),
+    }
     let existing_paths_by_original = Arc::new(
         {
             let mut connection = state.pool.acquire().await?;
@@ -2883,5 +2972,61 @@ mod tests {
             );
         }
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn file_info_snapshot_releases_the_guard_before_returning() {
+        // The resolved metadata is read while other tasks are still starting.
+        // This test holds the mutex after the snapshot returns, which a guard
+        // leaking out of the helper would make impossible.
+        let store: Arc<Mutex<Option<HashMap<String, ModrinthHashMatch>>>> =
+            Arc::new(Mutex::new(Some(HashMap::new())));
+        let snapshot = super::file_info_snapshot(&store).await;
+        assert!(snapshot.is_some());
+
+        let guard = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            store.lock(),
+        )
+        .await
+        .expect("the snapshot must not keep the metadata mutex locked");
+        drop(guard);
+    }
+
+    #[tokio::test]
+    async fn file_info_snapshot_reports_an_unset_map_instead_of_panicking() {
+        // A concurrent caller can take the double-checked early return in
+        // `load_modpack_file_infos` and leave the map unset. The old code
+        // unwrapped that case and panicked inside the install task, which
+        // reached the user as a phase that never advanced.
+        let store: Arc<Mutex<Option<HashMap<String, ModrinthHashMatch>>>> =
+            Arc::new(Mutex::new(None));
+
+        assert!(
+            super::file_info_snapshot(&store).await.is_none(),
+            "an unset map must surface as None, not a panic"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_populated_map_survives_the_snapshot() {
+        let mut infos = HashMap::new();
+        infos.insert(
+            "857abbbfb58186c2f1b5510a4072630950e518f6".to_string(),
+            ModrinthHashMatch {
+                hash: "857abbbfb58186c2f1b5510a4072630950e518f6".to_string(),
+                project_id: "project".to_string(),
+                version_id: "version".to_string(),
+            },
+        );
+        let store: Arc<Mutex<Option<HashMap<String, ModrinthHashMatch>>>> =
+            Arc::new(Mutex::new(Some(infos)));
+
+        let snapshot = super::file_info_snapshot(&store).await.unwrap();
+
+        assert_eq!(snapshot.len(), 1);
+        assert!(
+            snapshot.contains_key("857abbbfb58186c2f1b5510a4072630950e518f6")
+        );
     }
 }

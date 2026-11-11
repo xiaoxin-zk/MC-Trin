@@ -79,15 +79,51 @@ export interface ParsedDirectRoom {
 export const DEFAULT_MCTIER_SIGNALING = 'wss://mctier.pmhs.top/signaling'
 export const DEFAULT_MCTIER_NODE = 'tcp://easytier.weiai.org.cn:11010'
 
+/** Rust compares `value.len()` against 2048, which counts UTF-8 bytes. */
+const MAX_ENDPOINT_BYTES = 2048
+/** `char::is_control` in Rust is the Unicode Cc category. Written as a code
+ * point comparison so the rule does not embed literal control characters. */
+function hasControlCharacter(value: string): boolean {
+    for (const character of value) {
+        const code = character.codePointAt(0) ?? 0
+        if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true
+    }
+    return false
+}
+
+/** Mirrors the length and control-character precheck shared by both endpoint
+ * rules in `validate_endpoint`, so neither validator can accept text the
+ * backend rejects before it even parses the URL. */
+function endpointTextIsUsable(value: string): boolean {
+    return (
+        new TextEncoder().encode(value).length <= MAX_ENDPOINT_BYTES && !hasControlCharacter(value)
+    )
+}
+
+function endpointScheme(parsed: URL): string {
+    return parsed.protocol.replace(/:$/, '').toLowerCase()
+}
+
+/** Mirrors `validate_endpoint(_, false)` in `mctier.rs`, the rule every
+ * node/peer address is held to. The backend rejects paths and queries that this
+ * used to wave through, which only surfaced after the kernel was already
+ * started. `port_or_known_default` counts the ws/wss defaults, so only tcp/udp
+ * must spell the port out. */
 function validServerNode(value: string): boolean {
-    const match = /^([a-z][a-z0-9+.-]*):\/\//i.exec(value)
-    if (!match || !['tcp', 'udp', 'ws', 'wss'].includes(match[1].toLowerCase())) return false
+    if (!endpointTextIsUsable(value)) return false
+    let parsed: URL
     try {
-        const parsed = new URL(`http://${value.slice(match[0].length)}`)
-        return Boolean(parsed.hostname) && !parsed.username && !parsed.password && !parsed.hash
+        parsed = new URL(value)
     } catch {
         return false
     }
+    const scheme = endpointScheme(parsed)
+    if (!['tcp', 'udp', 'ws', 'wss'].includes(scheme)) return false
+    if (!parsed.hostname) return false
+    if (parsed.username || parsed.password || value.includes('?') || value.includes('#'))
+        return false
+    if (parsed.pathname !== '' && parsed.pathname !== '/') return false
+    return parsed.port !== '' || scheme === 'ws' || scheme === 'wss'
 }
 
 function serverNodeValue(value: string): string | null {
@@ -162,19 +198,60 @@ export function isValidDirectServerNode(value: string): boolean {
     return serverNodeValue(value) !== null
 }
 
+/** Rust's `char::is_alphanumeric` covers letters and every numeric category. */
+function isAlphanumericCharacter(character: string): boolean {
+    return /[\p{L}\p{N}]/u.test(character)
+}
+
+/**
+ * Mirrors the lobby-name rule in `StartRequest::validate`.
+ *
+ * A name made only of underscores or hyphens used to pass here and fail in the
+ * backend, so the form now requires at least one letter or number. Lengths are
+ * counted in code points, not UTF-16 units, because Rust counts `char`s.
+ */
+export function isValidMctierLobbyName(value: string): boolean {
+    const characters = [...value]
+    if (characters.length < 4 || characters.length > 32) return false
+    if (characters.some(hasControlCharacter)) return false
+    if (value.trim() !== value) return false
+    if (!characters.some(isAlphanumericCharacter)) return false
+    return characters.every(
+        (character) => isAlphanumericCharacter(character) || character === '_' || character === '-',
+    )
+}
+
+/**
+ * Mirrors the player-name rule in `StartRequest::validate`: the caller submits a
+ * trimmed name, so 1-64 code points of that value, without control characters.
+ */
+export function isValidMctierPlayerName(value: string): boolean {
+    const characters = [...value.trim()]
+    return (
+        characters.length >= 1 && characters.length <= 64 && !characters.some(hasControlCharacter)
+    )
+}
+
+/** Mirrors `validate_endpoint(_, true)`, the signalling rule. Signalling keeps
+ * its path and query (the service lives at e.g. `/signaling?token=...`), so only
+ * credentials and the fragment are refused. */
 function validSignalingServer(value: string): boolean {
+    if (!endpointTextIsUsable(value)) return false
+    let parsed: URL
     try {
-        const parsed = new URL(value)
-        const local = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
-        return (
-            (parsed.protocol === 'wss:' || (parsed.protocol === 'ws:' && local)) &&
-            !parsed.username &&
-            !parsed.password &&
-            !parsed.hash
-        )
+        parsed = new URL(value)
     } catch {
         return false
     }
+    const scheme = endpointScheme(parsed)
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+    if (scheme !== 'wss' && !(scheme === 'ws' && local)) return false
+    return Boolean(parsed.hostname) && !parsed.username && !parsed.password && !value.includes('#')
+}
+
+/** Whether the lobby service address may be sent to the backend. */
+export function isValidMctierSignalingServer(value: string): boolean {
+    return validSignalingServer(value.trim())
 }
 
 export function parseMctierInviteCode(value: string): MctierInvite | null {

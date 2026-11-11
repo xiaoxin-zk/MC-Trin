@@ -35,32 +35,97 @@ ${StrLoc}
 ; macro that writes them.
 Var AxlPortableLayout
 Var AxlPortableValue
+Var AxlPortablePath
+Var AxlPortableChar
+Var AxlPortableOut
+Var AxlPortableIndex
+Var AxlPortableLen
 
 ; Sets $AxlPortableLayout to "1" when the installation is portable.
 ;
-; The registry value is the authoritative record for installs made by this
-; build, but it cannot be relied on alone: installs created before it existed
-; have no PortableInstall value at all, so the marker directory the launcher
-; itself keys portable mode off is checked as well - including the pre-rename
-; name, so an old portable folder is still recognised.
+; PortableInstall stores the folder the record applies to, not a bare flag, so
+; a record left behind by an install elsewhere cannot reclassify this one.
+; Uninstalling with "keep application data" deliberately leaves the record in
+; place, and a later install into a different folder must not inherit it.
 ;
-; The registry is checked first and the markers only when it says nothing, so
-; a folder that is no longer portable cannot be reclassified by a leftover
-; marker file.
+; The marker directory the launcher itself keys portable mode off is still
+; checked, which is what keeps installs made before the record existed - and
+; installs whose uninstall registration was lost - correctly identified. The
+; pre-rename marker name is included for the same reason. The path comparison
+; uses StrCmp, which is case-insensitive, so a differently-cased record for the
+; same folder still matches.
+;
+; Everything here is string and file work only, because this macro is expanded
+; into the installer, the uninstaller and the hooks. It must therefore not call
+; a function: installer functions have no uninstaller counterpart, and a
+; function compiled into one binary cannot be called from the other.
+;
+; Both loops are LogicLib's ${DoWhile}/${Loop}, whose jump labels are derived
+; from an internal counter and so stay unique on every expansion. A hand written
+; label would be defined again by each insertion and fail to assemble the
+; second time.
 !macro AxlDetectPortableLayout
   StrCpy $AxlPortableLayout "0"
+
+  ; Windows accepts either separator in a path, but the record is compared as a
+  ; string, so both spellings are folded to a backslash first. Without this,
+  ; "D:/mc/x" and "D:\mc\x" - the same folder - would not match.
+  StrCpy $AxlPortableOut ""
+  StrCpy $AxlPortableIndex 0
+  ${DoWhile} 1 == 1
+    StrCpy $AxlPortableChar "$INSTDIR" 1 $AxlPortableIndex
+    ${If} $AxlPortableChar == ""
+      ${ExitDo}
+    ${EndIf}
+    ${If} $AxlPortableChar == "/"
+      StrCpy $AxlPortableChar "\"
+    ${EndIf}
+    StrCpy $AxlPortableOut "$AxlPortableOut$AxlPortableChar"
+    IntOp $AxlPortableIndex $AxlPortableIndex + 1
+  ${Loop}
+  StrCpy $AxlPortablePath "$AxlPortableOut"
+
+  ; Every trailing separator is dropped, not just one, because /INSTALL_DIR= and
+  ; typed input can both carry a run of them.
+  ;
+  ; The length guard is what protects roots, with no special case needed for
+  ; UNC. A drive root is exactly "D:\" - three characters - so the loop stops
+  ; before "D:" is reached. A UNC root ends in its share name, so trimming
+  ; "\\server\share\" to "\\server\share" is correct, and the loop then stops
+  ; naturally because that string no longer ends in a separator.
+  ${DoWhile} 1 == 1
+    StrCpy $AxlPortableChar "$AxlPortablePath" 1 -1
+    ${If} $AxlPortableChar != "\"
+      ${ExitDo}
+    ${EndIf}
+    StrLen $AxlPortableLen "$AxlPortablePath"
+    ${If} $AxlPortableLen <= 3
+      ${ExitDo}
+    ${EndIf}
+    StrCpy $AxlPortablePath "$AxlPortablePath" -1
+  ${Loop}
+
+  ; The record stores the folder it applies to, so one left behind by an
+  ; install elsewhere cannot reclassify this one. A bare "1" written by earlier
+  ; builds matches no folder and is ignored; those installs are still found
+  ; through their marker below.
   ClearErrors
   ReadRegStr $AxlPortableValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
-  ${If} $AxlPortableValue == "1"
+  ${If} $AxlPortableValue != ""
+  ${AndIf} $AxlPortableValue == $AxlPortablePath
     StrCpy $AxlPortableLayout "1"
   ${EndIf}
+
+  ; The marker the launcher itself keys portable mode off is checked as well,
+  ; which is what identifies installs made before the record existed, installs
+  ; whose uninstall registration was lost, and the pre-rename layout. Both the
+  ; plain path and the wildcard form are tested, so the result does not depend
+  ; on how IfFileExists treats a directory in this NSIS version.
   ${If} $AxlPortableLayout == "0"
-    ; Both the plain path and the wildcard form are tested, so the result does
-    ; not depend on how IfFileExists treats a directory in this NSIS version.
-    ${If} ${FileExists} "$INSTDIR\.MC-Trin"
-    ${OrIf} ${FileExists} "$INSTDIR\.MC-Trin\*"
-    ${OrIf} ${FileExists} "$INSTDIR\.Axolotl"
-    ${OrIf} ${FileExists} "$INSTDIR\.Axolotl\*"
+    ${If} ${FileExists} "$AxlPortablePath\.MC-Trin"
+    ${OrIf} ${FileExists} "$AxlPortablePath\.MC-Trin\*"
+    ${OrIf} ${FileExists} "$AxlPortablePath\.Axolotl"
+    ${OrIf} ${FileExists} "$AxlPortablePath\.Axolotl\*"
       StrCpy $AxlPortableLayout "1"
     ${EndIf}
   ${EndIf}
@@ -535,23 +600,6 @@ Function FinishShow
   SendMessage $0 ${WM_SETTEXT} 0 "STR:$(axlFinishButton)"
 FunctionEnd
 
-Function TrimTrailingSlash
-  Exch $0
-  Push $1
-  Push $2
-  trim_trailing_slash_loop:
-    StrLen $1 $0
-    IntCmp $1 3 trim_trailing_slash_done trim_trailing_slash_done
-    StrCpy $2 $0 1 -1
-    StrCmp $2 "\" 0 trim_trailing_slash_done
-    StrCpy $0 $0 -1
-    Goto trim_trailing_slash_loop
-  trim_trailing_slash_done:
-  Pop $2
-  Pop $1
-  Exch $0
-FunctionEnd
-
 Function ReportInstallerProgress
   Exch $0
   Push $1
@@ -688,9 +736,14 @@ FunctionEnd
 
 Function PageLeaveOptions
   ${NSD_GetText} $InstallDirInput $INSTDIR
-  Push $INSTDIR
-  Call TrimTrailingSlash
-  Pop $INSTDIR
+  ; Folder input and /INSTALL_DIR= can both arrive with forward slashes or a
+  ; run of trailing separators. Normalising here - with the same macro the
+  ; detection uses - keeps the validated path, $ResourceDir, the recorded
+  ; PortableInstall value and the UI preview spelled one way. The macro only
+  ; writes its own AxlPortable variables, so the portable choice and the update
+  ; detection decided earlier are untouched.
+  !insertmacro AxlDetectPortableLayout
+  StrCpy $INSTDIR "$AxlPortablePath"
   ${GetRoot} "$INSTDIR" $0
   ${If} $0 == ""
     ${NSD_SetText} $OptionsError "$(axlInstallDirectoryInvalid)"
@@ -1036,15 +1089,26 @@ Function .onInit
     Call RestorePreviousInstallLocation
   ${EndIf}
 
+  !if "${INSTALLMODE}" == "both"
+    !insertmacro MULTIUSER_INIT
+  !endif
+
+  ; The command-line folder is applied after MultiUser initialization because
+  ; its install-mode callback may restore a previous location. This keeps an
+  ; explicit /INSTALL_DIR authoritative in interactive, passive and silent mode.
   ${GetOptions} $CMDLINE "/INSTALL_DIR=" $0
   ${IfNot} ${Errors}
     StrCpy $INSTDIR "$0"
   ${EndIf}
 
-
-  !if "${INSTALLMODE}" == "both"
-    !insertmacro MULTIUSER_INIT
-  !endif
+  ; Canonicalise once here, because a silent or passive install never shows the
+  ; options page: without this, /INSTALL_DIR=D:/mc/x would be written to the
+  ; uninstall and InstallLocation registry values with forward slashes while the
+  ; detector compares a folded path. Quoted values with spaces have already been
+  ; unquoted by GetOptions, and the macro preserves interior separators and
+  ; roots, so this only folds "/" and drops trailing separators.
+  !insertmacro AxlDetectPortableLayout
+  StrCpy $INSTDIR "$AxlPortablePath"
 
   ; A portable install keeps its settings and database inside the marker
   ; directory, which the probe above cannot see because it only knows the
@@ -1068,7 +1132,12 @@ Function .onInit
     File "/oname=$PLUGINSDIR\AxolotlInstallerUI.exe" "${AXL_INSTALLER_UI_PATH}"
     StrCpy $0 2
     ClearErrors
-    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --resource-dir "$ResourceDir" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
+    ; The data folder is derived by the UI from the program folder and the
+    ; portable flag, so no second directory is passed in and nothing can
+    ; disagree about where it points. The layout is passed so an update of an
+    ; existing portable install keeps deriving the folder beside the program.
+    !insertmacro AxlDetectPortableLayout
+    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
     ${If} $0 <> 2
       Quit
     ${EndIf}
@@ -1309,7 +1378,10 @@ Section Install
   ; on its first start and deletes it, so it cannot tell the uninstaller where
   ; the data lives; PortableInstall is written once here and read by the
   ; uninstaller and by later updates, which is what keeps <install>\data
-  ; reachable when the user asks to delete application data.
+  ; reachable when the user asks to delete application data. The value stored is
+  ; the normalised path the detection macro compares against, never raw
+  ; $INSTDIR, so a folder typed with forward slashes or trailing separators
+  ; still matches the same folder on a later run.
   ${If} $FreshInstall = 1
     ${If} $PortableMode == 1
       ; A portable install is recognised by this marker directory, which is
@@ -1317,7 +1389,11 @@ Section Install
       ; folder. A pending directory would instead point at the program folder
       ; and be applied the day the marker disappears.
       CreateDirectory "$INSTDIR\.MC-Trin"
-      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "1"
+      ; The folder field can rewrite $INSTDIR after the macro last ran in
+      ; .onInit, so it is re-run here to normalise the value actually chosen.
+      ; Only $AxlPortablePath is read; the layout it also computes is unused.
+      !insertmacro AxlDetectPortableLayout
+      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "$AxlPortablePath"
       DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
     ${Else}
       ${StrCase} $0 "$ResourceDir" "L"
@@ -1337,7 +1413,7 @@ Section Install
   ${If} $FreshInstall <> 1
     !insertmacro AxlDetectPortableLayout
     ${If} $AxlPortableLayout == "1"
-      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "1"
+      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "$AxlPortablePath"
     ${Else}
       DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
     ${EndIf}
