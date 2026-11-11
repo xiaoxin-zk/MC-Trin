@@ -529,19 +529,20 @@ pub async fn tool(run_id: &str, request: ToolRequest) -> crate::Result<Value> {
     // prompt itself lives in the renderer, so this gate guarantees that an
     // unapproved write cannot execute, not that a hostile renderer cannot ask
     // for a grant.
-    if session.source == "assistant" && assistant_write_tool(&request.name) {
-        if let Some(token) = check_write_approval(
+    if session.source == "assistant"
+        && assistant_write_tool(&request.name)
+        && let Some(token) = check_write_approval(
             &session,
             approval.as_deref(),
             approval_request.unwrap_or(false),
             &request,
-        )? {
-            return Ok(json!({
-                APPROVAL_REQUIRED: true,
-                APPROVAL_TOKEN: token,
-                "tool": request.name,
-            }));
-        }
+        )?
+    {
+        return Ok(json!({
+            APPROVAL_REQUIRED: true,
+            APPROVAL_TOKEN: token,
+            "tool": request.name,
+        }));
     }
     let duplicate = {
         let mut budget = session
