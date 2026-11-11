@@ -3,9 +3,9 @@ import { describe, test } from 'node:test'
 
 import {
     combineCrashLogs,
-    logShareLeavesMachine,
     type CrashLogFile,
     crashLogLabel,
+    logShareLeavesMachine,
     preferredCrashLogKey,
     selectCrashLogFiles,
     shouldUseLogShareAutoAnalysis,

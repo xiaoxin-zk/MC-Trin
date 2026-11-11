@@ -26,6 +26,48 @@
   "app.drop.batch.scan.title": {
     "defaultMessage": "Scanning {count, plural, one {# file} other {# files}}…"
   },
+  "app.log-share.settings.grant-consent": {
+    "defaultMessage": "Allow LogShare uploads"
+  },
+  "app.log-share.settings.remote-consent": {
+    "defaultMessage": "Allow LogShare uploads"
+  },
+  "app.log-share.settings.remote-consent-granted": {
+    "defaultMessage": "LogShare uploads are allowed: crash-log content may be sent to api.logshare.cn. Revoke this to stop LogShare uploads; a separately configured AI provider may still receive selected excerpts."
+  },
+  "app.log-share.settings.remote-consent-revoked": {
+    "defaultMessage": "LogShare permission is off. No logs are sent to LogShare until you allow it; a separately configured AI provider may still receive selected excerpts."
+  },
+  "app.log-share.settings.revoke-consent": {
+    "defaultMessage": "Revoke LogShare permission"
+  },
+  "app.logagent.local-model-notice": {
+    "defaultMessage": "No logs are uploaded to LogShare, and no AI provider is configured, so the rule-based analysis stays on this computer."
+  },
+  "app.logagent.local-only-notice": {
+    "defaultMessage": "No logs are uploaded to LogShare. The AI provider you configured may receive the excerpts selected for analysis."
+  },
+  "app.logagent.remote-consent-action": {
+    "defaultMessage": "Allow LogShare upload"
+  },
+  "app.logagent.remote-consent-required": {
+    "defaultMessage": "Crash analysis stays on this computer until you allow LogShare. Nothing has been uploaded."
+  },
+  "app.logagent.source-remote": {
+    "defaultMessage": "LogShare (uploads logs)"
+  },
+  "app.logagent.source-remote-hint": {
+    "defaultMessage": "Only after you turn this on: the full crash logs are uploaded to api.logshare.cn, where they are analysed and stored. Your Minecraft token and computer username are removed first, but server addresses, chat and mod names are not."
+  },
+  "app.logagent.source-remote-hint-no-storage": {
+    "defaultMessage": "Only after you turn this on: the full crash logs are uploaded to api.logshare.cn for analysis. Retention without a stored copy is requested, but the service still receives the complete logs. Your Minecraft token and computer username are removed first; server addresses, chat and mod names are not."
+  },
+  "app.minecraft-crash.share-destination": {
+    "defaultMessage": "Clicking Share uploads crash-log content to an external service: LogShare when selected and allowed, or public mclo.gs when selected or used as a fallback. mclo.gs trims uploads over 9 MiB to the last 9 MiB. Share only if you accept this."
+  },
+  "app.minecraft-crash.share-fallback": {
+    "defaultMessage": "LogShare could not be used, so the diagnostic was uploaded to mclo.gs. mclo.gs creates a public link and trims uploads over 9 MiB to the last 9 MiB."
+  },
   "app.symlink-warning.write.body": {
     "defaultMessage": "This instance is linked to \"{path}\". Changes will also affect the original files."
   },

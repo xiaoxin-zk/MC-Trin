@@ -215,12 +215,8 @@ it('revokes consent without first toggling auto-upload on', async () => {
     calls.remoteConsent = true
     calls.saveShare.mockClear()
     const wrapper = await render()
-    // Consented but automatic upload deliberately off: the state that used to
-    // leave the user with no revoke path.
-    // The revoke control is reachable while local analysis remains selected and
-    // auto-upload is still off.
+    // The revoke control is reachable while local analysis remains selected.
     expect(wrapper.get('button[value="custom"]').attributes('aria-checked')).toBe('true')
-    expect(wrapper.get('#log-share-auto-upload').attributes('disabled')).toBeUndefined()
     await wrapper.get('#log-share-revoke-consent').trigger('click')
     await vi.waitFor(() => expect(calls.saveShare).toHaveBeenCalledTimes(1))
     expect(calls.saveShare.mock.calls[0][0].consent_action).toBe('revoke')

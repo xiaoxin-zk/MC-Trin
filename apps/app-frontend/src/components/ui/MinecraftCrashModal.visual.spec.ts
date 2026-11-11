@@ -183,8 +183,11 @@ it('offers configuration instead of a missing analyze button and keeps source ch
         .find((button) => button.text() === 'Change')!
         .trigger('click')
     await controls.get('[role="radio"][value="logshare"]').trigger('click')
-    expect(controls.text()).toContain('Cloud LogShare')
-    expect(controls.text()).toContain('Start analysis')
+    expect(controls.text()).toContain('LogShare (uploads logs)')
+    expect(controls.find('[data-crash-analysis="consent-required"]').exists()).toBe(true)
+    expect(controls.find('[data-crash-analysis="consent-action"]').text()).toBe(
+        'Allow LogShare upload',
+    )
     expect(controls.find('[role="radiogroup"]').exists()).toBe(false)
     await controls
         .findAll('button')

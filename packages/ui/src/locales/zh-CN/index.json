@@ -4433,6 +4433,48 @@
   "app.drop.batch.scan.error": {
     "message": "失败"
   },
+  "app.log-share.settings.grant-consent": {
+    "message": "允许 LogShare 上传"
+  },
+  "app.log-share.settings.remote-consent": {
+    "message": "允许上传到 LogShare"
+  },
+  "app.log-share.settings.remote-consent-granted": {
+    "message": "已允许上传到 LogShare：崩溃日志内容可能会发送到 api.logshare.cn。撤销此权限即可停止上传到 LogShare；单独配置的 AI 服务提供商仍可能收到选定的日志片段。"
+  },
+  "app.log-share.settings.remote-consent-revoked": {
+    "message": "LogShare 上传权限已关闭。在你允许之前，不会向 LogShare 发送日志；单独配置的 AI 服务提供商仍可能收到选定的日志片段。"
+  },
+  "app.log-share.settings.revoke-consent": {
+    "message": "撤销 LogShare 上传权限"
+  },
+  "app.logagent.local-model-notice": {
+    "message": "不会向 LogShare 上传日志，也未配置 AI 服务提供商，因此基于规则的分析会保留在此计算机上。"
+  },
+  "app.logagent.local-only-notice": {
+    "message": "不会向 LogShare 上传日志。你配置的 AI 服务提供商可能会收到分析所选的日志片段。"
+  },
+  "app.logagent.remote-consent-action": {
+    "message": "允许上传到 LogShare"
+  },
+  "app.logagent.remote-consent-required": {
+    "message": "在你允许 LogShare 之前，崩溃分析仅在此计算机上进行。尚未上传任何内容。"
+  },
+  "app.logagent.source-remote": {
+    "message": "LogShare（上传日志）"
+  },
+  "app.logagent.source-remote-hint": {
+    "message": "仅在你启用此选项后，完整崩溃日志才会上传到 api.logshare.cn，并由其分析和存储。上传前会移除 Minecraft 令牌和计算机用户名，但不会移除服务器地址、聊天内容和模组名称。"
+  },
+  "app.logagent.source-remote-hint-no-storage": {
+    "message": "仅在你启用此选项后，完整崩溃日志才会上传到 api.logshare.cn 进行分析。启动器会请求不保留存储副本，但服务仍会收到完整日志，且无法验证服务实际保留的内容。上传前会移除 Minecraft 令牌和计算机用户名，但不会移除服务器地址、聊天内容和模组名称。"
+  },
+  "app.minecraft-crash.share-destination": {
+    "message": "点击“分享”会将崩溃日志内容上传到外部服务：选择并获准使用 LogShare 时会上传到 LogShare；选择 mclo.gs 或将其用作备用服务时，会创建公开链接。mclo.gs 会将超过 9 MiB 的上传内容截取为最后 9 MiB。请仅在接受这些条件时分享。"
+  },
+  "app.minecraft-crash.share-fallback": {
+    "message": "LogShare 无法使用，因此诊断日志已上传到 mclo.gs。mclo.gs 会创建公开链接，并将超过 9 MiB 的上传内容截取为最后 9 MiB。"
+  },
   "drop.launcher_import.title": {
     "message": "从 {launcherName} 导入实例"
   },
