@@ -24,6 +24,7 @@ mod verify;
 mod tests;
 
 pub use self::archive::get_local_modpack_target;
+pub(crate) use self::archive::get_local_modpack_target_at;
 pub use self::auth::*;
 pub use self::catalog::*;
 pub use self::dto::*;

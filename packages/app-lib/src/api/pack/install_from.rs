@@ -1,5 +1,4 @@
 use crate::State;
-use crate::api::pack::detect::detect_local_pack_sync;
 use crate::data::ModLoader;
 use crate::install::{
     InstallErrorContext, InstallJobEventKind, InstallPhaseDetails,
@@ -27,8 +26,6 @@ use std::future::Future;
 
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-
-use zip::ZipArchive;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -183,6 +180,107 @@ pub struct CreatePackDescription {
     pub source_filename: Option<String>,
 }
 
+/// Opens a local pack's central directory on the blocking pool, with a deadline
+/// and cooperative cancellation.
+///
+/// Kept separate from format detection because the two answer different
+/// questions and map errors differently: this one must surface a corrupt
+/// archive as a terminal `Invalid or corrupt modpack archive` error, while
+/// detection treats an unreadable archive as merely unrecognised. Both are
+/// bounded, because both walk the same central directory.
+///
+/// The bound is cooperative, not preemptive. `ZipArchive::new` is one
+/// synchronous call that cannot be interrupted, so cancellation is only
+/// observable after it returns; a stalled disk can hold this worker past the
+/// deadline. The token plus RAII guard ensure no *second* detached parser is
+/// left running with nobody able to signal it, which is what the caller's
+/// timeout alone could not do.
+async fn validate_local_pack_archive_openable(
+    path: &std::path::Path,
+) -> crate::Result<()> {
+    use crate::api::pack::detect::DETECT_TIMEOUT;
+    let owned = path.to_path_buf();
+    let display = path.display().to_string();
+    let worker_cancellation = tokio_util::sync::CancellationToken::new();
+    let mut guard = OpenProbeGuard::new(worker_cancellation.clone());
+    let worker = tokio::task::spawn_blocking(move || {
+        // Inside the worker so the caller's deadline also covers the metadata
+        // stat: `std::fs::metadata` blocks on network paths like any other
+        // filesystem call, and doing it before the spawn would park the runtime
+        // outside the timeout.
+        crate::api::pack::detect::check_archive_size(&owned)?;
+        let file = std::fs::File::open(&owned)
+            .map_err(crate::ErrorKind::StdIOError)?;
+        let archive = zip::ZipArchive::new(file).map_err(|e| {
+            crate::ErrorKind::InputError(format!(
+                "Invalid or corrupt modpack archive ({display}): {e}"
+            ))
+        })?;
+        // First cancellation point: the constructor above cannot be
+        // interrupted, so this is the earliest the worker can obey the flag.
+        if worker_cancellation.is_cancelled() {
+            return Err(open_probe_cancelled());
+        }
+        drop(archive);
+        Ok(())
+    });
+
+    match tokio::time::timeout(DETECT_TIMEOUT, worker).await {
+        Ok(result) => {
+            guard.disarm();
+            result?
+        }
+        Err(_) => {
+            guard.cancel();
+            Err(crate::ErrorKind::InputError(format!(
+                "Timed out after {} seconds while reading the local modpack archive",
+                DETECT_TIMEOUT.as_secs()
+            ))
+            .into())
+        }
+    }
+}
+
+fn open_probe_cancelled() -> crate::Error {
+    crate::ErrorKind::OtherError("Install was canceled".to_string()).into()
+}
+
+/// Cancels an open-probe worker when the awaiting future is dropped.
+///
+/// Without this, a timeout only drops the join handle: the blocking task keeps
+/// running with no signal at all, which is the same detached-parser problem the
+/// detection path had.
+struct OpenProbeGuard {
+    token: tokio_util::sync::CancellationToken,
+    active: bool,
+}
+
+impl OpenProbeGuard {
+    fn new(token: tokio_util::sync::CancellationToken) -> Self {
+        Self {
+            token,
+            active: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn cancel(&mut self) {
+        self.token.cancel();
+        self.active = false;
+    }
+}
+
+impl Drop for OpenProbeGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.token.cancel();
+        }
+    }
+}
+
 pub async fn get_instance_from_pack(
     location: CreatePackLocation,
 ) -> crate::Result<CreatePackInstance> {
@@ -208,37 +306,68 @@ pub async fn get_instance_from_pack(
                 .to_string_lossy()
                 .to_string();
 
-            // Validate ZIP structure before proceeding — fail fast on corrupt archives
-            // rather than discovering the error later during extraction.
-            let file = std::fs::File::open(&path)
-                .map_err(crate::ErrorKind::StdIOError)?;
-            ZipArchive::new(file).map_err(|e| {
-                crate::ErrorKind::InputError(format!(
-                    "Invalid or corrupt modpack archive ({}): {e}",
-                    path.display()
-                ))
-            })?;
+            // Validate ZIP structure before proceeding — fail fast on corrupt
+            // archives rather than discovering the error later during
+            // extraction. Bounded like every other central-directory read:
+            // this used to be a bare `spawn_blocking(...).await??`, which left
+            // the request waiting on an uninterruptible parse with no deadline.
+            validate_local_pack_archive_openable(&path).await?;
+
+            // Detect first, because CurseForge packs may be wrapped in one
+            // top-level folder: the probe below needs the detected base prefix
+            // or it would report a valid wrapped pack as missing its manifest.
+            let detected =
+                match crate::api::pack::detect::detect_local_pack_with_timeout(
+                    &path,
+                )
+                .await
+                {
+                    Ok(detected) => Some(detected),
+                    Err(error)
+                        if crate::api::pack::detect::is_detection_timeout(
+                            &error,
+                        ) =>
+                    {
+                        return Err(error);
+                    }
+                    Err(_) => None,
+                };
 
             // CurseForge archives carry authoritative identity metadata in
             // manifest.json. Read it before instance creation so we do not
-            // briefly create a 1.19.4/Vanilla instance.
-            if let Ok((pack_name, target)) =
-                crate::api::curseforge::get_local_modpack_target(&path).await
+            // briefly create a 1.19.4/Vanilla instance. `base` keeps the probe
+            // aware of a wrapper folder while still preferring the archive root.
+            let detected_base = detected
+                .as_ref()
+                .map(|detected| detected.base_folder.as_str())
+                .unwrap_or("");
+            match crate::api::curseforge::get_local_modpack_target_at(
+                &path,
+                detected_base,
+            )
+            .await
             {
-                return Ok(CreatePackInstance {
-                    name: pack_name,
-                    game_version: target.game_version,
-                    modloader: target.loader,
-                    loader_version: target.loader_version,
-                    unknown_file: false,
-                    ..Default::default()
-                });
+                Ok((pack_name, target)) => {
+                    return Ok(CreatePackInstance {
+                        name: pack_name,
+                        game_version: target.game_version,
+                        modloader: target.loader,
+                        loader_version: target.loader_version,
+                        unknown_file: false,
+                        ..Default::default()
+                    });
+                }
+                Err(error)
+                    if crate::api::pack::detect::is_detection_timeout(
+                        &error,
+                    ) =>
+                {
+                    return Err(error);
+                }
+                Err(_) => {}
             }
 
-            // Scan ZIP entry names to detect pack format (no extraction, just
-            // reads the central directory). This tells us what kind of content
-            // we're dealing with before any expensive operations.
-            let is_known_file = detect_local_pack_sync(&path).is_ok();
+            let is_known_file = detected.is_some();
 
             Ok(CreatePackInstance {
                 name: file_name,

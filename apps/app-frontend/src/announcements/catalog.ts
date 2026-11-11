@@ -30,6 +30,47 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-0.0.3-beta',
+        version: '0.0.3-beta',
+        publishedAt: '2026-11-11',
+        title: {
+            'en-US': 'MC-Trin 0.0.3-beta',
+            'zh-CN': 'MC-Trin 0.0.3-beta',
+        },
+        changes: {
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed the installer preview so it follows the drive you pick and shows the data location the install will actually use, for normal and portable installs.',
+                    'zh-CN':
+                        '修复安装程序的目录预览：现在会跟随你选择的磁盘，并显示安装实际使用的数据位置，普通安装与便携安装均一致。',
+                },
+                {
+                    'en-US': 'Modpack parse errors and timeouts are now reported with clear feedback.',
+                    'zh-CN': '整合包解析错误和超时现在会显示明确提示。',
+                },
+                {
+                    'en-US':
+                        'Fixed the MCTier lobby form: invalid fields are explained, lobby name, player name and service address are validated, and a failed create is no longer silent.',
+                    'zh-CN':
+                        '修复 MCTier 房间表单：现在会说明无效字段，校验房间名、玩家名和服务地址，创建失败时也会给出提示。',
+                },
+                {
+                    'en-US':
+                        'Cloud crash-log analysis and upload stay off until you allow LogShare; that permission is separate from automatic uploads. A custom AI provider you configure can still receive the excerpts you analyze.',
+                    'zh-CN':
+                        '云端崩溃日志分析和上传默认关闭，需先允许 LogShare；该许可与自动上传分开设置。你配置的 AI 服务仍可能收到你选择分析的片段。',
+                },
+                {
+                    'en-US':
+                        'Fixed voice controls so you can pick audio devices and push-to-talk settings before joining a call.',
+                    'zh-CN':
+                        '修复语音控制，使你可以在加入通话前选择音频设备与按键说话设置。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-0.0.2-beta',
         version: '0.0.2-beta',
         publishedAt: '2026-11-11',

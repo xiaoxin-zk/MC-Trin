@@ -40,6 +40,30 @@ export function moduleFilter(relativePath) {
     return module.replace(/\//gu, '::')
 }
 
+/// Modules whose tests must run whenever the local-pack bounds change.
+///
+/// Every local-pack entry point shares `detect`'s archive limits and its
+/// cooperative cancel/deadline contract, and the regressions that matter span
+/// them: a detection timeout that is treated as fallback, or an unbounded
+/// constructor that skips the size pre-check, only shows up when the caller and
+/// the detector are exercised together. A per-file filter would run just the
+/// changed module and skip `detect`, so these pull in the whole pack module.
+const PACK_COUPLED_MODULES = new Set([
+    'api/pack/detect',
+    'api/pack/install_from',
+    'api/pack/archive_util',
+    'api/pack/install_plain_archive',
+    'api/pack/install_hmcl',
+    'api/pack/install_mcbbs',
+    'api/curseforge/archive',
+    'api/curseforge/modpack/local',
+    'install/runner/pack',
+])
+
+function coupledFilters(module) {
+    return PACK_COUPLED_MODULES.has(module) ? ['api::pack'] : []
+}
+
 function changedFiles(base) {
     if (!base || /^0+$/u.test(base)) return null
     try {
@@ -93,6 +117,14 @@ export function selectPlan(files) {
         const filter = crate.moduleTests ? moduleFilter(file) : null
         if (filter) entry.filters.add(filter)
         else entry.runWholePackage = true
+
+        if (crate.moduleTests) {
+            for (const coupled of coupledFilters(
+                file.slice(`${crate.root}/src/`.length, -'.rs'.length),
+            )) {
+                entry.filters.add(coupled)
+            }
+        }
     }
 
     if (unknownRustChange) return workspaceCompilePlan('unmapped Rust crate')

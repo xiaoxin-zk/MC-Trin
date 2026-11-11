@@ -125,3 +125,28 @@ test('deduplicates child filters when a parent module is selected', () => {
     ]).crates[0].filters
     assert.deepEqual(filters, ['api'])
 })
+
+test('runs the pack detection tests for every coupled local-pack module', () => {
+    // The detection bounds are shared by all of these, so a change to any one
+    // has to run `api::pack`; otherwise the detector's own tests are skipped
+    // and the coupling that caused the hang regressions goes unverified.
+    for (const file of [
+        'packages/app-lib/src/api/pack/detect.rs',
+        'packages/app-lib/src/api/pack/install_from.rs',
+        'packages/app-lib/src/api/pack/archive_util.rs',
+        'packages/app-lib/src/api/pack/install_plain_archive.rs',
+        'packages/app-lib/src/api/pack/install_hmcl.rs',
+        'packages/app-lib/src/api/pack/install_mcbbs.rs',
+        'packages/app-lib/src/api/curseforge/archive.rs',
+        'packages/app-lib/src/api/curseforge/modpack/local.rs',
+        'packages/app-lib/src/install/runner/pack.rs',
+    ]) {
+        const filters = selectPlan([file]).crates[0].filters
+        assert(filters.includes('api::pack'), `${file}: ${JSON.stringify(filters)}`)
+    }
+})
+
+test('keeps unrelated modules on their own filter', () => {
+    const filters = selectPlan(['packages/app-lib/src/state/friends.rs']).crates[0].filters
+    assert.deepEqual(filters, ['state::friends'])
+})

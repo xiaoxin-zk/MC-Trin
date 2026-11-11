@@ -72,6 +72,43 @@ fn join_arguments(value: &serde_json::Value) -> Vec<String> {
     }
 }
 
+/// Reads and parses the CurseForge manifest as the MCBBS fallback.
+///
+/// Shared by the "first manifest missing" and "first manifest unparsable"
+/// paths so both apply identical bounds and terminal-error rules.
+async fn fallback_mcbbs_manifest(
+    archive_path: PathBuf,
+    entry_name: String,
+    cancellation: tokio_util::sync::CancellationToken,
+) -> crate::Result<McbbsManifest> {
+    let contents = archive_util::read_archive_entry_to_string_bounded(
+        archive_path,
+        entry_name,
+        cancellation,
+    )
+    .await?;
+    Ok(serde_json::from_str(&contents)?)
+}
+
+/// Whether a manifest-read failure must end the install instead of falling back.
+///
+/// Only "this archive has no such entry" / "it did not parse" may try the next
+/// manifest. A deadline or a cancellation means the caller already gave up, so
+/// retrying would leave a second detached parse and would also mislabel the
+/// cause as a missing manifest.
+fn is_terminal_manifest_error(error: &crate::Error) -> bool {
+    if crate::api::pack::detect::is_detection_timeout(error)
+        || error.to_string().contains("Install was canceled")
+    {
+        return true;
+    }
+    // A size-limit hit is a safety boundary, not a "this is the other format"
+    // signal: falling back would open the archive a second time for a pack that
+    // is already known to be malformed. Only a genuinely absent or unparsable
+    // manifest may try the next name.
+    error.to_string().contains("is larger than the")
+}
+
 pub(crate) async fn install_mcbbs_pack_with_reporter(
     instance_id: String,
     archive_path: PathBuf,
@@ -81,22 +118,51 @@ pub(crate) async fn install_mcbbs_pack_with_reporter(
 ) -> crate::Result<()> {
     let state = State::get().await?;
 
-    let manifest_json = match archive_util::read_archive_entry_to_string(
+    // The MCBBS manifest may be absent - or present but not valid MCBBS JSON -
+    // in archives that are really CurseForge packs, so both cases fall back to
+    // the CurseForge manifest. A deadline, a cancellation or a size violation
+    // must NOT: the caller has already stopped waiting, and retrying would start
+    // another parse nobody can observe.
+    let mcbbs_cancellation = reporter.cancellation_token();
+    let mcbbs_json = match archive_util::read_archive_entry_to_string_bounded(
         archive_path.clone(),
         format!("{base_folder}{MCBBS_MANIFEST}"),
+        mcbbs_cancellation.clone(),
     )
     .await
     {
-        Ok(contents) => contents,
-        Err(_) => {
-            archive_util::read_archive_entry_to_string(
+        Ok(contents) => Some(contents),
+        Err(error) if is_terminal_manifest_error(&error) => return Err(error),
+        Err(_) => None,
+    };
+
+    // Parse before deciding to fall back: a manifest that exists but is not
+    // valid MCBBS JSON means "wrong format", exactly like a missing one.
+    let manifest = match mcbbs_json
+        .as_deref()
+        .map(serde_json::from_str::<McbbsManifest>)
+    {
+        Some(Ok(manifest)) => manifest,
+        Some(Err(error)) => {
+            tracing::debug!(
+                "MCBBS manifest was unparsable ({error}); trying the CurseForge manifest"
+            );
+            fallback_mcbbs_manifest(
                 archive_path.clone(),
                 format!("{base_folder}{CURSEFORGE_MANIFEST}"),
+                mcbbs_cancellation,
+            )
+            .await?
+        }
+        None => {
+            fallback_mcbbs_manifest(
+                archive_path.clone(),
+                format!("{base_folder}{CURSEFORGE_MANIFEST}"),
+                mcbbs_cancellation,
             )
             .await?
         }
     };
-    let manifest: McbbsManifest = serde_json::from_str(&manifest_json)?;
 
     let mut game_version = None;
     let mut loader = ModLoader::Vanilla;
@@ -625,4 +691,163 @@ pub(crate) async fn install_optifine_mod(
     )
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_timeout_is_terminal_and_does_not_fall_back() {
+        // A deadline must end the install instead of trying the CurseForge
+        // manifest, which would start a second parse after the caller gave up.
+        let timeout: crate::Error = crate::ErrorKind::InputError(
+            "Timed out after 60 seconds while reading mcbbs.packmeta from the modpack archive"
+                .to_string(),
+        )
+        .into();
+        assert!(is_terminal_manifest_error(&timeout));
+    }
+
+    #[test]
+    fn a_cancellation_is_terminal_and_does_not_fall_back() {
+        let cancelled: crate::Error =
+            crate::ErrorKind::OtherError("Install was canceled".to_string())
+                .into();
+        assert!(is_terminal_manifest_error(&cancelled));
+    }
+
+    #[test]
+    fn a_missing_manifest_still_falls_back() {
+        // The ordinary "not this format" case has to keep working: this is what
+        // lets a CurseForge archive be detected through the MCBBS installer.
+        let missing: crate::Error = crate::ErrorKind::InputError(
+            "Modpack archive is missing mcbbs.packmeta".to_string(),
+        )
+        .into();
+        assert!(!is_terminal_manifest_error(&missing));
+    }
+
+    #[test]
+    fn an_oversized_manifest_is_terminal() {
+        // A size-limit hit is a safety boundary, not a "try the other format"
+        // signal: falling back would reopen a pack already known to be broken.
+        let oversized: crate::Error = crate::ErrorKind::InputError(
+            "Modpack manifest mcbbs.packmeta is larger than the 4194304-byte limit"
+                .to_string(),
+        )
+        .into();
+        assert!(is_terminal_manifest_error(&oversized));
+    }
+
+    #[test]
+    fn an_unparsable_manifest_still_falls_back() {
+        // A manifest that exists but is not valid MCBBS JSON is the ordinary
+        // "wrong format" case and must keep falling back.
+        let unparsable: crate::Error = crate::ErrorKind::InputError(
+            "expected value at line 1 column 1".to_string(),
+        )
+        .into();
+        assert!(!is_terminal_manifest_error(&unparsable));
+    }
+
+    #[test]
+    fn a_malformed_first_manifest_falls_back_instead_of_aborting() {
+        // A manifest that exists but is not valid MCBBS JSON means "wrong
+        // format", so the CurseForge fallback must still be attempted. This
+        // exercises the classification the fallback decision is based on: the
+        // parse error itself is an ordinary failure, not a terminal one.
+        let unparsable: crate::Error = crate::ErrorKind::InputError(
+            "expected value at line 1 column 1".to_string(),
+        )
+        .into();
+        assert!(!is_terminal_manifest_error(&unparsable));
+    }
+
+    #[test]
+    fn a_terminal_read_failure_never_reaches_the_fallback() {
+        // Timeout, cancellation and size violations are checked before the
+        // parse, so they can never be downgraded into a fallback attempt.
+        for message in [
+            "Timed out after 60 seconds while reading mcbbs.packmeta from the modpack archive",
+            "Install was canceled",
+            "Modpack manifest mcbbs.packmeta is larger than the 4194304-byte limit",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                is_terminal_manifest_error(&error),
+                "expected terminal: {message}"
+            );
+        }
+    }
+
+    /// Builds a stored-only zip so the test exercises the same reader the
+    /// installer uses, including the bounded entry-to-string helper.
+    fn build_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            for (name, body) in entries {
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(body).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
+    #[tokio::test]
+    async fn a_malformed_first_manifest_really_falls_back_to_the_second() {
+        // Full call path: the first manifest exists but is not MCBBS JSON, so
+        // the bounded reader succeeds and the parse fails. The fallback helper
+        // must then read and parse the CurseForge manifest for real.
+        let bytes = build_archive(&[
+            ("mcbbs.packmeta", b"{ not json"),
+            (
+                "manifest.json",
+                br#"{"minecraft":{"version":"1.20.1"},"name":"Fallback Pack"}"#,
+            ),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pack.zip");
+        std::fs::write(&path, bytes).unwrap();
+
+        let manifest = fallback_mcbbs_manifest(
+            path,
+            "manifest.json".to_string(),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .expect("the CurseForge manifest is valid");
+
+        assert_eq!(manifest.name.as_deref(), Some("Fallback Pack"));
+    }
+
+    #[tokio::test]
+    async fn a_missing_fallback_manifest_reports_missing() {
+        // The fallback path must surface a real read error rather than a
+        // default identity.
+        let bytes = build_archive(&[("mcbbs.packmeta", b"{ not json")]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pack.zip");
+        std::fs::write(&path, bytes).unwrap();
+
+        let error = fallback_mcbbs_manifest(
+            path,
+            "manifest.json".to_string(),
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("missing"),
+            "expected the missing-entry error, got: {error}"
+        );
+    }
 }

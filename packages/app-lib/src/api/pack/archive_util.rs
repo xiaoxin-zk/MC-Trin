@@ -681,6 +681,10 @@ pub(crate) async fn extract_archive_entry_to_file(
 
 /// Reads a single archive entry into a string, tolerating GB18030-encoded
 /// file contents produced by Chinese packaging tools.
+///
+/// Unbounded and uncancellable: kept for callers outside the pack-resolution
+/// phase (server/fabric helpers). Pack identification must use
+/// [`read_archive_entry_to_string_bounded`] instead, which carries a deadline.
 pub(crate) async fn read_archive_entry_to_string(
     archive_path: PathBuf,
     entry_name: String,
@@ -708,6 +712,137 @@ pub(crate) async fn read_archive_entry_to_string(
         })
     })
     .await?
+}
+
+/// Largest manifest this helper will materialise.
+///
+/// The manifests read through it (`modpack.json`, `mcbbs.packmeta`,
+/// `manifest.json`) are a few KiB in practice; the bound stops a hostile or
+/// corrupt member from being inflated into memory during pack resolution.
+pub(crate) const MAX_MANIFEST_ENTRY_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Bounded, cancellable variant for the initial pack-manifest read.
+///
+/// Runs on the blocking pool under the shared detection deadline. Opening the
+/// central directory, locating the entry and inflating the manifest are all
+/// uninterruptible from the async side, so without this a malformed or slow
+/// archive holds the job in the parsing phase with no deadline, and a cancelled
+/// job leaves the worker running detached.
+pub(crate) async fn read_archive_entry_to_string_bounded(
+    archive_path: PathBuf,
+    entry_name: String,
+    cancellation: CancellationToken,
+) -> crate::Result<String> {
+    check_cancellation(Some(&cancellation))?;
+
+    let worker_cancellation = cancellation.child_token();
+    let mut guard = ManifestReadGuard::new(worker_cancellation.clone());
+    let worker = tokio::task::spawn_blocking(move || {
+        // Inside the worker so the deadline also covers the metadata stat,
+        // which blocks on network-backed paths.
+        super::detect::check_archive_size(&archive_path)?;
+        let file = std::fs::File::open(&archive_path)
+            .map_err(|error| io::IOError::with_path(error, &archive_path))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(archive_error)?;
+        // Earliest point after the constructor where the flag is observable.
+        check_cancellation(Some(&worker_cancellation))?;
+        let total_entries = archive.len();
+        if total_entries > super::detect::MAX_DETECT_ENTRIES {
+            return Err(crate::ErrorKind::InputError(format!(
+                "Modpack archive has {total_entries} entries, which exceeds the {}-entry detection limit",
+                super::detect::MAX_DETECT_ENTRIES
+            ))
+            .into());
+        }
+        // Cancellable lookup: the scan can walk every entry, so a deadline
+        // must be observable here too, not only around the read below.
+        let index = super::detect::find_entry_index_cancellable(
+            &mut archive,
+            &entry_name,
+            Some(&worker_cancellation),
+        )?
+        .ok_or_else(|| {
+            crate::ErrorKind::InputError(format!(
+                "Modpack archive is missing {entry_name}"
+            ))
+        })?;
+        let mut entry = archive.by_index(index).map_err(archive_error)?;
+        let mut contents = Vec::new();
+        // Bound the read itself so an entry declaring a huge size cannot fill
+        // memory before any check runs.
+        std::io::Read::read_to_end(
+            &mut std::io::Read::take(&mut entry, MAX_MANIFEST_ENTRY_BYTES + 1),
+            &mut contents,
+        )?;
+        if contents.len() as u64 > MAX_MANIFEST_ENTRY_BYTES {
+            return Err(crate::ErrorKind::InputError(format!(
+                "Modpack manifest {entry_name} is larger than the {MAX_MANIFEST_ENTRY_BYTES}-byte limit"
+            ))
+            .into());
+        }
+        // The read above is a single uninterruptible system call, so a cancel
+        // that landed during it is only visible here.
+        check_cancellation(Some(&worker_cancellation))?;
+        Ok(match String::from_utf8(contents) {
+            Ok(value) => value,
+            Err(error) => {
+                let (decoded, _, _) =
+                    encoding_rs::GB18030.decode(error.as_bytes());
+                decoded.into_owned()
+            }
+        })
+    });
+
+    match tokio::time::timeout(super::detect::DETECT_TIMEOUT, worker).await {
+        Ok(result) => {
+            guard.disarm();
+            result?
+        }
+        Err(_) => {
+            guard.cancel();
+            Err(crate::ErrorKind::InputError(format!(
+                "Timed out after {} seconds while reading {entry_name} from the modpack archive",
+                super::detect::DETECT_TIMEOUT.as_secs()
+            ))
+            .into())
+        }
+    }
+}
+
+/// Cancels a manifest-read worker when its awaiting future is dropped.
+///
+/// A dropped `spawn_blocking` join handle does not stop the task, so a job
+/// cancelled while this worker runs would otherwise keep reading with nobody
+/// able to observe the result.
+struct ManifestReadGuard {
+    token: CancellationToken,
+    active: bool,
+}
+
+impl ManifestReadGuard {
+    fn new(token: CancellationToken) -> Self {
+        Self {
+            token,
+            active: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn cancel(&mut self) {
+        self.token.cancel();
+        self.active = false;
+    }
+}
+
+impl Drop for ManifestReadGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.token.cancel();
+        }
+    }
 }
 
 /// Allocates a unique scratch directory for extracting nested pack content.
@@ -1275,5 +1410,112 @@ mod tests {
         assert!(!sibling_path(&first, ".installing.previous").exists());
         assert!(!sibling_path(&second, ".installing").exists());
         assert!(!sibling_path(&second, ".installing.previous").exists());
+    }
+
+    fn write_single_entry_archive(
+        dir: &std::path::Path,
+        name: &str,
+        body: &[u8],
+    ) -> PathBuf {
+        let path = dir.join("manifest.zip");
+        let file = std::fs::File::create(&path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file(name, options).unwrap();
+        writer.write_all(body).unwrap();
+        writer.finish().unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn bounded_manifest_read_returns_the_entry_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_single_entry_archive(
+            dir.path(),
+            "modpack.json",
+            br#"{"addons":[]}"#,
+        );
+
+        let contents = read_archive_entry_to_string_bounded(
+            path,
+            "modpack.json".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(contents, r#"{"addons":[]}"#);
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_token_fails_before_the_archive_is_opened() {
+        // The pre-read check must turn a cancelled job into a terminal error
+        // rather than scanning the archive anyway.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_single_entry_archive(
+            dir.path(),
+            "modpack.json",
+            br#"{"addons":[]}"#,
+        );
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let error = read_archive_entry_to_string_bounded(
+            path,
+            "modpack.json".to_string(),
+            cancellation,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("canceled"),
+            "expected the cancellation error, got: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_manifest_over_the_entry_limit_is_rejected() {
+        // The read is bounded, so an oversized member produces a clear error
+        // instead of being inflated into memory.
+        let dir = tempfile::tempdir().unwrap();
+        let oversized = vec![b'a'; (MAX_MANIFEST_ENTRY_BYTES + 1) as usize];
+        let path =
+            write_single_entry_archive(dir.path(), "modpack.json", &oversized);
+
+        let error = read_archive_entry_to_string_bounded(
+            path,
+            "modpack.json".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("larger than the"),
+            "expected the size-limit error, got: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_manifest_entry_reports_missing() {
+        // The "missing entry" case must stay distinguishable from a timeout so
+        // callers can keep falling back to another manifest name.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_single_entry_archive(dir.path(), "other.json", b"{}");
+
+        let error = read_archive_entry_to_string_bounded(
+            path,
+            "modpack.json".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("Modpack archive is missing"),
+            "expected the missing-entry error, got: {error}"
+        );
     }
 }

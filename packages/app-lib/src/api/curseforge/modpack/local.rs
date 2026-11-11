@@ -2,9 +2,9 @@
 
 use super::*;
 use crate::api::curseforge::archive::{
-    game_options_pack_source, loader_type, materialize_modpack_overrides,
-    modpack_servers, modpack_target, modpack_zip_error, read_modpack_manifest,
-    settle_materialized_modpack_overrides,
+    game_options_pack_source_at, loader_type, materialize_modpack_overrides_at,
+    modpack_servers_at, modpack_target, modpack_zip_error,
+    read_modpack_manifest_at, settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::catalog::{
     get_modpack_files, get_modpack_projects,
@@ -125,28 +125,124 @@ pub(super) fn install_error_chain(error: &crate::Error) -> String {
 /// and extracting the overrides folder. Unlike [`install_modpack_with_reporter`]
 /// this needs no project/file id — undownloadable files land on the manual
 /// download list exactly like API-driven installs.
+/// Cancels the initial metadata parse when its awaiting future is dropped.
+///
+/// A dropped `spawn_blocking` join handle does not stop the task, so a job
+/// cancelled while this worker runs would otherwise keep walking the archive
+/// with nobody able to observe the result.
+struct LocalArchiveParseGuard {
+    token: tokio_util::sync::CancellationToken,
+    active: bool,
+}
+
+impl LocalArchiveParseGuard {
+    fn new(token: tokio_util::sync::CancellationToken) -> Self {
+        Self {
+            token,
+            active: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn cancel(&mut self) {
+        self.token.cancel();
+        self.active = false;
+    }
+}
+
+impl Drop for LocalArchiveParseGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.token.cancel();
+        }
+    }
+}
+
 pub async fn install_modpack_from_local_archive_with_reporter(
     instance_id: String,
     archive_path: std::path::PathBuf,
-    _base_folder: String,
+    base_folder: String,
     source_filename: Option<String>,
     install_optional: bool,
     reporter: InstallProgressReporter,
     completion_policy: crate::launcher::InstanceCompletionPolicy,
 ) -> crate::Result<CurseForgeModpackInstallResult> {
+    // Initial metadata parse. This runs before the caller publishes any
+    // progress, so an unbounded worker here is indistinguishable from a hang.
+    // It gets the shared detection deadline and the job's cancellation token:
+    // opening the central directory, reading the manifest and walking every
+    // entry for options/servers are all uninterruptible from the async side.
     let manifest_archive_path = archive_path.clone();
+    let manifest_base_folder = base_folder.clone();
+    let cancellation = reporter.cancellation_token();
+    let mut parse_guard =
+        LocalArchiveParseGuard::new(cancellation.child_token());
+    let worker_cancellation = parse_guard.token.clone();
+    let worker = tokio::task::spawn_blocking(move || {
+        // Inside the worker so the deadline also covers the metadata stat,
+        // which blocks on network-backed paths.
+        crate::api::pack::detect::check_archive_size(&manifest_archive_path)?;
+        let file = std::fs::File::open(&manifest_archive_path)?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
+        // Earliest point after the constructor where the flag is observable.
+        crate::api::pack::archive_util::check_cancellation(Some(
+            &worker_cancellation,
+        ))?;
+        // Refuse a pathological entry count before walking the archive for
+        // options/servers: without this a huge archive could burn the whole
+        // deadline inside those loops instead of failing fast.
+        let total_entries = archive.len();
+        if total_entries > crate::api::pack::detect::MAX_DETECT_ENTRIES {
+            return Err(crate::ErrorKind::InputError(format!(
+                "CurseForge modpack archive has {total_entries} entries, which exceeds the {}-entry detection limit",
+                crate::api::pack::detect::MAX_DETECT_ENTRIES
+            ))
+            .into());
+        }
+        let manifest = read_modpack_manifest_at(
+            &mut archive,
+            &manifest_base_folder,
+            Some(&worker_cancellation),
+        )?;
+        let game_options_source = game_options_pack_source_at(
+            &mut archive,
+            &manifest,
+            &manifest_base_folder,
+            Some(&worker_cancellation),
+        )?;
+        let pack_servers = modpack_servers_at(
+            &mut archive,
+            &manifest,
+            &manifest_base_folder,
+            Some(&worker_cancellation),
+        )?;
+        Ok::<_, crate::Error>((manifest, game_options_source, pack_servers))
+    });
+
     let (manifest, game_options_source, pack_servers) =
-        tokio::task::spawn_blocking(move || {
-            let file = std::fs::File::open(&manifest_archive_path)?;
-            let mut archive =
-                zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
-            let manifest = read_modpack_manifest(&mut archive)?;
-            let game_options_source =
-                game_options_pack_source(&mut archive, &manifest)?;
-            let pack_servers = modpack_servers(&mut archive, &manifest)?;
-            Ok::<_, crate::Error>((manifest, game_options_source, pack_servers))
-        })
-        .await??;
+        match tokio::time::timeout(
+            crate::api::pack::detect::DETECT_TIMEOUT,
+            worker,
+        )
+        .await
+        {
+            Ok(result) => {
+                parse_guard.disarm();
+                result??
+            }
+            Err(_) => {
+                parse_guard.cancel();
+                return Err(crate::ErrorKind::InputError(format!(
+                    "Timed out after {} seconds while reading the CurseForge modpack archive",
+                    crate::api::pack::detect::DETECT_TIMEOUT.as_secs()
+                ))
+                .into());
+            }
+        };
 
     let target = modpack_target(&manifest)?;
     let loader = (target.loader != ModLoader::Vanilla)
@@ -255,15 +351,19 @@ pub async fn install_modpack_from_local_archive_with_reporter(
     let instance_path =
         crate::api::instance::get_full_path(&instance_id).await?;
     let overrides_archive_path = archive_path.clone();
+    // A wrapped pack keeps its override tree below the detected prefix, so the
+    // same `base_folder` used for the manifest has to reach the extractor too.
+    let overrides_base_folder = base_folder.clone();
     let override_cancellation = reporter.cancellation_token();
     let (overrides_written, override_replacements) =
         crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
             instance_id.clone(),
             override_cancellation.clone(),
             move |cancellation| {
-                materialize_modpack_overrides(
+                materialize_modpack_overrides_at(
                     &overrides_archive_path,
                     &instance_path,
+                    &overrides_base_folder,
                     Some(cancellation),
                 )
             },

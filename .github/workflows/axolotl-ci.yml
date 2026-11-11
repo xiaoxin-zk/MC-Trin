@@ -261,6 +261,12 @@ jobs:
         run: cargo test --package theseus --lib api::pack::install_mrpack -- --test-threads=1
       - name: Run pack installation regression tests
         run: cargo test --package theseus --lib install::runner::pack -- --test-threads=1
+      - name: Run local pack detection regression tests
+        run: cargo test --package theseus --lib api::pack::detect -- --test-threads=1
+      - name: Run plain archive install regression tests
+        run: cargo test --package theseus --lib api::pack::install_plain_archive -- --test-threads=1
+      - name: Run HMCL and MCBBS manifest regression tests
+        run: cargo test --package theseus --lib api::pack::install_mcbbs -- --test-threads=1
       - name: Run MCTier regression tests
         run: cargo test --package theseus --lib api::mctier -- --test-threads=1
       - name: Run log-sharing regression tests

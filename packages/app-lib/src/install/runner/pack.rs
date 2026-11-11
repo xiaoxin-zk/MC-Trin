@@ -69,23 +69,31 @@ fn scan_sub_archives(
         scratch,
         cancel,
         PACK_ARCHIVE_SCAN_TOTAL_BYTES,
+        crate::api::pack::detect::MAX_DETECT_ENTRIES,
     )
 }
 
-/// `scan_sub_archives` with an explicit extraction budget.
+/// `scan_sub_archives` with an explicit extraction budget and entry limit.
 ///
-/// Split out only so a test can drive the budget branch with a few bytes
-/// instead of needing an 8 GiB archive. Production always calls
-/// `scan_sub_archives`, which supplies the shared `EXTRACTION_SIZE_LIMIT`; the
-/// branch under test is the same one either way.
+/// Split out only so a test can drive the budget and entry-count branches with
+/// a few bytes and a handful of entries instead of needing an 8 GiB archive or
+/// 200k members. Production always calls `scan_sub_archives`, which supplies
+/// the shared `EXTRACTION_SIZE_LIMIT` and `MAX_DETECT_ENTRIES`; the branches
+/// under test are the same ones either way.
 fn scan_sub_archives_within(
     archive: &std::path::Path,
     scratch: &std::path::Path,
     cancel: &std::sync::atomic::AtomicBool,
     total_budget: u64,
+    max_entries: usize,
 ) -> crate::Result<Vec<PathBuf>> {
-    let result =
-        scan_sub_archives_inner(archive, scratch, cancel, total_budget);
+    let result = scan_sub_archives_inner(
+        archive,
+        scratch,
+        cancel,
+        total_budget,
+        max_entries,
+    );
     // Final cancellation check, after the inner walk has returned. Without it a
     // cancel that lands between the last in-loop check and the return would be
     // missed and the worker would report success, so the caller would keep the
@@ -116,10 +124,22 @@ fn scan_sub_archives_inner(
     scratch: &std::path::Path,
     cancel: &std::sync::atomic::AtomicBool,
     total_budget: u64,
+    max_entries: usize,
 ) -> crate::Result<Vec<PathBuf>> {
     use std::io::Read;
     use std::sync::atomic::Ordering;
 
+    // Same uninterruptible-constructor guard every other central-directory read
+    // uses. Without it the nested scan could open an arbitrarily large file on a
+    // blocking thread before the byte budget below was ever consulted, since
+    // that budget only counts declared member sizes.
+    if cancel.load(Ordering::Relaxed) {
+        return Err(crate::ErrorKind::InputError(
+            PACK_ARCHIVE_SCAN_CANCELLED.to_string(),
+        )
+        .into());
+    }
+    crate::api::pack::detect::check_archive_size(archive)?;
     let file = std::fs::File::open(archive)?;
     let Ok(mut zip) = zip::ZipArchive::new(file) else {
         return Err(crate::ErrorKind::InputError(
@@ -128,10 +148,31 @@ fn scan_sub_archives_inner(
         )
         .into());
     };
+    // Earliest point after the constructor where cancellation is observable.
+    if cancel.load(Ordering::Relaxed) {
+        return Err(crate::ErrorKind::InputError(
+            PACK_ARCHIVE_SCAN_CANCELLED.to_string(),
+        )
+        .into());
+    }
 
     let mut sub_archive_paths = Vec::new();
     let mut extracted_bytes = 0_u64;
     let mut buffer = vec![0_u8; PACK_ARCHIVE_SCAN_CHUNK_BYTES];
+
+    // The byte budget only limits what gets written. A zip can declare a huge
+    // number of tiny entries and never approach it, and every entry still costs
+    // a `by_index_raw` plus a name decode before the loop reaches the size check
+    // — the same pathology `MAX_DETECT_ENTRIES` guards in detection. Refuse the
+    // count up front so the walk cannot be made long by entry count alone.
+    if zip.len() > max_entries {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Modpack archive has {} entries, which exceeds the {max_entries}-entry scan limit",
+            zip.len()
+        ))
+        .into());
+    }
+
     for index in 0..zip.len() {
         if cancel.load(Ordering::Relaxed) {
             return Err(crate::ErrorKind::InputError(
@@ -336,6 +377,59 @@ impl Drop for ScratchDirGuard {
     }
 }
 
+/// Runs local pack detection under the shared deadline with cooperative
+/// cancel, so an explicit job cancellation stops the blocking worker too.
+async fn detect_local_pack_with_deadline(
+    path: &std::path::Path,
+    cancellation: tokio_util::sync::CancellationToken,
+) -> crate::Result<crate::api::pack::detect::DetectedLocalPack> {
+    crate::api::pack::detect::detect_local_pack_bounded(path, cancellation)
+        .await
+}
+
+/// Whether a detection failure must end the install instead of falling back.
+///
+/// Only "no manifest I recognise" may fall through to the recursive nested
+/// scan. A deadline or a cancellation has to stay terminal: both mean the
+/// caller has already stopped waiting, so starting a fresh recursive walk would
+/// leave a second parser running with nobody able to observe its result - the
+/// detached-work failure this phase was fixed for.
+///
+/// The nested scan's own failures count too. It reports three distinct terminal
+/// signals, and any of them reaching the child loop means this archive is not
+/// simply "an unrecognised format":
+/// - scan deadline expiry, surfaced as
+///   `Timed out while reading {filename} as a modpack archive`;
+/// - cooperative cancellation, surfaced as [`PACK_ARCHIVE_SCAN_CANCELLED`];
+/// - exceeding the nested-scan size budget, or a member that lies about its
+///   own size, which are structural properties of this file and will not change
+///   by trying the next candidate.
+fn is_terminal_detection_error(error: &crate::Error) -> bool {
+    let message = error.to_string();
+    crate::api::pack::detect::is_detection_timeout(error)
+        || message.contains("Install was canceled")
+        || message.contains(PACK_ARCHIVE_SCAN_CANCELLED)
+        || message.contains("Timed out while reading")
+        || message.contains("extraction budget")
+        || is_scan_member_size_error(&message)
+}
+
+/// Whether a message is one of the nested scan's own "member lied about its
+/// size" errors.
+///
+/// Matching these precisely matters: a bare `contains("declares ")` would also
+/// catch unrelated format-specific failures (a loader declaration, an MCBBS
+/// addon declaration) and wrongly mark them terminal, turning a recoverable
+/// candidate into a hard install failure.
+fn is_scan_member_size_error(message: &str) -> bool {
+    // Both scan errors name the archive member and quote its declared size:
+    //   "... member declares {n} bytes but contains more"
+    //   "... member declares {n} bytes but delivered {m}"
+    message.contains("Modpack archive member declares ")
+        && (message.contains("bytes but contains more")
+            || message.contains("bytes but delivered "))
+}
+
 /// Raises a scan's cooperative cancellation flag when dropped.
 ///
 /// Tokio cannot abort a `spawn_blocking` task, so the flag is the only way to
@@ -423,7 +517,18 @@ pub(super) async fn install_pack(
                         .build(),
                 )
                 .await?;
-            match crate::api::pack::detect::detect_local_pack(&path).await {
+            // Detection walks the archive's central directory. It runs on a
+            // blocking thread and is bounded here, because this phase is what
+            // the user sees as "parsing the modpack": without a deadline a
+            // pathological archive holds the job there indefinitely. The token
+            // makes an explicit cancellation stop the worker too, since a
+            // blocking task cannot be aborted once started.
+            match detect_local_pack_with_deadline(
+                &path,
+                reporter.cancellation_token(),
+            )
+            .await
+            {
                 Ok(detected) => {
                     if detected.format
                         != crate::api::pack::detect::LocalPackFormat::Mrpack
@@ -443,6 +548,15 @@ pub(super) async fn install_pack(
                     generate_pack_from_file(path, instance_id.clone()).await?
                 }
                 Err(detect_error) => {
+                    // A deadline or a user cancel is terminal. Retrying through
+                    // the recursive scan would start a second walk after the
+                    // caller already gave up, which is exactly the hang this
+                    // phase is supposed to avoid: the work would continue with
+                    // nobody waiting for it. Only a genuine "unknown format"
+                    // falls through to the nested scan.
+                    if is_terminal_detection_error(&detect_error) {
+                        return Err(detect_error);
+                    }
                     // No format recognised — try recursive extraction
                     // (3-level deep search for sub-archives, bundled
                     // packs, etc.) before giving up.
@@ -491,19 +605,24 @@ async fn install_local_pack_file_recursive(
     max_depth: usize,
     capture_game_options: bool,
 ) -> crate::Result<InstallExecutionOutcome<()>> {
-    // First try standard detection - this will already include our InstanceFolder fallback
-    if let Ok(detected) =
-        crate::api::pack::detect::detect_local_pack(&path).await
+    match detect_local_pack_with_deadline(&path, reporter.cancellation_token())
+        .await
     {
-        // If it's a standard format (including InstanceFolder), just install it
-        return install_local_pack_file(
-            detected,
-            path,
-            instance_id,
-            reporter,
-            capture_game_options,
-        )
-        .await;
+        Ok(detected) => {
+            // If it's a standard format (including InstanceFolder), just install it.
+            return install_local_pack_file(
+                detected,
+                path,
+                instance_id,
+                reporter,
+                capture_game_options,
+            )
+            .await;
+        }
+        Err(error) if is_terminal_detection_error(&error) => {
+            return Err(error);
+        }
+        Err(_) => {}
     }
 
     // If standard detection failed and we're not at max depth, try to look for
@@ -623,7 +742,12 @@ async fn install_local_pack_file_recursive(
                 .await?;
         }
 
-        // Try to install each sub-archive recursively
+        // Try to install each sub-archive recursively. A candidate that reports
+        // an unrecognised format may be followed by another one that is the real
+        // pack, so those failures are expected. A deadline or a cancellation is
+        // not: the caller has already stopped waiting, so continuing would start
+        // yet another parser with nobody able to observe it, and the loop would
+        // end up masking a timeout as "Unrecognized modpack format".
         for sub_path in sub_archive_paths {
             let result = install_local_pack_file_recursive(
                 sub_path,
@@ -635,8 +759,12 @@ async fn install_local_pack_file_recursive(
             )
             .await;
 
-            if result.is_ok() {
-                return result;
+            match result {
+                Ok(outcome) => return Ok(outcome),
+                Err(error) if is_terminal_detection_error(&error) => {
+                    return Err(error);
+                }
+                Err(_) => continue,
             }
         }
 
@@ -897,6 +1025,85 @@ pub(super) fn curseforge_world_was_imported_manually(
 #[cfg(test)]
 mod archive_scan_tests {
     use super::*;
+
+    #[test]
+    fn a_detection_timeout_is_terminal_and_never_falls_back() {
+        // The deadline path must not be mistaken for "unknown format": a
+        // fallback here would start the recursive scan after the caller has
+        // already given up.
+        let timeout = crate::api::pack::detect::detection_timeout_error();
+        assert!(is_terminal_detection_error(&timeout));
+    }
+
+    #[test]
+    fn a_cancellation_is_terminal_and_never_falls_back() {
+        let cancelled: crate::Error =
+            crate::ErrorKind::OtherError("Install was canceled".to_string())
+                .into();
+        assert!(is_terminal_detection_error(&cancelled));
+    }
+
+    #[test]
+    fn a_nested_scan_timeout_is_terminal_and_never_falls_back() {
+        // The nested archive scan has its own deadline and its own wording; the
+        // child loop must treat it as terminal too, otherwise up to 200k
+        // candidates would each burn a fresh 120 s scan.
+        let timeout: crate::Error = crate::ErrorKind::InputError(
+            "Timed out while reading pack.mrpack as a modpack archive"
+                .to_string(),
+        )
+        .into();
+        assert!(is_terminal_detection_error(&timeout));
+    }
+
+    #[test]
+    fn a_scan_cancellation_is_terminal_and_never_falls_back() {
+        let cancelled: crate::Error = crate::ErrorKind::InputError(
+            PACK_ARCHIVE_SCAN_CANCELLED.to_string(),
+        )
+        .into();
+        assert!(is_terminal_detection_error(&cancelled));
+    }
+
+    #[test]
+    fn a_scan_budget_or_size_violation_is_terminal() {
+        // A structural problem with this archive will not be fixed by trying
+        // another candidate.
+        let budget: crate::Error = crate::ErrorKind::InputError(
+            "Modpack archive scan exceeded its 8589934592-byte extraction budget"
+                .to_string(),
+        )
+        .into();
+        let lying: crate::Error = crate::ErrorKind::InputError(
+            "Modpack archive member declares 4096 bytes but delivered 14"
+                .to_string(),
+        )
+        .into();
+        assert!(is_terminal_detection_error(&budget));
+        assert!(is_terminal_detection_error(&lying));
+    }
+
+    #[test]
+    fn a_missing_manifest_still_falls_back_inside_the_child_loop() {
+        // Distinguish "this candidate is not a pack" from the terminal set.
+        let missing: crate::Error = crate::ErrorKind::InputError(
+            "Modpack archive is missing modrinth.index.json".to_string(),
+        )
+        .into();
+        assert!(!is_terminal_detection_error(&missing));
+    }
+
+    #[test]
+    fn an_unrecognised_format_still_falls_back_to_the_nested_scan() {
+        // The ordinary "no manifest found" case has to keep working: this is
+        // what lets a wrapper folder or a bundled pack install.
+        let unrecognised: crate::Error = crate::ErrorKind::InputError(
+            "Unrecognized modpack format: no known pack manifest was found in the archive"
+                .to_string(),
+        )
+        .into();
+        assert!(!is_terminal_detection_error(&unrecognised));
+    }
 
     /// Builds a minimal stored-only zip in memory.
     ///
@@ -1261,8 +1468,14 @@ mod archive_scan_tests {
         let scratch = temp.path().join("scratch");
         std::fs::create_dir_all(&scratch).unwrap();
 
-        let error = scan_sub_archives_within(&outer, &scratch, &no_cancel(), 4)
-            .unwrap_err();
+        let error = scan_sub_archives_within(
+            &outer,
+            &scratch,
+            &no_cancel(),
+            4,
+            usize::MAX,
+        )
+        .unwrap_err();
 
         assert!(
             error
@@ -1292,12 +1505,83 @@ mod archive_scan_tests {
         let scratch = temp.path().join("scratch");
         std::fs::create_dir_all(&scratch).unwrap();
 
-        let found =
-            scan_sub_archives_within(&outer, &scratch, &no_cancel(), 64)
-                .unwrap();
+        let found = scan_sub_archives_within(
+            &outer,
+            &scratch,
+            &no_cancel(),
+            64,
+            usize::MAX,
+        )
+        .unwrap();
 
         assert_eq!(found.len(), 1);
         assert_eq!(std::fs::read(&found[0]).unwrap(), b"payload");
+    }
+
+    #[test]
+    fn an_archive_over_the_entry_limit_is_rejected_before_any_output() {
+        // Production passes the shared `MAX_DETECT_ENTRIES`; the branch is
+        // driven here with a limit of 1 so a two-entry fixture suffices. Both
+        // entries are small enough to fit the byte budget, so only the entry
+        // count can reject this archive — which is the point: a zip declaring
+        // many tiny members never trips the size check but still makes the walk
+        // arbitrarily long.
+        let temp = tempfile::tempdir().unwrap();
+        let outer = temp.path().join("too-many-entries.zip");
+        std::fs::write(
+            &outer,
+            build_archive(&[
+                ("pack/a.zip", b"a" as &[u8]),
+                ("pack/b.zip", b"b" as &[u8]),
+            ]),
+        )
+        .unwrap();
+        let scratch = temp.path().join("scratch");
+        std::fs::create_dir_all(&scratch).unwrap();
+
+        let error = scan_sub_archives_within(
+            &outer,
+            &scratch,
+            &no_cancel(),
+            u64::MAX,
+            1,
+        )
+        .unwrap_err();
+
+        assert!(
+            error.to_string().contains("exceeds the 1-entry scan limit"),
+            "expected the entry-limit error, got: {error}"
+        );
+        assert!(!scratch.exists(), "a rejected scan must clean up");
+    }
+
+    #[test]
+    fn an_archive_at_the_entry_limit_still_scans() {
+        // Counterpart to the test above: the boundary is inclusive, so a limit
+        // equal to the entry count must still extract.
+        let temp = tempfile::tempdir().unwrap();
+        let outer = temp.path().join("at-entry-limit.zip");
+        std::fs::write(
+            &outer,
+            build_archive(&[
+                ("pack/a.zip", b"a" as &[u8]),
+                ("pack/b.zip", b"b" as &[u8]),
+            ]),
+        )
+        .unwrap();
+        let scratch = temp.path().join("scratch");
+        std::fs::create_dir_all(&scratch).unwrap();
+
+        let found = scan_sub_archives_within(
+            &outer,
+            &scratch,
+            &no_cancel(),
+            u64::MAX,
+            2,
+        )
+        .unwrap();
+
+        assert_eq!(found.len(), 2);
     }
 
     #[test]
@@ -1382,5 +1666,39 @@ mod archive_scan_tests {
 
         assert!(!flag.load(std::sync::atomic::Ordering::Relaxed));
         assert!(!scratch.exists(), "a reclaimed guard still cleans up");
+    }
+
+    #[test]
+    fn format_specific_semantic_errors_are_not_terminal() {
+        // These mention a declared loader/version but are ordinary "this
+        // candidate is not the pack" answers. Marking them terminal would turn
+        // a recoverable candidate into a hard install failure.
+        for message in [
+            "MCBBS modpack declares multiple primary loaders",
+            "Modpack declares an unsupported loader: quilt",
+            "HMCL manifest declares a missing game version",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                !is_terminal_detection_error(&error),
+                "must stay recoverable: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn both_scan_lied_size_messages_are_terminal() {
+        for message in [
+            "Modpack archive member declares 4096 bytes but contains more",
+            "Modpack archive member declares 4096 bytes but delivered 14",
+        ] {
+            let error: crate::Error =
+                crate::ErrorKind::InputError(message.to_string()).into();
+            assert!(
+                is_terminal_detection_error(&error),
+                "expected terminal: {message}"
+            );
+        }
     }
 }

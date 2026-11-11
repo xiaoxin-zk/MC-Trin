@@ -48,9 +48,10 @@ pub(crate) async fn install_hmcl_pack_with_reporter(
     reporter: InstallProgressReporter,
 ) -> crate::Result<()> {
     let state = State::get().await?;
-    let manifest_json = archive_util::read_archive_entry_to_string(
+    let manifest_json = archive_util::read_archive_entry_to_string_bounded(
         archive_path.clone(),
         format!("{base_folder}{HMCL_MANIFEST}"),
+        reporter.cancellation_token(),
     )
     .await?;
     let manifest: HmclManifest = serde_json::from_str(&manifest_json)?;

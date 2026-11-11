@@ -25,13 +25,38 @@ pub(crate) fn collect_modpack_override_tasks<R: Read + Seek>(
     instance_path: &Path,
     cancellation: Option<&CancellationToken>,
 ) -> crate::Result<Vec<ModpackOverrideTask>> {
-    let prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+    collect_modpack_override_tasks_at(
+        archive,
+        manifest,
+        instance_path,
+        "",
+        cancellation,
+    )
+}
+
+/// Same task collection, but addressing a pack wrapped in one top-level folder.
+///
+/// The manifest's `overrides` field is relative to the pack root, not to the
+/// archive root, so a wrapped pack stores its files under `{base}{overrides}/`.
+/// Root packs pass an empty `base` and keep the exact previous prefix.
+pub(crate) fn collect_modpack_override_tasks_at<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+    instance_path: &Path,
+    base: &str,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<Vec<ModpackOverrideTask>> {
+    let prefix = format!("{base}{}/", manifest.overrides.trim_matches('/'));
     let mut tasks_by_target = HashMap::<PathBuf, ModpackOverrideTask>::new();
     for index in 0..archive.len() {
         crate::api::pack::archive_util::check_cancellation(cancellation)?;
         let entry = archive.by_index(index).map_err(modpack_zip_error)?;
+        // Normalize before prefix matching: a Windows-produced archive stores
+        // `pack\overrides\config\a.toml`, and comparing that raw against the
+        // slash prefix would silently drop every override.
         let entry_name =
-            crate::pack::detect::decode_zip_entry_name(entry.name_raw());
+            crate::pack::detect::decode_zip_entry_name(entry.name_raw())
+                .replace('\\', "/");
         if entry.is_dir() || !entry_name.starts_with(&prefix) {
             continue;
         }
@@ -70,13 +95,37 @@ pub(crate) fn materialize_modpack_overrides(
     u32,
     crate::api::pack::archive_util::StagedArchiveReplacements,
 )> {
+    materialize_modpack_overrides_at(
+        archive_path,
+        instance_path,
+        "",
+        cancellation,
+    )
+}
+
+/// Same override materialisation, addressing a pack wrapped in one folder.
+///
+/// `base` is the detected pack prefix. Both the manifest lookup and the
+/// `overrides` prefix are resolved against it, because a wrapped pack keeps its
+/// manifest and override tree below that folder. Root packs pass `""` and keep
+/// their previous behaviour exactly.
+pub(crate) fn materialize_modpack_overrides_at(
+    archive_path: &Path,
+    instance_path: &Path,
+    base: &str,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> crate::Result<(
+    u32,
+    crate::api::pack::archive_util::StagedArchiveReplacements,
+)> {
     let file = std::fs::File::open(archive_path)?;
     let mut archive = zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
-    let manifest = read_modpack_manifest(&mut archive)?;
-    let tasks = collect_modpack_override_tasks(
+    let manifest = read_modpack_manifest_at(&mut archive, base, cancellation)?;
+    let tasks = collect_modpack_override_tasks_at(
         &mut archive,
         &manifest,
         instance_path,
+        base,
         cancellation,
     )?;
     drop(archive);
@@ -283,31 +332,148 @@ pub(crate) fn safe_archive_relative_path(value: &str) -> crate::Result<String> {
     Ok(normalized)
 }
 
+/// Largest `manifest.json` this module will parse.
+///
+/// Real CurseForge manifests are a few KiB; even very large modpacks stay far
+/// below a megabyte. The bound stops a member that declares a huge uncompressed
+/// size from being inflated into memory during pack identification.
+pub(crate) const MAX_MODPACK_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+
 pub(crate) fn read_modpack_manifest<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
 ) -> crate::Result<CurseForgeModpackManifest> {
-    let mut entry = archive.by_name("manifest.json").map_err(|_| {
+    read_modpack_manifest_cancellable(archive, None)
+}
+
+/// Reads `manifest.json` with a size bound and an optional cancellation check.
+///
+/// The read is capped *while* it happens (`take(limit + 1)`), not afterwards, so
+/// a hostile member cannot be materialised in memory first. Cancellation is
+/// checked before the read and again after it, because the read itself is a
+/// single uninterruptible system call from this worker's point of view.
+pub(crate) fn read_modpack_manifest_cancellable<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<CurseForgeModpackManifest> {
+    read_modpack_manifest_at(archive, "", cancellation)
+}
+
+/// Reads `{base}manifest.json`, preferring the archive root.
+///
+/// A CurseForge pack may be wrapped in one top-level folder, in which case the
+/// manifest is not at the root. Root wins whenever it exists so the unwrapped
+/// case keeps its exact previous behaviour; the wrapped location is only tried
+/// when the root entry is genuinely absent. Every failure that is not "no such
+/// entry" (size limit, cancellation, parse error) stays terminal rather than
+/// silently falling through to a second read.
+pub(crate) fn read_modpack_manifest_at<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    base: &str,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<CurseForgeModpackManifest> {
+    crate::api::pack::archive_util::check_cancellation(cancellation)?;
+    // Root first: an unwrapped pack must keep its exact previous behaviour, and
+    // a stray `{base}manifest.json` must never shadow a real root manifest.
+    //
+    // The lookup goes through the shared cancellable index scan rather than
+    // `archive.by_name`, so a 200k-entry archive polls the token per entry
+    // instead of running one uninterruptible linear scan inside the deadline.
+    let mut candidates = vec![CURSEFORGE_MANIFEST.to_string()];
+    if !base.is_empty() {
+        candidates.push(format!("{base}{CURSEFORGE_MANIFEST}"));
+    }
+    let mut selected = None;
+    for candidate in &candidates {
+        if crate::api::pack::detect::find_entry_index_cancellable(
+            archive,
+            candidate,
+            cancellation,
+        )?
+        .is_some()
+        {
+            selected = Some(candidate.clone());
+            break;
+        }
+    }
+    let Some(entry_name) = selected else {
+        return Err(ErrorKind::InputError(
+            "CurseForge modpack is missing manifest.json".to_string(),
+        )
+        .into());
+    };
+    let index = crate::api::pack::detect::find_entry_index_cancellable(
+        archive,
+        &entry_name,
+        cancellation,
+    )?
+    .ok_or_else(|| {
         ErrorKind::InputError(
             "CurseForge modpack is missing manifest.json".to_string(),
         )
     })?;
-    let mut json = String::new();
-    entry.read_to_string(&mut json)?;
-    Ok(serde_json::from_str::<CurseForgeModpackManifest>(&json)?)
+    crate::api::pack::archive_util::check_cancellation(cancellation)?;
+    let mut entry = archive.by_index(index).map_err(|_| {
+        ErrorKind::InputError(
+            "CurseForge modpack is missing manifest.json".to_string(),
+        )
+    })?;
+    let mut contents = Vec::new();
+    entry
+        .by_ref()
+        .take(MAX_MODPACK_MANIFEST_BYTES + 1)
+        .read_to_end(&mut contents)?;
+    if contents.len() as u64 > MAX_MODPACK_MANIFEST_BYTES {
+        return Err(ErrorKind::InputError(format!(
+            "CurseForge modpack manifest.json is larger than the {MAX_MODPACK_MANIFEST_BYTES}-byte limit"
+        ))
+        .into());
+    }
+    crate::api::pack::archive_util::check_cancellation(cancellation)?;
+    // Manifests may carry a UTF-8 BOM from Windows tooling.
+    let contents = contents
+        .strip_prefix(&[0xEF, 0xBB, 0xBF])
+        .unwrap_or(&contents);
+    Ok(serde_json::from_slice::<CurseForgeModpackManifest>(
+        contents,
+    )?)
 }
 
 pub(crate) fn game_options_pack_source<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     manifest: &CurseForgeModpackManifest,
 ) -> crate::Result<Option<crate::api::instance::GameOptionsPackSource>> {
-    let prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+    game_options_pack_source_cancellable(archive, manifest, None)
+}
+
+pub(crate) fn game_options_pack_source_cancellable<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<Option<crate::api::instance::GameOptionsPackSource>> {
+    game_options_pack_source_at(archive, manifest, "", cancellation)
+}
+
+/// Base-aware variant: a wrapped pack keeps its override tree below `base`.
+///
+/// Entry names are normalized to `/` before prefix matching, because a
+/// Windows-produced archive stores `pack\overrides\options.txt` and a raw
+/// comparison against the slash prefix would miss it entirely.
+pub(crate) fn game_options_pack_source_at<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+    base: &str,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<Option<crate::api::instance::GameOptionsPackSource>> {
+    let prefix = format!("{base}{}/", manifest.overrides.trim_matches('/'));
     let mut entries = Vec::new();
     for index in 0..archive.len() {
+        crate::api::pack::archive_util::check_cancellation(cancellation)?;
         let entry = archive.by_index(index).map_err(modpack_zip_error)?;
         if entry.is_dir() {
             continue;
         }
-        let name = crate::pack::detect::decode_zip_entry_name(entry.name_raw());
+        let name = crate::pack::detect::decode_zip_entry_name(entry.name_raw())
+            .replace('\\', "/");
         let Some(relative) = name.strip_prefix(&prefix) else {
             continue;
         };
@@ -330,9 +496,28 @@ pub(crate) fn modpack_servers<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     manifest: &CurseForgeModpackManifest,
 ) -> crate::Result<Vec<quartz_nbt::NbtCompound>> {
-    let prefix = format!("{}/", manifest.overrides.trim_matches('/'));
+    modpack_servers_cancellable(archive, manifest, None)
+}
+
+pub(crate) fn modpack_servers_cancellable<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<Vec<quartz_nbt::NbtCompound>> {
+    modpack_servers_at(archive, manifest, "", cancellation)
+}
+
+/// Base-aware variant: a wrapped pack keeps `servers.dat` below `base`.
+pub(crate) fn modpack_servers_at<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    manifest: &CurseForgeModpackManifest,
+    base: &str,
+    cancellation: Option<&CancellationToken>,
+) -> crate::Result<Vec<quartz_nbt::NbtCompound>> {
+    let prefix = format!("{base}{}/", manifest.overrides.trim_matches('/'));
     let mut selected = None;
     for index in 0..archive.len() {
+        crate::api::pack::archive_util::check_cancellation(cancellation)?;
         let entry = archive.by_index(index).map_err(modpack_zip_error)?;
         if entry.is_dir() {
             continue;
@@ -408,23 +593,113 @@ pub(crate) fn modpack_target(
 
 /// Reads the identity fields from a local CurseForge archive before an
 /// instance is created, avoiding the temporary default Vanilla metadata.
+///
+/// Bounded like every other central-directory read on the local pack path: the
+/// worker gets a cooperative token and a deadline, because it opens the archive
+/// and reads a manifest — two operations that can stall on a slow or contended
+/// file. `ZipArchive::new` itself cannot be interrupted, so cancellation is
+/// observed after it returns; the token still guarantees this is not a second
+/// detached parser that nobody can signal.
 pub async fn get_local_modpack_target(
     archive_path: &Path,
 ) -> crate::Result<(String, CurseForgeModpackTarget)> {
+    get_local_modpack_target_at(archive_path, "").await
+}
+
+/// Same probe, but also accepting a one-folder wrapper.
+///
+/// `base` is the detected pack prefix (`""` for the archive root). Without it a
+/// valid wrapped CurseForge pack reports "missing manifest.json", which the
+/// caller then downgrades to an unknown/modded file and a default Vanilla
+/// instance. Root is still tried first, so unwrapped packs behave exactly as
+/// before and the manifest location never changes identity semantics.
+pub async fn get_local_modpack_target_at(
+    archive_path: &Path,
+    base: &str,
+) -> crate::Result<(String, CurseForgeModpackTarget)> {
     let path = archive_path.to_path_buf();
-    tokio::task::spawn_blocking(move || {
+    let base = base.to_string();
+    let cancellation = CancellationToken::new();
+    let mut guard = LocalTargetProbeGuard::new(cancellation.clone());
+    let worker = tokio::task::spawn_blocking(move || {
+        // Inside the worker so the deadline also covers the metadata stat,
+        // which blocks on network-backed paths.
+        crate::api::pack::detect::check_archive_size(&path)?;
         let file = std::fs::File::open(path)?;
         let mut archive =
             zip::ZipArchive::new(file).map_err(modpack_zip_error)?;
-        let manifest = read_modpack_manifest(&mut archive)?;
+        if cancellation.is_cancelled() {
+            return Err(crate::ErrorKind::OtherError(
+                "Install was canceled".to_string(),
+            )
+            .into());
+        }
+        // Pass the token into the reader so the size-bounded manifest read also
+        // observes a cancellation that lands while it is in flight.
+        let manifest =
+            read_modpack_manifest_at(&mut archive, &base, Some(&cancellation))?;
+        if cancellation.is_cancelled() {
+            return Err(crate::ErrorKind::OtherError(
+                "Install was canceled".to_string(),
+            )
+            .into());
+        }
         let name = manifest
             .name
             .clone()
             .filter(|name| !name.trim().is_empty())
             .unwrap_or_else(|| "CurseForge Modpack".to_string());
         Ok((name, modpack_target(&manifest)?))
-    })
-    .await?
+    });
+
+    match tokio::time::timeout(crate::api::pack::detect::DETECT_TIMEOUT, worker)
+        .await
+    {
+        Ok(result) => {
+            guard.disarm();
+            result?
+        }
+        Err(_) => {
+            guard.cancel();
+            Err(crate::ErrorKind::InputError(format!(
+                "Timed out after {} seconds while reading the CurseForge modpack archive",
+                crate::api::pack::detect::DETECT_TIMEOUT.as_secs()
+            ))
+            .into())
+        }
+    }
+}
+
+/// Cancels a CURSEFORGE target probe when its awaiting future is dropped.
+struct LocalTargetProbeGuard {
+    token: CancellationToken,
+    active: bool,
+}
+
+impl LocalTargetProbeGuard {
+    fn new(token: CancellationToken) -> Self {
+        Self {
+            token,
+            active: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn cancel(&mut self) {
+        self.token.cancel();
+        self.active = false;
+    }
+}
+
+impl Drop for LocalTargetProbeGuard {
+    fn drop(&mut self) {
+        if self.active {
+            self.token.cancel();
+        }
+    }
 }
 
 pub(crate) fn modpack_zip_error(error: zip::result::ZipError) -> crate::Error {
@@ -501,4 +776,205 @@ pub(crate) async fn cache_instance_icon_from_url(
         &state.io_semaphore,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    /// Builds a stored-only zip so the fixture exercises the same reader the
+    /// installer uses.
+    fn build_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            for (name, body) in entries {
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(body).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
+    const MANIFEST: &str = r#"{
+        "minecraft": { "version": "1.20.1", "modLoaders": [ { "id": "forge-47.2.0", "primary": true } ] },
+        "manifestType": "minecraftModpack",
+        "name": "Wrapped Pack"
+    }"#;
+
+    fn read_manifest(
+        entries: &[(&str, &[u8])],
+        base: &str,
+    ) -> crate::Result<CurseForgeModpackManifest> {
+        let bytes = build_archive(entries);
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        read_modpack_manifest_at(&mut archive, base, None)
+    }
+
+    #[test]
+    fn a_root_manifest_is_read_without_a_base() {
+        let manifest =
+            read_manifest(&[("manifest.json", MANIFEST.as_bytes())], "")
+                .expect("root manifest must parse");
+        assert_eq!(manifest.name.as_deref(), Some("Wrapped Pack"));
+    }
+
+    #[test]
+    fn a_wrapped_manifest_is_found_through_the_base_prefix() {
+        // A pack zipped inside one folder used to report "missing manifest.json"
+        // and downgrade to an unknown file.
+        let manifest = read_manifest(
+            &[("pack-1.0/manifest.json", MANIFEST.as_bytes())],
+            "pack-1.0/",
+        )
+        .expect("wrapped manifest must parse");
+        assert_eq!(manifest.name.as_deref(), Some("Wrapped Pack"));
+    }
+
+    #[test]
+    fn the_root_manifest_wins_over_a_wrapped_one() {
+        // Identity must not change for an archive that has both: root stays
+        // authoritative, matching the previous behaviour exactly.
+        let root = MANIFEST.replace("Wrapped Pack", "Root Pack");
+        let manifest = read_manifest(
+            &[
+                ("manifest.json", root.as_bytes()),
+                ("pack-1.0/manifest.json", MANIFEST.as_bytes()),
+            ],
+            "pack-1.0/",
+        )
+        .unwrap();
+        assert_eq!(manifest.name.as_deref(), Some("Root Pack"));
+    }
+
+    #[test]
+    fn a_missing_manifest_reports_missing_not_a_default_identity() {
+        // The error must stay classifiable so the caller can tell "not a
+        // CurseForge pack" from a real failure.
+        let error = read_manifest(&[("other.txt", b"x")], "").unwrap_err();
+        assert!(
+            error.to_string().contains("missing manifest.json"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn an_oversized_manifest_is_rejected_rather_than_read() {
+        let oversized = vec![b' '; (MAX_MODPACK_MANIFEST_BYTES + 1) as usize];
+        let error =
+            read_manifest(&[("manifest.json", &oversized)], "").unwrap_err();
+        assert!(
+            error.to_string().contains("larger than the"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_wrapped_pack_collects_overrides_below_the_base_prefix() {
+        // The manifest's `overrides` field is relative to the pack root, so a
+        // wrapped pack keeps its files under `{base}{overrides}/`. Without the
+        // base the extractor would find no tasks and silently install nothing.
+        let bytes = build_archive(&[
+            ("pack-1.0/manifest.json", MANIFEST.as_bytes()),
+            ("pack-1.0/overrides/config/a.toml", b"a"),
+            ("other/overrides/config/b.toml", b"b"),
+        ]);
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let manifest =
+            read_modpack_manifest_at(&mut archive, "pack-1.0/", None).unwrap();
+
+        let tasks = collect_modpack_override_tasks_at(
+            &mut archive,
+            &manifest,
+            std::path::Path::new("instance"),
+            "pack-1.0/",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(tasks.len(), 1, "only the wrapped override tree counts");
+        assert!(tasks[0].target.ends_with("config/a.toml"));
+    }
+
+    #[test]
+    fn a_root_pack_still_collects_overrides_without_a_base() {
+        let bytes = build_archive(&[
+            ("manifest.json", MANIFEST.as_bytes()),
+            ("overrides/config/a.toml", b"a"),
+        ]);
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let manifest =
+            read_modpack_manifest_at(&mut archive, "", None).unwrap();
+
+        let tasks = collect_modpack_override_tasks_at(
+            &mut archive,
+            &manifest,
+            std::path::Path::new("instance"),
+            "",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(tasks.len(), 1);
+        assert!(tasks[0].target.ends_with("config/a.toml"));
+    }
+
+    #[test]
+    fn a_backslash_wrapped_pack_resolves_manifest_and_overrides() {
+        // End-to-end for the Windows spelling: the same pack stored with `\`
+        // separators must still resolve its manifest and its override tree.
+        let bytes = build_archive(&[
+            ("pack-1.0\\manifest.json", MANIFEST.as_bytes()),
+            ("pack-1.0\\overrides\\config\\a.toml", b"a"),
+        ]);
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+
+        let manifest =
+            read_modpack_manifest_at(&mut archive, "pack-1.0/", None)
+                .expect("backslash-wrapped manifest must resolve");
+        let tasks = collect_modpack_override_tasks_at(
+            &mut archive,
+            &manifest,
+            std::path::Path::new("instance"),
+            "pack-1.0/",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(tasks.len(), 1, "backslash override must be collected");
+        assert!(tasks[0].target.ends_with("config/a.toml"));
+    }
+
+    #[test]
+    fn wrapped_game_options_are_found_through_the_base() {
+        // `options.txt` under a wrapper folder must be recognised as a pack
+        // options source; without base + normalization it would be invisible.
+        let bytes = build_archive(&[
+            ("pack-1.0/manifest.json", MANIFEST.as_bytes()),
+            ("pack-1.0/overrides/options.txt", b"guiScale:2"),
+        ]);
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let manifest =
+            read_modpack_manifest_at(&mut archive, "pack-1.0/", None).unwrap();
+
+        let source = game_options_pack_source_at(
+            &mut archive,
+            &manifest,
+            "pack-1.0/",
+            None,
+        )
+        .unwrap();
+
+        assert!(source.is_some(), "wrapped options.txt must be detected");
+    }
 }
