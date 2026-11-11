@@ -737,6 +737,10 @@ pub(crate) async fn read_archive_entry_to_string_bounded(
 
     let worker_cancellation = cancellation.child_token();
     let mut guard = ManifestReadGuard::new(worker_cancellation.clone());
+    // Owned copy for error messages outside the worker: `entry_name` itself is
+    // moved into the closure below, so borrowing it in the timeout arm would be
+    // a use-after-move.
+    let entry_name_for_error = entry_name.clone();
     let worker = tokio::task::spawn_blocking(move || {
         // Inside the worker so the deadline also covers the metadata stat,
         // which blocks on network-backed paths.
@@ -801,7 +805,7 @@ pub(crate) async fn read_archive_entry_to_string_bounded(
         Err(_) => {
             guard.cancel();
             Err(crate::ErrorKind::InputError(format!(
-                "Timed out after {} seconds while reading {entry_name} from the modpack archive",
+                "Timed out after {} seconds while reading {entry_name_for_error} from the modpack archive",
                 super::detect::DETECT_TIMEOUT.as_secs()
             ))
             .into())

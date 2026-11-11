@@ -4,6 +4,7 @@ use crate::api::curseforge::dto::{
     CurseForgeInstallResult, CurseForgeModpackManifest, CurseForgeModpackTarget,
 };
 use crate::api::curseforge::modpack::CurseForgePackExpectedOverride;
+use crate::api::pack::detect::CURSEFORGE_MANIFEST;
 use crate::state::ModLoader;
 use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::{ErrorKind, State};
