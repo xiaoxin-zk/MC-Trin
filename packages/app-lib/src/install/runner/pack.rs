@@ -121,15 +121,12 @@ fn scan_sub_archives_inner(
     use std::sync::atomic::Ordering;
 
     let file = std::fs::File::open(archive)?;
-    let mut zip = match zip::ZipArchive::new(file) {
-        Ok(zip) => zip,
-        Err(_) => {
-            return Err(crate::ErrorKind::InputError(
-                "Unrecognized modpack format: no known pack manifest was found in the archive"
-                    .to_string(),
-            )
-            .into());
-        }
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return Err(crate::ErrorKind::InputError(
+            "Unrecognized modpack format: no known pack manifest was found in the archive"
+                .to_string(),
+        )
+        .into());
     };
 
     let mut sub_archive_paths = Vec::new();

@@ -241,7 +241,27 @@ it('renders the MC-Trin room workflow by default', async () => {
     const wrapper = await rooms()
     expect(wrapper.text()).toContain('MC-Trin LAN lobby')
     expect(wrapper.text()).not.toContain('RedStone Online 2')
-    expect(wrapper.findAll('select')).toHaveLength(0)
+    // Identify the branch structurally instead of by a raw select count: the
+    // MC-Trin tab legitimately owns selectors (device pickers, PTT key), so a
+    // "no selects" rule would be wrong the moment those render.
+    expect(wrapper.find('[data-onboarding-id="mctier-create-form"]').exists()).toBe(true)
+    const voicePanel = wrapper.find('[data-onboarding-id="mctier-voice"]')
+    expect(voicePanel.exists()).toBe(true)
+
+    const panelSelects = voicePanel.findAll('select')
+    expect(panelSelects.length).toBeGreaterThan(0)
+    // Every select on the page has to belong to that panel. Anything else would
+    // be a legacy provider control (Hongshi's port and node pickers), which is
+    // exactly what this test is guarding against. Counted, not hard-coded: the
+    // fixture clears stored preferences so push-to-talk is off and its key
+    // selector is absent, and the speaker picker only appears when the browser
+    // reports output devices.
+    expect(wrapper.findAll('select')).toHaveLength(panelSelects.length)
+
+    // Kept as a readable statement of what "the legacy workflow did not render"
+    // means; no other branch defines these labels.
+    expect(wrapper.text()).not.toContain('Local Minecraft port')
+    expect(wrapper.text()).not.toContain('Relay node')
 })
 
 it('preserves a settings draft when visiting console and files, including a direct settings entry', async () => {
