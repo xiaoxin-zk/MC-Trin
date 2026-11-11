@@ -46,7 +46,8 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                         '修复安装程序的目录预览：现在会跟随你选择的磁盘，并显示安装实际使用的数据位置，普通安装与便携安装均一致。',
                 },
                 {
-                    'en-US': 'Modpack parse errors and timeouts are now reported with clear feedback.',
+                    'en-US':
+                        'Modpack parse errors and timeouts are now reported with clear feedback.',
                     'zh-CN': '整合包解析错误和超时现在会显示明确提示。',
                 },
                 {
@@ -64,8 +65,7 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 {
                     'en-US':
                         'Fixed voice controls so you can pick audio devices and push-to-talk settings before joining a call.',
-                    'zh-CN':
-                        '修复语音控制，使你可以在加入通话前选择音频设备与按键说话设置。',
+                    'zh-CN': '修复语音控制，使你可以在加入通话前选择音频设备与按键说话设置。',
                 },
             ],
         },
