@@ -66,10 +66,7 @@ describe('Minecraft crash log selection', () => {
             false,
         )
         assert.equal(logShareLeavesMachine({ ai_source: 'logshare' }), false)
-        assert.equal(
-            logShareLeavesMachine({ ai_source: 'logshare', remote_consent: true }),
-            true,
-        )
+        assert.equal(logShareLeavesMachine({ ai_source: 'logshare', remote_consent: true }), true)
     })
 
     test('keeps current-run diagnostic files and one crash report per singleton type', () => {
