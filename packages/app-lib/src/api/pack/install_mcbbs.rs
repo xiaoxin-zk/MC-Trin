@@ -152,6 +152,9 @@ fn is_archive_structurally_invalid(
         return true;
     }
     message.contains("Modpack archive is invalid:")
+        // `find_entry_index_cancellable` maps a directory-walk failure here
+        // (detect.rs), which means the central directory itself is unreadable.
+        || message.contains("Failed to read modpack archive entry:")
         || message.contains("from modpack archive:")
         // Both real cap rejections share this prefix: the on-disk size bound
         // ("Modpack archive is {n} bytes, which exceeds the ...-byte limit") and
@@ -984,12 +987,14 @@ mod tests {
     fn an_archive_structural_failure_is_terminal() {
         // A bounded reader that cannot read the archive at all must not be
         // downgraded into a fallback attempt. The strings below are the
-        // reachable ones: `archive_error` for a corrupt archive, and the two
-        // real cap rejections that the reader can actually return.
+        // reachable ones: `archive_error` for a corrupt archive, the two real
+        // cap rejections, and the directory-walk failure raised by
+        // `find_entry_index_cancellable` in detect.rs.
         for message in [
             "Modpack archive is invalid: invalid Zip archive: Could not find central directory end",
             "Modpack archive is 17179869184 bytes, which exceeds the 8589934592-byte limit",
             "Modpack archive has 250000 entries, which exceeds the 200000-entry detection limit",
+            "Failed to read modpack archive entry: invalid Zip archive: Invalid local file header",
         ] {
             let error: crate::Error =
                 crate::ErrorKind::InputError(message.to_string()).into();
