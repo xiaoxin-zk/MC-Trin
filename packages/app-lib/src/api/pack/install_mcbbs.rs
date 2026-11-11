@@ -89,6 +89,9 @@ async fn fallback_mcbbs_manifest(
     entry_name: String,
     cancellation: tokio_util::sync::CancellationToken,
 ) -> crate::Result<McbbsManifest> {
+    // Owned copy for the shape-rejection message: `entry_name` itself is moved
+    // into the reader below, so borrowing it afterwards is a use-after-move.
+    let entry_name_for_error = entry_name.clone();
     let contents = archive_util::read_archive_entry_to_string_bounded(
         archive_path,
         entry_name,
@@ -98,7 +101,7 @@ async fn fallback_mcbbs_manifest(
     let manifest: McbbsManifest = serde_json::from_str(&contents)?;
     if manifest.addons.is_empty() {
         return Err(crate::ErrorKind::InputError(format!(
-            "Modpack archive is missing a usable {entry_name}: it is not an MCBBS manifest"
+            "Modpack archive is missing a usable {entry_name_for_error}: it is not an MCBBS manifest"
         ))
         .into());
     }
