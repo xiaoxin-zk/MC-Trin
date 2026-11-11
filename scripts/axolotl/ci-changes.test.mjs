@@ -207,6 +207,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         frontend: { result: 'success' },
         resources: { result: 'success' },
         desktop: { result: 'success' },
+        'feature-regression': { result: 'success' },
     }
     assert.doesNotThrow(() => validateCiResults(jobs))
 
@@ -217,6 +218,7 @@ test('CI result rejects skipped selected jobs and cancelled runs before establis
         'frontend',
         'resources',
         'desktop',
+        'feature-regression',
     ]) {
         for (const result of ['skipped', 'cancelled', 'failure']) {
             assert.throws(

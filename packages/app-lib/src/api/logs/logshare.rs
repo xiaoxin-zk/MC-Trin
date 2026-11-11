@@ -220,6 +220,7 @@ pub async fn get_log_share_settings() -> crate::Result<LogShareSettings> {
             no_storage: row.4 != 0,
             show_progress: row.5 != 0,
             remote_consent: consent,
+            consent_action: None,
         },
         consent,
     ))

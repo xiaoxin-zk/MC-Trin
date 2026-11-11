@@ -31,15 +31,6 @@ const PACK_ARCHIVE_SCAN_CHUNK_BYTES: usize = 256 * 1024;
 /// Returned when the cooperative cancellation flag stopped the scan early.
 const PACK_ARCHIVE_SCAN_CANCELLED: &str = "Modpack archive scan was canceled";
 
-/// Walks `archive` and writes every nested `.zip`/`.mrpack` member to `scratch`.
-///
-/// Blocking by design: the `zip` crate is synchronous, so this must only ever
-/// run inside `spawn_blocking`. `cancel` is the only way to stop it early —
-/// Tokio cannot cancel a blocking task once it has started — so the copy loop
-/// polls the flag between chunks and the entry loop polls it between entries.
-/// `scratch` is removed by this function on every exit path, because only this
-/// thread knows when its file handles are actually closed; on Windows the async
-/// caller cannot delete files it may still hold open.
 #[cfg(test)]
 thread_local! {
     /// Test seam: invoked after each nested archive member is fully written,
@@ -59,6 +50,15 @@ fn notify_after_entry() {
     });
 }
 
+/// Walks `archive` and writes every nested `.zip`/`.mrpack` member to `scratch`.
+///
+/// Blocking by design: the `zip` crate is synchronous, so this must only ever
+/// run inside `spawn_blocking`. `cancel` is the only way to stop it early —
+/// Tokio cannot cancel a blocking task once it has started — so the copy loop
+/// polls the flag between chunks and the entry loop polls it between entries.
+/// `scratch` is removed by this function on every exit path, because only this
+/// thread knows when its file handles are actually closed; on Windows the async
+/// caller cannot delete files it may still hold open.
 fn scan_sub_archives(
     archive: &std::path::Path,
     scratch: &std::path::Path,
