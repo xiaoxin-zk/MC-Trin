@@ -78,7 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node --input-type=module -e 'import { releaseVersion } from "./scripts/axolotl/release-utils.mjs"; releaseVersion(process.env.RELEASE_TAG)'
+          node --input-type=module -e 'import { releaseVersion } from "./scripts/axolotl/release-utils.mjs"; import { MINIMUM_RELEASE_TAG, isAtOrBelowReleaseBaseline } from "./scripts/axolotl/release-policy.mjs"; if (isAtOrBelowReleaseBaseline(process.env.RELEASE_TAG)) throw new Error(`New release tag ${process.env.RELEASE_TAG} must be greater than ${MINIMUM_RELEASE_TAG}: a tag at or below the baseline would make update checks treat installed 1.10.x launchers as permanently newer.`); releaseVersion(process.env.RELEASE_TAG)'
           release_notes="${RUNNER_TEMP}/axolotl-release-notes.md"
           node scripts/axolotl/create-release-notes.mjs "${RELEASE_TAG}" "$release_notes"
           if existing_draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"; then
