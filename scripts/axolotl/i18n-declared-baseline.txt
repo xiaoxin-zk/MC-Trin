@@ -1,4 +1,4 @@
-﻿app.account.modrinth-account
+app.account.modrinth-account
 app.account.signed-in-as
 app.account.sign-in-modrinth
 app.action-bar.active-backups
@@ -2888,6 +2888,8 @@ app.multiplayer.mctier.visibility-private-title
 app.multiplayer.mctier.visibility-public-description
 app.multiplayer.mctier.visibility-public-title
 app.multiplayer.mctier.visibility-title
+app.multiplayer.mctier.voice.activation
+app.multiplayer.mctier.voice.activation-hint
 app.multiplayer.mctier.voice.connected
 app.multiplayer.mctier.voice.description
 app.multiplayer.mctier.voice.input-device-lost
@@ -2899,10 +2901,6 @@ app.multiplayer.mctier.voice.mute-player
 app.multiplayer.mctier.voice.output-device-lost
 app.multiplayer.mctier.voice.peer-volume
 app.multiplayer.mctier.voice.permission-error
-app.multiplayer.mctier.voice.ptt-key
-app.multiplayer.mctier.voice.push-to-talk
-app.multiplayer.mctier.voice.push-to-talk-hint
-app.multiplayer.mctier.voice.push-to-talk-hold
 app.multiplayer.mctier.voice.speaker
 app.multiplayer.mctier.voice.start
 app.multiplayer.mctier.voice.stop

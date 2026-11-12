@@ -790,6 +790,13 @@ impl State {
         )
     }
 
+    /// Whether Automatic download sources lead with mirrors, as captured from
+    /// the settings locale check when the state was initialized or last
+    /// updated.
+    pub(crate) fn auto_prefers_mirror(&self) -> bool {
+        self.auto_prefers_mirror.load(Ordering::Relaxed)
+    }
+
     pub(crate) fn custom_download_sources(&self) -> Vec<CustomDownloadSource> {
         self.custom_download_sources.read().clone()
     }

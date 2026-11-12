@@ -427,6 +427,9 @@ test('falls back to the default output sink when the chosen device is gone', asy
 })
 
 test('does not rewrite the microphone track when the state is unchanged', () => {
+    // No Web Audio in this environment, so the track itself is the switch and
+    // the assertion is that a repeated call is a no-op rather than a second
+    // write. The gain-gated path is covered separately below.
     const environment = installVoiceEnvironment()
     try {
         const { stream, track } = createStream()
@@ -443,6 +446,126 @@ test('does not rewrite the microphone track when the state is unchanged', () => 
         assert.equal(track.enabledWrites, 1)
         session.close()
     } finally {
+        environment.restore()
+    }
+})
+
+/** A Web Audio stub whose gain node records every value written to it. */
+function installAudioEnvironment() {
+    const gains: { value: number; writes: number[] }[] = []
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext')
+
+    class FakeAudioContext {
+        createMediaStreamSource() {
+            return { connect() {}, disconnect() {} }
+        }
+
+        createGain() {
+            const entry = { value: 1, writes: [] as number[] }
+            gains.push(entry)
+            return {
+                get gain() {
+                    return {
+                        get value() {
+                            return entry.value
+                        },
+                        set value(next: number) {
+                            entry.value = next
+                            entry.writes.push(next)
+                        },
+                    }
+                },
+                connect() {},
+                disconnect() {},
+            }
+        }
+
+        createMediaStreamDestination() {
+            const stream = createStream().stream
+            return { stream, connect() {}, disconnect() {} }
+        }
+
+        resume() {
+            return Promise.resolve()
+        }
+
+        close() {
+            return Promise.resolve()
+        }
+    }
+
+    Object.defineProperty(globalThis, 'AudioContext', {
+        configurable: true,
+        value: FakeAudioContext,
+    })
+
+    return {
+        gains,
+        restore() {
+            if (previous) Object.defineProperty(globalThis, 'AudioContext', previous)
+            else Reflect.deleteProperty(globalThis, 'AudioContext')
+        },
+    }
+}
+
+test('voice activation gates the outgoing gain without touching the track', () => {
+    // The whole point of the GainNode gate: the capture stays live so the local
+    // analyser can still hear the user, while peers receive silence.
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    try {
+        const { stream, track } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+        const [gain] = audio.gains
+        assert.ok(gain, 'a gain node should have been created')
+
+        session.setVoiceActivationEnabled(true)
+        session.setVoiceActivity(false)
+        assert.equal(gain.value, 0, 'silence must gate the gain to zero')
+        assert.equal(track.enabled, true, 'the capture track must stay live')
+
+        session.setVoiceActivity(true)
+        assert.equal(gain.value, 1, 'speech must reopen the gain')
+
+        // Muting keeps using the gate, again leaving the track alone.
+        session.setMicrophoneEnabled(false)
+        assert.equal(gain.value, 0)
+        assert.equal(track.enabled, true)
+
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('open-mic mode transmits whenever the microphone is enabled', () => {
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    try {
+        const { stream } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+        const [gain] = audio.gains
+        assert.ok(gain)
+
+        // Voice activation is off by default, so activity reports must not gate
+        // anything: this is the existing open-mic behaviour.
+        session.setVoiceActivity(false)
+        assert.equal(gain.value, 1)
+
+        session.setMicrophoneEnabled(false)
+        assert.equal(gain.value, 0)
+        session.close()
+    } finally {
+        audio.restore()
         environment.restore()
     }
 })

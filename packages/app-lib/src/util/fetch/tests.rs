@@ -26,6 +26,7 @@ fn custom_modrinth_sources_follow_priority_and_keep_official_fallback() {
         ResourceClass::Modrinth,
         crate::state::DownloadSourceMode::MirrorPreferred,
         &sources,
+        false,
     );
 
     assert_eq!(routes.len(), 3);
@@ -70,6 +71,7 @@ fn custom_minecraft_and_curseforge_sources_use_provider_paths() {
         ResourceClass::MinecraftAsset,
         crate::state::DownloadSourceMode::MirrorPreferred,
         &sources,
+        false,
     );
     assert_eq!(assets[0].url, "https://mirror.example/assets/ab/cd");
 
@@ -78,6 +80,7 @@ fn custom_minecraft_and_curseforge_sources_use_provider_paths() {
         ResourceClass::CurseForge,
         crate::state::DownloadSourceMode::MirrorPreferred,
         &sources,
+        false,
     );
     assert_eq!(
         curseforge[0].url,
@@ -122,6 +125,7 @@ fn custom_content_mirrors_never_receive_authenticated_api_requests() {
             resource,
             crate::state::DownloadSourceMode::MirrorPreferred,
             &sources,
+            false,
         );
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].url, url);
@@ -1460,7 +1464,7 @@ fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
         },
     );
 
-    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset);
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, false);
 
     assert_eq!(
         routes.last().unwrap().source,
@@ -1502,6 +1506,7 @@ fn every_source_mode_pins_mcim_last() {
             ResourceClass::MinecraftAsset,
             mode,
             "https://resources.download.minecraft.net/ee/object",
+            true,
         );
 
         assert_eq!(
@@ -1510,6 +1515,201 @@ fn every_source_mode_pins_mcim_last() {
             "{mode:?} must pin MCIM last"
         );
     }
+}
+
+/// One route per source on authorities no other test records health for, so
+/// the automatic order is decided by the source preference under test instead
+/// of a leftover reputation from another case.
+fn auto_order_test_routes() -> Vec<DownloadRoute> {
+    vec![
+        direct_test_route(
+            "https://official.auto-order.test/ee/object".into(),
+            DownloadRouteSource::Official,
+        ),
+        direct_test_route(
+            "https://mirror.auto-order.test/assets/ee/object".into(),
+            DownloadRouteSource::Bmclapi,
+        ),
+        direct_test_route(
+            "https://mod.mcimirror.top/auto-order/ee/object".into(),
+            DownloadRouteSource::Mcim,
+        ),
+    ]
+}
+
+#[test]
+fn auto_with_a_chinese_locale_preference_leads_with_a_healthy_mirror() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "a mirror preference must lead with the mirror, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        routes[1].source,
+        DownloadRouteSource::Official,
+        "the official route stays as the next fallback"
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn auto_without_a_mirror_preference_keeps_the_official_route_first() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, false);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "without the preference automatic mode still starts officially"
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn official_only_drops_mirrors_even_when_the_locale_prefers_them() {
+    let mut routes = auto_order_test_routes();
+    super::routes::order_routes_for_mode(
+        &mut routes,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::OfficialOnly,
+        "https://official.auto-order.test/ee/object",
+        true,
+    );
+
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].source, DownloadRouteSource::Official);
+    assert!(
+        routes.iter().all(|route| !route.is_mirror),
+        "an explicit official mode must ignore the locale preference"
+    );
+}
+
+#[test]
+fn official_preferred_keeps_the_official_route_first_despite_the_locale() {
+    let mut routes = auto_order_test_routes();
+    super::routes::order_routes_for_mode(
+        &mut routes,
+        ResourceClass::MinecraftAsset,
+        crate::state::DownloadSourceMode::OfficialPreferred,
+        "https://official.auto-order.test/ee/object",
+        true,
+    );
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "official-preferred must not be reordered by the locale preference"
+    );
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+}
+
+#[test]
+fn a_mirror_preference_never_promotes_mcim_above_other_routes() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // MCIM is itself a mirror, so a preference that leads with mirrors is the
+    // one sort most likely to hand it the lead. Health makes it the best
+    // candidate; the pin must still keep it last.
+    let mut routes = auto_order_test_routes();
+    let mcim = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Mcim)
+        .unwrap()
+        .clone();
+    let key = route_health_key(&mcim, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(900_000_000.0),
+            ttfb_ms: Some(1.0),
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes.last().unwrap().source,
+        DownloadRouteSource::Mcim,
+        "MCIM stays last under a mirror preference, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "the remaining mirror leads once the healthy keys tie"
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_cooling_mirror_is_demoted_behind_official_even_with_the_locale() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The locale preference is only a tie-breaker between equally reachable
+    // routes. A mirror serving a cooldown is not equally reachable, so the
+    // official host must lead again instead of the sort honouring the locale
+    // and retrying an endpoint that just asked us to back off.
+    let mut routes = routes_with_mcim_mirror();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            cooldown_until: Some(Instant::now() + Duration::from_secs(60)),
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a cooling mirror must not lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes[1].source, DownloadRouteSource::Bmclapi);
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+
+    *ROUTE_HEALTH.lock() = previous_health;
 }
 
 #[test]
@@ -1587,7 +1787,7 @@ fn disabled_tianpao_routes_leave_official_cdn_available() {
         },
     );
 
-    order_auto_routes(&mut routes, ResourceClass::Modrinth);
+    order_auto_routes(&mut routes, ResourceClass::Modrinth, false);
 
     assert_eq!(routes[0].source, DownloadRouteSource::Official);
     *ROUTE_HEALTH.lock() = previous_health;

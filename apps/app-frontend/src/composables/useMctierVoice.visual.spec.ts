@@ -245,57 +245,40 @@ it('invalidates a pending microphone request and stops a stream that resolves la
     expect(voice.starting.value).toBe(false)
 })
 
-it('enables the microphone only while push-to-talk is held', async () => {
+it('opens on open-mic and only mutes when the user mutes', async () => {
     const { stream, track } = createStream()
     stubGetUserMedia(vi.fn(async () => stream))
     vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
     const { voice } = createVoice()
     const state = roomState()
 
-    voice.setPushToTalk(true)
     voice.syncRoom(state)
     await voice.start(state)
 
-    expect(track.enabled).toBe(false)
-
-    voice.setPttHeld(true)
+    // Voice activation is off by default, so the microphone transmits.
     expect(track.enabled).toBe(true)
-    // Repeating the same state must not keep poking the live track.
-    const writesWhileHeld = track.enabledWrites
-    voice.setPttHeld(true)
-    expect(track.enabledWrites).toBe(writesWhileHeld)
 
-    voice.setPttHeld(false)
+    voice.toggleMute()
     expect(track.enabled).toBe(false)
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F2' }))
+    voice.toggleMute()
     expect(track.enabled).toBe(true)
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'F2' }))
-    expect(track.enabled).toBe(false)
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F2' }))
-    expect(track.enabled).toBe(true)
-    window.dispatchEvent(new Event('blur'))
-    expect(track.enabled).toBe(false)
 })
 
-it('re-enables a persisted push-to-talk microphone on the next session', async () => {
-    localStorage.setItem(
-        'mctier.voice.preferences',
-        JSON.stringify({ pushToTalk: true, pushToTalkKey: 'F2' }),
-    )
-    const { stream, track } = createStream()
+it('remembers voice activation across sessions', async () => {
+    localStorage.setItem('mctier.voice.preferences', JSON.stringify({ voiceActivation: true }))
+    const { stream } = createStream()
     stubGetUserMedia(vi.fn(async () => stream))
     vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
     const { voice } = createVoice()
-    const state = roomState()
 
-    voice.syncRoom(state)
-    await voice.start(state)
-    expect(track.enabled).toBe(false)
+    expect(voice.voiceActivation.value).toBe(true)
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F2' }))
-    expect(track.enabled).toBe(true)
+    // Toggling persists the choice for the next session.
+    voice.setVoiceActivation(false)
+    expect(
+        JSON.parse(localStorage.getItem('mctier.voice.preferences') ?? '{}').voiceActivation,
+    ).toBe(false)
 })
 
 it('drops a peer from the connected count and closes its connection when it leaves', async () => {

@@ -47,6 +47,7 @@ export type VoiceActivityMonitor = {
 export function createVoiceActivityMonitor(callbacks: {
     onSpeaking: (id: string, speaking: boolean) => void
     onLevel?: (percent: number) => void
+    onLocalSpeaking?: (speaking: boolean) => void
 }): VoiceActivityMonitor {
     const watched = new Map<string, WatchedStream>()
     const AudioContextConstructor = globalThis.AudioContext
@@ -74,6 +75,7 @@ export function createVoiceActivityMonitor(callbacks: {
             // The stream or context may already be gone.
         }
         if (entry.speaking) callbacks.onSpeaking(id, false)
+        if (entry.metered) callbacks.onLocalSpeaking?.(false)
     }
 
     function tick() {
@@ -85,12 +87,14 @@ export function createVoiceActivityMonitor(callbacks: {
                 if (!entry.speaking) {
                     entry.speaking = true
                     callbacks.onSpeaking(id, true)
+                    if (entry.metered) callbacks.onLocalSpeaking?.(true)
                 }
             } else if (entry.speaking) {
                 entry.silentFrames += 1
                 if (entry.silentFrames >= SILENCE_HOLD_FRAMES) {
                     entry.speaking = false
                     callbacks.onSpeaking(id, false)
+                    if (entry.metered) callbacks.onLocalSpeaking?.(false)
                 }
             }
             if (entry.metered) callbacks.onLevel?.(microphoneLevelPercent(rms))

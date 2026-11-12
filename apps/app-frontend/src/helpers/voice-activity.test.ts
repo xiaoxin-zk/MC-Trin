@@ -174,6 +174,42 @@ describe('createVoiceActivityMonitor', () => {
         }
     })
 
+    it('reports local speech only for the metered capture stream', () => {
+        // Voice activation listens to this callback, so it must describe the
+        // local microphone and never a remote peer: gating the outgoing gain on
+        // someone else talking would transmit at the wrong moments.
+        const audio = installAudioEnvironment()
+        try {
+            const local: boolean[] = []
+            const monitor = createVoiceActivityMonitor({
+                onSpeaking: () => {},
+                onLocalSpeaking: (value) => local.push(value),
+            })
+            monitor.watch('me', {} as MediaStream, true)
+            monitor.watch('remote', {} as MediaStream)
+            const [mine, theirs] = audio.analysers
+            assert.ok(mine && theirs)
+
+            // Only the remote peer is loud: the local callback must stay quiet.
+            theirs.samples.fill(200)
+            audio.tick(1)
+            assert.deepEqual(local, [])
+
+            // Now the local capture speaks.
+            mine.samples.fill(200)
+            audio.tick()
+            assert.deepEqual(local, [true])
+
+            // And silence closes it again after the hold.
+            mine.samples.fill(128)
+            audio.tick(15)
+            assert.deepEqual(local, [true, false])
+            monitor.stop()
+        } finally {
+            audio.restore()
+        }
+    })
+
     it('detaches a stream and clears its speaking flag when it is unwatched', () => {
         const audio = installAudioEnvironment()
         try {

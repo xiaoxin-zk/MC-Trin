@@ -4182,6 +4182,17 @@ async fn run_task_probe(
     );
 }
 
+/// The stored locale preference for automatic mode.
+///
+/// Re-ordering after a route probe is synchronous, so this reads the atomic
+/// rather than awaiting `State`; before initialization it reports the
+/// conservative official-first order.
+fn auto_prefers_mirrors() -> bool {
+    crate::State::get_if_initialized()
+        .map(|state| state.auto_prefers_mirror())
+        .unwrap_or(false)
+}
+
 async fn ensure_task_routes_probed(
     request: &DownloadRequest,
     routes: &mut [DownloadRoute],
@@ -4228,7 +4239,7 @@ async fn ensure_task_routes_probed(
             });
         }
     }
-    order_auto_routes(routes, request.resource);
+    order_auto_routes(routes, request.resource, auto_prefers_mirrors());
 }
 
 pub(crate) async fn prepare_native_download_routes(
@@ -4248,7 +4259,7 @@ pub(crate) async fn prepare_native_download_routes(
     if source_mode_for_resource(request.resource)
         == crate::state::DownloadSourceMode::Auto
     {
-        order_auto_routes(routes, request.resource);
+        order_auto_routes(routes, request.resource, auto_prefers_mirrors());
     }
 }
 

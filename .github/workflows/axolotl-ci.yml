@@ -289,6 +289,67 @@ jobs:
       - name: Run installer UI regression tests
         run: node --test apps/installer-ui/tests/installer-ui.test.cjs
 
+  # The desktop matrix only builds on Windows, so this is the only place the
+  # Linux workspace test suite runs. It is test coverage, not a product
+  # artifact, and it stays a separate named job so a red suite reads as a
+  # failure of this check instead of disappearing inside a matrix build.
+  rust-tests:
+    name: Run full Rust test suite
+    needs: [changes]
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SQLX_OFFLINE: true
+      RUST_MIN_STACK: 16777216
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+      - name: Setup desktop build
+        uses: ./.github/actions/setup-desktop-build
+        with:
+          profile: ci
+          save-cache: false
+          resources: 'false'
+      # Runs the suite that is green on a Linux runner. The cases still skipped
+      # below need a real network (they reach cdn.modrinth.com, or hosts that no
+      # longer answer) or assert on timing-sensitive auto-concurrency steps.
+      # They are skipped by name rather than by module, so every other test in
+      # those files keeps running.
+      - name: Run the theseus test suite
+        timeout-minutes: 40
+        run: >-
+          cargo test
+          --package theseus
+          --package content-management
+          --package daedalus
+          --package path-util
+          --package async-minecraft-ping
+          --no-fail-fast
+          --
+          --test-threads=1
+          --skip synced_
+          --skip util::download::endpoint_selection::benchmark::range_recovery
+          --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream
+      - name: Check the desktop shell
+        run: cargo check --package theseus_gui
+      - name: Test synchronized instance features
+        timeout-minutes: 20
+        run: cargo test --package theseus synced_ -- --test-threads=1 --nocapture
+      # The GUI crate ships ~147 tests (updater, auth, window frame, seed map,
+      # mod translation) that only ever reached `cargo check`. Keeping them a
+      # separate Cargo invocation is what matters: `--features tauri` must not
+      # leak into the `not(feature = "tauri")` theseus fixtures above.
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
+      - name: Install cargo-nextest
+        run: cargo binstall --no-confirm --locked cargo-nextest
+      - name: Run Rust GUI tests
+        timeout-minutes: 45
+        run: cargo nextest run --package theseus_gui --no-fail-fast
+
   desktop:
     name: Build and test desktop application
     needs: [changes, guardrails, resources, fast]
@@ -299,7 +360,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-15, ubuntu-24.04]
+        os: [windows-2025]
     runs-on: ${{ matrix.os }}
     env:
       SQLX_OFFLINE: true
@@ -319,69 +380,13 @@ jobs:
           save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Set frontend target for reusable build
         shell: bash
-        run: |
-          case "$RUNNER_OS" in
-            Windows) platform=windows ;;
-            macOS) platform=darwin ;;
-            Linux) platform=linux ;;
-          esac
-          echo "TAURI_ENV_PLATFORM=$platform" >> "$GITHUB_ENV"
+        run: echo "TAURI_ENV_PLATFORM=windows" >> "$GITHUB_ENV"
       - name: Build frontend
         run: pnpm turbo run build --filter=@modrinth/app-frontend
       - name: Check for dead alpha utilities
         run: node scripts/axolotl/check-dead-utilities.mjs
       - name: Test version metadata writes
-        if: runner.os != 'Linux'
         run: cargo test --package theseus writing_version_info_creates_missing_parent_directory
-      # The whole theseus suite runs here rather than in a dedicated job: this
-      # job has already compiled the test binaries, while a standalone job spent
-      # ~95 of its 100 minutes rebuilding them from a cold cache. The previously
-      # name-filtered steps above are covered by this run, so they are gone.
-      # Runs the suite that is green on a Linux runner. The cases still skipped
-      # below need a real network (they reach cdn.modrinth.com, or hosts that no
-      # longer answer) or assert on timing-sensitive auto-concurrency steps.
-      # They are skipped by name rather than by module, so every other test in
-      # those files keeps running.
-      - name: Run the theseus test suite
-        if: runner.os == 'Linux'
-        timeout-minutes: 40
-        run: |
-          cargo test \
-            --package theseus \
-            --package content-management \
-            --package daedalus \
-            --package path-util \
-            --package async-minecraft-ping \
-            --no-fail-fast \
-            -- --test-threads=1 \
-            --skip synced_ \
-            --skip util::download::endpoint_selection::benchmark::range_recovery \
-            --skip util::download::endpoint_selection::probe::tests::native_h2_single_stream
-      - run: cargo check --package theseus_gui
-      - name: Test synchronized instance features
-        if: runner.os == 'Linux'
-        timeout-minutes: 20
-        run: cargo test --package theseus synced_ -- --test-threads=1 --nocapture
-      # The GUI crate ships ~147 tests (updater, auth, window frame, seed map,
-      # mod translation) that only ever reached `cargo check`. They run here,
-      # after the plain theseus suite, so the same checkout, pnpm install,
-      # frontend build and Cargo target directory are reused instead of paying
-      # for a second cold compile in a dedicated job. Keeping them a separate
-      # Cargo invocation is what matters: `--features tauri` must not leak into
-      # the `not(feature = "tauri")` theseus fixtures above.
-      - name: Install cargo-binstall
-        if: runner.os == 'Linux'
-        uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
-      - name: Install cargo-nextest
-        if: runner.os == 'Linux'
-        run: cargo binstall --no-confirm --locked cargo-nextest
-      - name: Run Rust GUI tests
-        if: runner.os == 'Linux'
-        timeout-minutes: 45
-        run: >-
-          cargo nextest run
-          --package theseus_gui
-          --no-fail-fast
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'
         run: |
@@ -470,6 +475,7 @@ jobs:
         fast,
         frontend,
         feature-regression,
+        rust-tests,
         resources,
         desktop,
       ]
@@ -490,6 +496,17 @@ jobs:
           if [ "$DESKTOP_SCOPE" != true ]; then expected=skipped; fi
           if [ "$FEATURE_REGRESSION_RESULT" != "$expected" ]; then
             echo "feature-regression: expected $expected, received $FEATURE_REGRESSION_RESULT" >&2
+            exit 1
+          fi
+      - name: Require the full Rust test suite to pass
+        env:
+          RUST_TESTS_RESULT: ${{ needs.rust-tests.result }}
+          DESKTOP_SCOPE: ${{ needs.changes.outputs.desktop }}
+        run: |
+          expected=success
+          if [ "$DESKTOP_SCOPE" != true ]; then expected=skipped; fi
+          if [ "$RUST_TESTS_RESULT" != "$expected" ]; then
+            echo "rust-tests: expected $expected, received $RUST_TESTS_RESULT" >&2
             exit 1
           fi
       - name: Require all selected checks to pass

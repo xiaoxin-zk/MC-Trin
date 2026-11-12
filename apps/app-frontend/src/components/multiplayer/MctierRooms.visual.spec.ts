@@ -370,7 +370,6 @@ it('offers the voice panel while a room is still being created', async () => {
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
     expect(wrapper.find(`${voicePanel} select`).exists()).toBe(true)
-    expect(wrapper.text()).toContain('Push-to-talk')
     // Device selection is the point of the pre-connect panel, so it must not be
     // wrapped in the session card that has nothing to show yet.
     expect(wrapper.find(voiceSessionCard).exists()).toBe(false)
@@ -390,6 +389,8 @@ it('offers a working voice panel once the room is connected', async () => {
 
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
+    // Open-mic is the default: no activation checkbox is forced on.
+    expect(wrapper.text()).not.toContain('Only send while I speak')
     expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeUndefined()
 })
 

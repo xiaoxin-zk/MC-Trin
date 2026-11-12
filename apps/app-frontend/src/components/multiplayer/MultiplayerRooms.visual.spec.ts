@@ -253,9 +253,8 @@ it('renders the MC-Trin room workflow by default', async () => {
     // Every select on the page has to belong to that panel. Anything else would
     // be a legacy provider control (Hongshi's port and node pickers), which is
     // exactly what this test is guarding against. Counted, not hard-coded: the
-    // fixture clears stored preferences so push-to-talk is off and its key
-    // selector is absent, and the speaker picker only appears when the browser
-    // reports output devices.
+    // microphone picker is always present, while the speaker picker only appears
+    // when the browser reports output devices.
     expect(wrapper.findAll('select')).toHaveLength(panelSelects.length)
 
     // Kept as a readable statement of what "the legacy workflow did not render"

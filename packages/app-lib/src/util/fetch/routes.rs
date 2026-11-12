@@ -368,6 +368,7 @@ fn pin_mcim_last(routes: &mut [DownloadRoute]) {
 pub(super) fn order_auto_routes(
     routes: &mut [DownloadRoute],
     resource: ResourceClass,
+    prefer_mirrors: bool,
 ) {
     let health = ROUTE_HEALTH.lock().clone();
     routes.sort_by(|left, right| {
@@ -396,11 +397,20 @@ pub(super) fn order_auto_routes(
                     .cmp(&right_health.consecutive_failures)
             })
             .then_with(|| {
-                // Automatic content downloads start from the supplied
-                // official URL. Health can still move a failing official
-                // route behind a mirror, but connectivity alone is not a
-                // reason to call a mirror faster.
-                (!is_official_route(left)).cmp(&(!is_official_route(right)))
+                // Healthy routes are already resolved by the keys above: the
+                // MCIM pin, cooldown and consecutive-failure comparisons run
+                // first, so this tie-break only orders routes that are equally
+                // reachable. A Chinese-locale preference leads with the mirror
+                // and keeps the official route as the next fallback; every
+                // other locale starts from the supplied official URL. MCIM is
+                // pinned by the first key, so `is_mirror` cannot promote it.
+                if prefer_mirrors {
+                    right.is_mirror.cmp(&left.is_mirror)
+                } else {
+                    let left_non_official = !is_official_route(left);
+                    let right_non_official = !is_official_route(right);
+                    left_non_official.cmp(&right_non_official)
+                }
             })
             .then_with(|| {
                 (right_health.success_samples > 0)
@@ -428,11 +438,15 @@ pub fn resolve_download_routes_for(
     let custom_sources = crate::State::get_if_initialized()
         .map(|state| state.custom_download_sources())
         .unwrap_or_default();
+    let prefer_mirrors = crate::State::get_if_initialized()
+        .map(|state| state.auto_prefers_mirror())
+        .unwrap_or(false);
     resolve_download_routes_for_with_sources(
         url,
         resource,
         mode,
         &custom_sources,
+        prefer_mirrors,
     )
 }
 
@@ -441,11 +455,15 @@ pub fn resolve_download_routes_for(
 /// Split from route construction so the ordering contract is testable with a
 /// mixed list: no route builder in this build emits an MCIM mirror beside an
 /// official URL, and a test that relied on one would pass vacuously.
+///
+/// `prefer_mirrors` is the stored locale preference and only affects `Auto`:
+/// every explicit mode states its own source order and must ignore it.
 pub(super) fn order_routes_for_mode(
     routes: &mut Vec<DownloadRoute>,
     resource: ResourceClass,
     mode: crate::state::DownloadSourceMode,
     url: &str,
+    prefer_mirrors: bool,
 ) {
     match mode {
         crate::state::DownloadSourceMode::Auto
@@ -454,7 +472,7 @@ pub(super) fn order_routes_for_mode(
             routes.sort_by_key(|route| route.is_mirror)
         }
         crate::state::DownloadSourceMode::Auto => {
-            order_auto_routes(routes, resource)
+            order_auto_routes(routes, resource, prefer_mirrors)
         }
         crate::state::DownloadSourceMode::OfficialOnly => {
             routes.retain(|route| !route.is_mirror);
@@ -477,6 +495,7 @@ pub fn resolve_download_routes_for_with_sources(
     resource: ResourceClass,
     mode: crate::state::DownloadSourceMode,
     custom_sources: &[CustomDownloadSource],
+    prefer_mirrors: bool,
 ) -> Vec<DownloadRoute> {
     let Ok(url) = retired_sources::normalize(url) else {
         return Vec::new();
@@ -499,7 +518,7 @@ pub fn resolve_download_routes_for_with_sources(
     } else {
         mode
     };
-    order_routes_for_mode(&mut routes, resource, mode, &url);
+    order_routes_for_mode(&mut routes, resource, mode, &url, prefer_mirrors);
     routes
 }
 

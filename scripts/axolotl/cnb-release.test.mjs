@@ -9,23 +9,13 @@ test('CNB mirrors the configured GitHub repository and verifies the final tagged
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'axolotl-cnb-test-'))
     t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
     const tag = 'v1.10.0-beta.5'
-    const names = [
-        'Axolotl_universal.app.tar.gz',
-        'Axolotl_aarch64.AppImage.tar.gz',
-        'Axolotl_amd64.AppImage.tar.gz',
-        'Axolotl_x64-setup.nsis.zip',
-    ]
-    const platforms = Object.fromEntries(
-        ['darwin-aarch64', 'darwin-x86_64', 'linux-aarch64', 'linux-x86_64', 'windows-x86_64'].map(
-            (platform, index) => [
-                platform,
-                {
-                    signature: 'signature'.repeat(12),
-                    url: `https://github.com/Example/Fork/releases/download/${tag}/${names[Math.max(0, index - 1)]}`,
-                },
-            ],
-        ),
-    )
+    const names = ['Axolotl_x64-setup.nsis.zip']
+    const platforms = {
+        'windows-x86_64': {
+            signature: 'signature'.repeat(12),
+            url: `https://github.com/Example/Fork/releases/download/${tag}/${names[0]}`,
+        },
+    }
     const manifest = { version: tag.slice(1), platforms }
     const release = {
         id: 123,
@@ -95,7 +85,7 @@ test('CNB mirrors the configured GitHub repository and verifies the final tagged
     const output = JSON.parse(fs.readFileSync(path.join(directory, 'latest.json'), 'utf8'))
     assert.equal(output.version, '1.10.0-beta.5')
     assert.equal(
-        output.platforms['darwin-aarch64'].url,
+        output.platforms['windows-x86_64'].url,
         `https://cnb.cool/axlmc/Axolotl/-/releases/download/${tag}/${names[0]}`,
     )
 })

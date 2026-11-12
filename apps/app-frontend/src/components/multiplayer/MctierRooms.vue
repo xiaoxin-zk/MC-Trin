@@ -302,22 +302,13 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.mic-level',
         defaultMessage: 'Mic level (speak to test)',
     },
-    voicePushToTalk: {
-        id: 'app.multiplayer.mctier.voice.push-to-talk',
-        defaultMessage: 'Push-to-talk',
+    voiceActivation: {
+        id: 'app.multiplayer.mctier.voice.activation',
+        defaultMessage: 'Only send while I speak',
     },
-    voicePushToTalkHint: {
-        id: 'app.multiplayer.mctier.voice.push-to-talk-hint',
-        defaultMessage:
-            'Hold the key while this window has focus, or hold the on-screen button while in game; the microphone stays muted otherwise.',
-    },
-    voicePttKey: {
-        id: 'app.multiplayer.mctier.voice.ptt-key',
-        defaultMessage: 'Push-to-talk key',
-    },
-    voicePushToTalkHold: {
-        id: 'app.multiplayer.mctier.voice.push-to-talk-hold',
-        defaultMessage: 'Hold to talk',
+    voiceActivationHint: {
+        id: 'app.multiplayer.mctier.voice.activation-hint',
+        defaultMessage: 'The microphone opens when you start talking and closes during silence.',
     },
 })
 
@@ -506,30 +497,10 @@ async function onOutputDeviceChange(event: Event) {
     target.value = voice.outputDeviceId.value ?? ''
 }
 
-function onPttToggle(event: Event) {
+function onVoiceActivationToggle(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLInputElement)) return
-    voice.setPushToTalk(target.checked)
-}
-
-/** Keys offered for push-to-talk; a mouse button cannot be bound here. */
-const PTT_KEY_OPTIONS = [
-    { code: 'F2', label: 'F2' },
-    { code: 'F1', label: 'F1' },
-    { code: 'F3', label: 'F3' },
-    { code: 'F4', label: 'F4' },
-    { code: 'KeyV', label: 'V' },
-    { code: 'KeyB', label: 'B' },
-    { code: 'KeyN', label: 'N' },
-    { code: 'AltLeft', label: 'Left Alt' },
-    { code: 'ControlLeft', label: 'Left Ctrl' },
-    { code: 'ShiftLeft', label: 'Left Shift' },
-]
-
-function onPttKeyChange(event: Event) {
-    const target = event.target
-    if (!(target instanceof HTMLSelectElement)) return
-    voice.setPushToTalkKey(target.value)
+    voice.setVoiceActivation(target.checked)
 }
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
@@ -784,23 +755,13 @@ function prefillInviteFromDeepLink() {
                 v-if="voice.active.value"
                 class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
             >
-                <label class="flex min-w-0 items-center gap-2 text-sm">
-                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceVolume) }}</span>
-                    <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="5"
-                        class="min-w-0 flex-1"
-                        :value="Math.round(voice.outputVolume.value * 100)"
-                        :aria-label="formatMessage(messages.voiceVolume)"
-                        @input="onVolumeInput"
-                    />
-                    <span class="w-10 shrink-0 text-right tabular-nums">
-                        {{ Math.round(voice.outputVolume.value * 100) }}%
-                    </span>
-                </label>
-                <label class="flex min-w-0 items-center gap-2 text-sm">
+                <!-- Without Web Audio there is no gain node, so the microphone
+                     level cannot be scaled; showing the slider would offer a
+                     control that silently does nothing. -->
+                <label
+                    v-if="voice.inputVolumeSupported.value"
+                    class="flex min-w-0 items-center gap-2 text-sm"
+                >
                     <span class="w-24 shrink-0">{{
                         formatMessage(messages.voiceInputVolume)
                     }}</span>
@@ -818,7 +779,13 @@ function prefillInviteFromDeepLink() {
                         {{ Math.round(voice.inputVolume.value * 100) }}%
                     </span>
                 </label>
-                <div class="flex min-w-0 items-center gap-2 text-sm">
+                <!-- The meter is fed by an AnalyserNode, so it needs the same
+                     Web Audio support as the gain node; otherwise it would sit
+                     at zero and read as "your microphone is broken". -->
+                <div
+                    v-if="voice.inputVolumeSupported.value"
+                    class="flex min-w-0 items-center gap-2 text-sm"
+                >
                     <span class="w-24 shrink-0">{{ formatMessage(messages.voiceMicLevel) }}</span>
                     <div
                         class="h-1.5 min-w-0 flex-1 overflow-hidden rounded bg-surface-5"
@@ -834,6 +801,22 @@ function prefillInviteFromDeepLink() {
                         />
                     </div>
                 </div>
+                <label class="flex min-w-0 items-center gap-2 text-sm">
+                    <span class="w-24 shrink-0">{{ formatMessage(messages.voiceVolume) }}</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        class="min-w-0 flex-1"
+                        :value="Math.round(voice.outputVolume.value * 100)"
+                        :aria-label="formatMessage(messages.voiceVolume)"
+                        @input="onVolumeInput"
+                    />
+                    <span class="w-10 shrink-0 text-right tabular-nums">
+                        {{ Math.round(voice.outputVolume.value * 100) }}%
+                    </span>
+                </label>
             </div>
             <div class="flex min-w-0 flex-col gap-3">
                 <label class="flex min-w-0 items-center gap-2 text-sm">
@@ -857,7 +840,7 @@ function prefillInviteFromDeepLink() {
                     </select>
                 </label>
                 <label
-                    v-if="voice.outputDevices.value.length"
+                    v-if="voice.outputDeviceSupported.value && voice.outputDevices.value.length"
                     class="flex min-w-0 items-center gap-2 text-sm"
                 >
                     <span class="w-24 shrink-0">{{ formatMessage(messages.voiceSpeaker) }}</span>
@@ -879,57 +862,24 @@ function prefillInviteFromDeepLink() {
                         </option>
                     </select>
                 </label>
-                <div
-                    class="flex min-w-0 flex-col gap-2 border-t border-solid border-surface-4 pt-2"
+                <label
+                    v-if="voice.voiceActivationSupported.value"
+                    class="flex min-w-0 items-center gap-2 text-sm"
                 >
-                    <label class="flex min-w-0 items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
-                            class="h-4 w-4"
-                            :checked="voice.pushToTalk.value"
-                            @change="onPttToggle"
-                        />
-                        <span>{{ formatMessage(messages.voicePushToTalk) }}</span>
-                    </label>
-                    <label
-                        v-if="voice.pushToTalk.value"
-                        class="flex min-w-0 items-center gap-2 text-sm"
-                    >
-                        <span class="w-24 shrink-0">{{ formatMessage(messages.voicePttKey) }}</span>
-                        <select
-                            class="min-w-0 flex-1 rounded-md border border-solid border-surface-5 bg-surface-3 px-2 py-1"
-                            :value="voice.pushToTalkKey.value"
-                            :aria-label="formatMessage(messages.voicePttKey)"
-                            @change="onPttKeyChange"
-                        >
-                            <option
-                                v-for="option in PTT_KEY_OPTIONS"
-                                :key="option.code"
-                                :value="option.code"
-                            >
-                                {{ option.label }}
-                            </option>
-                        </select>
-                    </label>
-                    <p
-                        v-if="voice.pushToTalk.value"
-                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
-                    >
-                        {{ formatMessage(messages.voicePushToTalkHint) }}
-                    </p>
-                    <button
-                        v-if="voice.pushToTalk.value"
-                        type="button"
-                        class="min-w-0 cursor-pointer select-none rounded-md border border-solid border-brand px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]"
-                        :class="voice.pttHeld.value ? 'bg-brand' : 'bg-surface-2'"
-                        @pointerdown.prevent="voice.setPttHeld(true)"
-                        @pointerup="voice.setPttHeld(false)"
-                        @pointerleave="voice.setPttHeld(false)"
-                        @pointercancel="voice.setPttHeld(false)"
-                    >
-                        {{ formatMessage(messages.voicePushToTalkHold) }}
-                    </button>
-                </div>
+                    <input
+                        type="checkbox"
+                        class="h-4 w-4"
+                        :checked="voice.voiceActivation.value"
+                        @change="onVoiceActivationToggle"
+                    />
+                    <span>{{ formatMessage(messages.voiceActivation) }}</span>
+                </label>
+                <p
+                    v-if="voice.voiceActivationSupported.value"
+                    class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                >
+                    {{ formatMessage(messages.voiceActivationHint) }}
+                </p>
             </div>
             <p v-if="voice.error.value" class="m-0 text-sm text-red" role="alert">
                 {{

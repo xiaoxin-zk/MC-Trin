@@ -120,16 +120,25 @@ export class MctierVoiceSession {
     private inputVolume = DEFAULT_INPUT_VOLUME
     private outputDeviceId: string | null = null
     private microphoneEnabled = true
+    private voiceActivationEnabled = false
+    private voiceActivity = true
     private closed = false
     private audioContext: AudioContext | null = null
     private inputGain: GainNode | null = null
     private outgoingStream: MediaStream
     private readonly rtcConfiguration: RTCConfiguration
     private readonly options: MctierVoiceSessionOptions
+    /** A GainNode gate needs Web Audio; without it the call is plain open-mic. */
+    readonly supportsVoiceActivation: boolean
+    /** `setSinkId` is the only way to choose a speaker. */
+    readonly supportsOutputDevice: boolean
 
     constructor(options: MctierVoiceSessionOptions) {
         this.options = options
         this.outgoingStream = options.stream
+        this.supportsVoiceActivation = Boolean(globalThis.AudioContext)
+        this.supportsOutputDevice =
+            typeof HTMLAudioElement !== 'undefined' && 'setSinkId' in HTMLAudioElement.prototype
         const iceServers = [
             ...(options.iceServer ? [{ urls: options.iceServer }] : []),
             { urls: 'stun:stun.qq.com:3478' },
@@ -140,8 +149,9 @@ export class MctierVoiceSession {
     }
 
     /** Routes the microphone through a gain node so the host can lower their
-     * own outgoing level; peers receive the adjusted stream instead of the raw
-     * capture. Environments without Web Audio keep the untouched capture. */
+     * own outgoing level and so voice activation can gate it; peers receive the
+     * adjusted stream instead of the raw capture. Environments without Web Audio
+     * keep the untouched capture and fall back to track-level mute. */
     private setupInputGain() {
         const AudioContextConstructor = globalThis.AudioContext
         if (!AudioContextConstructor) return
@@ -149,7 +159,6 @@ export class MctierVoiceSession {
             const context = new AudioContextConstructor()
             const source = context.createMediaStreamSource(this.options.stream)
             const gain = context.createGain()
-            gain.gain.value = this.inputVolume
             const destination = context.createMediaStreamDestination()
             source.connect(gain)
             gain.connect(destination)
@@ -157,6 +166,9 @@ export class MctierVoiceSession {
             this.inputGain = gain
             this.outgoingStream = destination.stream
             void context.resume().catch(() => {})
+            // Start from the real state rather than the nominal volume: a
+            // session that begins muted must not open at full gain.
+            this.applyInputGain()
         } catch {
             this.audioContext = null
             this.inputGain = null
@@ -231,10 +243,42 @@ export class MctierVoiceSession {
         }
     }
 
+    /** Mutes the outgoing signal. With Web Audio the capture track stays live and
+     * the gain node is what closes: disabling the track would also starve the
+     * local analyser, so voice activation could never re-open it and the level
+     * meter would read silence while muted. Without Web Audio there is no gate,
+     * so the track itself is the only available switch. */
     setMicrophoneEnabled(enabled: boolean) {
         if (this.closed || this.microphoneEnabled === enabled) return
         this.microphoneEnabled = enabled
+        if (this.inputGain) {
+            this.applyInputGain()
+            return
+        }
         this.options.stream.getAudioTracks().forEach((track) => (track.enabled = enabled))
+    }
+
+    setVoiceActivationEnabled(enabled: boolean) {
+        if (this.closed || !this.supportsVoiceActivation) return
+        if (this.voiceActivationEnabled === enabled) return
+        this.voiceActivationEnabled = enabled
+        if (!enabled) this.voiceActivity = true
+        this.applyInputGain()
+    }
+
+    setVoiceActivity(speaking: boolean) {
+        if (this.closed || this.voiceActivity === speaking) return
+        this.voiceActivity = speaking
+        this.applyInputGain()
+    }
+
+    private applyInputGain() {
+        if (this.inputGain) {
+            this.inputGain.gain.value =
+                this.microphoneEnabled && (!this.voiceActivationEnabled || this.voiceActivity)
+                    ? this.inputVolume
+                    : 0
+        }
     }
 
     /** Applies a 0-1 gain to every remote player, including ones that join later. */
@@ -247,7 +291,7 @@ export class MctierVoiceSession {
      * room hears the host at the chosen level. */
     setInputVolume(volume: number) {
         this.inputVolume = clampVolume(volume)
-        if (this.inputGain) this.inputGain.gain.value = this.inputVolume
+        this.applyInputGain()
     }
 
     /** Sets one remote player's level on top of the shared output volume. */

@@ -12368,23 +12368,17 @@
   "app.multiplayer.mctier.voice.permission-error": {
     "message": "未获得麦克风权限。请在系统设置中允许访问后重试。"
   },
-  "app.multiplayer.mctier.voice.ptt-key": {
-    "message": "按住说话的按键"
+  "app.multiplayer.mctier.voice.activation": {
+    "message": "仅在我说话时传输"
   },
-  "app.multiplayer.mctier.voice.push-to-talk": {
-    "message": "按键说话"
-  },
-  "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "本窗口在前台时可按住按键说话；进入游戏后请按住界面上的按钮；其余时间麦克风保持静音。"
+  "app.multiplayer.mctier.voice.activation-hint": {
+    "message": "开口说话时麦克风自动打开，安静时自动关闭。"
   },
   "app.multiplayer.mctier.voice.input-device-lost": {
     "message": "麦克风已断开连接。请重新接入后再次开启语音。"
   },
   "app.multiplayer.mctier.voice.output-device-lost": {
     "message": "扬声器已断开连接，语音已切换到系统默认设备。"
-  },
-  "app.multiplayer.mctier.voice.push-to-talk-hold": {
-    "message": "按住说话"
   },
   "app.multiplayer.mctier.voice.speaker": {
     "message": "扬声器"
@@ -13020,7 +13014,7 @@
     "message": "私密或公开列出"
   },
   "app.onboarding.multiplayer-voice.description": {
-    "message": "房间就绪后开启语音。选好麦克风和扬声器，调好每个人的音量，不想一直开着就按住按键说话。"
+    "message": "房间就绪后开启语音。选好麦克风和扬声器，调好每个人的音量，并让麦克风只在说话时传输。"
   },
   "app.onboarding.multiplayer-voice.title": {
     "message": "边玩边聊"

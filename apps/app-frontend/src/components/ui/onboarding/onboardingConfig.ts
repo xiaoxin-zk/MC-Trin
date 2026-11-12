@@ -518,7 +518,7 @@ export const onboardingMessages = defineMessages({
     multiplayerVoiceDescription: {
         id: 'app.onboarding.multiplayer-voice.description',
         defaultMessage:
-            'Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and hold the push-to-talk key when you would rather not stay open.',
+            'Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and let the microphone send only while you speak.',
     },
     assistantProvidersTitle: {
         id: 'app.onboarding.assistant-providers.title',

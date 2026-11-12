@@ -9,12 +9,7 @@ import { finalizeGithubRelease } from './finalize-github-release.mjs'
 import { assetDownloadUrl } from './release-utils.mjs'
 
 const tag = 'v1.10.0-beta.5'
-const names = [
-    'Axolotl_universal.app.tar.gz',
-    'Axolotl_aarch64.AppImage.tar.gz',
-    'Axolotl_amd64.AppImage.tar.gz',
-    'Axolotl_x64-setup.nsis.zip',
-]
+const names = ['Axolotl_x64-setup.nsis.zip']
 
 function fixture(t) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'axolotl-finalize-'))
@@ -81,9 +76,9 @@ test('publish draft assets, refresh public metadata and preserve the manifest on
     const { directory, state, run } = fixture(t)
     const release = finalizeGithubRelease(tag, directory, { run })
     assert.equal(release.draft, false)
-    assert.equal(release.assets.length, 9)
+    assert.equal(release.assets.length, 3)
     assert.equal(
-        JSON.parse(state.manifest).platforms['darwin-aarch64'].url,
+        JSON.parse(state.manifest).platforms['windows-x86_64'].url,
         assetDownloadUrl(tag, names[0]),
     )
     assert.equal(
@@ -120,7 +115,7 @@ test('a damaged published manifest is not silently overwritten', (t) => {
     const { directory, state, run } = fixture(t)
     finalizeGithubRelease(tag, directory, { run })
     const manifest = JSON.parse(state.manifest)
-    manifest.platforms['darwin-aarch64'].signature = 'different signature'.repeat(4)
+    manifest.platforms['windows-x86_64'].signature = 'different signature'.repeat(4)
     state.manifest = JSON.stringify(manifest)
     state.calls.length = 0
     assert.throws(() => finalizeGithubRelease(tag, directory, { run }), /does not match/)

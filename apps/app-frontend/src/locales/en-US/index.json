@@ -8447,20 +8447,17 @@
   "app.multiplayer.mctier.voice.permission-error": {
     "message": "Microphone permission was denied. Allow access in system settings and try again."
   },
-  "app.multiplayer.mctier.voice.push-to-talk": {
-    "message": "Push-to-talk"
+  "app.multiplayer.mctier.voice.activation": {
+    "message": "Only send while I speak"
   },
-  "app.multiplayer.mctier.voice.push-to-talk-hint": {
-    "message": "Hold the key while this window has focus, or hold the on-screen button while in game; the microphone stays muted otherwise."
+  "app.multiplayer.mctier.voice.activation-hint": {
+    "message": "The microphone opens when you start talking and closes during silence."
   },
   "app.multiplayer.mctier.voice.input-device-lost": {
     "message": "The microphone was disconnected. Reconnect it, then enable voice again."
   },
   "app.multiplayer.mctier.voice.output-device-lost": {
     "message": "The speaker was disconnected. Voice is playing through the system default."
-  },
-  "app.multiplayer.mctier.voice.push-to-talk-hold": {
-    "message": "Hold to talk"
   },
   "app.multiplayer.mctier.voice.speaker": {
     "message": "Speaker"
@@ -9096,7 +9093,7 @@
     "message": "Private or listed publicly"
   },
   "app.onboarding.multiplayer-voice.description": {
-    "message": "Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and hold the push-to-talk key when you would rather not stay open."
+    "message": "Start voice after the room is up. Pick your microphone and speaker, set how loud each person should be, and let the microphone send only while you speak."
   },
   "app.onboarding.multiplayer-voice.title": {
     "message": "Talk while you play"

@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 
 import type { MctierState } from '@/helpers/mctier'
 
@@ -26,26 +26,23 @@ export type VoiceDevice = { deviceId: string; label: string }
 
 type VoicePreferences = {
     muted: boolean
+    voiceActivation: boolean
     outputVolume: number
     inputVolume: number
     peerVolumes: Record<string, number>
     inputDeviceId: string | null
     outputDeviceId: string | null
-    pushToTalk: boolean
-    pushToTalkKey: string
 }
 
 const PREFERENCES_KEY = 'mctier.voice.preferences'
-export const DEFAULT_PUSH_TO_TALK_KEY = 'F2'
 const DEFAULT_PREFERENCES: VoicePreferences = {
     muted: false,
+    voiceActivation: false,
     outputVolume: 1,
     inputVolume: 1,
     peerVolumes: {},
     inputDeviceId: null,
     outputDeviceId: null,
-    pushToTalk: false,
-    pushToTalkKey: DEFAULT_PUSH_TO_TALK_KEY,
 }
 
 /** Virtual microphones already apply their own noise and echo handling;
@@ -89,6 +86,7 @@ function loadPreferences(): VoicePreferences {
         const parsed = JSON.parse(raw) as Partial<VoicePreferences>
         return {
             muted: parsed.muted === true,
+            voiceActivation: parsed.voiceActivation === true,
             outputVolume: clampVolume(Number(parsed.outputVolume ?? 1)),
             inputVolume: clampVolume(Number(parsed.inputVolume ?? 1)),
             peerVolumes: clampPeerVolumes(parsed.peerVolumes),
@@ -100,11 +98,6 @@ function loadPreferences(): VoicePreferences {
                 typeof parsed.outputDeviceId === 'string' && parsed.outputDeviceId
                     ? parsed.outputDeviceId
                     : null,
-            pushToTalk: parsed.pushToTalk === true,
-            pushToTalkKey:
-                typeof parsed.pushToTalkKey === 'string' && parsed.pushToTalkKey
-                    ? parsed.pushToTalkKey
-                    : DEFAULT_PUSH_TO_TALK_KEY,
         }
     } catch {
         return { ...DEFAULT_PREFERENCES }
@@ -125,6 +118,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const active = ref(false)
     const starting = ref(false)
     const muted = ref(preferences.muted)
+    const voiceActivation = ref(preferences.voiceActivation)
     const outputVolume = ref(preferences.outputVolume)
     const inputVolume = ref(preferences.inputVolume)
     const peerVolumes = ref<Record<string, number>>(preferences.peerVolumes)
@@ -132,12 +126,19 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const outputDeviceId = ref<string | null>(preferences.outputDeviceId)
     const inputDevices = ref<VoiceDevice[]>([])
     const outputDevices = ref<VoiceDevice[]>([])
+    /** Capabilities this webview actually advertises, so the panel never offers a
+     * control that would silently do nothing. A GainNode is the only way to gate
+     * the outgoing signal without touching the track, and `setSinkId` is the
+     * only way to route playback, so both are feature-detected rather than
+     * assumed. */
+    const inputVolumeSupported = ref(Boolean(globalThis.AudioContext))
+    const voiceActivationSupported = ref(Boolean(globalThis.AudioContext))
+    const outputDeviceSupported = ref(
+        typeof HTMLAudioElement !== 'undefined' && 'setSinkId' in HTMLAudioElement.prototype,
+    )
     const peerMuted = ref<Record<string, boolean>>({})
     const error = ref<VoiceError | null>(null)
     const peerStates = ref<Record<string, string>>({})
-    const pushToTalk = ref(preferences.pushToTalk)
-    const pushToTalkKey = ref(preferences.pushToTalkKey)
-    const pttHeld = ref(false)
     const speakingPeers = ref<Set<string>>(new Set())
     const inputLevel = ref(0)
     const connectedPeers = computed(
@@ -169,6 +170,9 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             onLevel: (percent) => {
                 inputLevel.value = percent
             },
+            onLocalSpeaking: (speaking) => {
+                session?.setVoiceActivity(speaking)
+            },
         })
         monitor.watch(localPlayerId, captureStream, true)
     }
@@ -181,22 +185,22 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         inputLevel.value = 0
     }
 
-    /** The microphone transmits unless the master mute is on, and in
-     * push-to-talk mode only while the key or button is held. */
+    /** The microphone stays open by default. Voice activation gates the outgoing
+     * gain while the raw capture remains observable by the analyser. */
     function applyMicrophoneState() {
-        session?.setMicrophoneEnabled(!muted.value && (!pushToTalk.value || pttHeld.value))
+        session?.setMicrophoneEnabled(!muted.value)
+        session?.setVoiceActivationEnabled(!muted.value && voiceActivation.value)
     }
 
     function persistPreferences() {
         storePreferences({
             muted: muted.value,
+            voiceActivation: voiceActivation.value,
             outputVolume: outputVolume.value,
             inputVolume: inputVolume.value,
             peerVolumes: peerVolumes.value,
             inputDeviceId: inputDeviceId.value,
             outputDeviceId: outputDeviceId.value,
-            pushToTalk: pushToTalk.value,
-            pushToTalkKey: pushToTalkKey.value,
         })
     }
 
@@ -226,10 +230,12 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
 
     async function requestMicrophone(deviceId: string | null): Promise<MediaStream> {
         const processed = await usesPreprocessedInput(deviceId)
-        const constraints: MediaTrackConstraints = {
-            autoGainControl: !processed,
-            echoCancellation: !processed,
-            noiseSuppression: !processed,
+        const supported = navigator.mediaDevices.getSupportedConstraints?.() ?? {}
+        const constraints: MediaTrackConstraints = {}
+        if ('autoGainControl' in supported) constraints.autoGainControl = !processed
+        if ('echoCancellation' in supported) constraints.echoCancellation = !processed
+        if ('noiseSuppression' in supported) {
+            constraints.noiseSuppression = !processed
         }
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: deviceId ? { ...constraints, deviceId: { exact: deviceId } } : constraints,
@@ -239,13 +245,12 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         // the first capture may only reveal a virtual device after opening it.
         const track = stream.getAudioTracks()[0]
         if (!processed && track && looksPreprocessed(track.label)) {
-            await track
-                .applyConstraints({
-                    autoGainControl: false,
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                })
-                .catch(() => {})
+            const processingConstraints: MediaTrackConstraints = {}
+            const supported = navigator.mediaDevices.getSupportedConstraints?.() ?? {}
+            if ('autoGainControl' in supported) processingConstraints.autoGainControl = false
+            if ('echoCancellation' in supported) processingConstraints.echoCancellation = false
+            if ('noiseSuppression' in supported) processingConstraints.noiseSuppression = false
+            await track.applyConstraints(processingConstraints).catch(() => {})
         }
         return stream
     }
@@ -370,6 +375,11 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             })
             session = startingSession
             sessionReady = false
+            // Capability flags come from the session's own feature detection:
+            // routing through Web Audio says nothing about whether the browser
+            // can denoise, so no processing capability is claimed here.
+            voiceActivationSupported.value = startingSession.supportsVoiceActivation
+            outputDeviceSupported.value = startingSession.supportsOutputDevice
             startingSession.setOutputVolume(outputVolume.value)
             startingSession.setInputVolume(inputVolume.value)
             if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
@@ -478,10 +488,16 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         active.value = false
         peerStates.value = {}
         error.value = null
-        pttHeld.value = false
         stopMonitoring()
         clearPendingSignals()
         signalDelivery = Promise.resolve()
+    }
+
+    function setVoiceActivation(enabled: boolean) {
+        if (enabled && !voiceActivationSupported.value) return
+        voiceActivation.value = enabled
+        persistPreferences()
+        applyMicrophoneState()
     }
 
     function setOutputVolume(value: number) {
@@ -491,6 +507,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     }
 
     function setInputVolume(value: number) {
+        if (!inputVolumeSupported.value) return
         inputVolume.value = clampVolume(value)
         persistPreferences()
         session?.setInputVolume(inputVolume.value)
@@ -584,6 +601,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     }
 
     async function setOutputDevice(deviceId: string | null) {
+        if (!outputDeviceSupported.value) return
         outputDeviceId.value = deviceId
         persistPreferences()
         const applied = await session?.setOutputDevice(deviceId)
@@ -636,72 +654,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         mediaDevices.addEventListener('devicechange', onDeviceChange)
     }
 
-    /** Push-to-talk listens for the configured key while a voice session is
-     * active, so the hotkey costs nothing when voice is off. */
-    function pttTargetIsEditable(target: EventTarget | null) {
-        if (!(target instanceof HTMLElement)) return false
-        return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-    }
-    function onPttKeyDown(event: KeyboardEvent) {
-        if (event.code !== pushToTalkKey.value || event.repeat || pttTargetIsEditable(event.target))
-            return
-        event.preventDefault()
-        setPttHeld(true)
-    }
-    function onPttKeyUp(event: KeyboardEvent) {
-        if (event.code !== pushToTalkKey.value) return
-        event.preventDefault()
-        setPttHeld(false)
-    }
-    function onWindowBlur() {
-        setPttHeld(false)
-    }
-    function removePttListeners() {
-        window.removeEventListener('keydown', onPttKeyDown)
-        window.removeEventListener('keyup', onPttKeyUp)
-        window.removeEventListener('blur', onWindowBlur)
-    }
-
-    function setPushToTalk(enabled: boolean) {
-        pushToTalk.value = enabled
-        if (!enabled) pttHeld.value = false
-        persistPreferences()
-        applyMicrophoneState()
-    }
-
-    /** Rebinds push-to-talk; the listener reads the ref, so no re-registration
-     * is needed when the key changes mid-session. */
-    function setPushToTalkKey(code: string) {
-        if (!code) return
-        pushToTalkKey.value = code
-        pttHeld.value = false
-        persistPreferences()
-        applyMicrophoneState()
-    }
-
-    function setPttHeld(held: boolean) {
-        if (!pushToTalk.value || pttHeld.value === held) return
-        pttHeld.value = held
-        applyMicrophoneState()
-    }
-
-    watch(
-        [active, pushToTalk],
-        ([isActive, enabled]) => {
-            if (isActive && enabled) {
-                window.addEventListener('keydown', onPttKeyDown)
-                window.addEventListener('keyup', onPttKeyUp)
-                window.addEventListener('blur', onWindowBlur)
-            } else {
-                removePttListeners()
-                pttHeld.value = false
-                applyMicrophoneState()
-            }
-        },
-        { immediate: true },
-    )
     onScopeDispose(() => {
-        removePttListeners()
         if (mediaDevices && typeof mediaDevices.removeEventListener === 'function') {
             mediaDevices.removeEventListener('devicechange', onDeviceChange)
         }
@@ -746,9 +699,10 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         inputDevices,
         outputDevices,
         peerMuted,
-        pushToTalk,
-        pushToTalkKey,
-        pttHeld,
+        voiceActivation,
+        voiceActivationSupported,
+        inputVolumeSupported,
+        outputDeviceSupported,
         speakingPeers,
         inputLevel,
         start,
@@ -761,9 +715,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         setPeerVolume,
         setInputDevice,
         setOutputDevice,
-        setPushToTalk,
-        setPushToTalkKey,
-        setPttHeld,
+        setVoiceActivation,
         refreshDevices,
         stop,
     }

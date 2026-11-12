@@ -19,6 +19,7 @@ export function validateCiResults(jobs) {
         ['fast', 'desktop'],
         ['frontend', 'frontend'],
         ['feature-regression', 'desktop'],
+        ['rust-tests', 'desktop'],
         ['resources', 'desktop'],
         ['desktop', 'desktop'],
     ]) {
