@@ -356,7 +356,9 @@ it('keeps public rooms passwordless and sends the chosen visibility', async () =
     const wrapper = page()
     await fillRequired(wrapper)
     await wrapper.get('input[name="lobby-password"]').setValue('')
-    await wrapper.get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]').setValue(true)
+    await wrapper
+        .get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]')
+        .setValue(true)
     await button(wrapper, 'Create lobby').trigger('click')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith(
@@ -374,7 +376,9 @@ it('clears the password when the room is listed publicly', async () => {
     // The directory cannot carry a password, so choosing to publish wipes the
     // secret instead of sending a combination the service ignores.
     await wrapper.get('input[name="lobby-password"]').setValue('secret')
-    await wrapper.get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]').setValue(true)
+    await wrapper
+        .get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]')
+        .setValue(true)
     await flushPromises()
     expect((wrapper.get('input[name="lobby-password"]').element as HTMLInputElement).value).toBe('')
     await button(wrapper, 'Create lobby').trigger('click')
