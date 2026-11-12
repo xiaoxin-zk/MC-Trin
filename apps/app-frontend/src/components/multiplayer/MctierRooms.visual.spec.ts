@@ -106,16 +106,14 @@ vi.mock('@modrinth/ui', async () => {
         Slider: defineComponent({
             props: ['modelValue', 'min', 'max', 'step', 'unit', 'disabled', 'id'],
             emits: ['update:modelValue'],
-            setup:
-                (props) =>
-                () =>
-                    h('input', {
-                        type: 'range',
-                        min: props.min,
-                        max: props.max,
-                        step: props.step,
-                        value: props.modelValue,
-                    }),
+            setup: (props) => () =>
+                h('input', {
+                    type: 'range',
+                    min: props.min,
+                    max: props.max,
+                    step: props.step,
+                    value: props.modelValue,
+                }),
         }),
         defineMessages: (messages: unknown) => messages,
         useVIntl: () => ({

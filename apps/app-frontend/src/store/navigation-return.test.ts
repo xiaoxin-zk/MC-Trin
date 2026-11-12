@@ -149,15 +149,8 @@ for (const route of ['compatibility', 'customize', 'confirm']) {
         })
 
         assert.equal(hydratedPlanId, 'same-plan', 'hydration runs before consumption')
-        assert.equal(
-            (restored as { plan?: { id?: string } } | null)?.plan?.id,
-            'same-plan',
-        )
-        assert.equal(
-            peekUpgradeFlow('instance-a'),
-            null,
-            'restoring consumes the parked flow',
-        )
+        assert.equal((restored as { plan?: { id?: string } } | null)?.plan?.id, 'same-plan')
+        assert.equal(peekUpgradeFlow('instance-a'), null, 'restoring consumes the parked flow')
     })
 }
 

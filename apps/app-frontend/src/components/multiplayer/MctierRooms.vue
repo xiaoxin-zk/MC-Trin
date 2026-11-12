@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-    ChevronLeftIcon,
-    GlobeIcon,
-    LockIcon,
-    MicrophoneIcon,
-    XIcon,
-} from '@modrinth/assets'
+import { ChevronLeftIcon, GlobeIcon, LockIcon, MicrophoneIcon, XIcon } from '@modrinth/assets'
 import {
     Button,
     Checkbox,
@@ -840,7 +834,9 @@ function prefillInviteFromDeepLink() {
                             :max="100"
                             :step="5"
                             unit="%"
-                            @update:model-value="(value: number) => voice.setInputVolume(value / 100)"
+                            @update:model-value="
+                                (value: number) => voice.setInputVolume(value / 100)
+                            "
                         />
                     </div>
                 </template>
