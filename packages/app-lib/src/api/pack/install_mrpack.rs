@@ -28,8 +28,9 @@ use crate::util::download::constants::CONTENT_DATABASE_BATCH_SIZE;
 use crate::util::download::constants::CONTENT_DATABASE_FLUSH_INTERVAL;
 use crate::util::download::constants::FINALIZE_WAIT_TIMEOUT;
 use crate::util::download::constants::ITEM_FAILURE_REASON_CHAR_LIMIT;
-use crate::util::download::constants::NATIVE_CONTENT_FINALIZE_CONCURRENCY;
+use crate::util::download::constants::MAX_MRPACK_MANIFEST_BYTES;
 use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
+use crate::util::download::constants::native_content_finalize_concurrency;
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
     Integrity, ResourceClass, download_to_path_without_executor,
@@ -731,23 +732,25 @@ impl MrpackZipReader {
         }
     }
 
-    async fn read_entry_to_string(
+    /// Reads the pack manifest with a hard uncompressed-size limit.
+    async fn read_manifest_to_string(
         &mut self,
         index: usize,
     ) -> crate::Result<String> {
-        let mut value = String::new();
         match self {
             Self::Memory(reader) => {
-                let mut reader = reader.reader_with_entry(index).await?;
-                reader.read_to_string_checked(&mut value).await?;
+                read_bounded_zip_entry_to_string(
+                    reader.reader_with_entry(index).await?,
+                )
+                .await
             }
             Self::File(reader) => {
-                let mut reader = reader.reader_with_entry(index).await?;
-                reader.read_to_string_checked(&mut value).await?;
+                read_bounded_zip_entry_to_string(
+                    reader.reader_with_entry(index).await?,
+                )
+                .await
             }
         }
-
-        Ok(value)
     }
 
     async fn hash_entry(
@@ -845,6 +848,64 @@ impl MrpackZipReader {
         self.extract_entry(spec.index, path, semaphore, progress)
             .await
     }
+}
+
+/// Reads a ZIP entry as UTF-8 under a hard uncompressed-size limit.
+///
+/// The size declared in the central directory is rejected before any bytes are
+/// read, and the read itself stops after `MAX_MRPACK_MANIFEST_BYTES + 1` bytes
+/// so an entry that understates its size cannot inflate past the limit. The
+/// CRC32 check matches what `read_to_string_checked` used to do.
+async fn read_bounded_zip_entry_to_string<R>(
+    mut reader: ZipEntryReader<'_, R, WithEntry<'_>>,
+) -> crate::Result<String>
+where
+    R: futures_lite::io::AsyncBufRead + Unpin,
+{
+    let declared_size = reader.entry().uncompressed_size();
+    if declared_size > MAX_MRPACK_MANIFEST_BYTES {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Pack manifest declares {declared_size} bytes, exceeding the {MAX_MRPACK_MANIFEST_BYTES}-byte limit"
+        ))
+        .into());
+    }
+    let expected_crc32 = reader.entry().crc32();
+
+    let read_limit = MAX_MRPACK_MANIFEST_BYTES.saturating_add(1);
+    let mut bytes = Vec::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut read_total = 0_u64;
+    while read_total < read_limit {
+        let chunk_len =
+            (read_limit - read_total).min(buffer.len() as u64) as usize;
+        let bytes_read = futures_lite::io::AsyncReadExt::read(
+            &mut reader,
+            &mut buffer[..chunk_len],
+        )
+        .await?;
+        if bytes_read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..bytes_read]);
+        read_total += bytes_read as u64;
+    }
+    if read_total > MAX_MRPACK_MANIFEST_BYTES {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Pack manifest exceeds the {MAX_MRPACK_MANIFEST_BYTES}-byte limit"
+        ))
+        .into());
+    }
+
+    let manifest = String::from_utf8(bytes).map_err(|_| {
+        crate::Error::from(crate::ErrorKind::InputError(
+            "Pack manifest is not valid UTF-8".to_string(),
+        ))
+    })?;
+    if reader.compute_hash() != expected_crc32 {
+        return Err(async_zip::error::ZipError::CRC32CheckError.into());
+    }
+
+    Ok(manifest)
 }
 
 async fn hash_zip_entry<R>(
@@ -953,6 +1014,24 @@ where
     Ok((size, hasher.digest().to_string()))
 }
 
+/// Cooperative cancellation checkpoint around opening an MRPack archive.
+///
+/// `async_zip` parses the central directory inside `MrpackZipReader::new`
+/// without observing a cancellation token, so this only prevents starting the
+/// open after a cancel and discards an open that raced one; it cannot preempt
+/// the parse while it is already running.
+fn check_mrpack_parse_canceled(
+    cancellation: &tokio_util::sync::CancellationToken,
+) -> crate::Result<()> {
+    if cancellation.is_cancelled() {
+        return Err(crate::ErrorKind::OtherError(
+            "modpack archive parse canceled".to_string(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
 pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     create_pack: CreatePack,
     ignore_lock: bool,
@@ -971,23 +1050,15 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     let mut icon_exists = icon.is_some();
     let source_path = pack_source_path(&file);
 
-    reporter
-        .set_context(
-            InstallErrorContext::new("read modpack archive")
-                .maybe_project_id(project_id.clone())
-                .maybe_version_id(version_id.clone())
-                .source_path(source_path.clone())
-                .build(),
-        )
-        .await?;
-    let mut zip_reader = MrpackZipReader::new(&file).await?;
-    let instance_full_path =
-        crate::api::instance::get_full_path(&instance_id).await?;
     let modpack_details = InstallPhaseDetails::Modpack {
         project_id: project_id.clone(),
         version_id: version_id.clone(),
         title: description.override_title.clone(),
     };
+    // `MrpackZipReader::new` parses the whole central directory, which can take
+    // a long time for a large local pack. Report the manifest phase before that
+    // work starts so the UI never shows a stale earlier phase while the archive
+    // is still being opened.
     reporter
         .update(
             InstallPhaseId::ReadingPackManifest,
@@ -1005,6 +1076,12 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                 .build(),
         )
         .await?;
+    let parse_cancellation = reporter.cancellation_token();
+    check_mrpack_parse_canceled(&parse_cancellation)?;
+    let mut zip_reader = MrpackZipReader::new(&file).await?;
+    check_mrpack_parse_canceled(&parse_cancellation)?;
+    let instance_full_path =
+        crate::api::instance::get_full_path(&instance_id).await?;
 
     // Extract index of modrinth.index.json, tolerating packs zipped inside a
     // single wrapping folder. A root-level manifest always wins so override
@@ -1020,7 +1097,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     let client_overrides_prefix = format!("{archive_base}client-overrides/");
     let server_overrides_prefix = format!("{archive_base}server-overrides/");
     let mut manifest = String::new();
-    manifest.push_str(&zip_reader.read_entry_to_string(manifest_idx).await?);
+    manifest.push_str(&zip_reader.read_manifest_to_string(manifest_idx).await?);
 
     let pack: PackFormat = serde_json::from_str(&manifest)?;
     if &*pack.game != "minecraft" {
@@ -1376,8 +1453,8 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             .iter()
             .map(|&index| (index, pack_files[index].clone()))
             .collect::<Vec<_>>();
-        let finalize_semaphore =
-            Arc::new(Semaphore::new(NATIVE_CONTENT_FINALIZE_CONCURRENCY));
+        let finalize_concurrency = native_content_finalize_concurrency();
+        let finalize_semaphore = Arc::new(Semaphore::new(finalize_concurrency));
         let (completion_tx, mut completion_rx) =
             mpsc::channel::<MrpackDatabaseTask>(128);
         let completion_instance_id = content_context.instance_id.clone();
@@ -1458,7 +1535,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                 futures::stream::poll_fn(move |cx| {
                     verification_rx.poll_recv(cx)
                 }),
-                Some(NATIVE_CONTENT_FINALIZE_CONCURRENCY),
+                Some(finalize_concurrency),
                 cancellation.clone(),
                 move |task| {
                     let verification_context = worker_context.clone();
@@ -2429,7 +2506,7 @@ pub(crate) async fn related_file_paths(
         )
         .into());
     };
-    let manifest = zip_reader.read_entry_to_string(manifest_idx).await?;
+    let manifest = zip_reader.read_manifest_to_string(manifest_idx).await?;
     let pack: PackFormat = serde_json::from_str(&manifest)?;
     let overrides_prefix = format!("{archive_base}overrides/");
     let client_overrides_prefix = format!("{archive_base}client-overrides/");
@@ -2847,7 +2924,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            reader.read_entry_to_string(index).await.unwrap(),
+            reader.read_manifest_to_string(index).await.unwrap(),
             r#"{"formatVersion":1,"game":"minecraft","versionId":"test","name":"test","files":[]}"#
         );
     }

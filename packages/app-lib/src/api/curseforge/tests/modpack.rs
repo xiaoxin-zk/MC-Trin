@@ -5,7 +5,7 @@ use super::fixtures::{
     write_override_size_test_archive, write_override_test_archive,
 };
 use crate::api::curseforge::archive::{
-    collect_modpack_override_tasks, curseforge_override_content,
+    collect_modpack_override_tasks_at, curseforge_override_content,
     extract_modpack_overrides, game_options_pack_source,
     materialize_modpack_overrides, modpack_servers, read_modpack_manifest,
     safe_archive_relative_path,
@@ -252,10 +252,11 @@ fn curseforge_overrides_accept_sizes_above_two_gib_up_to_shared_limit() {
             zip::ZipArchive::new(std::fs::File::open(&archive_path).unwrap())
                 .unwrap();
         let manifest = read_modpack_manifest(&mut archive).unwrap();
-        let tasks = collect_modpack_override_tasks(
+        let tasks = collect_modpack_override_tasks_at(
             &mut archive,
             &manifest,
             root.path(),
+            "",
             None,
         )
         .unwrap();
@@ -304,10 +305,11 @@ fn curseforge_overrides_size_counts_only_final_duplicate_targets() {
         zip::ZipArchive::new(std::fs::File::open(&archive_path).unwrap())
             .unwrap();
     let manifest = read_modpack_manifest(&mut archive).unwrap();
-    let tasks = collect_modpack_override_tasks(
+    let tasks = collect_modpack_override_tasks_at(
         &mut archive,
         &manifest,
         root.path(),
+        "",
         None,
     )
     .unwrap();

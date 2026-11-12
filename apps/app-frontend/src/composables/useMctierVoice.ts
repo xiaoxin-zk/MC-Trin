@@ -3,6 +3,7 @@ import { computed, onScopeDispose, ref } from 'vue'
 import type { MctierState } from '@/helpers/mctier'
 
 import {
+    clampVolume,
     MAX_SIGNAL_FRAME_BYTES,
     MctierVoiceSession,
     type MctierVoiceSignal,
@@ -68,11 +69,6 @@ function clampPeerVolumes(value: unknown): Record<string, number> {
         .filter(([playerId, volume]) => playerId && typeof volume === 'number')
         .map(([playerId, volume]) => [playerId, clampVolume(Number(volume))] as const)
     return Object.fromEntries(entries)
-}
-
-function clampVolume(volume: number): number {
-    if (!Number.isFinite(volume)) return 1
-    return Math.min(1, Math.max(0, volume))
 }
 
 /** Device ids and the chosen mic state outlive the room, so they are kept in

@@ -49,7 +49,7 @@ function utf8Length(value: string): number {
 }
 
 /** Playback volume is stored as a 0-1 gain so the slider and the element agree. */
-function clampVolume(volume: number): number {
+export function clampVolume(volume: number): number {
     if (!Number.isFinite(volume)) return DEFAULT_OUTPUT_VOLUME
     return Math.min(1, Math.max(0, volume))
 }

@@ -30,14 +30,6 @@
                     <SwapIcon v-else-if="installed && version.id !== installedVersion" />
                     <CheckIcon v-else />
                 </Button>
-                <!-- 开服功能暂有问题，隐藏该按钮
-				<Button v-if="serverCapable && startServer" circular icon-only type="quiet"
-						v-tooltip="formatMessage(messages.startServer)"
-						@click.stop="() => startServer(version)"
-					>
-						<ServerIcon />
-					</Button>
-				-->
                 <ButtonLink
                     v-tooltip="formatMessage(commonMessages.openInBrowserButton)"
                     :href="`https://modrinth.com/${project.project_type}/${project.slug}/version/${version.id}`"
@@ -55,13 +47,7 @@
 </template>
 
 <script setup>
-import {
-    CheckIcon,
-    DownloadIcon,
-    ExternalIcon,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by temporarily commented start-server button
-    ServerIcon,
-} from '@modrinth/assets'
+import { CheckIcon, DownloadIcon, ExternalIcon } from '@modrinth/assets'
 import {
     Button,
     ButtonLink,
@@ -71,7 +57,7 @@ import {
     ProjectPageVersions,
     useVIntl,
 } from '@modrinth/ui'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { SwapIcon } from '@/assets/icons/index.js'
@@ -86,17 +72,9 @@ const messages = defineMessages({
         id: 'app.project.versions.already-installed',
         defaultMessage: 'Already installed',
     },
-    addToAnotherInstance: {
-        id: 'app.project.versions.add-to-another-instance',
-        defaultMessage: 'Add to another instance',
-    },
-    startServer: {
-        id: 'app.project.versions.start-server',
-        defaultMessage: 'Create server',
-    },
 })
 
-const props = defineProps({
+defineProps({
     project: {
         type: Object,
         default: () => {},
@@ -117,25 +95,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
-    instance: {
-        type: Object,
-        default: null,
-    },
     installedVersion: {
         type: String,
         default: null,
     },
-    startServer: {
-        type: Function,
-        default: null,
-    },
 })
-
-// Used by the temporarily commented start-server button.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const serverCapable = computed(
-    () => props.project?.project_type === 'modpack' && props.project?.server_side !== 'unsupported',
-)
 
 const { handleError } = injectNotificationManager()
 const route = useRoute()

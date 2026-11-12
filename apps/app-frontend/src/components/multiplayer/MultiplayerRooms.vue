@@ -406,7 +406,7 @@ const {
     switchProvider,
     terracottaUpdate,
     updateTerracotta,
-} = useMultiplayerSession({ legacyProviders: true })
+} = useMultiplayerSession()
 
 const providerStorageKey = 'axolotl-multiplayer-provider'
 const nodeStorageKey = 'axolotl-hongshi-node'

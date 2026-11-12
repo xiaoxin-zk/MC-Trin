@@ -204,9 +204,6 @@ vi.mock('@/providers/setup/server-install-content', async () => {
 vi.mock('@/components/browse/BrowseInstanceSelector.vue', () => ({
     default: { render: () => null },
 }))
-vi.mock('@/components/multiplayer/servers/modpack/CreateModpackServerModal.vue', () => ({
-    default: { render: () => null },
-}))
 vi.mock('@/components/ui/InstanceIndicator.vue', () => ({ default: { render: () => null } }))
 vi.mock('@/components/ui/InstanceIcon.vue', () => ({ default: { render: () => null } }))
 vi.mock('@/components/ui/ContextMenu.vue', () => ({ default: { render: () => null } }))

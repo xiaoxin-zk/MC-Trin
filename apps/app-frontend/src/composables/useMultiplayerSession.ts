@@ -16,8 +16,7 @@ import { exportErrorLogs } from '@/helpers/utils'
 const ACTIVE_POLL_INTERVAL = 500
 const IDLE_POLL_INTERVAL = 2000
 
-export function useMultiplayerSession(options: { legacyProviders?: boolean } = {}) {
-    const legacyProviders = options.legacyProviders ?? true
+export function useMultiplayerSession() {
     const { handleError } = injectNotificationManager()
     const { formatMessage } = useVIntl()
     const multiplayerState = ref<MultiplayerState | null>(null)
@@ -168,20 +167,18 @@ export function useMultiplayerSession(options: { legacyProviders?: boolean } = {
         }
         document.addEventListener('visibilitychange', handleVisibilityChange)
         void pollState()
-        if (legacyProviders) {
-            void terracotta
-                .getPlatformKey()
-                .then((value) => {
-                    if (mounted) platformKey.value = value
-                })
-                .catch(() => undefined)
-            void terracotta
-                .checkForUpdate()
-                .then((update) => {
-                    if (mounted) terracottaUpdate.value = update
-                })
-                .catch(() => undefined)
-        }
+        void terracotta
+            .getPlatformKey()
+            .then((value) => {
+                if (mounted) platformKey.value = value
+            })
+            .catch(() => undefined)
+        void terracotta
+            .checkForUpdate()
+            .then((update) => {
+                if (mounted) terracottaUpdate.value = update
+            })
+            .catch(() => undefined)
         void multiplayer
             .getPlayerName()
             .then((value) => {

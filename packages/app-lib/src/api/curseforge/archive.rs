@@ -20,26 +20,12 @@ pub(crate) struct ModpackOverrideTask {
     pub(crate) size: u64,
 }
 
-pub(crate) fn collect_modpack_override_tasks<R: Read + Seek>(
-    archive: &mut zip::ZipArchive<R>,
-    manifest: &CurseForgeModpackManifest,
-    instance_path: &Path,
-    cancellation: Option<&CancellationToken>,
-) -> crate::Result<Vec<ModpackOverrideTask>> {
-    collect_modpack_override_tasks_at(
-        archive,
-        manifest,
-        instance_path,
-        "",
-        cancellation,
-    )
-}
-
-/// Same task collection, but addressing a pack wrapped in one top-level folder.
+/// Collects override tasks, addressing a pack wrapped in one top-level folder.
 ///
 /// The manifest's `overrides` field is relative to the pack root, not to the
 /// archive root, so a wrapped pack stores its files under `{base}{overrides}/`.
-/// Root packs pass an empty `base` and keep the exact previous prefix.
+/// Root-level packs pass an empty `base`, which makes the prefix exactly
+/// `{overrides}/`.
 pub(crate) fn collect_modpack_override_tasks_at<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     manifest: &CurseForgeModpackManifest,

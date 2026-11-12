@@ -364,6 +364,7 @@ pub(crate) const LIVE_PROGRESS_EMIT_INTERVAL: Duration =
 pub(crate) const LIVE_PROGRESS_MAX_WAIT: Duration = Duration::from_secs(1);
 pub(crate) const LIVE_PROGRESS_MIN_BYTES: u64 = 64 * 1024;
 pub(crate) const MAX_CONCURRENT_INSTALL_JOBS: usize = 1;
+pub(crate) const MAX_MRPACK_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const MAX_PACK_FILE_DOWNLOAD_CONCURRENCY: usize = 4;
 pub(crate) const MODPACK_DATABASE_BATCH_SIZE: usize = 25;
 pub(crate) const MODPACK_DATABASE_FLUSH_INTERVAL: Duration =
@@ -375,9 +376,23 @@ pub(crate) const MODPACK_REQUESTED_H2_RANGES: usize = 16;
 pub(crate) const MODPACK_RANGE_CONNECTION_FLOOR: usize = 32;
 pub(crate) const MODPACK_VERIFICATION_CONCURRENCY: usize = 4;
 pub(crate) const MODPACK_VERIFICATION_QUEUE_CAPACITY: usize = 128;
-pub(crate) const NATIVE_CONTENT_FINALIZE_CONCURRENCY: usize = 4;
 pub(crate) const OVERRIDE_EXTRACTION_CONCURRENCY: usize = 4;
 pub(crate) const PROGRESS_GRANULARITY: u64 = 1024 * 1024;
+
+/// Number of workers that verify and finalize modpack content.
+///
+/// Verification and finalization derive their limit from one place so the two
+/// stages cannot disagree: a verification pool larger than the finalize
+/// semaphore would only queue workers behind it. Four is the floor because
+/// finalization is dominated by SQLite writes and filesystem materialization,
+/// which stay useful even on a small host; eight is the ceiling so a high-core
+/// host does not oversubscribe that shared writer.
+pub(crate) fn native_content_finalize_concurrency() -> usize {
+    std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get())
+        .unwrap_or(4)
+        .clamp(4, 8)
+}
 
 /// Origin hosts, repositories and download URL components.
 pub(crate) const ALIYUN_MAVEN_BASE_URL: &str =
@@ -792,3 +807,12 @@ pub(crate) const H2_POOL_TEST_INVALID_443: &str = "test.invalid:443";
 pub(crate) const TEST_BODY_SIZE: usize = 2 * 1024 * 1024;
 #[cfg(test)]
 pub(crate) const TEST_FRAME_SIZE: usize = 16 * 1024;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn finalize_concurrency_stays_within_its_bounds() {
+        let concurrency = super::native_content_finalize_concurrency();
+        assert!((4..=8).contains(&concurrency));
+    }
+}

@@ -243,23 +243,6 @@
                             <CheckIcon v-else />
                             {{ installButtonLabel }}
                         </Button>
-                        <!-- 开服功能暂有问题，隐藏该按钮
-						<Transition name="start-server">
-							<Button
-								v-if="serverCapableModpack"
-								key="modpack-start-server"
-								size="xl"
-								type="outlined"
-
-									v-tooltip="formatMessage(messages.startServer)"
-									native-type="button"
-									@click="openModpackServerFlow"
-								>
-									<ServerIcon />
-									{{ formatMessage(messages.startServer) }}
-								</Button>
-						</Transition>
-						-->
                         <OverflowMenu
                             :tooltip="formatMessage(commonMessages.moreOptionsButton)"
                             :options="[
@@ -399,7 +382,6 @@
                     :translations="translations"
                     :translation-mode="translationMode"
                     :translation-style="translationStyle"
-                    :start-server="(version) => openModpackServerFlow(version)"
                 />
             </template>
             <template v-else> {{ formatMessage(messages.loadFailed) }} </template>
@@ -455,7 +437,6 @@
             @browse-modpacks="() => {}"
             @create="serverInstallContent.handleServerModpackFlowCreate"
         />
-        <CreateModpackServerModal ref="modpackServerModal" @created="handleModpackServerCreated" />
     </div>
 </template>
 
@@ -477,8 +458,6 @@ import {
     PlusIcon,
     ReportIcon,
     SearchIcon,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by temporarily commented start-server button
-    ServerIcon,
     SpinnerIcon,
     StopCircleIcon,
 } from '@modrinth/assets'
@@ -495,7 +474,6 @@ import {
     getLatestMatchingInstallVersion,
     getTargetInstallPreferences,
     injectNotificationManager,
-    injectPopupNotificationManager,
     NavTabs,
     OverflowMenu,
     ProjectBackgroundGradient,
@@ -521,7 +499,6 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { SwapIcon } from '@/assets/icons/index.js'
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
-import CreateModpackServerModal from '@/components/multiplayer/servers/modpack/CreateModpackServerModal.vue'
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import InstanceIndicator from '@/components/ui/InstanceIndicator.vue'
 import {
@@ -579,7 +556,6 @@ import UpgradeProjectReturnBar from './UpgradeProjectReturnBar.vue'
 dayjs.extend(relativeTime)
 
 const { addNotification, handleError } = injectNotificationManager()
-const popupNotificationManager = injectPopupNotificationManager()
 const { install: installVersion } = injectContentInstall()
 const contentSelection = injectContentSelection()
 const route = useRoute()
@@ -693,22 +669,6 @@ const messages = defineMessages({
         id: 'project.actions.view-modpacks',
         defaultMessage: 'View modpacks',
     },
-    startServer: {
-        id: 'app.project.modpack-server.start',
-        defaultMessage: 'Start server',
-    },
-    serverCreated: {
-        id: 'app.project.modpack-server.created-title',
-        defaultMessage: 'Server created',
-    },
-    serverCreatedDescription: {
-        id: 'app.project.modpack-server.created-description',
-        defaultMessage: '{name} is ready. Configure and start it in Multiplayer.',
-    },
-    openServer: {
-        id: 'app.project.modpack-server.open',
-        defaultMessage: 'Open server',
-    },
 })
 
 const { installingServerProjects, playServerProject, showAddServerToInstanceModal } =
@@ -738,46 +698,6 @@ const favoritePending = computed(() =>
 const favoriteSaved = computed(() =>
     data.value ? contentFavorites.isFavorite('modrinth', data.value.id) : false,
 )
-
-// Used by the temporarily commented start-server button.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const serverCapableModpack = computed(
-    () => data.value?.project_type === 'modpack' && data.value.server_side !== 'unsupported',
-)
-const modpackServerModal = ref()
-
-async function openModpackServerFlow(targetVersion) {
-    if (!data.value) return
-    // The version handed in by the UI can be an incomplete object that is missing
-    // `id`/`loaders`/`game_versions`/`files`. Re-fetch a complete version from the
-    // API so the modpack server flow has the data it needs (otherwise it misdetects
-    // the loader as Vanilla and fails with "No server launcher available").
-    let version = targetVersion
-    const isComplete = (v) => !!v && Array.isArray(v.game_versions) && Array.isArray(v.files)
-    if (!isComplete(version)) {
-        const versionId = version?.id ?? data.value.versions?.[0]
-        version = versionId ? await get_version(versionId, 'bypass').catch(() => null) : null
-    }
-    if (!version) return
-    modpackServerModal.value?.show(data.value, version)
-}
-
-function handleModpackServerCreated(serverId) {
-    popupNotificationManager.addPopupNotification({
-        title: formatMessage(messages.serverCreated),
-        text: formatMessage(messages.serverCreatedDescription, { name: data.value?.title ?? '' }),
-        type: 'success',
-        buttons: [
-            {
-                label: formatMessage(messages.openServer),
-                color: 'brand',
-                action: () => {
-                    void router.push(`/multiplayer/servers/${encodeURIComponent(serverId)}`)
-                },
-            },
-        ],
-    })
-}
 
 async function toggleFavorite() {
     if (!data.value || !favoriteSupported.value || favoritePending.value) return
@@ -1686,28 +1606,6 @@ const handleOptionsClick = (args) => {
 </script>
 
 <style scoped lang="scss">
-.start-server-enter-active {
-    transition:
-        opacity 0.28s ease,
-        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.start-server-enter-from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.96);
-}
-
-.start-server-leave-active {
-    transition:
-        opacity 0.16s ease,
-        transform 0.16s ease;
-}
-
-.start-server-leave-to {
-    opacity: 0;
-    transform: translateY(4px) scale(0.97);
-}
-
 .project-sidebar-section {
     @apply p-4 flex flex-col gap-2 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid;
 }

@@ -1,6 +1,6 @@
 # MC-Trin
 
-MC-Trin 是一款面向 Minecraft Java Edition 玩家、以简体中文用户为重点的 Windows、macOS 与 Linux 桌面启动器。项目使用 Vue、Rust 和 Tauri 构建，提供实例管理、内容下载、Java 管理、多人联机、AI 助手和本地插件等功能。
+MC-Trin 是一款面向 Minecraft Java Edition 玩家、以简体中文用户为重点的桌面启动器，目前支持 Windows（64 位）。项目使用 Vue、Rust 和 Tauri 构建，提供实例管理、内容下载、Java 管理、多人联机、AI 助手和本地插件等功能。
 
 ## 功能
 
@@ -21,7 +21,7 @@ AI 模型和 MCP 服务由用户自行配置，使用时会按所选服务发送
 
 ## 下载
 
-从 [GitHub Releases](https://github.com/xiaoxin-zk/MC-Trin/releases) 获取发布版本。Windows、macOS 和 Linux 的 CI 构建会在 GitHub Actions 中验证；实际可用安装包以对应版本发布页列出的产物为准。
+从 [GitHub Releases](https://github.com/xiaoxin-zk/MC-Trin/releases) 获取发布版本。CI 会在 GitHub Actions 中验证 Windows 构建；安装包请从对应版本的发布页下载。
 
 ## 开发
 
