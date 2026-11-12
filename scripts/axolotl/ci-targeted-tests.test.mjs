@@ -96,7 +96,7 @@ test('checks all workspace crates separately for workspace-wide changes', () => 
     const commands = targetedCargoArgs(plan)
     assert(commands.some((args) => args[0] === 'check' && args.includes('theseus')))
     assert(commands.some((args) => args[0] === 'check' && args.includes('theseus_gui')))
-    assert(commands.some((args) => args[0] === 'check' && args.includes('axolotl-installer-ui')))
+    assert(commands.some((args) => args[0] === 'check' && args.includes('mctrin-installer-ui')))
     assert(commands.some((args) => args[0] === 'check' && args.includes('content-management')))
 })
 

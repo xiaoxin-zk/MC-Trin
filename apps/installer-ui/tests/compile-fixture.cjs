@@ -36,8 +36,8 @@ fs.writeFileSync(path.join(out, 'resource.txt'), 'fixture resource')
 const hook = fs
     .readFileSync(path.join(root, 'apps/app/nsis/hooks.nsi'), 'utf8')
     .replace(
-        /!define AXL_INSTALLER_UI_PATH .*/g,
-        `!define AXL_INSTALLER_UI_PATH "${path.join(out, 'fixture.exe')}"`,
+        /!define MCTRIN_INSTALLER_UI_PATH .*/g,
+        `!define MCTRIN_INSTALLER_UI_PATH "${path.join(out, 'fixture.exe')}"`,
     )
 fs.writeFileSync(path.join(out, 'hooks.nsi'), hook)
 for (const file of ['utils.nsh', 'FileAssociation.nsh']) {

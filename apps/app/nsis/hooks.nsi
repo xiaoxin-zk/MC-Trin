@@ -1,9 +1,13 @@
 ; https://nsis.sourceforge.io/ShellExecWait
-!ifndef AXL_INSTALLER_UI_PATH
-  !if /FileExists "$%AXOLOTL_INSTALLER_UI_PATH%"
-    !define AXL_INSTALLER_UI_PATH "$%AXOLOTL_INSTALLER_UI_PATH%"
+!ifndef MCTRIN_INSTALLER_UI_PATH
+  !if /FileExists "$%MCTRIN_INSTALLER_UI_PATH%"
+    !define MCTRIN_INSTALLER_UI_PATH "$%MCTRIN_INSTALLER_UI_PATH%"
   !else
-    !define AXL_INSTALLER_UI_PATH "${__FILEDIR__}\..\..\..\target\release\axolotl-installer-ui.exe"
+    !if /FileExists "$%AXOLOTL_INSTALLER_UI_PATH%"
+      !define MCTRIN_INSTALLER_UI_PATH "$%AXOLOTL_INSTALLER_UI_PATH%"
+    !else
+      !define MCTRIN_INSTALLER_UI_PATH "${__FILEDIR__}\..\..\..\target\release\mctrin-installer-ui.exe"
+    !endif
   !endif
 !endif
 

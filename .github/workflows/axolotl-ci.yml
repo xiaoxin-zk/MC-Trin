@@ -390,7 +390,7 @@ jobs:
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'
         run: |
-          cargo test --package axolotl-installer-ui
+          cargo test --package mctrin-installer-ui
           pnpm --filter @modrinth/app-frontend exec playwright install chromium
           node --test apps/installer-ui/tests/installer-ui.test.cjs
       - name: Compile Windows application and installer UI without release optimization
@@ -409,7 +409,7 @@ jobs:
           $config = Join-Path $env:RUNNER_TEMP 'mctrin-startup-smoke/config'
           New-Item -ItemType Directory -Force -Path $config | Out-Null
           $env:THESEUS_CONFIG_DIR = $config
-          $env:AXOLOTL_DATA_DIR_SUFFIX = 'ci-smoke'
+          $env:MCTRIN_DATA_DIR_SUFFIX = 'ci-smoke'
           $binary = Resolve-Path 'target/ci/MC-Trin.exe'
           $app = Start-Process -FilePath $binary -PassThru
           try {

@@ -13,5 +13,5 @@ fn main() {
 
 #[cfg(not(windows))]
 fn main() {
-    eprintln!("axolotl-installer-ui is only available on Windows");
+    eprintln!("MC-Trin installer is only available on Windows");
 }

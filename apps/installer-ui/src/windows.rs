@@ -962,7 +962,7 @@ mod tests {
             .expect("system time should be after Unix epoch")
             .as_nanos();
         let missing = existing
-            .join(format!("axolotl-installer-ui-{unique}"))
+            .join(format!("mctrin-installer-ui-{unique}"))
             .join("nested");
         assert!(!missing.exists());
 
@@ -977,7 +977,7 @@ mod tests {
     #[test]
     fn install_request_includes_launch_after_choice() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":true}"#,
+            r#"{"command":"install","installDir":"C:\\Mctrin","desktopShortcut":true,"launchAfter":true}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {
@@ -990,7 +990,7 @@ mod tests {
     #[test]
     fn install_request_carries_the_portable_choice() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","portable":true,"desktopShortcut":true,"launchAfter":false}"#,
+            r#"{"command":"install","installDir":"C:\\Mctrin","portable":true,"desktopShortcut":true,"launchAfter":false}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {
@@ -1003,7 +1003,7 @@ mod tests {
     #[test]
     fn a_request_without_the_portable_flag_means_a_normal_install() {
         let command = serde_json::from_str::<UiCommand>(
-            r#"{"command":"install","installDir":"C:\\Axolotl","desktopShortcut":true,"launchAfter":false}"#,
+            r#"{"command":"install","installDir":"C:\\Mctrin","desktopShortcut":true,"launchAfter":false}"#,
         )
         .expect("install request should deserialize");
         let UiCommand::Install(request) = command else {
@@ -1062,7 +1062,7 @@ mod tests {
     #[test]
     fn uninstall_success_requires_completion_and_a_removed_main_binary() {
         let directory = std::env::temp_dir()
-            .join(format!("axolotl-uninstall-result-{}", std::process::id()));
+            .join(format!("mctrin-uninstall-result-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let status = directory.join("uninstall.status");
         assert!(uninstall_result(0, &status, &directory, false).is_err());
@@ -1104,7 +1104,7 @@ mod tests {
     #[test]
     fn deleting_app_data_verifies_the_instances_folder_is_gone() {
         let directory = std::env::temp_dir()
-            .join(format!("axolotl-uninstall-data-{}", std::process::id()));
+            .join(format!("mctrin-uninstall-data-{}", std::process::id()));
         let data = directory.join("data");
         fs::create_dir_all(&data).unwrap();
         let status = directory.join("uninstall.status");
@@ -1122,7 +1122,7 @@ mod tests {
     #[test]
     fn uninstall_preserves_unicode_failure_paths() {
         let directory = std::env::temp_dir()
-            .join(format!("axolotl-uninstall-unicode-{}", std::process::id()));
+            .join(format!("mctrin-uninstall-unicode-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let status = directory.join("uninstall.status");
         let message = r"error:Could not remove: D:\游戏\启动器.exe";
@@ -1157,7 +1157,7 @@ mod tests {
     #[test]
     fn writable_install_directory_does_not_require_elevation() {
         let directory = std::env::temp_dir().join(format!(
-            "axolotl-installer-ui-elevation-{}",
+            "mctrin-installer-ui-elevation-{}",
             std::process::id()
         ));
         fs::create_dir_all(&directory)
@@ -1184,7 +1184,7 @@ mod tests {
     #[test]
     fn launching_from_missing_install_directory_reports_error() {
         let missing = std::env::temp_dir().join(format!(
-            "axolotl-installer-ui-missing-{}",
+            "mctrin-installer-ui-missing-{}",
             std::process::id()
         ));
         assert!(!missing.exists());

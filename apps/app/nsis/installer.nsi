@@ -1129,7 +1129,7 @@ Function .onInit
   ${AndIf} $PassiveMode <> 1
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
-    File "/oname=$PLUGINSDIR\AxolotlInstallerUI.exe" "${AXL_INSTALLER_UI_PATH}"
+    File "/oname=$PLUGINSDIR\MCTRINInstallerUI.exe" "${MCTRIN_INSTALLER_UI_PATH}"
     StrCpy $0 2
     ClearErrors
     ; The data folder is derived by the UI from the program folder and the
@@ -1137,7 +1137,7 @@ Function .onInit
     ; disagree about where it points. The layout is passed so an update of an
     ; existing portable install keeps deriving the folder beside the program.
     !insertmacro AxlDetectPortableLayout
-    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
+    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
     ${If} $0 <> 2
       Quit
     ${EndIf}
@@ -1488,11 +1488,11 @@ Function un.onInit
   ${AndIfNot} ${Silent}
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
-    File "/oname=$PLUGINSDIR\AxolotlInstallerUI.exe" "${AXL_INSTALLER_UI_PATH}"
+    File "/oname=$PLUGINSDIR\MCTRINInstallerUI.exe" "${MCTRIN_INSTALLER_UI_PATH}"
     ; The UI needs the layout to describe what the optional cleanup removes:
     ; a portable install has no data subfolder, everything is in $INSTDIR.
     !insertmacro AxlDetectPortableLayout
-    ExecWait '"$PLUGINSDIR\AxolotlInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --version "${VERSION}" --language "$LANGUAGE"' $0
+    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --version "${VERSION}" --language "$LANGUAGE"' $0
     SetErrorLevel $0
     Quit
   ${EndIf}

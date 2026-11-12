@@ -26,7 +26,7 @@ requireProfile(profile)
 const source = path.join(root, 'target', profile)
 const binary = requireFile(path.join(source, 'MC-Trin.exe'))
 const initialHash = sha256(binary)
-process.env.AXOLOTL_INSTALLER_UI_PATH = requireFile(path.join(source, 'axolotl-installer-ui.exe'))
+process.env.MCTRIN_INSTALLER_UI_PATH = requireFile(path.join(source, 'mctrin-installer-ui.exe'))
 const destination = path.resolve(values.output)
 fs.mkdirSync(destination, { recursive: true })
 const target =
@@ -68,7 +68,7 @@ for (const variant of ['modern', 'native']) {
 }
 if (sha256(binary) !== initialHash) throw new Error('Packaging changed the compiled application')
 const portable = path.join(root, 'target', `portable-${profile}`, 'MC-Trin')
-fs.mkdirSync(path.join(portable, '.Axolotl'), { recursive: true })
+fs.mkdirSync(path.join(portable, '.MC-Trin'), { recursive: true })
 fs.copyFileSync(binary, path.join(portable, 'MC-Trin.exe'))
 requireFile(path.join(app, 'resources/seed-map/axolotl-cubiomes.dll'))
 fs.cpSync(path.join(app, 'resources/seed-map'), path.join(portable, 'resources/seed-map'), {

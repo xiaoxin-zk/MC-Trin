@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 
 const CRATES = [
     { root: 'apps/app', package: 'theseus_gui' },
-    { root: 'apps/installer-ui', package: 'axolotl-installer-ui' },
+    { root: 'apps/installer-ui', package: 'mctrin-installer-ui' },
     { root: 'packages/app-lib', package: 'theseus', moduleTests: true },
     { root: 'packages/content-management', package: 'content-management' },
     { root: 'packages/daedalus', package: 'daedalus' },

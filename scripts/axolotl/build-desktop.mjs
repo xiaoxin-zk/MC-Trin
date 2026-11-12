@@ -24,7 +24,7 @@ const { values } = parseArgs({
 const profile = values.profile
 if (!values['installer-only'] || process.env.CI) requireProfile(profile)
 if (values['installer-only']) {
-    run('cargo', ['build', '--locked', '--profile', profile, '--package', 'axolotl-installer-ui'])
+    run('cargo', ['build', '--locked', '--profile', profile, '--package', 'mctrin-installer-ui'])
 } else {
     const resources = process.env.AXOLOTL_BUILD_RESOURCES
     if (!resources)
