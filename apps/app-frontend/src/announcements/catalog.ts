@@ -30,6 +30,49 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-0.0.4-beta',
+        version: '0.0.4-beta',
+        publishedAt: '2026-11-12',
+        title: {
+            'en-US': 'MC-Trin 0.0.4-beta',
+            'zh-CN': 'MC-Trin 0.0.4-beta',
+        },
+        changes: {
+            added: [
+                {
+                    'en-US':
+                        "Added optional AI noise reduction to room voice, powered by RNNoise. It is off by default, runs only while you enable it, and falls back to your browser's own filtering when the device cannot run it.",
+                    'zh-CN':
+                        '联机语音新增可选 AI 降噪（RNNoise）。默认关闭，仅在你开启时运行；设备不支持时会自动回退到浏览器自带降噪。',
+                },
+                {
+                    'en-US':
+                        'Voice settings are now sorted by what they control: microphone, microphone volume, input level, noise reduction, activation, speaker and output volume.',
+                    'zh-CN':
+                        '语音设置已按用途重新排列：麦克风、麦克风音量、输入电平、降噪、语音激活、扬声器、输出音量。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed the room visibility switch, which could stay stuck because it received the wrong value type.',
+                    'zh-CN': '修复房间可见性开关：此前可能因收到错误的值类型而无法切换。',
+                },
+                {
+                    'en-US':
+                        'Content installs now download up to 16 files at once instead of 4, so large modpacks spend less time waiting on per-file latency.',
+                    'zh-CN':
+                        '内容安装现在最多同时下载 16 个文件（原先为 4 个），大型整合包等待单文件延迟的时间明显减少。',
+                },
+                {
+                    'en-US':
+                        'A disabled option can no longer keep the launcher busy: the AI noise reduction worklet is released as soon as you turn it off.',
+                    'zh-CN': '关闭的选项不再占用资源：关闭 AI 降噪时会立即释放 worklet。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-0.0.3-beta',
         version: '0.0.3-beta',
         publishedAt: '2026-11-11',
