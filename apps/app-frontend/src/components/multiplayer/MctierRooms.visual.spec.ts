@@ -356,7 +356,7 @@ it('keeps public rooms passwordless and sends the chosen visibility', async () =
     const wrapper = page()
     await fillRequired(wrapper)
     await wrapper.get('input[name="lobby-password"]').setValue('')
-    await wrapper.get('input[name="public-lobby"]').setValue(true)
+    await wrapper.get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]').setValue(true)
     await button(wrapper, 'Create lobby').trigger('click')
     await flushPromises()
     expect(fixture.start).toHaveBeenCalledWith(
@@ -374,7 +374,7 @@ it('clears the password when the room is listed publicly', async () => {
     // The directory cannot carry a password, so choosing to publish wipes the
     // secret instead of sending a combination the service ignores.
     await wrapper.get('input[name="lobby-password"]').setValue('secret')
-    await wrapper.get('input[name="public-lobby"]').setValue(true)
+    await wrapper.get('[data-onboarding-id="mctier-visibility-public"] input[type="radio"]').setValue(true)
     await flushPromises()
     expect((wrapper.get('input[name="lobby-password"]').element as HTMLInputElement).value).toBe('')
     await button(wrapper, 'Create lobby').trigger('click')
@@ -455,8 +455,11 @@ it('offers a working voice panel once the room is connected', async () => {
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
     // Open-mic is the default: the voice-activation option is offered but starts off.
-    // Checkbox is a `role="checkbox"` button, so its state is `aria-checked`.
-    const activation = wrapper.find(`${voicePanel} [role="checkbox"]`)
+    // Checkbox is a `role="checkbox"` button carrying its label on `aria-label`,
+    // so target it by name rather than by position among the panel's switches.
+    const activation = wrapper.find(
+        `${voicePanel} [role="checkbox"][aria-label="Only send while I speak"]`,
+    )
     if (activation.exists()) {
         expect(activation.attributes('aria-checked')).toBe('false')
     }
