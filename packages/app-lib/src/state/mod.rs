@@ -1180,7 +1180,6 @@ impl State {
             .into_iter()
             .map(|metadata| metadata.instance_id)
             .collect();
-        active_log_ids.extend(crate::api::servers::running_server_ids());
         process::remove_inactive_log_buffers(&active_log_ids);
     }
 

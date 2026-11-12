@@ -1130,41 +1130,7 @@ fn main() {
                         DefaultPermissionRule::AllowAllCommands,
                     ),
             )
-            .plugin(
-                "servers",
-                InlinedPlugin::new()
-                    .commands(&[
-                        "servers_list",
-                        "servers_get",
-                        "servers_create",
-                        "servers_update_settings",
-                        "servers_set_icon",
-                        "servers_set_linked_world",
-                        "servers_is_local_address",
-                        "servers_wait_until_ready",
-                        "servers_delete",
-                        "servers_read_file",
-                        "servers_write_file",
-                        "servers_download_file",
-                        "servers_install_forge",
-                        "servers_install_neoforge",
-                        "servers_install_modpack",
-                        "servers_start",
-                        "servers_send_console_input",
-                        "servers_resize_console",
-                        "servers_stop",
-                        "servers_kill",
-                        "servers_kill_port_process",
-                        "servers_port_process",
-                        "servers_get_log_buffer",
-                        "servers_get_log_delta",
-                        "servers_get_console_delta",
-                        "servers_clear_log",
-                    ])
-                    .default_permission(
-                        DefaultPermissionRule::AllowAllCommands,
-                    ),
-            )
+
             .plugin(
                 "friends",
                 InlinedPlugin::new()

@@ -923,7 +923,6 @@ fn main() {
         .plugin(api::terracotta::init())
         .plugin(api::multiplayer::init())
         .manage(api::files::StudioWatchers::default())
-        .plugin(api::servers::init())
         .manage(PendingUpdateData::default())
         .invoke_handler(tauri::generate_handler![
             initialize_state,
@@ -992,12 +991,6 @@ fn main() {
 
                 if matches!(&event, tauri::RunEvent::ExitRequested { .. }) {
                     tauri::async_runtime::block_on(async {
-                        let killed = theseus::servers::shutdown_all().await;
-                        if killed > 0 {
-                            tracing::info!(
-                                "Killed {killed} dedicated server process(es) after the shutdown budget"
-                            );
-                        }
                         if let Some(state) = State::get_if_initialized() {
                             state.shutdown().await;
                         }

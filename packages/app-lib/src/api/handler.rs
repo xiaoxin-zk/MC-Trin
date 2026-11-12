@@ -328,21 +328,14 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
             );
         }
         "multiplayer"
-            if ["", "servers", "rooms"].contains(&first)
+            if ["", "rooms", "servers"].contains(&first)
                 && (second.is_empty() || first == "servers")
                 && !extra =>
         {
-            let path = if first.is_empty() {
-                "/multiplayer/servers".to_string()
-            } else if first == "rooms" {
-                "/multiplayer/rooms".to_string()
-            } else if second.is_empty() {
-                "/multiplayer/servers".to_string()
-            } else {
-                format!("/multiplayer/servers/{second}")
-            };
+            // The managed-server pages were removed; every multiplayer deep link
+            // now lands on the rooms page.
             return open_route(
-                path,
+                "/multiplayer/rooms".to_string(),
                 (!query_part.is_empty()).then_some(query_part),
             );
         }

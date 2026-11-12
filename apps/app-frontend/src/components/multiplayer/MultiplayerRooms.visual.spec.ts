@@ -5,7 +5,6 @@ import { ref } from 'vue'
 import type { HongshiState, MultiplayerState } from '@/helpers/multiplayer'
 
 import MultiplayerRooms from './MultiplayerRooms.vue'
-import ServerDetail from './servers/ServerDetail.vue'
 
 const fixture = vi.hoisted(() => ({
     state: null as MultiplayerState | null,
@@ -53,38 +52,6 @@ vi.mock('vue-router', () => ({
     useRoute: () => ({ params: { id: 'test-server' }, query: fixture.query }),
     useRouter: () => ({ push: fixture.push, replace: vi.fn() }),
 }))
-vi.mock('@/composables/useServers', () => ({
-    useServers: () => ({ servers: fixture.servers, refresh: vi.fn(), stopServer: vi.fn() }),
-}))
-vi.mock('@/composables/useServerInstalls', () => ({ serverSetupStatus: () => null }))
-vi.mock('@/composables/useServerLifecycle', async () => {
-    const { ref } = await import('vue')
-    return { useServerLifecycle: () => ({ eulaModal: ref(null) }) }
-})
-vi.mock('@/helpers/servers', () => ({ servers: {} }))
-vi.mock('./servers/EulaModal.vue', () => ({ default: { render: () => null } }))
-vi.mock('./servers/ServerConsole.vue', () => ({ default: { render: () => null } }))
-vi.mock('./servers/ServerFilesPanel.vue', () => ({ default: { render: () => null } }))
-vi.mock('./servers/ServerSettingsPanel.vue', async () => {
-    const { defineComponent, ref, h } = await import('vue')
-    return {
-        default: defineComponent({
-            setup: () => {
-                const name = ref('Saved name')
-                return () =>
-                    h('input', {
-                        'data-server-draft': '',
-                        value: name.value,
-                        onInput: (event: Event) => {
-                            name.value = (event.target as HTMLInputElement).value
-                        },
-                    })
-            },
-        }),
-    }
-})
-vi.mock('./servers/ServerIcon.vue', () => ({ default: { render: () => null } }))
-
 vi.mock('@modrinth/ui', async () => {
     const { defineComponent, h } = await import('vue')
     const { default: ProgressBar } =
@@ -267,15 +234,6 @@ beforeEach(() => {
             has_password: false,
         },
     } as unknown as MultiplayerState
-    fixture.servers = ref([
-        {
-            id: 'test-server',
-            name: 'Test server',
-            status: 'running',
-            port: 25577,
-            gameVersion: '1.21.1',
-        },
-    ])
     fixture.push.mockResolvedValue(undefined)
     fixture.switchProvider.mockImplementation(async () => {
         fixture.state!.active_provider = null
@@ -310,21 +268,4 @@ it('renders the MC-Trin room workflow by default', async () => {
     // means; no other branch defines these labels.
     expect(wrapper.text()).not.toContain('Local Minecraft port')
     expect(wrapper.text()).not.toContain('Relay node')
-})
-
-it('preserves a settings draft when visiting console and files, including a direct settings entry', async () => {
-    fixture.query = { tab: 'settings' }
-    const wrapper = mount(ServerDetail, {
-        attachTo: document.body,
-        global: { directives: { tooltip: () => {} } },
-    })
-    wrappers.push(wrapper)
-    await flushPromises()
-    await wrapper.get('[data-server-draft]').setValue('Unsaved name')
-    await wrapper.get('nav').findAll('button')[0].trigger('click')
-    expect(wrapper.get('[data-server-draft]').isVisible()).toBe(false)
-    await wrapper.get('nav').findAll('button')[1].trigger('click')
-    await wrapper.get('nav').findAll('button')[2].trigger('click')
-    expect(wrapper.get<HTMLInputElement>('[data-server-draft]').element.value).toBe('Unsaved name')
-    expect(wrapper.get('[data-server-draft]').isVisible()).toBe(true)
 })

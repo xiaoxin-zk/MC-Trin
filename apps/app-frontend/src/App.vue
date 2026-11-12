@@ -2609,8 +2609,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         :class="{
             'navigation-expanded': navigationExpanded,
             'sidebar-enabled': sidebarVisible,
-            'studio-mode':
-                route.name === 'FileStudio' || route.name === 'MultiplayerServerFileStudio',
+            'studio-mode': route.name === 'FileStudio',
             'disable-advanced-rendering': !themeStore.advancedRendering,
             'has-custom-background':
                 themeStore.customBackgroundPath && !themeStore.transparentBackground,

@@ -87,11 +87,7 @@ export function resolveOpenRoute(path: string, query?: string | null) {
         return null
     }
     if (path.startsWith('/multiplayer')) {
-        if (
-            path === '/multiplayer/servers' ||
-            path === '/multiplayer/rooms' ||
-            path.startsWith('/multiplayer/servers/')
-        ) {
+        if (path === '/multiplayer/rooms') {
             return route(path, query)
         }
         return null

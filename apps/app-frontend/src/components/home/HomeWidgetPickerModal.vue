@@ -91,14 +91,6 @@ const messages = defineMessages({
         id: 'app.home.widgets.pinned-worlds-description',
         defaultMessage: 'Automatically collects favorite singleplayer worlds.',
     },
-    pinnedServers: {
-        id: 'app.home.widgets.pinned-servers',
-        defaultMessage: 'All favorite servers',
-    },
-    pinnedServersDescription: {
-        id: 'app.home.widgets.pinned-servers-description',
-        defaultMessage: 'Automatically collects favorite multiplayer servers.',
-    },
     instance: { id: 'app.home.widgets.instance', defaultMessage: 'Single instance' },
     instanceDescription: {
         id: 'app.home.widgets.instance-description',
@@ -164,12 +156,6 @@ const catalogSections = computed(() => [
                 label: formatMessage(messages.pinnedWorlds),
                 description: formatMessage(messages.pinnedWorldsDescription),
                 icon: GameIcon,
-            },
-            {
-                kind: 'pinned-servers' as const,
-                label: formatMessage(messages.pinnedServers),
-                description: formatMessage(messages.pinnedServersDescription),
-                icon: ServerIcon,
             },
         ],
     },

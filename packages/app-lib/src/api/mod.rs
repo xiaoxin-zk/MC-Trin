@@ -27,7 +27,6 @@ pub mod pack;
 pub mod planet_minecraft;
 pub mod process;
 pub mod server_address;
-pub mod servers;
 pub mod settings;
 pub mod symlink;
 pub mod tags;
@@ -86,7 +85,7 @@ pub mod prelude {
         install, instance,
         jre::{self, JdkVersionInfo},
         metadata, minecraft_auth, mr_auth, pack, process, server_address,
-        servers, settings,
+        settings,
         state::{ReleaseChannel, db_backup::app_db_backup_dir},
         translation,
         util::{
