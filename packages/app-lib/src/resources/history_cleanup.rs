@@ -104,7 +104,7 @@ async fn root(
         || scope.instance.symlink_target.is_some()
     {
         return Err(invalid(
-            "old cleanup is only available for Axolotl-owned instances",
+            "old cleanup is only available for MC-Trin-owned instances",
         ));
     }
     let root = crate::state::instances::commands::instance_content_root(

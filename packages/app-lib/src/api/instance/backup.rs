@@ -4170,7 +4170,7 @@ async fn validate_repository_at(root: &Path) -> crate::Result<()> {
     }
     if schema_name != "axolotl-instance-backups" {
         return Err(crate::ErrorKind::FSError(
-            "Moved directory is not an Axolotl backup repository".to_string(),
+            "Moved directory is not an MC-Trin backup repository".to_string(),
         )
         .into());
     }

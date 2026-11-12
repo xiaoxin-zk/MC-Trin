@@ -652,7 +652,8 @@ fn raise_file_descriptor_limit() {
 // ie: deep links or filepaths for .mrpacks
 #[allow(clippy::default_constructed_unit_structs)]
 fn main() {
-    // Initialize portable mode first (checks .Axolotl folder and sets THESEUS_CONFIG_DIR)
+    // Initialize portable mode first (checks the .MC-Trin folder, falling back
+    // to the legacy .Axolotl marker, and sets THESEUS_CONFIG_DIR)
     // SAFETY: Called at the start of main() before any threads or tokio runtime are spawned
     let _portable = unsafe { portable::init_portable_mode() };
 

@@ -489,7 +489,7 @@ async fn scan_import_plan(
         loader == "labymod" || loader.starts_with("labymod-")
     }) {
         return Err(crate::ErrorKind::InputError(
-            "Unsupported loader LabyMod: Axolotl does not install, update, or repair LabyMod instances"
+            "Unsupported loader LabyMod: MC-Trin does not install, update, or repair LabyMod instances"
                 .to_string(),
         )
         .into());
