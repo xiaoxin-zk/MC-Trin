@@ -7641,7 +7641,7 @@
     "message": "查看完整更新日誌"
   },
   "app.update-announcement.unknown-body": {
-    "message": "此版本暫未內建更新公告，請前往官網查看完整更新日誌。"
+    "message": "此版本暫未內建更新公告。"
   },
   "app.update-announcement.unknown-title": {
     "message": "MC-Trin 已更新"
