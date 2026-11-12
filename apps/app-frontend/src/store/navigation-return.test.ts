@@ -227,7 +227,10 @@ test('a parked reactive upgrade dto is detached from later mutations', () => {
         true,
         'the store must snapshot the value, not keep a live reference',
     )
-    assert.equal(consumeUpgradeFlow('wrong-instance', '/instance/reactive-instance/upgrade/compatibility'), null)
+    assert.equal(
+        consumeUpgradeFlow('wrong-instance', '/instance/reactive-instance/upgrade/compatibility'),
+        null,
+    )
     clearUpgradeFlow()
 })
 
