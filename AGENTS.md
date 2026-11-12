@@ -1,4 +1,4 @@
-# Axolotl Launcher Monorepo
+# MC-Trin Launcher Monorepo
 
 MC-Trin contains a Nuxt 4 website scaffold, a Vue 3 desktop frontend, and a Rust / Tauri shell. Turborepo (`turbo.jsonc`) and pnpm workspaces (`pnpm-workspace.yaml`) coordinate the packages. Frontend styling uses Tailwind CSS v3. Use spaces, never tabs.
 
@@ -23,7 +23,7 @@ Read the applicable instruction files before editing, even when your session sta
 - `packages/ui`, `assets`, `utils`: shared components, theme assets and utilities.
 - `packages/api-client`: public content-service API client; `packages/app-lib`: desktop runtime library.
 - `packages/content-management`: provider-neutral resource and installation models.
-- `packages/daedalus`, `ariadne`, `async-minecraft-ping`: Minecraft metadata, social/tunnel protocols and server ping.
+- `packages/daedalus`, `async-minecraft-ping`: Minecraft metadata and server ping.
 - `packages/path-util`, `tooling-config`: shared paths and tooling.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and application data isolation before launching the desktop app. Run `pnpm website:dev` or `pnpm app:dev` from the root; prepare `packages/app-lib/.env` from its template for desktop development.
