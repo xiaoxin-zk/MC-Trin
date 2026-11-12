@@ -7268,9 +7268,6 @@
   "app.settings.updates.preferences.title": {
     "message": "更新行為"
   },
-  "app.settings.updates.preview-announcement": {
-    "message": "預覽更新公告彈出視窗"
-  },
   "app.settings.updates.security": {
     "message": "只有透過加密簽章驗證的更新才會被安裝。"
   },

@@ -14861,12 +14861,6 @@
   "app.settings.developer.official-login-section": {
     "message": "正版 Minecraft 登录记录"
   },
-  "app.settings.developer.preview-announcement-modal": {
-    "message": "预览启动弹窗"
-  },
-  "app.settings.developer.preview-announcement-popup": {
-    "message": "预览 Popup 通知"
-  },
   "app.settings.developer.preview-with-action": {
     "message": "显示可选的外部链接按钮"
   },
@@ -17593,9 +17587,6 @@
   },
   "app.settings.updates.preferences.title": {
     "message": "更新行为"
-  },
-  "app.settings.updates.preview-announcement": {
-    "message": "预览更新公告弹窗"
   },
   "app.settings.updates.preview.description": {
     "message": "展示更新完成后用户看到的弹窗。不会标记为已展示，也不影响待展示的公告。"
