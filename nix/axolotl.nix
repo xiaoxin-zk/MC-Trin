@@ -83,7 +83,7 @@ in
       inherit pname version src;
       pnpm = pnpm_10_33_2;
       fetcherVersion = 4;
-      hash = "sha256-BASJw/YJXph8vpGVwA+4Slh0YVAtmrxxFD8hGy0zDKc=";
+      hash = "sha256-Bq+KNLB8vDROmerhVJ8rJx9jjNVNpu1zS1IpFc1Cpgc=";
     };
     # Gradle
     gradleFlags = [
