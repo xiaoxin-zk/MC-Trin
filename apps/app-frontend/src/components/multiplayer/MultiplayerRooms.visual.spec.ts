@@ -154,6 +154,39 @@ vi.mock('@modrinth/ui', async () => {
                         onClick: () => emit('update:modelValue', !props.modelValue),
                     }),
         }),
+        // The real primitive is a `role="switch"` button, so it must not render a
+        // <select>: the MC-Trin select-count assertion below counts every select
+        // on the page and expects them all to belong to the voice panel.
+        Toggle: defineComponent({
+            props: ['modelValue', 'disabled', 'id'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h('button', {
+                        type: 'button',
+                        role: 'switch',
+                        'aria-checked': props.modelValue ? 'true' : 'false',
+                        disabled: props.disabled,
+                        onClick: () => emit('update:modelValue', !props.modelValue),
+                    }),
+        }),
+        // Slider renders a real range input inside a boxed track. The MC-Trin
+        // spec uses `input[type="range"]` to tell whether session-only controls
+        // appeared, so this mock has to keep rendering an actual range input.
+        Slider: defineComponent({
+            props: ['modelValue', 'min', 'max', 'step', 'unit', 'disabled', 'id'],
+            emits: ['update:modelValue'],
+            setup: (props) => () =>
+                h('input', {
+                    type: 'range',
+                    min: props.min,
+                    max: props.max,
+                    step: props.step,
+                    value: props.modelValue,
+                    disabled: props.disabled,
+                }),
+        }),
         Combobox: defineComponent({
             props: ['modelValue', 'options'],
             emits: ['update:modelValue'],
