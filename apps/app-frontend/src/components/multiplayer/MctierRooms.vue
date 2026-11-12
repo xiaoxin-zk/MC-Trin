@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-    ChevronLeftIcon,
-    GlobeIcon,
-    LockIcon,
-    MicrophoneIcon,
-    XIcon,
-} from '@modrinth/assets'
+import { GlobeIcon, LockIcon, MicrophoneIcon, XIcon } from '@modrinth/assets'
 import {
     Button,
     Checkbox,
@@ -18,6 +12,7 @@ import {
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import SettingsRow from '@/components/ui/settings/SettingsRow.vue'
 import { useMctierVoice } from '@/composables/useMctierVoice'
 import {
     DEFAULT_MCTIER_NODE,
@@ -727,23 +722,24 @@ function prefillInviteFromDeepLink() {
             {{ displayError }}
         </p>
         <section
-            class="flex min-w-0 flex-col gap-3 rounded-lg border border-solid border-surface-4 bg-surface-3 p-4"
+            class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-surface-4 bg-surface-3"
             data-onboarding-id="mctier-voice"
         >
-            <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div
+                class="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-surface-4 p-4"
+            >
                 <div class="min-w-0">
-                    <h3 class="m-0 text-base font-semibold">
+                    <h3 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
                         {{ formatMessage(messages.voiceTitle) }}
                     </h3>
-                    <p class="mb-0 mt-1 text-sm text-[var(--color-text-tertiary)]">
+                    <p class="m-0 mt-1 text-sm leading-relaxed text-[var(--color-text-tertiary)]">
                         {{ formatMessage(messages.voiceDescription) }}
                     </p>
                 </div>
                 <div class="flex shrink-0 flex-wrap gap-2">
                     <Button
                         v-if="!voice.active.value"
-                        type="colored"
-                        color="brand"
+                        type="outlined"
                         :disabled="voice.starting.value || !canStartVoice"
                         @click="startVoice"
                     >
@@ -760,14 +756,18 @@ function prefillInviteFromDeepLink() {
                                 )
                             }}
                         </Button>
-                        <Button type="outlined" color="red" @click="voice.stop">
+                        <Button type="quiet" @click="voice.stop">
                             <XIcon />
                             {{ formatMessage(messages.voiceStop) }}
                         </Button>
                     </template>
                 </div>
             </div>
-            <p v-if="voice.active.value" class="m-0 text-sm" role="status">
+            <p
+                v-if="voice.active.value"
+                class="m-0 border-b border-surface-4 px-4 py-3 text-sm"
+                role="status"
+            >
                 {{
                     voice.connectedPeers.value
                         ? formatMessage(messages.voiceConnected, {
@@ -776,14 +776,11 @@ function prefillInviteFromDeepLink() {
                         : formatMessage(messages.voiceWaiting)
                 }}
             </p>
-            <div class="flex min-w-0 flex-col gap-1">
-                <label for="mctier-voice-microphone" class="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]">{{
-                    formatMessage(messages.voiceMicrophone)
-                }}</label>
-                <div class="relative flex w-full min-w-0 items-center">
+            <SettingsRow>
+                <template #label>{{ formatMessage(messages.voiceMicrophone) }}</template>
+                <template #control>
                     <select
-                        id="mctier-voice-microphone"
-                        class="h-9 w-full min-w-0 appearance-none rounded-xl border border-solid border-surface-4 bg-surface-4 px-3 pr-9 text-sm text-[var(--color-text-default)]"
+                        class="h-9 w-full min-w-0 rounded-xl border-none bg-surface-4 px-3 text-sm text-[var(--color-text-default)]"
                         :value="voice.inputDeviceId.value ?? ''"
                         :aria-label="formatMessage(messages.voiceMicrophone)"
                         @change="onInputDeviceChange"
@@ -799,113 +796,15 @@ function prefillInviteFromDeepLink() {
                             {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
                         </option>
                     </select>
-                    <!-- The global select rule strips the native arrow. -->
-                    <ChevronLeftIcon
-                        class="pointer-events-none absolute right-3 size-4 shrink-0 -rotate-90 text-[var(--color-text-tertiary)]"
-                        aria-hidden="true"
-                    />
-                </div>
-            </div>
-                        <!-- Session meters only make sense while a call is up; the device
-             pickers stay outside this card so they can be set first. -->
-            <div
-            v-if="voice.active.value"
-            class="flex min-w-0 flex-col gap-4 rounded-lg border border-solid border-surface-4 bg-surface-4 p-4"
-            >
-            <div class="flex min-w-0 flex-col gap-1">
-                <div
-                    class="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"
-                >
-                    <span class="min-w-0 font-semibold text-[var(--color-text-primary)]">{{
-                        formatMessage(messages.voiceInputVolume)
-                    }}</span>
-                    <span class="shrink-0 tabular-nums text-[var(--color-text-tertiary)]">
-                        {{ Math.round(voice.inputVolume.value * 100) }}%
-                    </span>
-                </div>
-                <input
-                    v-if="voice.inputVolumeSupported.value"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    class="min-w-0 w-full"
-                    :value="Math.round(voice.inputVolume.value * 100)"
-                    :aria-label="formatMessage(messages.voiceInputVolume)"
-                    @input="onInputVolumeInput"
-                />
-            </div>
-            <!-- The meter is fed by an AnalyserNode, so it needs the same
-                 Web Audio support as the gain node; otherwise it would sit
-                 at zero and read as "your microphone is broken". -->
-            <div v-if="voice.inputVolumeSupported.value" class="flex min-w-0 flex-col gap-1">
-                <span class="text-sm font-semibold text-[var(--color-text-primary)]">{{
-                    formatMessage(messages.voiceMicLevel)
-                }}</span>
-                <div
-                    class="h-1.5 w-full min-w-0 overflow-hidden rounded bg-surface-5"
-                    role="meter"
-                    :aria-valuenow="voice.inputLevel.value"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    :aria-label="formatMessage(messages.voiceMicLevel)"
-                >
-                    <div
-                        class="h-full bg-brand"
-                        :style="{ width: `${voice.inputLevel.value}%` }"
-                    />
-                </div>
-            </div>
-            </div>
-            <div class="flex min-w-0 flex-col gap-4">
-<!-- RNNoise is the only mode worth a switch. `native` means the
-                 browser already filters, so there is nothing to toggle and
-                 only a note is shown; `unavailable` hides the row entirely. -->
-            <div v-if="voice.noiseSuppressionMode.value === 'rnnoise'" class="flex min-w-0 flex-col gap-1">
-                <label class="flex min-w-0 items-center gap-2 text-sm">
-                    <Checkbox
-                        :model-value="voice.noiseReduction.value"
-                        :disabled="voice.noiseReductionForcedNative.value"
-                        :label="formatMessage(messages.voiceNoiseReduction)"
-                        @update:model-value="onNoiseReductionToggle"
-                    />
-                </label>
-                <p
-                    v-if="voice.noiseReductionForcedNative.value"
-                    class="m-0 text-xs text-[var(--color-text-tertiary)]"
-                >
-                    {{ formatMessage(messages.voiceNoiseReductionVirtualMic) }}
-                </p>
-            </div>
-            <p
-                v-else-if="voice.noiseSuppressionMode.value === 'native'"
-                class="m-0 text-xs text-[var(--color-text-tertiary)]"
-            >
-                {{ formatMessage(messages.voiceNoiseReductionNative) }}
-            </p>
-            <div v-if="voice.voiceActivationSupported.value" class="flex min-w-0 flex-col gap-1">
-                <label class="flex min-w-0 items-center gap-2 text-sm">
-                    <Checkbox
-                        :model-value="voice.voiceActivation.value"
-                        :label="formatMessage(messages.voiceActivation)"
-                        @update:model-value="onVoiceActivationToggle"
-                    />
-                </label>
-                <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                    {{ formatMessage(messages.voiceActivationHint) }}
-                </p>
-            </div>
-            <div
+                </template>
+            </SettingsRow>
+            <SettingsRow
                 v-if="voice.outputDeviceSupported.value && voice.outputDevices.value.length"
-                class="flex min-w-0 flex-col gap-1"
             >
-                <label for="mctier-voice-speaker" class="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]">{{
-                    formatMessage(messages.voiceSpeaker)
-                }}</label>
-                <div class="relative flex w-full min-w-0 items-center">
+                <template #label>{{ formatMessage(messages.voiceSpeaker) }}</template>
+                <template #control>
                     <select
-                        id="mctier-voice-speaker"
-                        class="h-9 w-full min-w-0 appearance-none rounded-xl border border-solid border-surface-4 bg-surface-4 px-3 pr-9 text-sm text-[var(--color-text-default)]"
+                        class="h-9 w-full min-w-0 rounded-xl border-none bg-surface-4 px-3 text-sm text-[var(--color-text-default)]"
                         :value="voice.outputDeviceId.value ?? ''"
                         :aria-label="formatMessage(messages.voiceSpeaker)"
                         @change="onOutputDeviceChange"
@@ -921,47 +820,132 @@ function prefillInviteFromDeepLink() {
                             {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
                         </option>
                     </select>
-                    <ChevronLeftIcon
-                        class="pointer-events-none absolute right-3 size-4 shrink-0 -rotate-90 text-[var(--color-text-tertiary)]"
-                        aria-hidden="true"
+                </template>
+            </SettingsRow>
+            <!-- Session meters only make sense while a call is up; the device
+                 pickers above stay outside this group so they can be set first. -->
+            <!-- Without Web Audio there is no gain node, so the microphone
+                 level cannot be scaled; showing the slider would offer a
+                 control that silently does nothing. -->
+            <SettingsRow v-if="voice.active.value && voice.inputVolumeSupported.value" stacked>
+                <template #label>{{ formatMessage(messages.voiceInputVolume) }}</template>
+                <template #control>
+                    <div class="flex w-full min-w-0 items-center gap-3">
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            class="min-w-0 flex-1"
+                            :value="Math.round(voice.inputVolume.value * 100)"
+                            :aria-label="formatMessage(messages.voiceInputVolume)"
+                            @input="onInputVolumeInput"
+                        />
+                        <span
+                            class="w-10 shrink-0 text-right text-sm tabular-nums text-[var(--color-text-tertiary)]"
+                        >
+                            {{ Math.round(voice.inputVolume.value * 100) }}%
+                        </span>
+                    </div>
+                </template>
+            </SettingsRow>
+            <!-- The meter is fed by an AnalyserNode, so it needs the same Web
+                 Audio support as the gain node; otherwise it would sit at zero
+                 and read as "your microphone is broken". -->
+            <SettingsRow v-if="voice.active.value && voice.inputVolumeSupported.value" stacked>
+                <template #label>{{ formatMessage(messages.voiceMicLevel) }}</template>
+                <template #control>
+                    <div
+                        class="h-1.5 w-full min-w-0 overflow-hidden rounded bg-surface-5"
+                        role="meter"
+                        :aria-valuenow="voice.inputLevel.value"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        :aria-label="formatMessage(messages.voiceMicLevel)"
+                    >
+                        <div
+                            class="h-full bg-brand"
+                            :style="{ width: `${voice.inputLevel.value}%` }"
+                        />
+                    </div>
+                </template>
+            </SettingsRow>
+            <SettingsRow v-if="voice.active.value" stacked>
+                <template #label>{{ formatMessage(messages.voiceVolume) }}</template>
+                <template #control>
+                    <div class="flex w-full min-w-0 items-center gap-3">
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            class="min-w-0 flex-1"
+                            :value="Math.round(voice.outputVolume.value * 100)"
+                            :aria-label="formatMessage(messages.voiceVolume)"
+                            @input="onVolumeInput"
+                        />
+                        <span
+                            class="w-10 shrink-0 text-right text-sm tabular-nums text-[var(--color-text-tertiary)]"
+                        >
+                            {{ Math.round(voice.outputVolume.value * 100) }}%
+                        </span>
+                    </div>
+                </template>
+            </SettingsRow>
+            <SettingsRow v-if="voice.voiceActivationSupported.value" inline-control>
+                <template #label>{{ formatMessage(messages.voiceActivation) }}</template>
+                <template #description>
+                    {{ formatMessage(messages.voiceActivationHint) }}
+                </template>
+                <template #control>
+                    <Checkbox
+                        :model-value="voice.voiceActivation.value"
+                        :description="formatMessage(messages.voiceActivation)"
+                        @update:model-value="onVoiceActivationToggle"
                     />
-                </div>
-            </div>
-            <div v-if="voice.active.value" class="flex min-w-0 flex-col gap-1">
-                <div class="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
-                    <span class="min-w-0 font-semibold text-[var(--color-text-primary)]">{{
-                        formatMessage(messages.voiceVolume)
-                    }}</span>
-                    <span class="shrink-0 tabular-nums text-[var(--color-text-tertiary)]">
-                        {{ Math.round(voice.outputVolume.value * 100) }}%
-                    </span>
-                </div>
-                <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    class="min-w-0 w-full"
-                    :value="Math.round(voice.outputVolume.value * 100)"
-                    :aria-label="formatMessage(messages.voiceVolume)"
-                    @input="onVolumeInput"
-                />
-            </div>
-            </div>
-            <p v-if="voice.error.value" class="m-0 text-sm text-[var(--color-red)]" role="alert">
-            {{
-                formatMessage(
-                    voice.error.value === 'permission'
-                        ? messages.voiceErrorPermission
-                        : voice.error.value === 'unsupported'
-                          ? messages.voiceErrorUnsupported
-                          : voice.error.value === 'input-device-lost'
-                            ? messages.voiceInputDeviceLost
-                            : voice.error.value === 'output-device-lost'
-                              ? messages.voiceOutputDeviceLost
-                              : messages.voiceErrorUnavailable,
-                )
-            }}
+                </template>
+            </SettingsRow>
+            <!-- RNNoise is the only mode worth a switch. `native` means the
+                 browser already filters, so there is nothing to toggle and
+                 only a note is shown; `unavailable` hides the row entirely. -->
+            <SettingsRow v-if="voice.noiseSuppressionMode.value === 'rnnoise'" inline-control>
+                <template #label>{{ formatMessage(messages.voiceNoiseReduction) }}</template>
+                <template v-if="voice.noiseReductionForcedNative.value" #description>
+                    {{ formatMessage(messages.voiceNoiseReductionVirtualMic) }}
+                </template>
+                <template #control>
+                    <Checkbox
+                        :model-value="voice.noiseReduction.value"
+                        :disabled="voice.noiseReductionForcedNative.value"
+                        :description="formatMessage(messages.voiceNoiseReduction)"
+                        @update:model-value="onNoiseReductionToggle"
+                    />
+                </template>
+            </SettingsRow>
+            <p
+                v-else-if="voice.noiseSuppressionMode.value === 'native'"
+                class="m-0 px-4 py-3 text-sm leading-relaxed text-[var(--color-text-tertiary)]"
+            >
+                {{ formatMessage(messages.voiceNoiseReductionNative) }}
+            </p>
+            <p
+                v-if="voice.error.value"
+                class="m-0 px-4 py-3 text-sm leading-relaxed text-[var(--color-red)]"
+                role="alert"
+            >
+                {{
+                    formatMessage(
+                        voice.error.value === 'permission'
+                            ? messages.voiceErrorPermission
+                            : voice.error.value === 'unsupported'
+                              ? messages.voiceErrorUnsupported
+                              : voice.error.value === 'input-device-lost'
+                                ? messages.voiceInputDeviceLost
+                                : voice.error.value === 'output-device-lost'
+                                  ? messages.voiceOutputDeviceLost
+                                  : messages.voiceErrorUnavailable,
+                    )
+                }}
             </p>
         </section>
         <template v-if="connected">

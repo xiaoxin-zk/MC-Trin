@@ -65,9 +65,8 @@ vi.mock('@modrinth/ui', async () => {
                 ),
         }),
         StyledInput: input,
-        // The real primitive is a 
-ole="checkbox" button that draws its own box
-        // and toggles on click, so the mock must keep those two traits.
+        // The real primitive is a `role="checkbox"` button that draws its own
+        // box and toggles on click, so the mock must keep those two traits.
         Checkbox: defineComponent({
             props: ['modelValue', 'disabled', 'description', 'label'],
             emits: ['update:modelValue'],
@@ -165,8 +164,8 @@ function button(wrapper: VueWrapper, text: string) {
 }
 
 const voicePanel = '[data-onboarding-id="mctier-voice"]'
-/** The bordered card that only makes sense while a call is up. */
-const voiceSessionCard = `${voicePanel} > div.rounded-lg.border`
+/** Volume meters that only make sense while a call is up. */
+const voiceSessionControls = `${voicePanel} input[type="range"]`
 
 it('validates fields and starts a host session with the expected DTO', async () => {
     const wrapper = page()
@@ -437,8 +436,8 @@ it('offers the voice panel while a room is still being created', async () => {
     expect(wrapper.text()).toContain('Room voice')
     expect(wrapper.find(`${voicePanel} select`).exists()).toBe(true)
     // Device selection is the point of the pre-connect panel, so it must not be
-    // wrapped in the session card that has nothing to show yet.
-    expect(wrapper.find(voiceSessionCard).exists()).toBe(false)
+    // wrapped in the session-only group that has nothing to show yet.
+    expect(wrapper.find(voiceSessionControls).exists()).toBe(false)
     // Nothing to signal from yet, so the call itself stays disabled.
     expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeDefined()
 })
