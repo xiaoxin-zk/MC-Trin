@@ -1,6 +1,6 @@
 [package]
 name = "theseus_gui"
-# The actual version is set by the theseus-build workflow on tagging
+# The actual version is set at release time by scripts/axolotl/set-version.mjs from the release tag
 version = "1.10.0"
 edition.workspace = true
 description = "MC-Trin is a cross-platform Minecraft launcher"
