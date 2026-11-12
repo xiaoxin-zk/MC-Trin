@@ -358,7 +358,13 @@ export class MctierVoiceSession {
             // request that arrives last must not win: drop this node untouched
             // rather than wiring it into a graph that is already the wrong shape.
             if (this.closed || generation !== this.noiseGeneration) {
-                node.disconnect()
+                // A throw here must not skip `destroy`, which is what frees the
+                // wasm heap; a node that was never wired has nothing to unplug.
+                try {
+                    node.disconnect()
+                } catch {
+                    // The node was never connected; there is nothing to detach.
+                }
                 destroyRnnoiseNode(node)
                 return false
             }

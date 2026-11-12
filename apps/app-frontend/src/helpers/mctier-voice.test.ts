@@ -785,8 +785,8 @@ test('a disable during loading wins over the enable that arrives late', async ()
     // rather than connected to a graph the user believes is off.
     const environment = installVoiceEnvironment()
     const audio = installAudioEnvironment()
-    let releaseLoad: (() => void) | null = null
-    let signalEntered: (() => void) | null = null
+    let releaseLoad!: () => void
+    let signalEntered!: () => void
     const enteredLoading = new Promise<void>((resolve) => {
         signalEntered = resolve
     })
@@ -800,7 +800,7 @@ test('a disable during loading wins over the enable that arrives late', async ()
             loadNoiseNode: async () => {
                 // Announce that the load is in flight, then hold it open until
                 // the test lets it finish, so the disable lands mid-await.
-                signalEntered?.()
+                signalEntered()
                 await new Promise<void>((resolve) => {
                     releaseLoad = resolve
                 })
@@ -817,7 +817,7 @@ test('a disable during loading wins over the enable that arrives late', async ()
         const enabling = session.setNoiseSuppressionEnabled(true)
         await enteredLoading
         await session.setNoiseSuppressionEnabled(false)
-        releaseLoad?.()
+        releaseLoad()
         const started = await enabling
 
         assert.equal(started, false)
