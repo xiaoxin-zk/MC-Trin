@@ -64,6 +64,11 @@ type FakeTrack = {
     stopped: boolean
     onended: ((event: Event) => void) | null
     stop: () => void
+    /** Present because the real `MediaStreamTrack` always has it: a virtual
+     * microphone label makes `requestMicrophone` re-apply the processing
+     * constraints, and a missing method would throw before the session starts. */
+    applyConstraints: (constraints?: MediaTrackConstraints) => Promise<void>
+    appliedConstraints: MediaTrackConstraints[]
 }
 
 function createStream() {
@@ -84,6 +89,11 @@ function createStream() {
         stop() {
             track.stopped = true
             track.readyState = 'ended'
+        },
+        appliedConstraints: [],
+        applyConstraints(constraints?: MediaTrackConstraints) {
+            track.appliedConstraints.push(constraints ?? {})
+            return Promise.resolve()
         },
     }
     const stream = {
@@ -129,6 +139,16 @@ function stubGetUserMedia(
         value: {
             getUserMedia,
             enumerateDevices: vi.fn(async () => devices),
+            // The real `MediaDevices` always exposes this in Chromium, and the
+            // session probes it per key before sending any constraint. Without
+            // it the probe falls back to `{}`, the capture ends up with no
+            // constraints at all, and tests about processed-vs-raw input would
+            // pass vacuously. Booleans mean "this constraint is supported".
+            getSupportedConstraints: () => ({
+                autoGainControl: true,
+                echoCancellation: true,
+                noiseSuppression: true,
+            }),
             addEventListener: vi.fn(),
             removeEventListener: vi.fn(),
         },
@@ -315,9 +335,20 @@ it('forces the native path when the capture device is a virtual microphone', asy
 
     voice.syncRoom(state)
     await voice.start(state)
-    await vi.waitFor(() => expect(voice.noiseReductionForcedNative.value).toBe(true))
+    // `applyNoiseReduction` is deliberately not awaited by `start` (it would
+    // block the call on a ~217 KB download), so wait on the state it publishes
+    // rather than on a timeout. `noiseSuppressionMode` settling to 'native' is
+    // exactly the last write that function makes on this path.
+    await vi.waitFor(() => expect(voice.noiseSuppressionMode.value).toBe('native'))
 
-    expect(voice.noiseSuppressionMode.value).toBe('native')
+    // The virtual microphone was detected from the capture label, which is what
+    // pins the mode; asserting both keeps the test honest if the label lookup
+    // regresses and 'native' starts coming from the rate check instead.
+    expect(voice.noiseReductionForcedNative.value).toBe(true)
+    // Re-applying the constraints is the observable proof that the virtual-mic
+    // branch actually ran during capture setup.
+    expect(track.appliedConstraints).toHaveLength(1)
+    expect(track.appliedConstraints[0]).toMatchObject({ noiseSuppression: false })
 })
 
 it('hides noise reduction when the webview cannot run it', () => {

@@ -458,9 +458,15 @@ test('does not rewrite the microphone track when the state is unchanged', () => 
  *
  * `sampleRate` matters: the session refuses to run RNNoise unless the context
  * reports 48kHz, so the stub has to answer like a real one — honouring the
- * requested rate and otherwise using `defaultSampleRate`, which a test lowers to
- * model a device that silently ignores the request. */
-function installAudioEnvironment(options: { defaultSampleRate?: number } = {}) {
+ * requested rate and otherwise using `defaultSampleRate`.
+ *
+ * `ignoreRequestedSampleRate` models the browsers that accept `{ sampleRate }`
+ * and quietly hand back the device default anyway. Without it the stub would
+ * always honour the request, and a test that only lowers `defaultSampleRate`
+ * would never exercise the mismatch at all. */
+function installAudioEnvironment(
+    options: { defaultSampleRate?: number; ignoreRequestedSampleRate?: boolean } = {},
+) {
     const defaultSampleRate = options.defaultSampleRate ?? 48000
     const gains: { value: number; writes: number[] }[] = []
     /** Directed `source -> target` edges, named so assertions read clearly. */
@@ -481,7 +487,9 @@ function installAudioEnvironment(options: { defaultSampleRate?: number } = {}) {
         readonly sampleRate: number
 
         constructor(settings?: { sampleRate?: number }) {
-            this.sampleRate = settings?.sampleRate ?? defaultSampleRate
+            this.sampleRate = options.ignoreRequestedSampleRate
+                ? defaultSampleRate
+                : (settings?.sampleRate ?? defaultSampleRate)
         }
 
         createMediaStreamSource() {
@@ -728,7 +736,12 @@ test('refuses RNNoise when the audio graph is not at 48kHz', async () => {
     // so at 44.1kHz it would process 480 samples as if they were 10ms and
     // pitch-shift the voice by ~8.8%. The session has to refuse instead.
     const environment = installVoiceEnvironment()
-    const audio = installAudioEnvironment({ defaultSampleRate: 44100 })
+    // `ignoreRequestedSampleRate` is what models the real failure: the product
+    // asks for 48kHz and the browser hands back 44.1kHz without complaining.
+    const audio = installAudioEnvironment({
+        defaultSampleRate: 44100,
+        ignoreRequestedSampleRate: true,
+    })
     let loaderCalls = 0
     try {
         const { stream, track } = createStream()
