@@ -3186,11 +3186,6 @@ app.plugins.sample
 app.plugins.theme
 app.plugins.theme-applied
 app.plugins.title
-app.privileged-consent.acknowledge
-app.privileged-consent.confirm
-app.privileged-consent.danger
-app.privileged-consent.title
-app.privileged-consent.warning
 app.privileged-modal.applied
 app.privileged-modal.no-processes
 app.privileged-modal.stopped

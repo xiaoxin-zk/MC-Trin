@@ -13274,21 +13274,6 @@
   "app.privacy-consent.title": {
     "message": "隐私与安全"
   },
-  "app.privileged-consent.acknowledge": {
-    "message": "我了解风险，仍要启用敏感scheme操作"
-  },
-  "app.privileged-consent.confirm": {
-    "message": "启用"
-  },
-  "app.privileged-consent.danger": {
-    "message": "外部链接将可以修改设置（主题、启动命令、目录、网络选项等）并停止正在运行的游戏。每次执行前仍会要求确认。"
-  },
-  "app.privileged-consent.title": {
-    "message": "启用特权链接操作？"
-  },
-  "app.privileged-consent.warning": {
-    "message": "这类操作会修改安全敏感设置并停止游戏"
-  },
   "app.privileged-modal.applied": {
     "message": "scheme操作已执行"
   },

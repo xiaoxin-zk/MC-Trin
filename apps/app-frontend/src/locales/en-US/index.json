@@ -9353,21 +9353,6 @@
   "app.privacy-consent.title": {
     "message": "Privacy & security"
   },
-  "app.privileged-consent.acknowledge": {
-    "message": "I understand the risks and want to enable privileged link actions"
-  },
-  "app.privileged-consent.confirm": {
-    "message": "Enable"
-  },
-  "app.privileged-consent.danger": {
-    "message": "External links will be able to change settings (theme, launch commands, directories, network options, etc.) and stop running games. You will still confirm each action before it executes."
-  },
-  "app.privileged-consent.title": {
-    "message": "Enable privileged link actions?"
-  },
-  "app.privileged-consent.warning": {
-    "message": "These actions can change security-sensitive settings and stop games"
-  },
   "app.privileged-modal.applied": {
     "message": "Privileged link applied"
   },
