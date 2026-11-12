@@ -13,14 +13,19 @@ pub fn user_agent(version: &str, os: &str) -> String {
 
 /// Name of the directory the launcher keeps its settings, databases and logs in.
 ///
-/// A build can opt into its own directory by setting `AXOLOTL_DATA_DIR_SUFFIX`
-/// at build time (see `build.rs`). Local and test builds use this to stay away
+/// A build can opt into its own directory by setting `MCTRIN_DATA_DIR_SUFFIX`
+/// at build time (see `build.rs`; the previous `AXOLOTL_DATA_DIR_SUFFIX` name is
+/// still accepted). Local and test builds use this to stay away
 /// from the database of an installed launcher: the two otherwise share one
 /// directory, and a database touched by a newer build can no longer be opened
 /// by an older one. Releases leave the variable unset, so they resolve to the
 /// plain identifier.
 pub fn app_data_dir_identifier(app_identifier: &str) -> String {
-    data_dir_identifier(app_identifier, option_env!("AXOLOTL_DATA_DIR_SUFFIX"))
+    data_dir_identifier(
+        app_identifier,
+        option_env!("MCTRIN_DATA_DIR_SUFFIX")
+            .or_else(|| option_env!("AXOLOTL_DATA_DIR_SUFFIX")),
+    )
 }
 
 /// Appends a sanitized suffix to the identifier.

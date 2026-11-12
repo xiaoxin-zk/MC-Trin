@@ -503,7 +503,7 @@ fn credential_entry(
 ) -> crate::Result<Entry> {
     provider_definition(provider_id)?;
     // Same name the data directory uses, so a build with its own directory
-    // (AXOLOTL_DATA_DIR_SUFFIX) also keeps its own credentials. A release
+    // (MCTRIN_DATA_DIR_SUFFIX) also keeps its own credentials. A release
     // resolves to the plain identifier and is unaffected.
     Entry::new(
         &crate::brand::app_data_dir_identifier(crate::brand::BUNDLE_IDENTIFIER),

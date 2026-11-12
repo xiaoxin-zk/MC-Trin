@@ -1,6 +1,6 @@
 # Desktop Application Library
 
-This Rust crate owns desktop runtime behavior, persistence, and database migrations. Read [CONTRIBUTING.md](../../CONTRIBUTING.md#应用数据目录与数据库迁移) before starting the application or operating on an app database. Development builds share the installed app's data directory unless explicitly isolated with `THESEUS_CONFIG_DIR` or `AXOLOTL_DATA_DIR_SUFFIX`.
+This Rust crate owns desktop runtime behavior, persistence, and database migrations. Read [CONTRIBUTING.md](../../CONTRIBUTING.md#应用数据目录与数据库迁移) before starting the application or operating on an app database. Development builds share the installed app's data directory unless explicitly isolated with `THESEUS_CONFIG_DIR` or `MCTRIN_DATA_DIR_SUFFIX` (legacy `AXOLOTL_DATA_DIR_SUFFIX` is still accepted).
 
 For behavior exposed to the frontend through a new or changed native command, follow the shell's [Tauri command completion rules](../../apps/app/AGENTS.md#tauri-command-completion). For build locks or occupied outputs, follow the root [shared Rust build resource rules](../../AGENTS.md#shared-rust-build-resources); do not allocate another target directory.
 

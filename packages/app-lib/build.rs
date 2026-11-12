@@ -5,7 +5,10 @@ use std::{env, fs};
 /// Build-time opt-in to a private launcher data directory. Read by
 /// `theseus::brand::app_data_dir_identifier`, which appends it to the directory
 /// name.
-const DATA_DIR_SUFFIX_VAR: &str = "AXOLOTL_DATA_DIR_SUFFIX";
+const DATA_DIR_SUFFIX_VAR: &str = "MCTRIN_DATA_DIR_SUFFIX";
+/// Previous variable name, still honored so existing `.env` files and CI
+/// exports keep working across the rename. The new name wins when both are set.
+const LEGACY_DATA_DIR_SUFFIX_VAR: &str = "AXOLOTL_DATA_DIR_SUFFIX";
 
 /// Public service defaults for downstream builds that have no `.env`.
 /// Private Modrinth services remain disabled by Axolotl capabilities at runtime.
@@ -63,6 +66,7 @@ fn set_env() {
         if var_name == "DATABASE_URL"
             || var_name == "CURSEFORGE_API_KEY"
             || var_name == DATA_DIR_SUFFIX_VAR
+            || var_name == LEGACY_DATA_DIR_SUFFIX_VAR
             || MODRINTH_ENV_DEFAULTS
                 .iter()
                 .any(|(name, _)| name == var_name)
@@ -95,17 +99,23 @@ fn set_env() {
 
     // Lets a local or test build keep its own data directory, so it cannot write
     // the database an installed launcher is using. Releases leave it unset and
-    // resolve to the plain identifier.
+    // resolve to the plain identifier. The previous variable name is still
+    // accepted; the new name wins when both are set.
     println!("cargo::rerun-if-env-changed={DATA_DIR_SUFFIX_VAR}");
-    let data_dir_suffix = env::var(DATA_DIR_SUFFIX_VAR)
-        .ok()
-        .filter(|suffix| !suffix.is_empty())
-        .or_else(|| {
-            read_dotenv_literal(DATA_DIR_SUFFIX_VAR)
+    println!("cargo::rerun-if-env-changed={LEGACY_DATA_DIR_SUFFIX_VAR}");
+    let data_dir_suffix = [DATA_DIR_SUFFIX_VAR, LEGACY_DATA_DIR_SUFFIX_VAR]
+        .into_iter()
+        .find_map(|var_name| {
+            env::var(var_name)
+                .ok()
                 .filter(|suffix| !suffix.is_empty())
+                .or_else(|| {
+                    read_dotenv_literal(var_name).filter(|suffix| !suffix.is_empty())
+                })
+                .map(|suffix| (var_name, suffix))
         });
 
-    if let Some(data_dir_suffix) = data_dir_suffix {
+    if let Some((suffix_var, data_dir_suffix)) = data_dir_suffix {
         // brand::data_dir_identifier drops every character that is not ASCII
         // alphanumeric or `-_.` and then trims dots and dashes off both ends, so
         // a suffix holding none of what survives sanitizes to nothing and the
@@ -116,7 +126,7 @@ fn set_env() {
             character.is_ascii_alphanumeric() || character == '_'
         }) {
             println!(
-                "cargo::error={DATA_DIR_SUFFIX_VAR} leaves no usable directory name, so this build would use the installed launcher's data directory"
+                "cargo::error={suffix_var} leaves no usable directory name, so this build would use the installed launcher's data directory"
             );
             exit(1);
         }

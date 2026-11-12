@@ -21,7 +21,7 @@
 //   --db <path>       target app.db, when it is not in the default location
 //   --channel <name>  release or beta; defaults to the launcher's active channel
 //   --suffix <name>   settings directory of a build made with
-//                     AXOLOTL_DATA_DIR_SUFFIX=<name>
+//                     MCTRIN_DATA_DIR_SUFFIX=<name>
 //   --apply           perform the downgrade; without it nothing is written
 //   --allow-unmapped  continue although a migration has no known schema here
 //   --list            print the applied migrations and exit

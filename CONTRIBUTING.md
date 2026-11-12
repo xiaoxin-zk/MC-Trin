@@ -18,6 +18,6 @@
 
 ## 应用数据目录与数据库迁移
 
-桌面开发和测试不得使用或修改日常使用中的启动器数据库。需要运行应用或迁移时，先为开发实例设置独立的 `THESEUS_CONFIG_DIR`；也可使用项目支持的 `AXOLOTL_DATA_DIR_SUFFIX` 隔离目录。确认隔离路径后再启动应用。
+桌面开发和测试不得使用或修改日常使用中的启动器数据库。需要运行应用或迁移时，先为开发实例设置独立的 `THESEUS_CONFIG_DIR`；也可使用项目支持的 `MCTRIN_DATA_DIR_SUFFIX` 隔离目录（旧名 `AXOLOTL_DATA_DIR_SUFFIX` 仍兼容）。确认隔离路径后再启动应用。
 
 数据库迁移一经应用即视为不可变。不要修改、重命名或删除既有迁移；需要修复时新增更高版本的前向迁移，并同步更新 `scripts/axolotl/downgrade-app-db.mjs` 中的可回退结构映射及相应测试。详细要求见 [app-lib 开发说明](packages/app-lib/AGENTS.md)。
