@@ -65,6 +65,28 @@ vi.mock('@modrinth/ui', async () => {
                 ),
         }),
         StyledInput: input,
+        // The real primitive is a 
+ole="checkbox" button that draws its own box
+        // and toggles on click, so the mock must keep those two traits.
+        Checkbox: defineComponent({
+            props: ['modelValue', 'disabled', 'description', 'label'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h(
+                        'button',
+                        {
+                            type: 'button',
+                            role: 'checkbox',
+                            'aria-checked': props.modelValue ? 'true' : 'false',
+                            'aria-label': props.description || props.label || undefined,
+                            disabled: props.disabled,
+                            onClick: () => emit('update:modelValue', !props.modelValue),
+                        },
+                        props.label,
+                    ),
+        }),
         defineMessages: (messages: unknown) => messages,
         useVIntl: () => ({
             formatMessage: (
@@ -402,8 +424,8 @@ it('shows a generated host invite and sends visibility changes to the backend', 
     expect(wrapper.text()).toContain(inviteCode)
 
     await wrapper
-        .get('[data-onboarding-id="mctier-publish-state"] input[type="checkbox"]')
-        .setValue(true)
+        .get('[data-onboarding-id="mctier-publish-state"] [role="checkbox"]')
+        .trigger('click')
     expect(fixture.setPublic).toHaveBeenCalledWith(true)
 })
 
@@ -434,9 +456,10 @@ it('offers a working voice panel once the room is connected', async () => {
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
     // Open-mic is the default: the voice-activation option is offered but starts off.
-    const activation = wrapper.find(`${voicePanel} input[type="checkbox"]`)
+    // Checkbox is a `role="checkbox"` button, so its state is `aria-checked`.
+    const activation = wrapper.find(`${voicePanel} [role="checkbox"]`)
     if (activation.exists()) {
-        expect((activation.element as HTMLInputElement).checked).toBe(false)
+        expect(activation.attributes('aria-checked')).toBe('false')
     }
     expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeUndefined()
 })

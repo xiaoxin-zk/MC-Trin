@@ -138,6 +138,22 @@ vi.mock('@modrinth/ui', async () => {
                             emit('update:modelValue', (event.target as HTMLInputElement).value),
                     }),
         }),
+        // The real primitive is a `role="checkbox"` button (no native input),
+        // so the MC-Trin voice panel needs it stubbed to render here.
+        Checkbox: defineComponent({
+            props: ['modelValue', 'disabled', 'description', 'label'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h('button', {
+                        type: 'button',
+                        role: 'checkbox',
+                        'aria-checked': props.modelValue ? 'true' : 'false',
+                        disabled: props.disabled,
+                        onClick: () => emit('update:modelValue', !props.modelValue),
+                    }),
+        }),
         Combobox: defineComponent({
             props: ['modelValue', 'options'],
             emits: ['update:modelValue'],
