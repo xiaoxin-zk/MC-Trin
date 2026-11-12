@@ -242,7 +242,7 @@ it('renders the MC-Trin room workflow by default', async () => {
     expect(wrapper.text()).toContain('MC-Trin LAN lobby')
     expect(wrapper.text()).not.toContain('RedStone Online 2')
     // Identify the branch structurally instead of by a raw select count: the
-    // MC-Trin tab legitimately owns selectors (device pickers, PTT key), so a
+    // MC-Trin tab legitimately owns selectors (audio device pickers), so a
     // "no selects" rule would be wrong the moment those render.
     expect(wrapper.find('[data-onboarding-id="mctier-create-form"]').exists()).toBe(true)
     const voicePanel = wrapper.find('[data-onboarding-id="mctier-voice"]')

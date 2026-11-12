@@ -80,7 +80,7 @@ test('generate stable tagged URLs from draft assets and verify the repository an
             `http://github.com/Axolotl-Launcher/Axolotl/releases/download/${tag}/Axolotl.Launcher_x64-setup.nsis.zip`,
             `https://github.com/Axolotl-Launcher/Axolotl/releases/download/${tag}/Axolotl.Launcher_x64-setup.nsis.zip#fragment`,
             `https://github.com/extra/Axolotl-Launcher/Axolotl/releases/download/${tag}/asset.tar.gz`,
-            `https://github.com/Axolotl-Launcher/Axolotl/releases/download/${tag}/wrong-platform_x64-setup.nsis.zip`,
+            `https://github.com/Axolotl-Launcher/Axolotl/releases/download/${tag}/wrong-platform.AppImage.tar.gz`,
         ]) {
             const manifest = structuredClone(original)
             manifest.platforms['windows-x86_64'].url = url

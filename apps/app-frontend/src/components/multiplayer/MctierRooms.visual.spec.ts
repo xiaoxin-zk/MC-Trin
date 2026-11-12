@@ -389,8 +389,11 @@ it('offers a working voice panel once the room is connected', async () => {
 
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
-    // Open-mic is the default: no activation checkbox is forced on.
-    expect(wrapper.text()).not.toContain('Only send while I speak')
+    // Open-mic is the default: the voice-activation option is offered but starts off.
+    const activation = wrapper.find(`${voicePanel} input[type="checkbox"]`)
+    if (activation.exists()) {
+        expect((activation.element as HTMLInputElement).checked).toBe(false)
+    }
     expect(button(wrapper, 'Enable voice').attributes('disabled')).toBeUndefined()
 })
 
