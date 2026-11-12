@@ -368,11 +368,12 @@ pub(crate) const MAX_MRPACK_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 /// Ceiling for the number of modpack content files downloaded at once.
 ///
 /// This is a **limit**, not the value actually used: callers take
-/// `state.download_concurrency().clamp(1, ceiling)`, so a user who configured a
-/// lower concurrency keeps it, while the automatic controller can still use more
-/// than this when the machine and network support it. Previously the call site
-/// clamped to this constant directly, pinning every install to 4 regardless of
-/// the detected capacity.
+/// `state.download_concurrency().clamp(1, ceiling)`. A user who configured a low
+/// concurrency therefore keeps it, while the automatic controller is free to
+/// exceed that low configured value up to this ceiling when the machine and
+/// network support it. No caller can exceed the ceiling itself. Previously the
+/// call site clamped directly to this constant, pinning every install to 4
+/// regardless of the detected capacity.
 pub(crate) const MAX_PACK_FILE_DOWNLOAD_CONCURRENCY: usize = 16;
 
 /// Effective concurrency for modpack content-file downloads.
@@ -847,15 +848,16 @@ mod tests {
 
     #[test]
     fn pack_file_concurrency_is_capped_at_the_ceiling() {
-        // The automatic controller can report values far above the ceiling.
-        assert_eq!(
-            super::max_pack_file_download_concurrency(96),
-            super::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY
-        );
-        assert_eq!(
-            super::max_pack_file_download_concurrency(usize::MAX),
-            super::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY
-        );
+        // Assert the literal ceiling rather than comparing the function against
+        // the constant: the constant is its own upper bound, so a self-referential
+        // assertion would stay green even if the ceiling were lowered back to 4.
+        assert_eq!(super::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY, 16);
+        // Values below the ceiling pass through unchanged...
+        assert_eq!(super::max_pack_file_download_concurrency(8), 8);
+        assert_eq!(super::max_pack_file_download_concurrency(16), 16);
+        // ...and anything above it is clamped to the literal ceiling.
+        assert_eq!(super::max_pack_file_download_concurrency(96), 16);
+        assert_eq!(super::max_pack_file_download_concurrency(usize::MAX), 16);
     }
 
     #[test]
