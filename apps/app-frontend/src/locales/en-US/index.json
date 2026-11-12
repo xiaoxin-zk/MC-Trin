@@ -13469,6 +13469,15 @@
   "app.settings.updates.preferences.title": {
     "message": "Update behavior"
   },
+  "app.settings.updates.preview.description": {
+    "message": "Shows the dialog users see after updating. Nothing is marked as shown, and the pending announcement is left untouched."
+  },
+  "app.settings.updates.preview.open": {
+    "message": "Preview announcement"
+  },
+  "app.settings.updates.preview.title": {
+    "message": "Announcement preview"
+  },
   "app.settings.updates.security": {
     "message": "Updates are installed only when their cryptographic signature is valid."
   },
@@ -13980,7 +13989,7 @@
     "message": "Open full changelog"
   },
   "app.update-announcement.unknown-body": {
-    "message": "This version does not have a bundled announcement yet. Visit the website for the full changelog."
+    "message": "This version does not have a bundled announcement yet."
   },
   "app.update-announcement.unknown-title": {
     "message": "MC-Trin was updated"

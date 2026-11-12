@@ -13,6 +13,7 @@ import {
     LayoutTemplateIcon,
     PaintbrushIcon,
     RefreshCwIcon,
+    RocketIcon,
     ShieldIcon,
     ToggleRightIcon,
     UsersIcon,
@@ -87,6 +88,10 @@ const categoryContent: Record<SettingsCategoryId, Pick<SettingsCategory, 'icon' 
     'storage-backups': {
         icon: ArchiveIcon,
         content: defineAsyncComponent(() => import('./StorageBackupSettings.vue')),
+    },
+    updates: {
+        icon: RocketIcon,
+        content: defineAsyncComponent(() => import('./UpdatesSettings.vue')),
     },
     logs: {
         icon: FileTextIcon,

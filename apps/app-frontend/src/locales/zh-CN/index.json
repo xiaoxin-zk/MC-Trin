@@ -17597,6 +17597,15 @@
   "app.settings.updates.preview-announcement": {
     "message": "预览更新公告弹窗"
   },
+  "app.settings.updates.preview.description": {
+    "message": "展示更新完成后用户看到的弹窗。不会标记为已展示，也不影响待展示的公告。"
+  },
+  "app.settings.updates.preview.open": {
+    "message": "预览公告"
+  },
+  "app.settings.updates.preview.title": {
+    "message": "公告预览"
+  },
   "app.settings.updates.security": {
     "message": "只有通过加密签名验证的更新才会被安装。"
   },
@@ -18114,7 +18123,7 @@
     "message": "查看完整更新日志"
   },
   "app.update-announcement.unknown-body": {
-    "message": "此版本暂未内置更新公告，请前往官网查看完整更新日志。"
+    "message": "此版本暂未内置更新公告。"
   },
   "app.update-announcement.unknown-title": {
     "message": "MC-Trin 已更新"

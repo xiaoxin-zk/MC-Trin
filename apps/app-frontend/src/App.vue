@@ -82,6 +82,7 @@ import { type RouteLocationNormalizedLoaded, RouterView, useRoute, useRouter } f
 
 import InstanceExportModal from '@/components/lab/recipe-generator/InstanceExportModal.vue'
 import AccountsCard from '@/components/ui/AccountsCard.vue'
+import UpdateAnnouncementModal from '@/components/ui/announcement/UpdateAnnouncementModal.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import AppTitlebar from '@/components/ui/AppTitlebar.vue'
 import ContentInstallPreviewModal from '@/components/ui/ContentInstallPreviewModal.vue'
@@ -414,6 +415,9 @@ const onboardingMode = ref<OnboardingMode>('main')
 const onboardingSettings = ref<AppSettings | null>(null)
 const onboardingReplay = ref(false)
 const nativeDecorations = ref(false)
+
+const updateAnnouncementModal = ref<InstanceType<typeof UpdateAnnouncementModal>>()
+const pendingUpdateAnnouncementVersion = ref<string | null>(null)
 
 const os = ref('')
 const isDevEnvironment = ref(false)
@@ -950,6 +954,9 @@ async function setupApp() {
     stateInitialized.value = true
     showOnboarding.value = !onboarded
 
+    pendingUpdateAnnouncementVersion.value = initialSettings.pending_update_toast_for_version
+    maybeShowPendingUpdateAnnouncement()
+
     unlistenWindowResize = await getCurrentWindow().onResized(() => {
         // Display mode/DPI changes can emit a burst of resize events. Coalesce
         // them so WebView2 does not receive one IPC request per event.
@@ -1074,6 +1081,31 @@ async function finishOnboarding() {
     }
     showOnboarding.value = false
     onboardingReplay.value = false
+    maybeShowPendingUpdateAnnouncement()
+}
+
+/**
+ * Shows the post-update announcement below the startup dialog priority:
+ * initialization errors and the first-run onboarding overlay come first, and
+ * the announcement waits until the overlay is gone. A replayed tour does not
+ * consume the pending trigger.
+ */
+function maybeShowPendingUpdateAnnouncement() {
+    const version = pendingUpdateAnnouncementVersion.value
+    if (!version || stateFailed.value || showOnboarding.value) return
+    updateAnnouncementModal.value?.show(version)
+}
+
+async function handleUpdateAnnouncementClosed(version: string) {
+    pendingUpdateAnnouncementVersion.value = null
+    try {
+        const current = await getSettings()
+        // A freshly installed update may have re-armed the trigger meanwhile.
+        if (current.pending_update_toast_for_version !== version) return
+        await updateSettings({ pending_update_toast_for_version: null })
+    } catch (error) {
+        console.warn('Failed to clear the pending update announcement', error)
+    }
 }
 
 async function skipOnboarding() {
@@ -2969,6 +3001,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         :done="batchScanDone"
         :total="batchOriginalCount"
         @cancel="cancelBatchScan"
+    />
+
+    <UpdateAnnouncementModal
+        ref="updateAnnouncementModal"
+        @closed="handleUpdateAnnouncementClosed"
     />
 
     <OnboardingOverlay

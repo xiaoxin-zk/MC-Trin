@@ -13,6 +13,7 @@ export type SettingsCategoryId =
     | 'network-multiplayer'
     | 'network-connection'
     | 'storage-backups'
+    | 'updates'
     | 'about'
     | 'logs'
     | 'feature-flags'
@@ -136,6 +137,14 @@ export const settingsCategoryDefinitions: SettingsCategoryDefinition[] = [
         }),
         group: 'data-privacy',
         onboardingId: 'settings-tab-storage-backups',
+    },
+    {
+        id: 'updates',
+        name: defineMessage({
+            id: 'app.settings.tabs.updates',
+            defaultMessage: 'Updates',
+        }),
+        group: 'support',
     },
     {
         id: 'about',

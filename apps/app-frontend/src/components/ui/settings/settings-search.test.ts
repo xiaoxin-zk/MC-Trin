@@ -39,6 +39,7 @@ const settingsComponentFiles = {
         './StorageSettings.vue',
     ],
     'instance-sync': ['./instances/index.vue'],
+    updates: ['./UpdatesSettings.vue'],
     logs: ['./LogsSettings.vue'],
     about: ['./AboutSettings.vue'],
     'feature-flags': ['./FeatureFlagSettings.vue'],
@@ -186,7 +187,12 @@ test('settings navigation groups preserve the intended MC-Trin information archi
         'network-multiplayer',
     ])
     assert.deepEqual(categoriesForGroup('data-privacy'), ['storage-backups'])
-    assert.deepEqual(categoriesForGroup('support'), ['about', 'network-connection', 'logs'])
+    assert.deepEqual(categoriesForGroup('support'), [
+        'updates',
+        'about',
+        'network-connection',
+        'logs',
+    ])
     assert.deepEqual(categoriesForGroup('developer'), [])
     assert.deepEqual(categoriesForGroup('developer', true), ['feature-flags'])
 })
