@@ -149,9 +149,9 @@ pub(crate) async fn install_resolved_content_plan_with_reporter(
             }
         })
         .buffer_unordered(
-            state
-                .download_concurrency()
-                .clamp(1, crate::util::download::constants::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY),
+            crate::util::download::constants::max_pack_file_download_concurrency(
+                state.download_concurrency(),
+            ),
         )
         .try_collect::<Vec<_>>()
         .await?;

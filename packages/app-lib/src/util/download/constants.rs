@@ -365,7 +365,28 @@ pub(crate) const LIVE_PROGRESS_MAX_WAIT: Duration = Duration::from_secs(1);
 pub(crate) const LIVE_PROGRESS_MIN_BYTES: u64 = 64 * 1024;
 pub(crate) const MAX_CONCURRENT_INSTALL_JOBS: usize = 1;
 pub(crate) const MAX_MRPACK_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
-pub(crate) const MAX_PACK_FILE_DOWNLOAD_CONCURRENCY: usize = 4;
+/// Ceiling for the number of modpack content files downloaded at once.
+///
+/// This is a **limit**, not the value actually used: callers take
+/// `state.download_concurrency().clamp(1, ceiling)`, so a user who configured a
+/// lower concurrency keeps it, while the automatic controller can still use more
+/// than this when the machine and network support it. Previously the call site
+/// clamped to this constant directly, pinning every install to 4 regardless of
+/// the detected capacity.
+pub(crate) const MAX_PACK_FILE_DOWNLOAD_CONCURRENCY: usize = 16;
+
+/// Effective concurrency for modpack content-file downloads.
+///
+/// Respects the user's configured/auto-detected capacity and only *caps* it at
+/// [`MAX_PACK_FILE_DOWNLOAD_CONCURRENCY`], so a low-powered machine is never
+/// pushed past what it asked for while a fast one is no longer pinned to the
+/// ceiling. Kept as a function so every call site shares one definition.
+pub(crate) fn max_pack_file_download_concurrency(
+    download_concurrency: usize,
+) -> usize {
+    download_concurrency.clamp(1, MAX_PACK_FILE_DOWNLOAD_CONCURRENCY)
+}
+
 pub(crate) const MODPACK_DATABASE_BATCH_SIZE: usize = 25;
 pub(crate) const MODPACK_DATABASE_FLUSH_INTERVAL: Duration =
     Duration::from_millis(500);
@@ -814,5 +835,32 @@ mod tests {
     fn finalize_concurrency_stays_within_its_bounds() {
         let concurrency = super::native_content_finalize_concurrency();
         assert!((4..=8).contains(&concurrency));
+    }
+
+    #[test]
+    fn pack_file_concurrency_respects_a_low_user_setting() {
+        // A user who configured a small value must keep it.
+        assert_eq!(super::max_pack_file_download_concurrency(1), 1);
+        assert_eq!(super::max_pack_file_download_concurrency(2), 2);
+        assert_eq!(super::max_pack_file_download_concurrency(4), 4);
+    }
+
+    #[test]
+    fn pack_file_concurrency_is_capped_at_the_ceiling() {
+        // The automatic controller can report values far above the ceiling.
+        assert_eq!(
+            super::max_pack_file_download_concurrency(96),
+            super::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY
+        );
+        assert_eq!(
+            super::max_pack_file_download_concurrency(usize::MAX),
+            super::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY
+        );
+    }
+
+    #[test]
+    fn pack_file_concurrency_never_reaches_zero() {
+        // Guards the clamp lower bound: a zero would stall `buffer_unordered`.
+        assert_eq!(super::max_pack_file_download_concurrency(0), 1);
     }
 }
