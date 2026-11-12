@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { GlobeIcon, LockIcon, MicrophoneIcon, XIcon } from '@modrinth/assets'
+import {
+    ChevronLeftIcon,
+    GlobeIcon,
+    LockIcon,
+    MicrophoneIcon,
+    XIcon,
+} from '@modrinth/assets'
 import {
     Button,
     Checkbox,
     CopyCode,
     defineMessages,
     ProgressBar,
+    Slider,
     StyledInput,
+    Toggle,
     useVIntl,
 } from '@modrinth/ui'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -483,24 +491,6 @@ async function startVoice() {
     if (voice.active.value) await voice.refreshDevices()
 }
 
-function onVolumeInput(event: Event) {
-    const target = event.target
-    if (!(target instanceof HTMLInputElement)) return
-    voice.setOutputVolume(Number(target.value) / 100)
-}
-
-function onInputVolumeInput(event: Event) {
-    const target = event.target
-    if (!(target instanceof HTMLInputElement)) return
-    voice.setInputVolume(Number(target.value) / 100)
-}
-
-function onPeerVolumeInput(event: Event, playerId: string) {
-    const target = event.target
-    if (!(target instanceof HTMLInputElement)) return
-    voice.setPeerVolume(playerId, Number(target.value) / 100)
-}
-
 async function onInputDeviceChange(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLSelectElement)) return
@@ -729,7 +719,7 @@ function prefillInviteFromDeepLink() {
                 class="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-surface-4 p-4"
             >
                 <div class="min-w-0">
-                    <h3 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
+                    <h3 class="m-0 text-lg font-semibold text-[var(--color-text-primary)]">
                         {{ formatMessage(messages.voiceTitle) }}
                     </h3>
                     <p class="m-0 mt-1 text-sm leading-relaxed text-[var(--color-text-tertiary)]">
@@ -779,23 +769,30 @@ function prefillInviteFromDeepLink() {
             <SettingsRow>
                 <template #label>{{ formatMessage(messages.voiceMicrophone) }}</template>
                 <template #control>
-                    <select
-                        class="h-9 w-full min-w-0 rounded-xl border-none bg-surface-4 px-3 text-sm text-[var(--color-text-default)]"
-                        :value="voice.inputDeviceId.value ?? ''"
-                        :aria-label="formatMessage(messages.voiceMicrophone)"
-                        @change="onInputDeviceChange"
-                    >
-                        <option value="">
-                            {{ formatMessage(messages.voiceSystemDefault) }}
-                        </option>
-                        <option
-                            v-for="device in voice.inputDevices.value"
-                            :key="device.deviceId"
-                            :value="device.deviceId"
+                    <div class="relative flex w-full min-w-0 items-center">
+                        <select
+                            class="h-9 w-full min-w-0 appearance-none rounded-xl border border-solid border-surface-4 bg-surface-4 px-3 pr-9 text-sm text-[var(--color-text-default)]"
+                            :value="voice.inputDeviceId.value ?? ''"
+                            :aria-label="formatMessage(messages.voiceMicrophone)"
+                            @change="onInputDeviceChange"
                         >
-                            {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
-                        </option>
-                    </select>
+                            <option value="">
+                                {{ formatMessage(messages.voiceSystemDefault) }}
+                            </option>
+                            <option
+                                v-for="device in voice.inputDevices.value"
+                                :key="device.deviceId"
+                                :value="device.deviceId"
+                            >
+                                {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
+                            </option>
+                        </select>
+                        <!-- The global select rule strips the native arrow. -->
+                        <ChevronLeftIcon
+                            class="pointer-events-none absolute right-3 size-4 shrink-0 -rotate-90 text-[var(--color-text-tertiary)]"
+                            aria-hidden="true"
+                        />
+                    </div>
                 </template>
             </SettingsRow>
             <SettingsRow
@@ -803,23 +800,29 @@ function prefillInviteFromDeepLink() {
             >
                 <template #label>{{ formatMessage(messages.voiceSpeaker) }}</template>
                 <template #control>
-                    <select
-                        class="h-9 w-full min-w-0 rounded-xl border-none bg-surface-4 px-3 text-sm text-[var(--color-text-default)]"
-                        :value="voice.outputDeviceId.value ?? ''"
-                        :aria-label="formatMessage(messages.voiceSpeaker)"
-                        @change="onOutputDeviceChange"
-                    >
-                        <option value="">
-                            {{ formatMessage(messages.voiceSystemDefault) }}
-                        </option>
-                        <option
-                            v-for="device in voice.outputDevices.value"
-                            :key="device.deviceId"
-                            :value="device.deviceId"
+                    <div class="relative flex w-full min-w-0 items-center">
+                        <select
+                            class="h-9 w-full min-w-0 appearance-none rounded-xl border border-solid border-surface-4 bg-surface-4 px-3 pr-9 text-sm text-[var(--color-text-default)]"
+                            :value="voice.outputDeviceId.value ?? ''"
+                            :aria-label="formatMessage(messages.voiceSpeaker)"
+                            @change="onOutputDeviceChange"
                         >
-                            {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
-                        </option>
-                    </select>
+                            <option value="">
+                                {{ formatMessage(messages.voiceSystemDefault) }}
+                            </option>
+                            <option
+                                v-for="device in voice.outputDevices.value"
+                                :key="device.deviceId"
+                                :value="device.deviceId"
+                            >
+                                {{ device.label || formatMessage(messages.voiceUnnamedDevice) }}
+                            </option>
+                        </select>
+                        <ChevronLeftIcon
+                            class="pointer-events-none absolute right-3 size-4 shrink-0 -rotate-90 text-[var(--color-text-tertiary)]"
+                            aria-hidden="true"
+                        />
+                    </div>
                 </template>
             </SettingsRow>
             <!-- Session meters only make sense while a call is up; the device
@@ -830,22 +833,15 @@ function prefillInviteFromDeepLink() {
             <SettingsRow v-if="voice.active.value && voice.inputVolumeSupported.value" stacked>
                 <template #label>{{ formatMessage(messages.voiceInputVolume) }}</template>
                 <template #control>
-                    <div class="flex w-full min-w-0 items-center gap-3">
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="min-w-0 flex-1"
-                            :value="Math.round(voice.inputVolume.value * 100)"
-                            :aria-label="formatMessage(messages.voiceInputVolume)"
-                            @input="onInputVolumeInput"
+                    <div class="w-full min-w-0">
+                        <Slider
+                            :model-value="Math.round(voice.inputVolume.value * 100)"
+                            :min="0"
+                            :max="100"
+                            :step="5"
+                            unit="%"
+                            @update:model-value="(value: number) => voice.setInputVolume(value / 100)"
                         />
-                        <span
-                            class="w-10 shrink-0 text-right text-sm tabular-nums text-[var(--color-text-tertiary)]"
-                        >
-                            {{ Math.round(voice.inputVolume.value * 100) }}%
-                        </span>
                     </div>
                 </template>
             </SettingsRow>
@@ -873,22 +869,17 @@ function prefillInviteFromDeepLink() {
             <SettingsRow v-if="voice.active.value" stacked>
                 <template #label>{{ formatMessage(messages.voiceVolume) }}</template>
                 <template #control>
-                    <div class="flex w-full min-w-0 items-center gap-3">
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="min-w-0 flex-1"
-                            :value="Math.round(voice.outputVolume.value * 100)"
-                            :aria-label="formatMessage(messages.voiceVolume)"
-                            @input="onVolumeInput"
+                    <div class="w-full min-w-0">
+                        <Slider
+                            :model-value="Math.round(voice.outputVolume.value * 100)"
+                            :min="0"
+                            :max="100"
+                            :step="5"
+                            unit="%"
+                            @update:model-value="
+                                (value: number) => voice.setOutputVolume(value / 100)
+                            "
                         />
-                        <span
-                            class="w-10 shrink-0 text-right text-sm tabular-nums text-[var(--color-text-tertiary)]"
-                        >
-                            {{ Math.round(voice.outputVolume.value * 100) }}%
-                        </span>
                     </div>
                 </template>
             </SettingsRow>
@@ -898,9 +889,9 @@ function prefillInviteFromDeepLink() {
                     {{ formatMessage(messages.voiceActivationHint) }}
                 </template>
                 <template #control>
-                    <Checkbox
+                    <Toggle
+                        id="mctier-voice-activation"
                         :model-value="voice.voiceActivation.value"
-                        :description="formatMessage(messages.voiceActivation)"
                         @update:model-value="onVoiceActivationToggle"
                     />
                 </template>
@@ -914,10 +905,10 @@ function prefillInviteFromDeepLink() {
                     {{ formatMessage(messages.voiceNoiseReductionVirtualMic) }}
                 </template>
                 <template #control>
-                    <Checkbox
+                    <Toggle
+                        id="mctier-voice-noise-reduction"
                         :model-value="voice.noiseReduction.value"
                         :disabled="voice.noiseReductionForcedNative.value"
-                        :description="formatMessage(messages.voiceNoiseReduction)"
                         @update:model-value="onNoiseReductionToggle"
                     />
                 </template>
@@ -1079,23 +1070,26 @@ function prefillInviteFromDeepLink() {
                             <MicrophoneIcon v-if="!voice.peerMuted.value[player.playerId]" />
                             <XIcon v-else />
                         </Button>
-                        <input
+                        <div
                             v-if="voice.active.value && player.playerId !== state?.local_player_id"
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="w-32"
-                            :value="
-                                Math.round((voice.peerVolumes.value[player.playerId] ?? 1) * 100)
-                            "
-                            :aria-label="
-                                formatMessage(messages.voicePeerVolume, {
-                                    player: player.playerName,
-                                })
-                            "
-                            @input="onPeerVolumeInput($event, player.playerId)"
-                        />
+                            class="w-56 max-w-full"
+                        >
+                            <Slider
+                                :model-value="
+                                    Math.round(
+                                        (voice.peerVolumes.value[player.playerId] ?? 1) * 100,
+                                    )
+                                "
+                                :min="0"
+                                :max="100"
+                                :step="5"
+                                unit="%"
+                                @update:model-value="
+                                    (value: number) =>
+                                        voice.setPeerVolume(player.playerId, value / 100)
+                                "
+                            />
+                        </div>
                         <span class="text-[var(--color-text-tertiary)]">{{
                             player.virtualIp
                         }}</span>

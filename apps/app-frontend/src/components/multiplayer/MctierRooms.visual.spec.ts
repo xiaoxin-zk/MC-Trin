@@ -86,6 +86,37 @@ vi.mock('@modrinth/ui', async () => {
                         props.label,
                     ),
         }),
+        // The real primitive is a `role="switch"` button that toggles on click.
+        Toggle: defineComponent({
+            props: ['modelValue', 'disabled', 'id'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h('button', {
+                        type: 'button',
+                        role: 'switch',
+                        'aria-checked': props.modelValue ? 'true' : 'false',
+                        disabled: props.disabled,
+                        onClick: () => emit('update:modelValue', !props.modelValue),
+                    }),
+        }),
+        // Slider renders a real range input inside a boxed track; tests only
+        // need it to exist so "session-only controls" checks stay meaningful.
+        Slider: defineComponent({
+            props: ['modelValue', 'min', 'max', 'step', 'unit', 'disabled', 'id'],
+            emits: ['update:modelValue'],
+            setup:
+                (props) =>
+                () =>
+                    h('input', {
+                        type: 'range',
+                        min: props.min,
+                        max: props.max,
+                        step: props.step,
+                        value: props.modelValue,
+                    }),
+        }),
         defineMessages: (messages: unknown) => messages,
         useVIntl: () => ({
             formatMessage: (
@@ -459,11 +490,9 @@ it('offers a working voice panel once the room is connected', async () => {
     expect(wrapper.find(voicePanel).exists()).toBe(true)
     expect(wrapper.text()).toContain('Room voice')
     // Open-mic is the default: the voice-activation option is offered but starts off.
-    // Checkbox is a `role="checkbox"` button carrying its label on `aria-label`,
-    // so target it by name rather than by position among the panel's switches.
-    const activation = wrapper.find(
-        `${voicePanel} [role="checkbox"][aria-label="Only send while I speak"]`,
-    )
+    // The persisted switches render as `role="switch"`; the activation one is the
+    // first in the panel, the noise-reduction switch follows it.
+    const activation = wrapper.findAll(`${voicePanel} [role="switch"]`)[0]
     if (activation.exists()) {
         expect(activation.attributes('aria-checked')).toBe('false')
     }
