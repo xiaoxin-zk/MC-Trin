@@ -12,20 +12,16 @@ pub(crate) struct ResolvedDirectLink {
     pub launcher: ImportLauncherType,
     pub launcher_root: PathBuf,
     pub dot_minecraft: PathBuf,
-    /// Resolved `versions/<id>` directory of the linked installation; carried
-    /// as part of the resolution contract even though current consumers
-    /// derive their paths from `dot_minecraft`/`version_json` directly.
-    #[allow(dead_code)]
+    /// Resolved `versions/<id>` directory of the linked installation. No
+    /// production consumer reads it (they derive paths from
+    /// `dot_minecraft`/`version_json`), so it only exists so tests can assert
+    /// that resolution lands on the right version directory.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub version_dir: PathBuf,
     pub version_json: PathBuf,
     pub version_id: String,
     pub game_version: String,
     pub loader: ModLoader,
-    /// Detected loader version of the linked document. Directly associated
-    /// instances display no loader version (the loader is managed by the
-    /// external launcher), so this is not persisted anywhere yet.
-    #[allow(dead_code)]
-    pub loader_version: Option<String>,
 }
 
 /// The launcher's dialect and root used to resolve a traditional
@@ -340,7 +336,6 @@ fn resolve_known(
         version_id,
         game_version: info.vanilla_name,
         loader,
-        loader_version: info.loader_version,
     })
 }
 

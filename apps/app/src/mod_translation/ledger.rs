@@ -77,7 +77,6 @@ pub struct WorkGraph {
     revision: u64,
 }
 
-#[allow(dead_code)]
 impl WorkGraph {
     pub fn new(task_id: String) -> Self {
         Self {
@@ -145,6 +144,9 @@ impl WorkGraph {
         self.items.values().cloned().collect()
     }
 
+    /// Unused today: no caller filters the graph without also inspecting the
+    /// items. Kept for the resume/reporting work that needs pending-only views.
+    #[allow(dead_code)]
     pub fn pending(&self) -> Vec<WorkItem> {
         self.items
             .values()
@@ -163,6 +165,8 @@ impl WorkGraph {
         self.items.get(&id).cloned()
     }
 
+    /// Unused in production: only the ledger tests read a single item.
+    #[allow(dead_code)]
     pub fn item(&self, id: &str) -> Option<WorkItem> {
         self.items.get(id).cloned()
     }
@@ -241,6 +245,8 @@ impl WorkGraph {
         (verified, total)
     }
 
+    /// Unused today: callers read `WorkGraphSnapshot::revision` instead.
+    #[allow(dead_code)]
     pub fn revision(&self) -> u64 {
         self.revision
     }
