@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    detectNoiseSuppressionMode,
     MAX_ICE_CANDIDATE_BYTES,
     MAX_SDP_BYTES,
     MAX_SIGNAL_FRAME_BYTES,
@@ -450,20 +451,48 @@ test('does not rewrite the microphone track when the state is unchanged', () => 
     }
 })
 
-/** A Web Audio stub whose gain node records every value written to it. */
-function installAudioEnvironment() {
+/** A Web Audio stub whose gain node records every value written to it.
+ *
+ * Node identity is tracked so a test can assert the wiring order: RNNoise must
+ * sit before the gain node, otherwise the gate's tail stays audible.
+ *
+ * `sampleRate` matters: the session refuses to run RNNoise unless the context
+ * reports 48kHz, so the stub has to answer like a real one — honouring the
+ * requested rate and otherwise using `defaultSampleRate`, which a test lowers to
+ * model a device that silently ignores the request. */
+function installAudioEnvironment(options: { defaultSampleRate?: number } = {}) {
+    const defaultSampleRate = options.defaultSampleRate ?? 48000
     const gains: { value: number; writes: number[] }[] = []
+    /** Directed `source -> target` edges, named so assertions read clearly. */
+    const connections: string[] = []
     const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext')
 
+    const named = (name: string) => ({
+        name,
+        connect(target: { name?: string }) {
+            connections.push(`${name}->${target?.name ?? '?'}`)
+        },
+        disconnect() {
+            connections.push(`${name}-/->`)
+        },
+    })
+
     class FakeAudioContext {
+        readonly sampleRate: number
+
+        constructor(settings?: { sampleRate?: number }) {
+            this.sampleRate = settings?.sampleRate ?? defaultSampleRate
+        }
+
         createMediaStreamSource() {
-            return { connect() {}, disconnect() {} }
+            return named('source')
         }
 
         createGain() {
             const entry = { value: 1, writes: [] as number[] }
             gains.push(entry)
             return {
+                name: 'gain',
                 get gain() {
                     return {
                         get value() {
@@ -475,14 +504,18 @@ function installAudioEnvironment() {
                         },
                     }
                 },
-                connect() {},
-                disconnect() {},
+                connect(target: { name?: string }) {
+                    connections.push(`gain->${target?.name ?? '?'}`)
+                },
+                disconnect() {
+                    connections.push('gain-/->')
+                },
             }
         }
 
         createMediaStreamDestination() {
             const stream = createStream().stream
-            return { stream, connect() {}, disconnect() {} }
+            return { ...named('destination'), stream }
         }
 
         resume() {
@@ -501,6 +534,7 @@ function installAudioEnvironment() {
 
     return {
         gains,
+        connections,
         restore() {
             if (previous) Object.defineProperty(globalThis, 'AudioContext', previous)
             else Reflect.deleteProperty(globalThis, 'AudioContext')
@@ -563,6 +597,225 @@ test('open-mic mode transmits whenever the microphone is enabled', () => {
 
         session.setMicrophoneEnabled(false)
         assert.equal(gain.value, 0)
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('defaults to the untouched source -> gain -> destination graph', () => {
+    // RNNoise is opt-in, so a plain session must not construct one and must not
+    // download anything: the graph is wired directly.
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    try {
+        const { stream } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+
+        assert.equal(session.noiseSuppressionActive, false)
+        assert.deepEqual(
+            audio.connections.filter((edge) => edge.startsWith('source->')),
+            ['source->gain'],
+        )
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('reports the capture label so a virtual microphone can be detected', () => {
+    // The owner uses this to force the native path: a device that denoises on
+    // its own must not be processed twice.
+    const environment = installVoiceEnvironment()
+    const { stream, track } = createStream()
+    track.label = 'NVIDIA Broadcast'
+    try {
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+
+        assert.equal(session.activeCaptureLabel, 'NVIDIA Broadcast')
+        session.close()
+    } finally {
+        environment.restore()
+    }
+})
+
+test('noise suppression mode is probed without creating an audio graph', () => {
+    // The probe runs before any call starts, so it must be cheap and must not
+    // touch AudioContext construction.
+    const previousAudioContext = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext')
+    try {
+        Reflect.deleteProperty(globalThis, 'AudioContext')
+        assert.equal(detectNoiseSuppressionMode(), 'unavailable')
+    } finally {
+        if (previousAudioContext) {
+            Object.defineProperty(globalThis, 'AudioContext', previousAudioContext)
+        }
+    }
+})
+
+test('falls back to native when the worklet assets cannot load', async () => {
+    // This is a guaranteed failure in `node --test`, for two independent
+    // reasons, both verified against the installed package: its entry module
+    // evaluates `class ... extends AudioWorkletNode` at import time and that
+    // global only exists in a browser, and the `?url` specifiers are a Vite
+    // transform that Node's resolver rejects with ERR_PACKAGE_PATH_NOT_EXPORTED.
+    // Whichever rejects first, enabling must report `false` and the call must
+    // keep working. The failure is asserted rather than assumed: if the loader
+    // ever started succeeding here, `started` would be true and this would fail.
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    try {
+        const { stream, track } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+
+        const started = await session.setNoiseSuppressionEnabled(true)
+
+        assert.equal(started, false)
+        assert.equal(session.noiseSuppressionActive, false)
+        // The original path is still intact, so audio keeps flowing unfiltered.
+        assert.deepEqual(
+            audio.connections.filter((edge) => edge.endsWith('->gain')),
+            ['source->gain'],
+        )
+        assert.equal(track.enabled, true)
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('turning noise suppression off disconnects the worklet', async () => {
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    try {
+        const { stream } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+        })
+        // Enable fails here (no assets), which is enough to prove the off path
+        // stays safe and leaves no dangling node behind.
+        await session.setNoiseSuppressionEnabled(true)
+        await session.setNoiseSuppressionEnabled(false)
+
+        assert.equal(session.noiseSuppressionActive, false)
+        assert.equal(audio.gains.length, 1)
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('refuses RNNoise when the audio graph is not at 48kHz', async () => {
+    // RNNoise cannot detect a rate mismatch: its frame size is a wasm constant,
+    // so at 44.1kHz it would process 480 samples as if they were 10ms and
+    // pitch-shift the voice by ~8.8%. The session has to refuse instead.
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment({ defaultSampleRate: 44100 })
+    let loaderCalls = 0
+    try {
+        const { stream, track } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+            // A loader that would happily hand back a node: proving the refusal
+            // comes from the rate check, not from a load failure.
+            loadNoiseNode: async () => {
+                loaderCalls += 1
+                return { connect() {}, disconnect() {} } as unknown as AudioWorkletNode
+            },
+        })
+
+        assert.equal(session.supportsNoiseSuppression, false)
+        const started = await session.setNoiseSuppressionEnabled(true)
+
+        assert.equal(started, false)
+        assert.equal(session.noiseSuppressionActive, false)
+        // Loading must not even be attempted: downloading ~217 KB for a node
+        // that would be discarded is wasted bandwidth.
+        assert.equal(loaderCalls, 0)
+        // Voice itself is unaffected: the plain graph is still wired and the
+        // capture track is still live.
+        assert.deepEqual(
+            audio.connections.filter((edge) => edge.endsWith('->gain')),
+            ['source->gain'],
+        )
+        assert.equal(track.enabled, true)
+        session.close()
+    } finally {
+        audio.restore()
+        environment.restore()
+    }
+})
+
+test('a disable during loading wins over the enable that arrives late', async () => {
+    // The switch is a user action, not a queue entry: if it is turned off while
+    // the worklet is still downloading, the late arrival must be thrown away
+    // rather than connected to a graph the user believes is off.
+    const environment = installVoiceEnvironment()
+    const audio = installAudioEnvironment()
+    let releaseLoad: (() => void) | null = null
+    let signalEntered: (() => void) | null = null
+    const enteredLoading = new Promise<void>((resolve) => {
+        signalEntered = resolve
+    })
+    let destroys = 0
+    try {
+        const { stream } = createStream()
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+            loadNoiseNode: async () => {
+                // Announce that the load is in flight, then hold it open until
+                // the test lets it finish, so the disable lands mid-await.
+                signalEntered?.()
+                await new Promise<void>((resolve) => {
+                    releaseLoad = resolve
+                })
+                return {
+                    connect() {},
+                    disconnect() {},
+                    destroy() {
+                        destroys += 1
+                    },
+                } as unknown as AudioWorkletNode
+            },
+        })
+
+        const enabling = session.setNoiseSuppressionEnabled(true)
+        await enteredLoading
+        await session.setNoiseSuppressionEnabled(false)
+        releaseLoad?.()
+        const started = await enabling
+
+        assert.equal(started, false)
+        assert.equal(session.noiseSuppressionActive, false)
+        // The discarded node was released, not left holding a wasm heap.
+        assert.equal(destroys, 1)
+        // And it never entered the graph.
+        assert.deepEqual(
+            audio.connections.filter((edge) => edge.endsWith('->gain')),
+            ['source->gain'],
+        )
         session.close()
     } finally {
         audio.restore()

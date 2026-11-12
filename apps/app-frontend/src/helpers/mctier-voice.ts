@@ -7,6 +7,116 @@ export type MctierVoiceSignal = {
     candidate?: RTCIceCandidateInit
 }
 
+/** Which noise-suppression implementation this webview can offer.
+ *
+ * `native` is the browser's own `noiseSuppression` constraint, which is always
+ * available but is a plain filter rather than a learned model. `rnnoise` means
+ * the bundled WebAssembly RNNoise worklet can run here. `unavailable` is neither,
+ * so the UI hides the control instead of offering a switch that does nothing. */
+export type NoiseSuppressionMode = 'native' | 'rnnoise' | 'unavailable'
+
+/** Probes the two capabilities RNNoise needs, without downloading either asset.
+ *
+ * `audioWorklet` alone is not enough: an `AudioWorkletNode` also requires a
+ * constructible `AudioContext`, and the processor is WebAssembly, which some
+ * hardened builds disable via CSP. `WebAssembly.validate` is checked with a
+ * trivial module so a present-but-broken implementation is caught here rather
+ * than on the first audio frame. */
+export function detectNoiseSuppressionMode(): NoiseSuppressionMode {
+    if (typeof globalThis.AudioContext === 'undefined') return 'unavailable'
+    if (typeof globalThis.AudioWorkletNode === 'undefined') return 'unavailable'
+    if (typeof WebAssembly === 'undefined' || typeof WebAssembly.validate !== 'function') {
+        return 'unavailable'
+    }
+    // The shortest valid module: the 8-byte wasm header alone. A build that
+    // cannot validate this cannot run RNNoise either.
+    const wasmMagic = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+    let wasmWorks = false
+    try {
+        wasmWorks = WebAssembly.validate(wasmMagic)
+    } catch {
+        wasmWorks = false
+    }
+    return wasmWorks ? 'rnnoise' : 'native'
+}
+
+/** The sample rate RNNoise assumes. Its `dist/index.d.ts` says the processor
+ * "Assumes sample rate to be 48kHz", and its frame size (480 samples) is a wasm
+ * constant meaning 10ms only at that rate. */
+const RNNOISE_SAMPLE_RATE = 48000
+
+/** The context plus whether it actually runs at RNNoise's rate.
+ *
+ * The processor never checks the context rate — its frame size comes from
+ * `_rnnoise_get_frame_size()` in the wasm module, which is always 480, and its
+ * only assertion is `frameSize !== 480`. So at 44.1kHz it still gets 480 samples,
+ * which is ~10.88ms rather than 10ms: the denoiser runs, silently, about 8.8%
+ * pitch-shifted. Nothing in the library detects this, which is why the rate has
+ * to be confirmed here and the denoiser disabled when it does not match.
+ *
+ * Asking for a fixed rate is a preference, not a guarantee: some devices throw on
+ * an unsupported `sampleRate` and others silently return the device default. A
+ * rejected construction must never cost the user their call, so it is retried
+ * without options — voice keeps working and only the denoiser is lost. */
+type VoiceAudioContext = { context: AudioContext; atRnnoiseRate: boolean }
+
+function createVoiceAudioContext(AudioContextConstructor: typeof AudioContext): VoiceAudioContext {
+    let context: AudioContext
+    try {
+        context = new AudioContextConstructor({ sampleRate: RNNOISE_SAMPLE_RATE })
+    } catch {
+        // Unsupported rate: retry with the device default so the gain gate, the
+        // level meter and the call itself all still work.
+        context = new AudioContextConstructor()
+    }
+    return { context, atRnnoiseRate: context.sampleRate === RNNOISE_SAMPLE_RATE }
+}
+
+/** Loads RNNoise and returns an unconnected worklet node.
+ *
+ * Both assets are pulled in with `?url` so Vite emits them as separate files and
+ * hands back their hashed URLs; neither is inlined because the wasm binary is far
+ * above the 4096-byte `assetsInlineLimit`, and the worklet must stay a real
+ * module URL for `addModule` to fetch it. The package exports both subpaths, so
+ * no `vite.config.ts` change is needed: Vite copies imported package assets into
+ * `dist/assets` like any other.
+ *
+ * `loadRnnoise` takes **both** the plain and the SIMD wasm URL and picks one
+ * itself via a feature probe, so both must be shipped even though only one is
+ * downloaded. Registration order matters: the processor has to be added to the
+ * context before the node is constructed.
+ *
+ * Deferred to the first enable so a user who never turns noise reduction on
+ * downloads none of it. */
+async function createRnnoiseNode(context: AudioContext): Promise<AudioWorkletNode> {
+    const [{ loadRnnoise, RnnoiseWorkletNode }, worklet, wasm, simdWasm] = await Promise.all([
+        import('@sapphi-red/web-noise-suppressor'),
+        import('@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'),
+        import('@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'),
+        import('@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'),
+    ])
+    const wasmBinary = await loadRnnoise({
+        url: wasm.default,
+        simdUrl: simdWasm.default,
+    })
+    await context.audioWorklet.addModule(worklet.default)
+    return new RnnoiseWorkletNode(context, { wasmBinary, maxChannels: 1 })
+}
+
+/** Releases the wasm heap held by a worklet node.
+ *
+ * `destroy()` only exists on the library's node class, and a node the caller
+ * already dropped may not have it, so the call is guarded rather than assumed. */
+function destroyRnnoiseNode(node: AudioWorkletNode) {
+    const destroy = (node as AudioWorkletNode & { destroy?: () => void }).destroy
+    if (typeof destroy !== 'function') return
+    try {
+        destroy.call(node)
+    } catch {
+        // The processor may already have shut down with its context.
+    }
+}
+
 type PeerConnectionState = {
     connection: RTCPeerConnection
     remoteDescriptionSet: boolean
@@ -30,6 +140,13 @@ export type MctierVoiceSessionOptions = {
     /** Fires when the chosen sink could not be applied and playback fell back
      * to the system default, so the owner can stop advertising the dead device. */
     onOutputDeviceError?: () => void
+    /** Swaps the RNNoise loader, for tests only.
+     *
+     * The real loader needs Vite to resolve its `?url` imports, which a plain
+     * `node --test` process cannot do, so without this seam the post-load
+     * generation guard is unreachable in tests and any assertion about it would
+     * pass for the wrong reason. Production never sets it. */
+    loadNoiseNode?: (context: AudioContext) => Promise<AudioWorkletNode>
 }
 
 /** These mirror the signalling frame limits in
@@ -125,9 +242,28 @@ export class MctierVoiceSession {
     private closed = false
     private audioContext: AudioContext | null = null
     private inputGain: GainNode | null = null
+    /** Kept so the graph can be rewired around the gain node when RNNoise is
+     * toggled at runtime. */
+    private inputSource: MediaStreamAudioSourceNode | null = null
+    private inputDestination: MediaStreamAudioDestinationNode | null = null
+    /** Inserted between the capture and the gain node when RNNoise is on. */
+    private noiseNode: AudioWorkletNode | null = null
+    private noiseSuppressionEnabled = false
+    /** Whether the graph runs at the rate RNNoise assumes. False means the
+     * denoiser must stay off: it cannot detect a rate mismatch itself, so
+     * enabling it there would pitch-shift the user's voice unnoticed. */
+    private audioContextAtRnnoiseRate = false
+    /** Bumped by every enable/disable/close. A load takes hundreds of
+     * milliseconds, so an enable can still be in flight when the user flips the
+     * switch back off; without this counter the late arrival would connect the
+     * node and leave the UI reading "off" while audio was being processed. */
+    private noiseGeneration = 0
     private outgoingStream: MediaStream
     private readonly rtcConfiguration: RTCConfiguration
     private readonly options: MctierVoiceSessionOptions
+    /** Label of the capture device in use, so the owner can tell a virtual
+     * microphone (which already denoises) from a physical one. */
+    readonly activeCaptureLabel: string
     /** A GainNode gate needs Web Audio; without it the call is plain open-mic. */
     readonly supportsVoiceActivation: boolean
     /** `setSinkId` is the only way to choose a speaker. */
@@ -136,6 +272,7 @@ export class MctierVoiceSession {
     constructor(options: MctierVoiceSessionOptions) {
         this.options = options
         this.outgoingStream = options.stream
+        this.activeCaptureLabel = options.stream.getAudioTracks()[0]?.label ?? ''
         this.supportsVoiceActivation = Boolean(globalThis.AudioContext)
         this.supportsOutputDevice =
             typeof HTMLAudioElement !== 'undefined' && 'setSinkId' in HTMLAudioElement.prototype
@@ -148,22 +285,28 @@ export class MctierVoiceSession {
         this.setupInputGain()
     }
 
-    /** Routes the microphone through a gain node so the host can lower their
-     * own outgoing level and so voice activation can gate it; peers receive the
-     * adjusted stream instead of the raw capture. Environments without Web Audio
-     * keep the untouched capture and fall back to track-level mute. */
+    /** Builds `source → [rnnoise] → gain → destination`.
+     *
+     * The gain node both scales the outgoing level and gates voice activation,
+     * so RNNoise has to sit *before* it: noise removed after the gate would keep
+     * the gate's tail audible, because the gate closes on the raw signal while
+     * the residue it just unmuted is still in flight.
+     */
     private setupInputGain() {
         const AudioContextConstructor = globalThis.AudioContext
         if (!AudioContextConstructor) return
         try {
-            const context = new AudioContextConstructor()
+            const { context, atRnnoiseRate } = createVoiceAudioContext(AudioContextConstructor)
             const source = context.createMediaStreamSource(this.options.stream)
             const gain = context.createGain()
             const destination = context.createMediaStreamDestination()
             source.connect(gain)
             gain.connect(destination)
             this.audioContext = context
+            this.audioContextAtRnnoiseRate = atRnnoiseRate
             this.inputGain = gain
+            this.inputSource = source
+            this.inputDestination = destination
             this.outgoingStream = destination.stream
             void context.resume().catch(() => {})
             // Start from the real state rather than the nominal volume: a
@@ -171,8 +314,101 @@ export class MctierVoiceSession {
             this.applyInputGain()
         } catch {
             this.audioContext = null
+            this.audioContextAtRnnoiseRate = false
             this.inputGain = null
+            this.inputSource = null
+            this.inputDestination = null
             this.outgoingStream = this.options.stream
+        }
+    }
+
+    /** Turns RNNoise on or off by rewiring the graph around the gain node.
+     *
+     * Loading is deferred to the first enable: the worklet module plus whichever
+     * of the two wasm builds the SIMD probe selects come to roughly 217 KB, and a
+     * user who never asks for noise reduction should not download any of it.
+     * Failures are swallowed down to a warning so a missing asset degrades to the
+     * native path instead of breaking the call.
+     *
+     * Returns whether RNNoise is actually running afterwards. */
+    async setNoiseSuppressionEnabled(enabled: boolean): Promise<boolean> {
+        if (this.closed) return false
+        // Any state change invalidates an in-flight load, including this one.
+        const generation = (this.noiseGeneration += 1)
+        if (!enabled) {
+            this.teardownNoiseSuppression()
+            return false
+        }
+        if (!this.audioContext || !this.inputSource || !this.inputGain || !this.inputDestination) {
+            return false
+        }
+        // RNNoise assumes 48kHz and cannot tell that it is wrong: its frame size
+        // is a wasm constant, so at any other rate it would process 480 samples
+        // as if they were 10ms and pitch-shift the voice. Refuse rather than run
+        // it, and let the caller fall back to the browser's own filter.
+        if (!this.audioContextAtRnnoiseRate) return false
+        if (this.noiseNode) {
+            this.noiseSuppressionEnabled = true
+            return true
+        }
+        try {
+            const node = await (this.options.loadNoiseNode ?? createRnnoiseNode)(this.audioContext)
+            // The user may have turned the switch off, or the whole session may
+            // have closed, while the worklet and wasm were downloading. The
+            // request that arrives last must not win: drop this node untouched
+            // rather than wiring it into a graph that is already the wrong shape.
+            if (this.closed || generation !== this.noiseGeneration) {
+                node.disconnect()
+                destroyRnnoiseNode(node)
+                return false
+            }
+            // Rewire only after the node exists, so a failed load leaves the
+            // untouched source → gain path in place.
+            this.inputSource.disconnect()
+            this.inputSource.connect(node)
+            node.connect(this.inputGain)
+            this.noiseNode = node
+            this.noiseSuppressionEnabled = true
+            return true
+        } catch (failure) {
+            console.warn('RNNoise noise suppression could not start', failure)
+            return false
+        }
+    }
+
+    get noiseSuppressionActive(): boolean {
+        return this.noiseSuppressionEnabled && this.noiseNode !== null
+    }
+
+    /** Exposed so the owner can show the native fallback instead of a dead
+     * switch when this machine's audio graph does not run at 48kHz. */
+    get supportsNoiseSuppression(): boolean {
+        return this.audioContextAtRnnoiseRate
+    }
+
+    /** Unhooks the worklet and drops the reference so its thread and buffers can
+     * be reclaimed; with the node gone there is no per-frame RNNoise work left.
+     *
+     * `RnnoiseWorkletNode.destroy()` is what actually frees the wasm heap — a
+     * plain `disconnect()` only unplugs it from the graph. */
+    private teardownNoiseSuppression() {
+        this.noiseSuppressionEnabled = false
+        if (!this.noiseNode) return
+        const node = this.noiseNode
+        this.noiseNode = null
+        try {
+            node.disconnect()
+        } catch {
+            // The node may already be detached; nothing left to release.
+        }
+        destroyRnnoiseNode(node)
+        if (this.inputSource && this.inputGain) {
+            try {
+                this.inputSource.disconnect()
+            } catch {
+                // Already disconnected by the wiring above.
+            }
+            this.inputSource.connect(this.inputGain)
         }
     }
 
@@ -232,14 +468,20 @@ export class MctierVoiceSession {
     close() {
         if (this.closed) return
         this.closed = true
+        // Invalidate any enable still waiting on the worklet download, so it
+        // cannot connect a node into a context that is about to be closed.
+        this.noiseGeneration += 1
         for (const [playerId, peer] of this.peers) this.closePeer(playerId, peer)
         this.activePlayerIds.clear()
         this.peerVolumes.clear()
+        this.teardownNoiseSuppression()
         this.options.stream.getTracks().forEach((track) => track.stop())
         if (this.audioContext) {
             void this.audioContext.close().catch(() => {})
             this.audioContext = null
             this.inputGain = null
+            this.inputSource = null
+            this.inputDestination = null
         }
     }
 

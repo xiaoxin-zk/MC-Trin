@@ -4,9 +4,11 @@ import type { MctierState } from '@/helpers/mctier'
 
 import {
     clampVolume,
+    detectNoiseSuppressionMode,
     MAX_SIGNAL_FRAME_BYTES,
     MctierVoiceSession,
     type MctierVoiceSignal,
+    type NoiseSuppressionMode,
     parseMctierVoiceSignal,
     type VoicePeer,
 } from '../helpers/mctier-voice'
@@ -28,6 +30,9 @@ export type VoiceDevice = { deviceId: string; label: string }
 type VoicePreferences = {
     muted: boolean
     voiceActivation: boolean
+    /** Only the boolean is stored. The resulting mode is re-detected each
+     * session, because capabilities belong to the machine, not the user. */
+    noiseReduction: boolean
     outputVolume: number
     inputVolume: number
     peerVolumes: Record<string, number>
@@ -39,6 +44,7 @@ const PREFERENCES_KEY = 'mctier.voice.preferences'
 const DEFAULT_PREFERENCES: VoicePreferences = {
     muted: false,
     voiceActivation: false,
+    noiseReduction: false,
     outputVolume: 1,
     inputVolume: 1,
     peerVolumes: {},
@@ -83,6 +89,7 @@ function loadPreferences(): VoicePreferences {
         return {
             muted: parsed.muted === true,
             voiceActivation: parsed.voiceActivation === true,
+            noiseReduction: parsed.noiseReduction === true,
             outputVolume: clampVolume(Number(parsed.outputVolume ?? 1)),
             inputVolume: clampVolume(Number(parsed.inputVolume ?? 1)),
             peerVolumes: clampPeerVolumes(parsed.peerVolumes),
@@ -122,6 +129,17 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     const outputDeviceId = ref<string | null>(preferences.outputDeviceId)
     const inputDevices = ref<VoiceDevice[]>([])
     const outputDevices = ref<VoiceDevice[]>([])
+    /** A user-facing preference: whether they asked for noise reduction. What
+     * that turns into is `noiseSuppressionMode`, which depends on the machine. */
+    const noiseReduction = ref(preferences.noiseReduction)
+    /** Three-state capability: the browser's own filter, the bundled RNNoise
+     * worklet, or neither. Re-detected per session rather than persisted, so a
+     * stored `true` can never promise a mode this machine cannot run. */
+    const noiseSuppressionMode = ref<NoiseSuppressionMode>(detectNoiseSuppressionMode())
+    /** A virtual microphone (NVIDIA Broadcast, Krisp, …) already denoises, and
+     * stacking RNNoise on top of it double-processes the signal. Those devices
+     * force the native path and the switch is disabled. */
+    const noiseReductionForcedNative = ref(false)
     /** Capabilities this webview actually advertises, so the panel never offers a
      * control that would silently do nothing. A GainNode is the only way to gate
      * the outgoing signal without touching the track, and `setSinkId` is the
@@ -151,6 +169,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
     let signalDelivery = Promise.resolve()
     let monitor: VoiceActivityMonitor | null = null
     let captureStream: MediaStream | null = null
+    /** Orders noise-reduction toggles so a slow earlier one cannot resolve last. */
+    let noiseRequest = 0
     const pendingSignals: QueuedSignal[] = []
     let pendingSignalBytes = 0
 
@@ -181,6 +201,40 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         inputLevel.value = 0
     }
 
+    /** Resolves the three-state mode against the capture device and applies the
+     * stored preference.
+     *
+     * A virtual microphone already denoises, so RNNoise on top of it would
+     * process the signal twice and the switch is pinned to the native path. The
+     * capability probe runs first: on a machine without AudioWorklet or wasm
+     * there is nothing to offer, and the switch is hidden rather than dead. */
+    async function applyNoiseReduction(target: MctierVoiceSession) {
+        noiseReductionForcedNative.value = looksPreprocessed(target.activeCaptureLabel ?? '')
+        if (noiseReductionForcedNative.value) {
+            noiseSuppressionMode.value = 'native'
+            await target.setNoiseSuppressionEnabled(false)
+            return
+        }
+        const detected = detectNoiseSuppressionMode()
+        // The probe only knows whether the APIs exist. The audio graph itself has
+        // to run at 48kHz or RNNoise would silently pitch-shift, and only the
+        // session knows its context rate, so that decides between the two modes.
+        noiseSuppressionMode.value = target.supportsNoiseSuppression ? detected : 'native'
+        if (noiseSuppressionMode.value !== 'rnnoise' || !noiseReduction.value) {
+            await target.setNoiseSuppressionEnabled(false)
+            return
+        }
+        const started = await target.setNoiseSuppressionEnabled(true)
+        // The assets can still fail to load on a machine that advertises the
+        // APIs (CSP, corrupt cache, missing file). Degrade to the browser's own
+        // filter instead of leaving a switch that claims to work and does not.
+        // A superseded request (the user toggled or the session moved on) is not
+        // a failure, so it must not demote the mode.
+        if (!started && session === target && noiseReduction.value) {
+            noiseSuppressionMode.value = 'native'
+        }
+    }
+
     /** The microphone stays open by default. Voice activation gates the outgoing
      * gain while the raw capture remains observable by the analyser. */
     function applyMicrophoneState() {
@@ -192,6 +246,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         storePreferences({
             muted: muted.value,
             voiceActivation: voiceActivation.value,
+            noiseReduction: noiseReduction.value,
             outputVolume: outputVolume.value,
             inputVolume: inputVolume.value,
             peerVolumes: peerVolumes.value,
@@ -380,6 +435,10 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             startingSession.setInputVolume(inputVolume.value)
             if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
             applyMicrophoneState()
+            // Resolved after the graph exists, and deliberately not awaited: the
+            // call must not wait on a ~217 KB worklet + wasm download before the
+            // user can talk. Until it settles the call is simply the native path.
+            void applyNoiseReduction(startingSession)
             for (const [playerId, isMuted] of Object.entries(peerMuted.value)) {
                 if (isMuted) startingSession.setPeerMuted(playerId, true)
             }
@@ -494,6 +553,25 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         voiceActivation.value = enabled
         persistPreferences()
         applyMicrophoneState()
+    }
+
+    /** Toggles RNNoise. Only meaningful in `rnnoise` mode; the caller disables
+     * the switch in the other two so this cannot be reached with nothing to do. */
+    async function setNoiseReduction(enabled: boolean) {
+        if (noiseSuppressionMode.value !== 'rnnoise' || noiseReductionForcedNative.value) return
+        noiseReduction.value = enabled
+        persistPreferences()
+        if (!session) return
+        // Each toggle takes a number; a slower earlier request that resolves
+        // after a newer one must not decide anything. Without this, a cancelled
+        // enable would report `false` and demote the mode to native, hiding a
+        // switch the user had just turned back on.
+        const request = (noiseRequest += 1)
+        const started = await session.setNoiseSuppressionEnabled(enabled)
+        if (request !== noiseRequest) return
+        // Enabling can fail after the probe passed; fall back to native so the
+        // stored preference and the live graph cannot disagree.
+        if (enabled && !started) noiseSuppressionMode.value = 'native'
     }
 
     function setOutputVolume(value: number) {
@@ -697,6 +775,9 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         peerMuted,
         voiceActivation,
         voiceActivationSupported,
+        noiseReduction,
+        noiseSuppressionMode,
+        noiseReductionForcedNative,
         inputVolumeSupported,
         outputDeviceSupported,
         speakingPeers,
@@ -712,6 +793,7 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         setInputDevice,
         setOutputDevice,
         setVoiceActivation,
+        setNoiseReduction,
         refreshDevices,
         stop,
     }

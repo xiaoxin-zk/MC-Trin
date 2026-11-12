@@ -12374,6 +12374,15 @@
   "app.multiplayer.mctier.voice.activation-hint": {
     "message": "开口说话时麦克风自动打开，安静时自动关闭。"
   },
+  "app.multiplayer.mctier.voice.noise-reduction": {
+    "message": "AI 降噪（RNNoise）"
+  },
+  "app.multiplayer.mctier.voice.noise-reduction-native": {
+    "message": "系统已在过滤麦克风噪声。"
+  },
+  "app.multiplayer.mctier.voice.noise-reduction-virtual-mic": {
+    "message": "该麦克风已自带降噪，保持原样。"
+  },
   "app.multiplayer.mctier.voice.input-device-lost": {
     "message": "麦克风已断开连接。请重新接入后再次开启语音。"
   },
@@ -14626,6 +14635,9 @@
   },
   "app.settings.about.attribution": {
     "message": "MC-Trin 依据 GPL-3.0 许可证发布，版权与第三方许可声明保留在项目源码中。"
+  },
+  "app.settings.about.audio-components": {
+    "message": "音频组件"
   },
   "app.settings.about.author": {
     "message": "作者"

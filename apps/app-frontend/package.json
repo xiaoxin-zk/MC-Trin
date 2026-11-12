@@ -27,6 +27,7 @@
     "@modrinth/server": "workspace:*",
     "@modrinth/ui": "workspace:*",
     "@modrinth/utils": "workspace:*",
+    "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "@sfirew/minecraft-motd-parser": "^1.1.6",
     "@tanstack/vue-query": "^5.102.8",
     "@tauri-apps/api": "^2.11.1",

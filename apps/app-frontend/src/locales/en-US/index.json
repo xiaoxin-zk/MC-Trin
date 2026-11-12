@@ -8453,6 +8453,15 @@
   "app.multiplayer.mctier.voice.activation-hint": {
     "message": "The microphone opens when you start talking and closes during silence."
   },
+  "app.multiplayer.mctier.voice.noise-reduction": {
+    "message": "AI noise reduction (RNNoise)"
+  },
+  "app.multiplayer.mctier.voice.noise-reduction-native": {
+    "message": "Your system already filters microphone noise."
+  },
+  "app.multiplayer.mctier.voice.noise-reduction-virtual-mic": {
+    "message": "This microphone already removes noise, so it is left as is."
+  },
   "app.multiplayer.mctier.voice.input-device-lost": {
     "message": "The microphone was disconnected. Reconnect it, then enable voice again."
   },
@@ -10696,6 +10705,9 @@
   },
   "app.settings.about.attribution": {
     "message": "MC-Trin is distributed under GPL-3.0. Copyright and third-party license notices remain in the project sources."
+  },
+  "app.settings.about.audio-components": {
+    "message": "Audio components"
   },
   "app.settings.about.author": {
     "message": "Author"

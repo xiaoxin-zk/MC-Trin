@@ -2898,6 +2898,9 @@ app.multiplayer.mctier.voice.mic-level
 app.multiplayer.mctier.voice.microphone
 app.multiplayer.mctier.voice.mute
 app.multiplayer.mctier.voice.mute-player
+app.multiplayer.mctier.voice.noise-reduction
+app.multiplayer.mctier.voice.noise-reduction-native
+app.multiplayer.mctier.voice.noise-reduction-virtual-mic
 app.multiplayer.mctier.voice.output-device-lost
 app.multiplayer.mctier.voice.peer-volume
 app.multiplayer.mctier.voice.permission-error
@@ -3633,6 +3636,7 @@ app.servers.wizard.setup-title
 app.servers.wizard.show-snapshots
 app.servers.wizard.type-heading
 app.servers.wizard.type-title
+app.settings.about.audio-components
 app.settings.about.author
 app.settings.about.developer-tools
 app.settings.about.easteregg.click-hint

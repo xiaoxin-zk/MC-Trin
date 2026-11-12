@@ -281,6 +281,56 @@ it('remembers voice activation across sessions', async () => {
     ).toBe(false)
 })
 
+it('defaults noise reduction off and never persists the mode string', () => {
+    // The stored preference is a boolean the user owns. The resolved mode is a
+    // property of the machine and is re-detected, so persisting it would let a
+    // stale value promise a mode this webview cannot run.
+    const { voice } = createVoice()
+
+    expect(voice.noiseReduction.value).toBe(false)
+    expect(['native', 'rnnoise', 'unavailable']).toContain(voice.noiseSuppressionMode.value)
+
+    voice.setNoiseReduction(true)
+    const stored = JSON.parse(localStorage.getItem('mctier.voice.preferences') ?? '{}')
+    expect('noiseSuppressionMode' in stored).toBe(false)
+    expect('noiseReductionMode' in stored).toBe(false)
+    // The only noise key is the boolean, and it is true only when the mode can
+    // actually honour it.
+    if (stored.noiseReduction !== undefined) {
+        expect(voice.noiseSuppressionMode.value).toBe('rnnoise')
+        expect(stored.noiseReduction).toBe(true)
+    }
+})
+
+it('forces the native path when the capture device is a virtual microphone', async () => {
+    // A device that already denoises must not be processed twice, so the switch
+    // is pinned to native regardless of the stored preference.
+    localStorage.setItem('mctier.voice.preferences', JSON.stringify({ noiseReduction: true }))
+    const { stream, track } = createStream()
+    track.label = 'Krisp Audio'
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    const state = roomState()
+
+    voice.syncRoom(state)
+    await voice.start(state)
+    await vi.waitFor(() => expect(voice.noiseReductionForcedNative.value).toBe(true))
+
+    expect(voice.noiseSuppressionMode.value).toBe('native')
+})
+
+it('hides noise reduction when the webview cannot run it', () => {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'AudioContext')
+    try {
+        Reflect.deleteProperty(globalThis, 'AudioContext')
+        const { voice } = createVoice()
+        expect(voice.noiseSuppressionMode.value).toBe('unavailable')
+    } finally {
+        if (previous) Object.defineProperty(globalThis, 'AudioContext', previous)
+    }
+})
+
 it('drops a peer from the connected count and closes its connection when it leaves', async () => {
     const { stream } = createStream()
     stubGetUserMedia(vi.fn(async () => stream))

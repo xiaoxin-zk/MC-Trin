@@ -310,6 +310,18 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.activation-hint',
         defaultMessage: 'The microphone opens when you start talking and closes during silence.',
     },
+    voiceNoiseReduction: {
+        id: 'app.multiplayer.mctier.voice.noise-reduction',
+        defaultMessage: 'AI noise reduction (RNNoise)',
+    },
+    voiceNoiseReductionNative: {
+        id: 'app.multiplayer.mctier.voice.noise-reduction-native',
+        defaultMessage: 'Your system already filters microphone noise.',
+    },
+    voiceNoiseReductionVirtualMic: {
+        id: 'app.multiplayer.mctier.voice.noise-reduction-virtual-mic',
+        defaultMessage: 'This microphone already removes noise, so it is left as is.',
+    },
 })
 
 const randomAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
@@ -501,6 +513,12 @@ function onVoiceActivationToggle(event: Event) {
     const target = event.target
     if (!(target instanceof HTMLInputElement)) return
     voice.setVoiceActivation(target.checked)
+}
+
+function onNoiseReductionToggle(event: Event) {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement)) return
+    void voice.setNoiseReduction(target.checked)
 }
 
 async function start(mode: 'create' | 'join', invite?: MctierInvite) {
@@ -879,6 +897,36 @@ function prefillInviteFromDeepLink() {
                     class="m-0 text-xs text-[var(--color-text-tertiary)]"
                 >
                     {{ formatMessage(messages.voiceActivationHint) }}
+                </p>
+                <!-- RNNoise is the only mode worth a switch. `native` means the
+                     browser already filters, so there is nothing to toggle and
+                     only a note is shown; `unavailable` hides the row entirely. -->
+                <template v-if="voice.noiseSuppressionMode.value === 'rnnoise'">
+                    <label
+                        class="flex min-w-0 items-center gap-2 text-sm"
+                        :class="{ 'opacity-60': voice.noiseReductionForcedNative.value }"
+                    >
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4"
+                            :checked="voice.noiseReduction.value"
+                            :disabled="voice.noiseReductionForcedNative.value"
+                            @change="onNoiseReductionToggle"
+                        />
+                        <span>{{ formatMessage(messages.voiceNoiseReduction) }}</span>
+                    </label>
+                    <p
+                        v-if="voice.noiseReductionForcedNative.value"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                    >
+                        {{ formatMessage(messages.voiceNoiseReductionVirtualMic) }}
+                    </p>
+                </template>
+                <p
+                    v-else-if="voice.noiseSuppressionMode.value === 'native'"
+                    class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                >
+                    {{ formatMessage(messages.voiceNoiseReductionNative) }}
                 </p>
             </div>
             <p v-if="voice.error.value" class="m-0 text-sm text-red" role="alert">

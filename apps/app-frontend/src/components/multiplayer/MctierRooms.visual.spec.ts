@@ -227,6 +227,50 @@ it('uses Unicode code-point limits without truncating names by UTF-16 units', as
     expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeUndefined()
 })
 
+it('names the field that blocks Create for player, port and signalling values', async () => {
+    const wrapper = page()
+    const createForm = '[data-onboarding-id="mctier-create-form"]'
+    const reason = () => wrapper.get(`${createForm} [role="status"]`).text()
+
+    // A blank player name has its own wording, separate from an invalid one.
+    await wrapper.get('input[name="lobby-name"]').setValue('TestRoom')
+    await wrapper.get('input[name="player-name"]').setValue('   ')
+    await flushPromises()
+    expect(reason()).toContain('Enter the player name friends will see.')
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    // 65 code points exceed the backend's 64-character limit.
+    await wrapper.get('input[name="player-name"]').setValue('a'.repeat(65))
+    await flushPromises()
+    expect(reason()).toContain(
+        'Player names must be 1-64 characters and cannot contain control characters.',
+    )
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    // A control character is rejected even though the length is fine.
+    await wrapper.get('input[name="player-name"]').setValue('Alic\te')
+    await flushPromises()
+    expect(reason()).toContain('Player names must be 1-64 characters')
+
+    await wrapper.get('input[name="player-name"]').setValue('Alice')
+    await wrapper.get('input[name="game-port"]').setValue('70000')
+    await flushPromises()
+    expect(reason()).toContain('Minecraft port must be between 1 and 65535.')
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    await wrapper.get('input[name="game-port"]').setValue('25565')
+    await wrapper.get('input[name="signaling-server"]').setValue('ws://signal.example:1234')
+    await flushPromises()
+    expect(reason()).toContain('Lobby service must use wss://')
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeDefined()
+
+    // The message names the IPv6 loopback the validator also accepts.
+    await wrapper.get('input[name="signaling-server"]').setValue('ws://[::1]:1234')
+    await flushPromises()
+    expect(wrapper.find(`${createForm} [role="status"]`).exists()).toBe(false)
+    expect(button(wrapper, 'Create lobby').attributes('disabled')).toBeUndefined()
+})
+
 it('shows the verified address and leaves a running session', async () => {
     const wrapper = page({
         ...idle,
