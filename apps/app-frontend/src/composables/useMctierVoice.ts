@@ -436,8 +436,9 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             if (outputDeviceId.value) void startingSession.setOutputDevice(outputDeviceId.value)
             applyMicrophoneState()
             // Resolved after the graph exists, and deliberately not awaited: the
-            // call must not wait on a ~217 KB worklet + wasm download before the
-            // user can talk. Until it settles the call is simply the native path.
+            // call must not wait on a ~150 KB wasm download plus the worklet
+            // module before the user can talk. Until it settles the call is
+            // simply the native path.
             void applyNoiseReduction(startingSession)
             for (const [playerId, isMuted] of Object.entries(peerMuted.value)) {
                 if (isMuted) startingSession.setPeerMuted(playerId, true)

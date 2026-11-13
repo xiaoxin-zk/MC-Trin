@@ -78,20 +78,20 @@ mod tests {
     #[test]
     fn data_dir_identifier_without_suffix_keeps_the_identifier() {
         assert_eq!(
-            data_dir_identifier("red.ghs.mctrin", None),
-            "red.ghs.mctrin"
+            data_dir_identifier("com.mctrin.launcher", None),
+            "com.mctrin.launcher"
         );
     }
 
     #[test]
     fn data_dir_identifier_appends_a_readable_suffix() {
         for (suffix, expected) in [
-            ("pr538", "red.ghs.mctrin-pr538"),
-            ("fix_issue_538", "red.ghs.mctrin-fix_issue_538"),
-            ("v1.2.3", "red.ghs.mctrin-v1.2.3"),
+            ("pr538", "com.mctrin.launcher-pr538"),
+            ("fix_issue_538", "com.mctrin.launcher-fix_issue_538"),
+            ("v1.2.3", "com.mctrin.launcher-v1.2.3"),
         ] {
             assert_eq!(
-                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
+                data_dir_identifier("com.mctrin.launcher", Some(suffix)),
                 expected,
                 "unexpected identifier for suffix {suffix:?}"
             );
@@ -114,7 +114,7 @@ mod tests {
             "..-.-",
         ] {
             let identifier =
-                data_dir_identifier("red.ghs.mctrin", Some(suffix));
+                data_dir_identifier("com.mctrin.launcher", Some(suffix));
 
             assert!(
                 !identifier.contains(['/', '\\', ':']),
@@ -126,7 +126,7 @@ mod tests {
             );
 
             let remainder = identifier
-                .strip_prefix("red.ghs.mctrin-")
+                .strip_prefix("com.mctrin.launcher-")
                 .map_or(identifier.as_str(), |remainder| remainder);
             assert!(
                 !remainder.is_empty() && remainder != "." && remainder != "..",
@@ -141,8 +141,8 @@ mod tests {
         // one. The identifier always carries the prefix, so it never is.
         for suffix in ["CON", "NUL", "PRN", "AUX", "COM1", "LPT1"] {
             assert_eq!(
-                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
-                format!("red.ghs.mctrin-{suffix}")
+                data_dir_identifier("com.mctrin.launcher", Some(suffix)),
+                format!("com.mctrin.launcher-{suffix}")
             );
         }
     }
@@ -150,18 +150,18 @@ mod tests {
     #[test]
     fn data_dir_identifier_drops_characters_that_are_unsafe_in_a_path() {
         for (suffix, expected) in [
-            ("a b", "red.ghs.mctrin-ab"),
-            ("a:b", "red.ghs.mctrin-ab"),
+            ("a b", "com.mctrin.launcher-ab"),
+            ("a:b", "com.mctrin.launcher-ab"),
             // Fullwidth solidus: not a separator the filesystem honours, but no
             // more welcome in a directory name than any other non-ASCII.
-            ("a\u{ff0f}b", "red.ghs.mctrin-ab"),
+            ("a\u{ff0f}b", "com.mctrin.launcher-ab"),
             // Every non-ASCII character goes, so a suffix typed in another
             // script keeps only its ASCII part - which may be nothing at all.
-            ("版本v2", "red.ghs.mctrin-v2"),
-            ("版本", "red.ghs.mctrin"),
+            ("版本v2", "com.mctrin.launcher-v2"),
+            ("版本", "com.mctrin.launcher"),
         ] {
             assert_eq!(
-                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
+                data_dir_identifier("com.mctrin.launcher", Some(suffix)),
                 expected,
                 "unexpected identifier for suffix {suffix:?}"
             );
@@ -175,8 +175,8 @@ mod tests {
         let suffix = format!("{}abc", ".".repeat(40));
 
         assert_eq!(
-            data_dir_identifier("red.ghs.mctrin", Some(&suffix)),
-            "red.ghs.mctrin-abc"
+            data_dir_identifier("com.mctrin.launcher", Some(&suffix)),
+            "com.mctrin.launcher-abc"
         );
     }
 
@@ -184,8 +184,8 @@ mod tests {
     fn data_dir_identifier_ignores_unusable_suffixes() {
         for suffix in ["", "   ", "..", "--", "///", "..-.-"] {
             assert_eq!(
-                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
-                "red.ghs.mctrin",
+                data_dir_identifier("com.mctrin.launcher", Some(suffix)),
+                "com.mctrin.launcher",
                 "suffix {suffix:?} should have been ignored"
             );
         }
@@ -194,11 +194,11 @@ mod tests {
     #[test]
     fn data_dir_identifier_bounds_the_suffix_length() {
         let identifier =
-            data_dir_identifier("red.ghs.mctrin", Some(&"a".repeat(200)));
+            data_dir_identifier("com.mctrin.launcher", Some(&"a".repeat(200)));
 
         assert_eq!(
             identifier,
-            format!("red.ghs.mctrin-{}", "a".repeat(MAX_DATA_DIR_SUFFIX_LEN))
+            format!("com.mctrin.launcher-{}", "a".repeat(MAX_DATA_DIR_SUFFIX_LEN))
         );
     }
 }

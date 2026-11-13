@@ -72,6 +72,21 @@ function createVoiceAudioContext(AudioContextConstructor: typeof AudioContext): 
     return { context, atRnnoiseRate: context.sampleRate === RNNOISE_SAMPLE_RATE }
 }
 
+/** Per-session memo for the two things that must not be repeated.
+ *
+ * The shipped worklet ends in `registerProcessor('@sapphi-red/web-noise-suppressor/rnnoise', …)`,
+ * and `AudioWorkletGlobalScope.registerProcessor` throws `NotSupportedError` on a
+ * duplicate name. A second `addModule` therefore rejects, which surfaced as "the
+ * switch disappears and never comes back" after the user turned noise reduction
+ * off and on again. So the module is added once per AudioContext.
+ *
+ * `loadRnnoise` calls `fetch(url).arrayBuffer()` on every invocation, with no
+ * cache of its own, so the wasm is fetched once here and reused as well. */
+type NoiseAssetCache = {
+    workletRegistered: boolean
+    wasmBinary: ArrayBuffer | null
+}
+
 /** Loads RNNoise and returns an unconnected worklet node.
  *
  * Both assets are pulled in with `?url` so Vite emits them as separate files and
@@ -88,18 +103,29 @@ function createVoiceAudioContext(AudioContextConstructor: typeof AudioContext): 
  *
  * Deferred to the first enable so a user who never turns noise reduction on
  * downloads none of it. */
-async function createRnnoiseNode(context: AudioContext): Promise<AudioWorkletNode> {
+async function createRnnoiseNode(
+    context: AudioContext,
+    cache: NoiseAssetCache,
+): Promise<AudioWorkletNode> {
     const [{ loadRnnoise, RnnoiseWorkletNode }, worklet, wasm, simdWasm] = await Promise.all([
         import('@sapphi-red/web-noise-suppressor'),
         import('@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'),
         import('@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'),
         import('@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'),
     ])
-    const wasmBinary = await loadRnnoise({
-        url: wasm.default,
-        simdUrl: simdWasm.default,
-    })
-    await context.audioWorklet.addModule(worklet.default)
+    if (!cache.wasmBinary) {
+        cache.wasmBinary = await loadRnnoise({
+            url: wasm.default,
+            simdUrl: simdWasm.default,
+        })
+    }
+    const wasmBinary = cache.wasmBinary
+    // Registering the same processor name twice throws, so this has to happen at
+    // most once per context — the node itself can be built as often as needed.
+    if (!cache.workletRegistered) {
+        await context.audioWorklet.addModule(worklet.default)
+        cache.workletRegistered = true
+    }
     return new RnnoiseWorkletNode(context, { wasmBinary, maxChannels: 1 })
 }
 
@@ -258,6 +284,11 @@ export class MctierVoiceSession {
      * switch back off; without this counter the late arrival would connect the
      * node and leave the UI reading "off" while audio was being processed. */
     private noiseGeneration = 0
+    /** Survives an off/on cycle of the switch for the life of this context. */
+    private readonly noiseAssets: NoiseAssetCache = {
+        workletRegistered: false,
+        wasmBinary: null,
+    }
     private outgoingStream: MediaStream
     private readonly rtcConfiguration: RTCConfiguration
     private readonly options: MctierVoiceSessionOptions
@@ -324,11 +355,11 @@ export class MctierVoiceSession {
 
     /** Turns RNNoise on or off by rewiring the graph around the gain node.
      *
-     * Loading is deferred to the first enable: the worklet module plus whichever
-     * of the two wasm builds the SIMD probe selects come to roughly 217 KB, and a
-     * user who never asks for noise reduction should not download any of it.
-     * Failures are swallowed down to a warning so a missing asset degrades to the
-     * native path instead of breaking the call.
+     * Loading is deferred to the first enable: it fetches one of the two wasm
+     * builds, roughly 150 KB, plus the worklet module, and a user who never asks
+     * for noise reduction should not download any of it. Failures are swallowed
+     * down to a warning so a missing asset degrades to the native path instead of
+     * breaking the call.
      *
      * Returns whether RNNoise is actually running afterwards. */
     async setNoiseSuppressionEnabled(enabled: boolean): Promise<boolean> {
@@ -352,7 +383,11 @@ export class MctierVoiceSession {
             return true
         }
         try {
-            const node = await (this.options.loadNoiseNode ?? createRnnoiseNode)(this.audioContext)
+            // The seam keeps its one-argument shape: tests inject a loader and
+            // never touch the asset cache, which stays an implementation detail.
+            const node = await (this.options.loadNoiseNode
+                ? this.options.loadNoiseNode(this.audioContext)
+                : createRnnoiseNode(this.audioContext, this.noiseAssets))
             // The user may have turned the switch off, or the whole session may
             // have closed, while the worklet and wasm were downloading. The
             // request that arrives last must not win: drop this node untouched
@@ -409,12 +444,15 @@ export class MctierVoiceSession {
         }
         destroyRnnoiseNode(node)
         if (this.inputSource && this.inputGain) {
+            // Both calls can throw once the context is closed, and teardown runs
+            // on the close path — an escaping exception there would abort the
+            // rest of the shutdown.
             try {
                 this.inputSource.disconnect()
+                this.inputSource.connect(this.inputGain)
             } catch {
-                // Already disconnected by the wiring above.
+                // Already detached, or the graph is gone with its context.
             }
-            this.inputSource.connect(this.inputGain)
         }
     }
 
