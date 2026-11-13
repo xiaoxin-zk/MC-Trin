@@ -187,7 +187,6 @@ jobs:
           pnpm --filter @modrinth/app-frontend lint
           pnpm --filter @modrinth/assets lint
           pnpm --filter @modrinth/utils lint
-          pnpm --filter @modrinth/server lint
           pnpm --filter @modrinth/api-client lint
           pnpm --filter @modrinth/tooling-config lint
       - name: Configure Ubuntu package downloads
@@ -195,8 +194,6 @@ jobs:
       - name: Install Playwright browser for visual tests
         timeout-minutes: 10
         run: pnpm --filter @modrinth/ui exec playwright install --with-deps chromium
-      - name: Test server package
-        run: pnpm --filter @modrinth/server test
       - name: Test shared UI package
         run: pnpm --filter @modrinth/ui test
       - name: Test desktop frontend

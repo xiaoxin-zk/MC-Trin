@@ -24,7 +24,6 @@
     "@lobehub/icons-static-svg": "^1.95.0",
     "@modrinth/api-client": "workspace:^",
     "@modrinth/assets": "workspace:*",
-    "@modrinth/server": "workspace:*",
     "@modrinth/ui": "workspace:*",
     "@modrinth/utils": "workspace:*",
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
