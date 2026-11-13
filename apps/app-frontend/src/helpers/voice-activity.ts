@@ -65,7 +65,16 @@ export function createVoiceActivityMonitor(callbacks: {
             // call and the level meter would sit at 0. Resuming is best-effort —
             // it can reject without a gesture, and the monitor is not the place
             // to fail the call over it.
-            void context.resume().catch(() => {})
+            //
+            // Guarded because `resume` is not universally present (older
+            // WebView2 builds, embedded browsers). Calling it blindly would
+            // throw here, the catch below would then null out a perfectly good
+            // context, and every analyser would disappear — the monitor would
+            // go silent for the whole call, which is strictly worse than not
+            // resuming at all.
+            if (typeof context.resume === 'function') {
+                void context.resume().catch(() => {})
+            }
         } catch {
             context = null
         }

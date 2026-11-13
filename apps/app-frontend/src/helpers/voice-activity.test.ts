@@ -69,6 +69,13 @@ function installAudioEnvironment() {
         close() {
             return Promise.resolve()
         }
+
+        // Present so `ensureContext` exercises its resume path. The monitor
+        // guards the call anyway (older WebView2 builds omit it), but a fake
+        // without it would leave that branch unentered and quietly untested.
+        resume() {
+            return Promise.resolve()
+        }
     }
 
     Object.defineProperty(globalThis, 'AudioContext', {

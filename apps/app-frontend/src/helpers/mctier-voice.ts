@@ -374,7 +374,14 @@ export class MctierVoiceSession {
             this.inputSource = source
             this.inputDestination = destination
             this.outgoingStream = destination.stream
-            void context.resume().catch(() => {})
+            // Best-effort: a context created without a pending gesture may start
+            // suspended, and a suspended graph produces no audio at all. Guarded
+            // because `resume` is not universally present; an unguarded call
+            // would throw into the catch below and tear down a graph that was
+            // built successfully.
+            if (typeof context.resume === 'function') {
+                void context.resume().catch(() => {})
+            }
             // Start from the real state rather than the nominal volume: a
             // session that begins muted must not open at full gain.
             this.applyInputGain()
