@@ -198,7 +198,10 @@ mod tests {
 
         assert_eq!(
             identifier,
-            format!("com.mctrin.launcher-{}", "a".repeat(MAX_DATA_DIR_SUFFIX_LEN))
+            format!(
+                "com.mctrin.launcher-{}",
+                "a".repeat(MAX_DATA_DIR_SUFFIX_LEN)
+            )
         );
     }
 }
