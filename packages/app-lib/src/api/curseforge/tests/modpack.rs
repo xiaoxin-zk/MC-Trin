@@ -394,6 +394,33 @@ fn archive_paths_stay_inside_the_instance() {
 }
 
 #[test]
+fn archive_paths_reject_windows_reserved_names_and_aliases() {
+    // These all pass a bare `Component::Normal` check and then fail at write
+    // time on Windows: `CON`/`NUL` are DOS device names, a trailing dot is
+    // stripped by the filesystem so the file lands somewhere else, and a colon
+    // opens an alternate data stream instead of creating the named file.
+    for invalid in ["CON", "NUL", "a.", "a:b"] {
+        assert!(
+            safe_archive_relative_path(invalid).is_err(),
+            "{invalid} must be rejected"
+        );
+    }
+
+    // The same names are still fine as ordinary path components when they are
+    // not the whole segment, so the check must not be a blanket substring ban.
+    for valid in [
+        "config/example.toml",
+        "mods/console.jar",
+        "saves/My World/level.dat",
+    ] {
+        assert!(
+            safe_archive_relative_path(valid).is_ok(),
+            "{valid} must be accepted"
+        );
+    }
+}
+
+#[test]
 fn curseforge_game_options_source_uses_manifest_override_root() {
     let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     writer

@@ -9,6 +9,15 @@ use tokio_util::sync::CancellationToken;
 
 pub(crate) const EXTRACTION_SIZE_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 
+/// Whether a declared unpacked total fits inside [`EXTRACTION_SIZE_LIMIT`].
+///
+/// Shared by the CurseForge and Modrinth extractors so the two ceilings cannot
+/// drift apart. Strictly greater-than means an archive that declares exactly
+/// the limit is still allowed; only exceeding it is an error.
+pub(crate) fn within_extraction_limit(total_unpacked_bytes: u64) -> bool {
+    total_unpacked_bytes <= EXTRACTION_SIZE_LIMIT
+}
+
 fn archive_error(error: zip::result::ZipError) -> crate::Error {
     crate::ErrorKind::InputError(format!("Modpack archive is invalid: {error}"))
         .into()
@@ -872,6 +881,20 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::io::Write;
+
+    /// Decides whether a declared unpacked total is inside the extraction limit.
+    ///
+    /// Extracted from the two call sites so the boundary itself is testable
+    /// without building an 8 GiB zip. The comparison is strictly greater-than:
+    /// exactly `EXTRACTION_SIZE_LIMIT` bytes is allowed, one byte more is not.
+    #[test]
+    fn extraction_limit_is_inclusive_at_the_boundary() {
+        assert!(within_extraction_limit(0));
+        assert!(within_extraction_limit(EXTRACTION_SIZE_LIMIT - 1));
+        assert!(within_extraction_limit(EXTRACTION_SIZE_LIMIT));
+        assert!(!within_extraction_limit(EXTRACTION_SIZE_LIMIT + 1));
+        assert!(!within_extraction_limit(u64::MAX));
+    }
 
     #[test]
     fn unsafe_override_paths_fail_without_writing_outside_target() {

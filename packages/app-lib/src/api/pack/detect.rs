@@ -871,7 +871,8 @@ mod tests {
                 "curseforge",
                 vec![(
                     "manifest.json",
-                    br#"{"manifestType":"minecraftModpack"}"# as &[u8],
+                    br#"{"manifestType":"minecraftModpack","minecraft":{"version":"1.20.1"}}"#
+                        as &[u8],
                 )],
                 LocalPackFormat::CurseForge,
             ),
@@ -967,6 +968,70 @@ mod tests {
         assert!(
             error.to_string().contains("Unrecognized modpack format"),
             "got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_manifest_with_addons_is_mcbbs() {
+        // The MCBBS variant is identified by its `addons` array, regardless of
+        // whether it also carries a `minecraft` object.
+        let (_dir, path) = write_pack(&[(
+            "manifest.json",
+            br#"{"addons":[{"id":"game","version":"1.20.1"}]}"#,
+        )]);
+
+        let detected = detect_local_pack_sync(&path).unwrap();
+
+        assert_eq!(detected.format, LocalPackFormat::Mcbbs);
+    }
+
+    #[test]
+    fn a_manifest_with_minecraft_version_and_no_addons_is_curseforge() {
+        // A real CurseForge manifest: `minecraft.version` plus `modLoaders`, and
+        // no `addons` key at all. This is the shape every CF pack ships.
+        let (_dir, path) = write_pack(&[(
+            "manifest.json",
+            br#"{"manifestType":"minecraftModpack","manifestVersion":1,"name":"Pack","version":"1.0.0","author":"someone","minecraft":{"version":"1.20.1","modLoaders":[{"id":"forge-47.2.0","primary":true}]},"files":[]}"#,
+        )]);
+
+        let detected = detect_local_pack_sync(&path).unwrap();
+
+        assert_eq!(detected.format, LocalPackFormat::CurseForge);
+    }
+
+    #[test]
+    fn a_manifest_without_addons_or_minecraft_version_is_not_curseforge() {
+        // An unrelated `manifest.json` (a mod config inside a zipped game
+        // folder) must not be claimed as CurseForge: the CF installer would then
+        // fail on a file it cannot parse. Detection has to keep probing and end
+        // with the shared "unrecognized" answer.
+        let (_dir, path) = write_pack(&[(
+            "manifest.json",
+            br#"{"name":"some-mod","version":"2.1.0"}"#,
+        )]);
+
+        let error = detect_local_pack_sync(&path).unwrap_err();
+
+        assert!(
+            error.to_string().contains("Unrecognized modpack format"),
+            "an unrelated manifest.json must not be detected as CurseForge, got: {error}"
+        );
+    }
+
+    #[test]
+    fn a_manifest_with_minecraft_but_no_version_is_not_curseforge() {
+        // Guards the exact key the probe reads: a `minecraft` object alone is
+        // not enough, `minecraft.version` is what the CF parser needs.
+        let (_dir, path) = write_pack(&[(
+            "manifest.json",
+            br#"{"minecraft":{"modLoaders":[]}}"#,
+        )]);
+
+        let error = detect_local_pack_sync(&path).unwrap_err();
+
+        assert!(
+            error.to_string().contains("Unrecognized modpack format"),
+            "minecraft without version must not be CurseForge, got: {error}"
         );
     }
 

@@ -65,7 +65,7 @@ pub(crate) fn collect_modpack_override_tasks_at<R: Read + Seek>(
         .values()
         .fold(0_u64, |total, task| total.saturating_add(task.size));
     let limit = crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT;
-    if total_size > limit {
+    if !crate::api::pack::archive_util::within_extraction_limit(total_size) {
         return Err(ErrorKind::InputError(format!(
             "CurseForge modpack overrides exceed the extraction limit: {total_size} unpacked bytes required, limit is {limit} bytes"
         ))

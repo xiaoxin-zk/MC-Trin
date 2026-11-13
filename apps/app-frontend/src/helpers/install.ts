@@ -2,10 +2,16 @@ import { invoke } from '@tauri-apps/api/core'
 
 import { install_job_listener } from './events'
 import type { InstallJobStatus } from './install-job-status.ts'
+import {
+    installProgressMarker,
+    progressMarkerAdvanced,
+    type InstallProgressMarker,
+} from './install-stall.ts'
 import type { InstanceUpgradeResult } from './instance-upgrade'
 import type { InstanceLink, InstanceLoader, LoaderComponent } from './types'
 export type { InstallJobStatus } from './install-job-status.ts'
 export { ACTIVE_INSTALL_JOB_STATUSES, isActiveInstallJobStatus } from './install-job-status.ts'
+export { installProgressMarker, progressMarkerAdvanced, type InstallProgressMarker }
 
 export interface PackLocationVersionId {
     type: 'fromVersionId'
@@ -558,7 +564,7 @@ function settleInstallJob(job: InstallJobSnapshot) {
 
 const INSTALL_JOB_POLL_INTERVAL_MS = 1000
 const INSTALL_JOB_QUERY_TIMEOUT_MS = 10 * 1000
-const INSTALL_JOB_STALL_TIMEOUT_MS = 30 * 60 * 1000
+const INSTALL_JOB_STALL_TIMEOUT_MS = 45 * 60 * 1000
 
 function errorMessage(error: unknown) {
     return error instanceof Error
@@ -628,12 +634,32 @@ export async function wait_for_install_job(jobId: string) {
         // keeps reporting progress may legitimately run for hours (a 10-20 GB
         // pack on a normal connection takes 60-130 minutes). Only a job that
         // stops making progress for the whole window is abandoned.
+        //
+        // "Progress" means the observed marker changed, never merely that a
+        // query answered: a wedged backend keeps returning the same snapshot.
+        //
+        // Known trade-off: a phase with no observable movement for the whole
+        // window is still treated as stalled. The window is deliberately long
+        // (45 minutes) because some single files are large and silent between
+        // byte reports, and because the cost of a false abort (a nearly finished
+        // install thrown away) is much worse than waiting one extra window.
+        let lastMarker: InstallProgressMarker | null = null
+
         const armStallTimer = () => {
             if (finished) return
             if (timeoutTimer) clearTimeout(timeoutTimer)
             timeoutTimer = setTimeout(() => {
                 void requestCancellation()
             }, INSTALL_JOB_STALL_TIMEOUT_MS)
+        }
+
+        /** Arms the timer only when the job actually moved. */
+        const observeJob = (job: InstallJobSnapshot) => {
+            if (finished || job.job_id !== jobId || isInstallJobFinished(job.status)) return
+            const marker = installProgressMarker(job)
+            if (!progressMarkerAdvanced(lastMarker, marker)) return
+            lastMarker = marker
+            armStallTimer()
         }
 
         const resolveJob = (job: InstallJobSnapshot) => {
@@ -661,11 +687,9 @@ export async function wait_for_install_job(jobId: string) {
             pollInFlight = true
             queryInstallJob(jobId)
                 .then((job) => {
-                    // A successful poll proves the job is advancing; restart the
-                    // stall window so long installs are not cut off mid-download.
-                    if (job.job_id === jobId && !isInstallJobFinished(job.status)) {
-                        armStallTimer()
-                    }
+                    // Re-arm only when the snapshot actually moved; a stalled
+                    // job keeps answering with identical numbers.
+                    observeJob(job)
                     resolveJob(job)
                 })
                 .catch((error) => {
@@ -698,11 +722,9 @@ export async function wait_for_install_job(jobId: string) {
         armStallTimer()
 
         install_job_listener((job: InstallJobSnapshot) => {
-            // Every pushed snapshot means the job is alive, so re-arm before
-            // delegating: `resolveJob` only acts on terminal states.
-            if (job.job_id === jobId && !isInstallJobFinished(job.status)) {
-                armStallTimer()
-            }
+            // Pushed snapshots go through the same movement check as polls: a
+            // periodic re-emit of an unchanged snapshot is not progress.
+            observeJob(job)
             resolveJob(job)
         })
             .then((listener) => {

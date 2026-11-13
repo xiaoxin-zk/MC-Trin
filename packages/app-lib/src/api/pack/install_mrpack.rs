@@ -2057,12 +2057,12 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .iter()
         .enumerate()
         .filter_map(|(index, file)| {
-            // `as_str()` is `None` for GBK-encoded names, which `unwrap_or_default`
+            // `as_str()` fails for GBK-encoded names, which `unwrap_or_default`
             // turned into an empty string: every Chinese override was silently
             // skipped while the install still reported success.
             let filename = match file.filename().as_str() {
-                Some(name) => name.to_string(),
-                None => crate::api::pack::detect::decode_zip_entry_name(
+                Ok(name) => name.to_string(),
+                Err(_) => crate::api::pack::detect::decode_zip_entry_name(
                     file.filename().as_bytes(),
                 ),
             };
@@ -2112,9 +2112,9 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     // Reject an oversized override tree before writing anything, using the same
     // ceiling the CurseForge extractor enforces. Without this the declared size
     // only fed the progress bar and a hostile pack could fill the disk.
-    if override_total_bytes
-        > crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT
-    {
+    if !crate::api::pack::archive_util::within_extraction_limit(
+        override_total_bytes,
+    ) {
         return Err(crate::ErrorKind::InputError(format!(
             "Modpack overrides exceed the extraction limit: {override_total_bytes} unpacked bytes requested, limit {} bytes",
             crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT
@@ -2559,8 +2559,8 @@ pub(crate) async fn related_file_paths(
     for entry in zip_reader.file().entries() {
         let decoded_name;
         let name = match entry.filename().as_str() {
-            Some(name) => name,
-            None => {
+            Ok(name) => name,
+            Err(_) => {
                 decoded_name = crate::api::pack::detect::decode_zip_entry_name(
                     entry.filename().as_bytes(),
                 );
@@ -2612,6 +2612,7 @@ mod tests {
     use async_zip::tokio::write::ZipFileWriter;
     use async_zip::{Compression, ZipEntryBuilder};
     use std::sync::Mutex as StdMutex;
+    use std::sync::atomic::AtomicUsize;
 
     #[test]
     fn override_paths_reject_portable_traversal_and_windows_aliases() {
@@ -2865,6 +2866,82 @@ mod tests {
         .unwrap();
         let attempted = attempted.lock().unwrap().clone();
         (attempted, failures)
+    }
+
+    /// Peak number of task futures alive at the same time.
+    ///
+    /// The task bodies await a barrier-sized sleep, so every task that is
+    /// admitted by the concurrency limit is genuinely concurrent when it
+    /// increments the counter. Without that dwell time the runtime could finish
+    /// each future before starting the next and the peak would read 1 even with
+    /// no limit at all, making the assertion vacuous.
+    async fn peak_concurrency_for_workload(
+        items: u64,
+        limit: Option<usize>,
+    ) -> usize {
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let failures = collect_required_file_failures_concurrently(
+            (0..items).map(|index| (index as usize, index)).collect(),
+            limit,
+            {
+                let active = active.clone();
+                let peak = peak.clone();
+                move |(_manifest_index, _value)| {
+                    let active = active.clone();
+                    let peak = peak.clone();
+                    async move {
+                        let now_active =
+                            active.fetch_add(1, Ordering::SeqCst) + 1;
+                        peak.fetch_max(now_active, Ordering::SeqCst);
+                        // Long enough for the limit to admit the next task while
+                        // this one is still inside the body.
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            25,
+                        ))
+                        .await;
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(failures.is_empty());
+        peak.load(Ordering::SeqCst)
+    }
+
+    #[tokio::test]
+    async fn pack_file_downloads_are_clamped_inside_the_helper() {
+        // 64 items with a 25 ms dwell each would reach a peak of 64 without the
+        // clamp; with it the peak must stay at or below the literal ceiling.
+        let peak = peak_concurrency_for_workload(64, Some(64)).await;
+
+        assert!(
+            peak <= crate::util::download::constants::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY,
+            "the helper must clamp a 64-wide request down to the ceiling, \
+             observed peak {peak}"
+        );
+        // Proves the workload really is concurrent, so the assertion above is
+        // not passing merely because nothing overlapped.
+        assert!(
+            peak > 1,
+            "the fixture must produce overlapping tasks, observed peak {peak}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_concurrency_fixture_can_exceed_the_ceiling_without_a_clamp() {
+        // Control for the test above: the same workload driven at a low limit
+        // must actually reach that limit, which is what makes the clamp
+        // observable rather than a coincidence of scheduling.
+        let peak = peak_concurrency_for_workload(64, Some(4)).await;
+
+        assert!(
+            peak > 1 && peak <= 4,
+            "a 4-wide limit must admit up to 4 concurrent tasks, observed {peak}"
+        );
     }
 
     #[tokio::test]
