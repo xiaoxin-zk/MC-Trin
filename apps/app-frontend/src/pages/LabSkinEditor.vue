@@ -95,11 +95,30 @@ async function reloadEditor() {
     frameKey.value += 1
 }
 
+/**
+ * Message names understood by the bundled skin editor.
+ *
+ * The committed bundle (`resources/blockbench-skin/dist/skin.bundle.js.gz`) is
+ * built from the `third-party/blockbench` submodule, which still spells these
+ * `axolotl-skin-*`. The launcher was renamed, so both spellings are in play:
+ *
+ * - `theme` is the name this page sends. The bundle only accepts the legacy
+ *   name today, so both are sent from `sendThemeToEditor`.
+ * - `ready` / `export` are the names the bundle sends back. Either spelling is
+ *   treated as a valid response.
+ *
+ * Accepting both keeps the editor working against the shipped bundle and
+ * against a rebuilt one without requiring a submodule change to land first.
+ */
+const SKIN_THEME_MESSAGES = ['mctrin-skin-theme', 'axolotl-skin-theme'] as const
+const SKIN_THEME_READY_MESSAGES = ['mctrin-skin-theme-ready', 'axolotl-skin-theme-ready'] as const
+const SKIN_EXPORT_MESSAGES = ['mctrin-skin-export', 'axolotl-skin-export'] as const
+
 function sendThemeToEditor() {
-    frame.value?.contentWindow?.postMessage(
-        { type: 'mctrin-skin-theme', theme: createSkinEditorTheme() },
-        '*',
-    )
+    const theme = createSkinEditorTheme()
+    for (const type of SKIN_THEME_MESSAGES) {
+        frame.value?.contentWindow?.postMessage({ type, theme }, '*')
+    }
 }
 
 function handleFrameLoad() {
@@ -110,13 +129,17 @@ async function handleEditorMessage(event: MessageEvent<unknown>) {
     if (event.source !== frame.value?.contentWindow) return
     if (!event.data || typeof event.data !== 'object') return
     const message = event.data as { type?: unknown; name?: unknown; dataUrl?: unknown }
-    if (message.type === 'mctrin-skin-theme-ready') {
+    if (
+        typeof message.type === 'string' &&
+        (SKIN_THEME_READY_MESSAGES as readonly string[]).includes(message.type)
+    ) {
         sendThemeToEditor()
         markEditorReady()
         return
     }
     if (
-        message.type !== 'mctrin-skin-export' ||
+        typeof message.type !== 'string' ||
+        !(SKIN_EXPORT_MESSAGES as readonly string[]).includes(message.type) ||
         typeof message.name !== 'string' ||
         typeof message.dataUrl !== 'string'
     )

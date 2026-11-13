@@ -1,4 +1,24 @@
 ; https://nsis.sourceforge.io/ShellExecWait
+
+; Registry roots shared by the hooks below and by the custom installer template.
+;
+; These must be defined here, not only in `installer.nsi`: the hooks file is
+; included by *both* bundled variants, while `installer.nsi` is the custom
+; template used only by the "modern" one. The "native" variant builds against
+; Tauri's stock template, which never defines these names, so a hook that
+; referenced them would fail to compile with "unknown variable/constant".
+; The `!ifndef` guards keep a repeat definition harmless when the custom
+; template also defines them.
+!ifndef MCTRIN_SETTINGSKEY
+  !define MCTRIN_SETTINGSKEY "Software\mctrin\MC-Trin"
+!endif
+!ifndef MCTRIN_LEGACY_SETTINGSKEY
+  !define MCTRIN_LEGACY_SETTINGSKEY "Software\ghs\Axolotl Launcher"
+!endif
+!ifndef MCTRIN_LEGACY_MANUKEY
+  !define MCTRIN_LEGACY_MANUKEY "Software\ghs"
+!endif
+
 !ifndef MCTRIN_INSTALLER_UI_PATH
   !if /FileExists "$%MCTRIN_INSTALLER_UI_PATH%"
     !define MCTRIN_INSTALLER_UI_PATH "$%MCTRIN_INSTALLER_UI_PATH%"

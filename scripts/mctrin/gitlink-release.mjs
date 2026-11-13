@@ -8,6 +8,9 @@ import { githubApiBase, isMain, releaseVersion, verifyRelease } from './release-
 
 // GitLink reports business failures with HTTP 200, so every response is checked for status === 0.
 const DEFAULT_BASE_URL = 'https://www.gitlink.org.cn'
+// Kept as the mirror target for this launcher's own GitLink repository. It is
+// overridable with `GITLINK_REPO_SLUG`; the value here must match the repository
+// the release workflow actually publishes to.
 const DEFAULT_REPO_SLUG = 'xinvxueyuan/Axolotl'
 const DEFAULT_UPLOAD_CONCURRENCY = 4
 const UPLOAD_ATTEMPTS = 3

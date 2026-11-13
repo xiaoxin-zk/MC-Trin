@@ -173,9 +173,19 @@ Var MctrinPortableLen
 ; Installs made before the rename stored them under the old key, so every
 ; reader falls back to ${MCTRIN_LEGACY_SETTINGSKEY} when the new key is empty,
 ; and the uninstaller removes both.
-!define MCTRIN_SETTINGSKEY "Software\mctrin\MC-Trin"
-!define MCTRIN_LEGACY_SETTINGSKEY "Software\ghs\Axolotl Launcher"
-!define MCTRIN_LEGACY_MANUKEY "Software\ghs"
+;
+; Guarded because `hooks.nsi` defines the same three names for the benefit of
+; the stock-template variant, and it is included above; NSIS aborts with
+; "already defined" on a bare redefinition.
+!ifndef MCTRIN_SETTINGSKEY
+  !define MCTRIN_SETTINGSKEY "Software\mctrin\MC-Trin"
+!endif
+!ifndef MCTRIN_LEGACY_SETTINGSKEY
+  !define MCTRIN_LEGACY_SETTINGSKEY "Software\ghs\Axolotl Launcher"
+!endif
+!ifndef MCTRIN_LEGACY_MANUKEY
+  !define MCTRIN_LEGACY_MANUKEY "Software\ghs"
+!endif
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"

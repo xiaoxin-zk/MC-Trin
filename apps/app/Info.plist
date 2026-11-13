@@ -10,7 +10,7 @@
                 <string>MC-Trin</string>
                 <key>CFBundleURLSchemes</key>
                 <array>
-                    <string>axolotl</string>
+                    <string>mctrin</string>
                 </array>
             </dict>
         </array>
