@@ -58,6 +58,14 @@ export function createVoiceActivityMonitor(callbacks: {
         if (context || !AudioContextConstructor) return context
         try {
             context = new AudioContextConstructor()
+            // Browsers may hand back a suspended context when no user gesture is
+            // pending. A suspended context leaves the analyser reading zeros,
+            // which the monitor reports as perpetual silence: with voice
+            // activation on, the outgoing gain would stay closed for the whole
+            // call and the level meter would sit at 0. Resuming is best-effort —
+            // it can reject without a gesture, and the monitor is not the place
+            // to fail the call over it.
+            void context.resume().catch(() => {})
         } catch {
             context = null
         }

@@ -76,15 +76,20 @@ function createVoiceAudioContext(AudioContextConstructor: typeof AudioContext): 
  *
  * The shipped worklet ends in `registerProcessor('@sapphi-red/web-noise-suppressor/rnnoise', …)`,
  * and `AudioWorkletGlobalScope.registerProcessor` throws `NotSupportedError` on a
- * duplicate name. A second `addModule` therefore rejects, which surfaced as "the
- * switch disappears and never comes back" after the user turned noise reduction
- * off and on again. So the module is added once per AudioContext.
+ * duplicate name, so the module may be added only once per AudioContext.
  *
- * `loadRnnoise` calls `fetch(url).arrayBuffer()` on every invocation, with no
- * cache of its own, so the wasm is fetched once here and reused as well. */
+ * Both entries cache the *promise*, not its result. Caching the result alone
+ * only closed the sequential hole: a first enable is still downloading when a
+ * second one arrives, both see an empty cache, and both call `addModule` — the
+ * loser gets `NotSupportedError`, which the caller reports as "RNNoise
+ * unavailable" and the switch disappears mid-call. A promise makes the second
+ * caller join the first attempt instead of starting a competing one.
+ *
+ * `loadRnnoise` calls `fetch(url).arrayBuffer()` on every invocation and caches
+ * nothing, so the wasm needs the same treatment. */
 type NoiseAssetCache = {
-    workletRegistered: boolean
-    wasmBinary: ArrayBuffer | null
+    workletRegistration: Promise<void> | null
+    wasmBinary: Promise<ArrayBuffer> | null
 }
 
 /** Loads RNNoise and returns an unconnected worklet node.
@@ -113,20 +118,40 @@ async function createRnnoiseNode(
         import('@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'),
         import('@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'),
     ])
-    if (!cache.wasmBinary) {
-        cache.wasmBinary = await loadRnnoise({
-            url: wasm.default,
-            simdUrl: simdWasm.default,
-        })
+    cache.wasmBinary ??= loadRnnoise({
+        url: wasm.default,
+        simdUrl: simdWasm.default,
+    })
+    cache.workletRegistration ??= context.audioWorklet.addModule(worklet.default)
+    const wasmLoad = cache.wasmBinary
+    const registration = cache.workletRegistration
+    try {
+        const [wasmBinary] = await Promise.all([wasmLoad, registration])
+        return new RnnoiseWorkletNode(context, { wasmBinary, maxChannels: 1 })
+    } catch (failure) {
+        // A rejected promise must not stay cached or every later attempt would
+        // replay this one failure forever. Clear only the entry this call was
+        // waiting on and that actually failed, so a concurrent caller's healthy
+        // load is not discarded from under it.
+        if (cache.wasmBinary === wasmLoad && (await settledRejected(wasmLoad))) {
+            cache.wasmBinary = null
+        }
+        if (cache.workletRegistration === registration && (await settledRejected(registration))) {
+            cache.workletRegistration = null
+        }
+        throw failure
     }
-    const wasmBinary = cache.wasmBinary
-    // Registering the same processor name twice throws, so this has to happen at
-    // most once per context — the node itself can be built as often as needed.
-    if (!cache.workletRegistered) {
-        await context.audioWorklet.addModule(worklet.default)
-        cache.workletRegistered = true
+}
+
+/** Whether a promise has already rejected, without rethrowing or waiting on a
+ * still-pending one. Used to decide which cache entry may be discarded. */
+async function settledRejected(promise: Promise<unknown>): Promise<boolean> {
+    try {
+        await promise
+        return false
+    } catch {
+        return true
     }
-    return new RnnoiseWorkletNode(context, { wasmBinary, maxChannels: 1 })
 }
 
 /** Releases the wasm heap held by a worklet node.
@@ -149,7 +174,17 @@ type PeerConnectionState = {
     pendingCandidates: RTCIceCandidateInit[]
     makingOffer: boolean
     audio: HTMLAudioElement | null
+    /** ICE restarts already attempted for this peer. Bounded so a network that
+     * genuinely cannot reach the peer does not spin forever. */
+    iceRestarts: number
 }
+
+/** How many ICE restarts a peer gets before it is left failed.
+ *
+ * One is not enough — a single wifi handover often produces two separate
+ * failures a few seconds apart — and more than two restarts in a row almost
+ * always means the peer is unreachable, so further offers only burn bandwidth. */
+const MAX_ICE_RESTARTS = 2
 
 export type VoicePeer = { playerId: string }
 export type VoiceConnectionState = RTCPeerConnectionState | RTCIceConnectionState
@@ -286,7 +321,7 @@ export class MctierVoiceSession {
     private noiseGeneration = 0
     /** Survives an off/on cycle of the switch for the life of this context. */
     private readonly noiseAssets: NoiseAssetCache = {
-        workletRegistered: false,
+        workletRegistration: null,
         wasmBinary: null,
     }
     private outgoingStream: MediaStream
@@ -472,7 +507,17 @@ export class MctierVoiceSession {
         for (const playerId of next) {
             const peer = this.ensurePeer(playerId)
             if (this.options.localPlayerId.localeCompare(playerId) < 0) {
-                await this.createOffer(playerId, peer)
+                // One unreachable peer must not abort the whole call: the other
+                // peers may already be negotiating, and the caller treats a
+                // throw here as "voice failed to start" and tears everything
+                // down. The failure is reported through `onPeerState` instead,
+                // which is the same channel a mid-call drop uses.
+                try {
+                    await this.createOffer(playerId, peer)
+                } catch (failure) {
+                    console.warn('MCTier voice could not negotiate with a peer', failure)
+                    this.options.onPeerState?.(playerId, 'failed')
+                }
             }
         }
     }
@@ -648,6 +693,7 @@ export class MctierVoiceSession {
             pendingCandidates: [],
             makingOffer: false,
             audio: null,
+            iceRestarts: 0,
         }
         this.peers.set(playerId, peer)
         for (const track of this.outgoingStream.getAudioTracks())
@@ -679,24 +725,60 @@ export class MctierVoiceSession {
             this.options.onRemoteStream?.(playerId, peer.audio.srcObject)
             void peer.audio.play().catch(() => {})
         }
-        connection.onconnectionstatechange = () =>
+        connection.onconnectionstatechange = () => {
+            if (this.closed || this.peers.get(playerId) !== peer) return
             this.options.onPeerState?.(playerId, connection.connectionState)
-        connection.oniceconnectionstatechange = () =>
+            // A recovery that worked must not keep the peer one failure away
+            // from being abandoned: reset the budget once media flows again.
+            if (connection.connectionState === 'connected') peer.iceRestarts = 0
+            if (connection.connectionState === 'failed') void this.recoverPeer(playerId, peer)
+        }
+        connection.oniceconnectionstatechange = () => {
+            if (this.closed || this.peers.get(playerId) !== peer) return
             this.options.onPeerState?.(playerId, connection.iceConnectionState)
+            if (connection.iceConnectionState === 'failed') void this.recoverPeer(playerId, peer)
+        }
 
         return peer
     }
 
-    private async createOffer(playerId: string, peer: PeerConnectionState) {
-        if (
-            peer.makingOffer ||
-            peer.connection.signalingState !== 'stable' ||
-            peer.connection.localDescription
-        )
-            return
+    /** Tries once to bring a failed peer back with an ICE restart.
+     *
+     * An ICE restart is preferred over tearing the peer down and building a new
+     * one: it reuses the existing `RTCPeerConnection`, so the negotiated media
+     * and the attached `<audio>` element survive. Rebuilding would re-run
+     * `ontrack`, append a second audio element per peer, and briefly detach the
+     * remote stream (firing `onRemoteStream(null)` into the speaking monitor) —
+     * strictly more moving parts for the same recovery.
+     *
+     * Only the offering side restarts, mirroring the initial negotiation. The
+     * answering side just waits: its connection recovers when the new offer
+     * arrives, so both peers cannot start competing offers.
+     *
+     * Bounded by `MAX_ICE_RESTARTS`; past that the peer is left failed and the
+     * owner keeps showing it as disconnected rather than retrying forever. */
+    private async recoverPeer(playerId: string, peer: PeerConnectionState) {
+        if (this.closed || this.peers.get(playerId) !== peer) return
+        if (this.options.localPlayerId.localeCompare(playerId) >= 0) return
+        if (peer.iceRestarts >= MAX_ICE_RESTARTS) return
+        if (peer.makingOffer) return
+        peer.iceRestarts += 1
+        try {
+            await this.createOffer(playerId, peer, true)
+        } catch (failure) {
+            console.warn('MCTier voice could not restart ICE for a peer', failure)
+        }
+    }
+
+    private async createOffer(playerId: string, peer: PeerConnectionState, iceRestart = false) {
+        if (peer.makingOffer || peer.connection.signalingState !== 'stable') return
+        // A first offer only exists so the initial negotiation has a local
+        // description; a restart has to replace it, so the early return must not
+        // apply there or the peer could never renegotiate.
+        if (peer.connection.localDescription && !iceRestart) return
         peer.makingOffer = true
         try {
-            const offer = await peer.connection.createOffer()
+            const offer = await peer.connection.createOffer(iceRestart ? { iceRestart: true } : {})
             await peer.connection.setLocalDescription(offer)
             await this.options.send({
                 type: 'offer',

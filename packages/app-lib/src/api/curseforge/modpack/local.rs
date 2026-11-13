@@ -355,6 +355,9 @@ pub async fn install_modpack_from_local_archive_with_reporter(
     // same `base_folder` used for the manifest has to reach the extractor too.
     let overrides_base_folder = base_folder.clone();
     let override_cancellation = reporter.cancellation_token();
+    // The override worker takes its own copy: `instance_path` is still needed
+    // below for the disk-space check, and the closure is `move`.
+    let overrides_instance_path = instance_path.clone();
     let (overrides_written, override_replacements) =
         crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
             instance_id.clone(),
@@ -362,7 +365,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
             move |cancellation| {
                 materialize_modpack_overrides_at(
                     &overrides_archive_path,
-                    &instance_path,
+                    &overrides_instance_path,
                     &overrides_base_folder,
                     Some(cancellation),
                 )

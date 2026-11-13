@@ -1159,12 +1159,10 @@ function submitJoin() {
             </div>
         </template>
 
-        <MctierRooms
-            v-else-if="selectedProvider === 'mctier'"
-            :state="multiplayerState?.mctier"
-            :initial-invite-code="initialMctierInvite"
-        />
-        <DirectRoom v-else-if="selectedProvider === 'direct'" :state="multiplayerState?.mctier" />
+        <!-- No `mctier`/`direct` branch belongs here: the wrapping `v-if` above
+             excludes both providers, so they are mounted once at the top level.
+             A second copy would open two voice panels and two microphone
+             captures. -->
         <template v-else>
             <Card v-if="!hongshiState" class="!m-0">
                 <div class="flex items-center gap-3">

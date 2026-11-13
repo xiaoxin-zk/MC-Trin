@@ -10,7 +10,7 @@ use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::{ErrorKind, State};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Seek};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
@@ -309,7 +309,7 @@ pub(crate) fn safe_archive_relative_path(value: &str) -> crate::Result<String> {
     // `Component::Normal` check accepts and which then fail at write time.
     // The returned path is discarded; only the validation matters here.
     crate::util::io::safe_relative_join(Path::new(""), &normalized).map_err(
-        |_| {
+        |_| -> crate::Error {
             ErrorKind::InputError(
                 "CurseForge modpack contains an invalid override path"
                     .to_string(),

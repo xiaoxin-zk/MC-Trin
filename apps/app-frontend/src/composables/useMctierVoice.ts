@@ -733,7 +733,10 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         if (mediaDevices && typeof mediaDevices.removeEventListener === 'function') {
             mediaDevices.removeEventListener('devicechange', onDeviceChange)
         }
-        stopMonitoring()
+        // `stop()` is idempotent and is the only thing that closes the session,
+        // so the capture tracks must not depend on the component remembering to
+        // call it: unmounting mid-call would otherwise leave the microphone live.
+        stop()
     })
 
     function syncRoom(state: MctierState | undefined) {
