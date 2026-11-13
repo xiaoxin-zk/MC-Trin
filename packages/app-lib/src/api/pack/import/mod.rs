@@ -1009,7 +1009,7 @@ pub async fn is_valid_importable_instance(
             curseforge::is_valid_curseforge(instance_path).await
         }
         ImportLauncherType::ModrinthApp => instance_path.is_dir(),
-        ImportLauncherType::Mctrin => has_instance_config(instance_path),
+        ImportLauncherType::Mctrin => has_instance_config(&instance_path),
         ImportLauncherType::PCL2
         | ImportLauncherType::PCL2CE
         | ImportLauncherType::HMCL

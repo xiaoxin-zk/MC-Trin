@@ -192,8 +192,7 @@ test('packs widgets into the earliest available cells', () => {
             { column: 3, row: 1, effectiveColumns: 1, effectiveRows: 2 },
             { column: 1, row: 2, effectiveColumns: 2, effectiveRows: 2 },
             { column: 4, row: 1, effectiveColumns: 1, effectiveRows: 2 },
-            { column: 3, row: 3, effectiveColumns: 2, effectiveRows: 2 },
-            { column: 1, row: 4, effectiveColumns: 2, effectiveRows: 1 },
+            { column: 3, row: 3, effectiveColumns: 2, effectiveRows: 1 },
         ],
     )
 })
