@@ -304,18 +304,19 @@ pub(crate) fn curseforge_override_content(
 
 pub(crate) fn safe_archive_relative_path(value: &str) -> crate::Result<String> {
     let normalized = value.replace('\\', "/");
-    let path = Path::new(&normalized);
-    if normalized.is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        return Err(ErrorKind::InputError(
-            "CurseForge modpack contains an invalid override path".to_string(),
-        )
-        .into());
-    }
+    // Delegate to the shared validator: it also rejects Windows reserved names,
+    // trailing dots/spaces and drive-style colons, which a bare
+    // `Component::Normal` check accepts and which then fail at write time.
+    // The returned path is discarded; only the validation matters here.
+    crate::util::io::safe_relative_join(Path::new(""), &normalized).map_err(
+        |_| {
+            ErrorKind::InputError(
+                "CurseForge modpack contains an invalid override path"
+                    .to_string(),
+            )
+            .into()
+        },
+    )?;
     Ok(normalized)
 }
 

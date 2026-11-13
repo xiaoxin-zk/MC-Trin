@@ -14,6 +14,46 @@ fn archive_error(error: zip::result::ZipError) -> crate::Error {
         .into()
 }
 
+/// Fails early when the target volume cannot hold the whole install.
+///
+/// A modpack install writes every downloaded file plus the extracted overrides,
+/// so running out halfway leaves a partially written instance that the pipeline
+/// then rolls back — the user sees a raw OS error (e.g. `os error 112`) after
+/// minutes of downloading. Checking up front turns that into one clear message.
+///
+/// `required` is the sum of declared download sizes and declared override sizes.
+/// A 10% margin absorbs block rounding and the journal/part files that coexist
+/// with the final ones. When the volume cannot be identified this returns `Ok`:
+/// a missing sysinfo entry must not block an otherwise valid install.
+pub(crate) fn ensure_install_disk_space(
+    target_dir: &Path,
+    required: u64,
+) -> crate::Result<()> {
+    if required == 0 {
+        return Ok(());
+    }
+    let Ok(canonical) = crate::util::io::canonicalize(target_dir) else {
+        return Ok(());
+    };
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let available = disks
+        .iter()
+        .filter(|disk| canonical.starts_with(disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().as_os_str().len())
+        .map(sysinfo::Disk::available_space);
+    let Some(available) = available else {
+        return Ok(());
+    };
+    let needed = required.saturating_add(required / 10);
+    if available < needed {
+        return Err(crate::ErrorKind::FSError(format!(
+            "Not enough free disk space for the modpack install: need {needed} bytes, have {available} bytes"
+        ))
+        .into());
+    }
+    Ok(())
+}
+
 /// Extracts every file under `prefix` in the archive into `target_dir`,
 /// preserving the directory structure below the prefix. Returns the number of
 /// files written.

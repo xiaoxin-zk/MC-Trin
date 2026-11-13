@@ -392,6 +392,13 @@ where
     let failures = Arc::new(Mutex::new(Vec::<RequiredFileFailure>::new()));
     let collected_failures = failures.clone();
     let num_items = items.len();
+    // Clamp here rather than at each call site so no caller can exceed the
+    // pack-content ceiling: the auto concurrency controller reports values up to
+    // 256, and a pack install must not open that many simultaneous fetches.
+    // `None` keeps the previous "unbounded" meaning.
+    let limit = limit.map(
+        crate::util::download::constants::max_pack_file_download_concurrency,
+    );
     loading_try_for_each_concurrent(
         futures::stream::iter(items).map(Ok::<T, crate::Error>),
         limit,
@@ -1169,6 +1176,14 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     let num_files = pack.files.len();
     let content_total_bytes =
         checked_download_size(pack.files.iter().map(|file| file.file_size))?;
+    // Fail before downloading anything when the target volume cannot hold the
+    // whole pack. Override sizes are not known yet (they are declared in the zip
+    // directory), so this covers the download half; the override half is checked
+    // again below once those sizes are read.
+    crate::api::pack::archive_util::ensure_install_disk_space(
+        &instance_full_path,
+        content_total_bytes,
+    )?;
     let mut cached_pack_hashes = pack
         .files
         .iter()
@@ -2042,7 +2057,16 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .iter()
         .enumerate()
         .filter_map(|(index, file)| {
-            let filename = file.filename().as_str().unwrap_or_default();
+            // `as_str()` is `None` for GBK-encoded names, which `unwrap_or_default`
+            // turned into an empty string: every Chinese override was silently
+            // skipped while the install still reported success.
+            let filename = match file.filename().as_str() {
+                Some(name) => name.to_string(),
+                None => crate::api::pack::detect::decode_zip_entry_name(
+                    file.filename().as_bytes(),
+                ),
+            };
+            let filename = filename.as_str();
             ((filename.starts_with(&overrides_prefix)
                 || filename.starts_with(&client_overrides_prefix))
                 && !filename.ends_with('/'))
@@ -2085,6 +2109,23 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         .iter()
         .map(|spec| zip_reader.file().entries()[spec.index].uncompressed_size())
         .sum::<u64>();
+    // Reject an oversized override tree before writing anything, using the same
+    // ceiling the CurseForge extractor enforces. Without this the declared size
+    // only fed the progress bar and a hostile pack could fill the disk.
+    if override_total_bytes
+        > crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT
+    {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Modpack overrides exceed the extraction limit: {override_total_bytes} unpacked bytes requested, limit {} bytes",
+            crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT
+        ))
+        .into());
+    }
+    // The override tree lands in the same instance folder, so it must fit too.
+    crate::api::pack::archive_util::ensure_install_disk_space(
+        &instance_full_path,
+        override_total_bytes,
+    )?;
     reporter
         .track_rollback_paths(
             override_specs
@@ -2516,7 +2557,16 @@ pub(crate) async fn related_file_paths(
         .map(|file| file.path.as_str().to_string())
         .collect::<Vec<_>>();
     for entry in zip_reader.file().entries() {
-        let name = entry.filename().as_str().unwrap_or_default();
+        let decoded_name;
+        let name = match entry.filename().as_str() {
+            Some(name) => name,
+            None => {
+                decoded_name = crate::api::pack::detect::decode_zip_entry_name(
+                    entry.filename().as_bytes(),
+                );
+                decoded_name.as_str()
+            }
+        };
         if (name.starts_with(&overrides_prefix)
             || name.starts_with(&client_overrides_prefix))
             && !name.ends_with('/')

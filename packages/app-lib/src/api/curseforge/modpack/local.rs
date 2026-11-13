@@ -517,6 +517,13 @@ pub(crate) async fn install_local_manifest_files(
                 .unwrap_or(0)
         })
         .sum::<u64>();
+    // Fail before the first byte is written when the volume cannot hold the
+    // pack; otherwise a large pack dies halfway with a raw OS error and the
+    // new instance is rolled back after minutes of downloading.
+    crate::api::pack::archive_util::ensure_install_disk_space(
+        &instance_path,
+        content_total_bytes,
+    )?;
     reporter
         .update_with_events(
             InstallPhaseId::DownloadingContent,

@@ -558,7 +558,7 @@ function settleInstallJob(job: InstallJobSnapshot) {
 
 const INSTALL_JOB_POLL_INTERVAL_MS = 1000
 const INSTALL_JOB_QUERY_TIMEOUT_MS = 10 * 1000
-const INSTALL_JOB_TIMEOUT_MS = 30 * 60 * 1000
+const INSTALL_JOB_STALL_TIMEOUT_MS = 30 * 60 * 1000
 
 function errorMessage(error: unknown) {
     return error instanceof Error
@@ -624,6 +624,18 @@ export async function wait_for_install_job(jobId: string) {
             }
         }
 
+        // The timeout is a *stall* timeout, not a wall-clock limit: a job that
+        // keeps reporting progress may legitimately run for hours (a 10-20 GB
+        // pack on a normal connection takes 60-130 minutes). Only a job that
+        // stops making progress for the whole window is abandoned.
+        const armStallTimer = () => {
+            if (finished) return
+            if (timeoutTimer) clearTimeout(timeoutTimer)
+            timeoutTimer = setTimeout(() => {
+                void requestCancellation()
+            }, INSTALL_JOB_STALL_TIMEOUT_MS)
+        }
+
         const resolveJob = (job: InstallJobSnapshot) => {
             if (finished || job.job_id !== jobId || !isInstallJobFinished(job.status)) return
 
@@ -649,6 +661,11 @@ export async function wait_for_install_job(jobId: string) {
             pollInFlight = true
             queryInstallJob(jobId)
                 .then((job) => {
+                    // A successful poll proves the job is advancing; restart the
+                    // stall window so long installs are not cut off mid-download.
+                    if (job.job_id === jobId && !isInstallJobFinished(job.status)) {
+                        armStallTimer()
+                    }
                     resolveJob(job)
                 })
                 .catch((error) => {
@@ -678,11 +695,16 @@ export async function wait_for_install_job(jobId: string) {
         }
 
         pollTimer = setInterval(poll, INSTALL_JOB_POLL_INTERVAL_MS)
-        timeoutTimer = setTimeout(() => {
-            void requestCancellation()
-        }, INSTALL_JOB_TIMEOUT_MS)
+        armStallTimer()
 
-        install_job_listener(resolveJob)
+        install_job_listener((job: InstallJobSnapshot) => {
+            // Every pushed snapshot means the job is alive, so re-arm before
+            // delegating: `resolveJob` only acts on terminal states.
+            if (job.job_id === jobId && !isInstallJobFinished(job.status)) {
+                armStallTimer()
+            }
+            resolveJob(job)
+        })
             .then((listener) => {
                 if (finished) {
                     listener()

@@ -477,15 +477,25 @@ fn detect_at_base_indexed<R: std::io::Read + std::io::Seek>(
                 let has_addons = manifest
                     .get("addons")
                     .is_some_and(|value| !value.is_null());
+                // A CurseForge manifest carries `minecraft.version`. Without it
+                // the file is just some unrelated `manifest.json` (a mod config
+                // inside a zipped game folder), and claiming CurseForge here
+                // would send the install down a parser that cannot read it.
+                let has_minecraft_version = manifest
+                    .get("minecraft")
+                    .and_then(|minecraft| minecraft.get("version"))
+                    .is_some();
                 debug!(
-                    "detect_at_base: matched CurseForge/MCBBS via manifest.json at base={:?} addons={}",
-                    base, has_addons
+                    "detect_at_base: manifest.json at base={:?} addons={} minecraft_version={}",
+                    base, has_addons, has_minecraft_version
                 );
-                return Ok(Some(detected(if has_addons {
-                    LocalPackFormat::Mcbbs
-                } else {
-                    LocalPackFormat::CurseForge
-                })));
+                if has_addons {
+                    return Ok(Some(detected(LocalPackFormat::Mcbbs)));
+                }
+                if has_minecraft_version {
+                    return Ok(Some(detected(LocalPackFormat::CurseForge)));
+                }
+                // Neither variant: fall through to the remaining probes.
             }
             Err(error) => {
                 // A cancellation must propagate instead of being logged as an
