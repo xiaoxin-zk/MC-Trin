@@ -614,8 +614,16 @@ it('shows camera-relative positive axes and toggles depth-independent chest high
     expect(wrapper.get('[data-testid="seed-map-chest-loot-preview"]').text()).toContain('3')
     const axis = wrapper.get('[data-testid="seed-map-axis-indicator"]')
     expect(axis.attributes('aria-label')).toContain('+X east')
-    for (const name of ['X', 'Y', 'Z'])
-        expect(axis.find(`[data-testid="seed-map-axis-${name}"]`).exists()).toBe(true)
+    // The indicator's `aria-label` is a static attribute on the <svg>, so it says
+    // nothing about the axis rows. Those come from the `axes` prop, which starts
+    // empty and is only filled by the scene's next animation frame — `ready`
+    // (which mounts the indicator) is set synchronously when the scene is
+    // constructed, one frame earlier. Wait for the rows instead of assuming the
+    // frame has already run.
+    await vi.waitFor(() => {
+        for (const name of ['X', 'Y', 'Z'])
+            expect(axis.find(`[data-testid="seed-map-axis-${name}"]`).exists()).toBe(true)
+    })
     expect(wrapper.get('[data-testid="seed-map-chest-xray"]').text()).toContain('(1)')
     expect(wrapper.text()).toContain('2 containers have no known Y coordinates')
     const gl = canvas.getContext('webgl2')!
