@@ -697,6 +697,13 @@ fn create_main_window(app: &AppHandle, route: &str) -> Result<(), String> {
                     15.0, 22.0,
                 ));
         }
+        // The window is recreated here after lightweight mode hands back, so it
+        // needs the same webview user data folder the startup path gives it;
+        // otherwise a portable install would silently start writing the
+        // browser state to %LOCALAPPDATA% the first time the window is rebuilt.
+        if let Some(directory) = crate::portable::webview_data_directory() {
+            builder = builder.data_directory(directory);
+        }
         builder.build().map_err(|error| error.to_string())?;
     }
     Ok(())

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 const PORTABLE_DIR_NAME: &str = ".MC-Trin";
@@ -6,6 +7,22 @@ const PORTABLE_DIR_NAME: &str = ".MC-Trin";
 const LEGACY_PORTABLE_DIR_NAME: &str = ".Axolotl";
 
 static PORTABLE_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Directory holding the portable installation's runtime state, recorded by
+/// [`init_portable_mode`] once it has resolved the marker.
+static PORTABLE_DIR: std::sync::Mutex<Option<PathBuf>> =
+    std::sync::Mutex::new(None);
+
+/// Returns the portable directory when the launcher is running in portable mode.
+///
+/// The native webview keeps its user data folder - caches, GPU shader cache,
+/// cookies - in the app local data directory unless it is told otherwise. For a
+/// portable installation that belongs beside the executable, not in
+/// `%LOCALAPPDATA%`, or roughly 18 MB of browser state lands outside the single
+/// folder the portable package promises.
+pub fn webview_data_directory() -> Option<PathBuf> {
+    PORTABLE_DIR.lock().ok()?.clone()
+}
 
 /// 在启动时初始化便携模式
 /// 检查 `.MC-Trin` 文件夹是否存在且可写
@@ -62,6 +79,9 @@ pub unsafe fn init_portable_mode() -> bool {
         std::env::set_var("MCTRIN_CONFIG_DIR", &portable_dir);
     }
     PORTABLE_MODE.store(true, Ordering::Relaxed);
+    if let Ok(mut slot) = PORTABLE_DIR.lock() {
+        *slot = Some(portable_dir.clone());
+    }
 
     tracing::info!(
         "Portable mode enabled: MCTRIN_CONFIG_DIR={}",

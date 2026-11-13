@@ -820,6 +820,36 @@ fn main() {
             window_state_builder.build()
         })
         .setup(|app| {
+            // The window is created here rather than by Tauri's config loop so a
+            // portable install can point the webview's user data folder at the
+            // portable directory. Left to itself WebView2 writes its caches,
+            // shader cache and cookies to %LOCALAPPDATA%\com.mctrin.launcher,
+            // which put about 18 MB outside the portable folder on a cold start.
+            // The config marks the window `create: false` for this reason, so it
+            // has to exist before anything below asks for it.
+            {
+                let config = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .cloned()
+                    .expect("the main window configuration must exist");
+                let mut window = tauri::WebviewWindowBuilder::from_config(
+                    app.handle(),
+                    &config,
+                )?;
+                if let Some(directory) = portable::webview_data_directory() {
+                    // WebView2 creates its own `EBWebView` folder inside the
+                    // directory it is given - the default it replaces is
+                    // `$APPLOCALDATA/EBWebView` - so passing the portable
+                    // directory yields `<portable>/.MC-Trin/EBWebView`.
+                    window = window.data_directory(directory);
+                }
+                window.build()?;
+            }
+
             lightweight_mode::init(app.handle());
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
