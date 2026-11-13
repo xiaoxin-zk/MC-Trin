@@ -1,4 +1,4 @@
-//! Theseus state management system
+//! MC-Trin state management system
 use crate::util::download::constants::MAX_CONCURRENT_INSTALL_JOBS;
 use crate::util::download::constants::{
     AUTO_DOWNLOAD_CONCURRENCY_INITIAL, AUTO_DOWNLOAD_CONCURRENCY_MAX,
@@ -197,7 +197,7 @@ pub struct State {
     // because creating the state object is fallible (e.g. database missing),
     // but we rely on the app identifier to create the state (data dir).
     //
-    // /// App identifier string (like com.modrinth.AxolotlLauncher)
+    // /// App identifier string (like com.mctrin.launcher)
     // pub app_identifier: String,
     pub restart_after_pending_update: AtomicBool,
 
@@ -1180,7 +1180,6 @@ impl State {
             .into_iter()
             .map(|metadata| metadata.instance_id)
             .collect();
-        active_log_ids.extend(crate::api::servers::running_server_ids());
         process::remove_inactive_log_buffers(&active_log_ids);
     }
 

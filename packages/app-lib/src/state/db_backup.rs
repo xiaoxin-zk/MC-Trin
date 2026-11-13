@@ -496,7 +496,7 @@ async fn open_read_only_db(db_path: &Path) -> crate::Result<SqliteConnection> {
 }
 
 pub fn app_db_backup_dir() -> crate::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("THESEUS_DB_BACKUP_DIR") {
+    if let Some(path) = std::env::var_os("MCTRIN_DB_BACKUP_DIR") {
         return Ok(PathBuf::from(path));
     }
 
@@ -527,7 +527,7 @@ fn app_db_backup_dir_for(db_path: &Path) -> crate::Result<PathBuf> {
             ))
         })?;
 
-    let backup_dir = std::env::var_os("THESEUS_DB_BACKUP_DIR")
+    let backup_dir = std::env::var_os("MCTRIN_DB_BACKUP_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| settings_dir.join("Backups").join("app-db"));
     match db_path

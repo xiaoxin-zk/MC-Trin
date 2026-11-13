@@ -42,7 +42,7 @@ export type SeedMapWorkspace = {
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
-export const SEED_MAP_STORAGE_KEY = 'axolotl.lab.seed-map.v1'
+export const SEED_MAP_STORAGE_KEY = 'mctrin.lab.seed-map.v1'
 
 export const SEED_MAP_SCALES = [1, 4, 16, 64, 256] as const
 export const SEED_MAP_MIN_ZOOM = -2

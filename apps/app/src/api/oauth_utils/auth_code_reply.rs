@@ -18,8 +18,8 @@ use std::{
 
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioIo, TokioTimer};
-use theseus::ErrorKind;
-use theseus::prelude::tcp_listen_any_loopback;
+use mctrin::ErrorKind;
+use mctrin::prelude::tcp_listen_any_loopback;
 use tokio::sync::{broadcast, oneshot};
 
 static SERVER_SHUTDOWN: LazyLock<broadcast::Sender<()>> =
@@ -31,8 +31,8 @@ static SERVER_SHUTDOWN: LazyLock<broadcast::Sender<()>> =
 ///
 /// If the server is stopped before receiving an authorization code, `Ok(None)` is returned.
 pub async fn listen(
-    listen_socket_tx: oneshot::Sender<Result<SocketAddr, theseus::Error>>,
-) -> Result<Option<AuthorizationCodeReply>, theseus::Error> {
+    listen_socket_tx: oneshot::Sender<Result<SocketAddr, mctrin::Error>>,
+) -> Result<Option<AuthorizationCodeReply>, mctrin::Error> {
     let listener = tcp_listen_any_loopback().await;
     listen_with_listener(listener, listen_socket_tx, None).await
 }
@@ -40,10 +40,10 @@ pub async fn listen(
 /// Starts a temporary HTTP server on a registered loopback callback address.
 pub async fn listen_fixed(
     address: SocketAddr,
-    listen_socket_tx: oneshot::Sender<Result<SocketAddr, theseus::Error>>,
+    listen_socket_tx: oneshot::Sender<Result<SocketAddr, mctrin::Error>>,
     expected_path: String,
     expected_state: String,
-) -> Result<Option<AuthorizationCodeReply>, theseus::Error> {
+) -> Result<Option<AuthorizationCodeReply>, mctrin::Error> {
     let listener = tokio::net::TcpListener::bind(address).await;
     listen_with_listener(
         listener,
@@ -63,9 +63,9 @@ struct CallbackExpectation {
 
 async fn listen_with_listener(
     listener: Result<tokio::net::TcpListener, std::io::Error>,
-    listen_socket_tx: oneshot::Sender<Result<SocketAddr, theseus::Error>>,
+    listen_socket_tx: oneshot::Sender<Result<SocketAddr, mctrin::Error>>,
     expected: Option<CallbackExpectation>,
-) -> Result<Option<AuthorizationCodeReply>, theseus::Error> {
+) -> Result<Option<AuthorizationCodeReply>, mctrin::Error> {
     let listener = match listener {
         Ok(listener) => {
             listen_socket_tx
@@ -190,7 +190,7 @@ fn render_reply_page(language: &str, title: &str, message: &str) -> String {
 async fn handle_reply(
     req: hyper::Request<Incoming>,
     auth_code_out: &Mutex<
-        Option<Result<AuthorizationCodeReply, theseus::Error>>,
+        Option<Result<AuthorizationCodeReply, mctrin::Error>>,
     >,
     expected: Option<&CallbackExpectation>,
 ) -> Result<hyper::Response<String>, hyper::http::Error> {

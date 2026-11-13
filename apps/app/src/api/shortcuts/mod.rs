@@ -64,7 +64,7 @@ pub async fn create_instance_shortcut<R: Runtime>(
     let output_path_existed =
         tokio::fs::try_exists(&output_path).await.unwrap_or(false);
     let instance =
-        theseus::instance::get(&instance_id).await?.ok_or_else(|| {
+        mctrin::instance::get(&instance_id).await?.ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("unknown instance: {instance_id}"),
@@ -263,7 +263,7 @@ fn desktop_shortcut_name(instance_name: &str) -> String {
         sanitized
     };
 
-    format!("{} - {instance_name}", theseus::brand::SHORT_PRODUCT_NAME)
+    format!("{} - {instance_name}", mctrin::brand::SHORT_PRODUCT_NAME)
 }
 
 fn shortcut_path_with_extension(mut path: PathBuf) -> PathBuf {

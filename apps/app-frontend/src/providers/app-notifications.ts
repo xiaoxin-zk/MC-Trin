@@ -10,9 +10,9 @@ import { webNotificationKey } from './notification-keys.ts'
 
 export class AppNotificationManager extends AbstractWebNotificationManager {
     public errorTextFormatter?: (error: unknown) => string | null
-    private static readonly STORAGE_KEY = 'axolotl:active-web-notifications-v1'
-    private static readonly DISMISSED_STORAGE_KEY = 'axolotl:dismissed-web-notifications-v2'
-    private static readonly LEGACY_DISMISSED_STORAGE_KEY = 'axolotl:dismissed-web-notifications'
+    private static readonly STORAGE_KEY = 'mctrin:active-web-notifications-v1'
+    private static readonly DISMISSED_STORAGE_KEY = 'mctrin:dismissed-web-notifications-v2'
+    private static readonly LEGACY_DISMISSED_STORAGE_KEY = 'mctrin:dismissed-web-notifications'
     private static readonly MAX_NOTIFICATIONS = 100
     private static readonly MAX_NOTIFICATION_AGE_MS = 30 * 24 * 60 * 60 * 1000
     private static readonly MAX_SUPPORT_DATA_BYTES = 32 * 1024

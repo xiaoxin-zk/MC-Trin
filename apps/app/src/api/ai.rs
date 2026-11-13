@@ -1,5 +1,5 @@
 use crate::api::Result;
-use theseus::ai::{
+use mctrin::ai::{
     self, AiModelUpdate, AiProviderConfigUpdate, AiProviderDefinition,
     AiProviderModel, AiSettings, AiState, OAuthDeviceCode, OAuthPollStatus,
 };

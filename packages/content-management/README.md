@@ -1,6 +1,6 @@
 # Content management
 
-Provider-neutral resource contracts and installation planning for Axolotl Launcher.
+Provider-neutral resource contracts and installation planning for MC-Trin Launcher.
 
 The `resources` module defines stable project, release, artifact and installed-entry
 identities, compatibility assessments, dependency graphs, operation plans, history

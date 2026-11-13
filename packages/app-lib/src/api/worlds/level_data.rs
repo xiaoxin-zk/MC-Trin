@@ -411,7 +411,7 @@ async fn backup_and_replace(
     io::write(PathBuf::from(backup), original).await?;
 
     let mut temp = path.as_os_str().to_owned();
-    temp.push(".axolotl-tmp");
+    temp.push(".mctrin-tmp");
     let temp = PathBuf::from(temp);
     io::write(&temp, updated).await?;
     io::rename_or_move(&temp, path).await?;

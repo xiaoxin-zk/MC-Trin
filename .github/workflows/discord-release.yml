@@ -66,4 +66,4 @@ jobs:
           if [[ "$DRY_RUN" == true ]]; then
             args+=(--dry-run)
           fi
-          node scripts/axolotl/publish-discord-release.mjs "$RELEASE_TAG" "${args[@]}"
+          node scripts/mctrin/publish-discord-release.mjs "$RELEASE_TAG" "${args[@]}"

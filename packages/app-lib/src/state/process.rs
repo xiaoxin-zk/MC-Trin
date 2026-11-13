@@ -1581,7 +1581,7 @@ mod process_wait_tests {
 
     #[test]
     fn sleeping_child() {
-        if std::env::var_os("AXOLOTL_PROCESS_WAIT_TEST").is_some() {
+        if std::env::var_os("MCTRIN_PROCESS_WAIT_TEST").is_some() {
             std::thread::sleep(std::time::Duration::from_secs(30));
         }
     }
@@ -1595,7 +1595,7 @@ mod process_wait_tests {
                 "--exact",
                 "state::process::process_wait_tests::sleeping_child",
             ])
-            .env("AXOLOTL_PROCESS_WAIT_TEST", "1")
+            .env("MCTRIN_PROCESS_WAIT_TEST", "1")
             .kill_on_drop(true)
             .stdout(std::process::Stdio::null());
         let child = command.spawn().unwrap();

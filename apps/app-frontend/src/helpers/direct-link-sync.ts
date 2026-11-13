@@ -9,8 +9,8 @@ import {
     sync_direct_links,
 } from './instance'
 
-export const DIRECT_LINKS_SYNCED_EVENT = 'axolotl-direct-links-synced'
-export const DIRECT_LINKS_CHANGED_EVENT = 'axolotl-direct-links-changed'
+export const DIRECT_LINKS_SYNCED_EVENT = 'mctrin-direct-links-synced'
+export const DIRECT_LINKS_CHANGED_EVENT = 'mctrin-direct-links-changed'
 
 const sync = createDirectLinkSyncController(sync_direct_links, (report) => {
     window.dispatchEvent(

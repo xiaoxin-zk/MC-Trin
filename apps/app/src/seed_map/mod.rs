@@ -113,7 +113,7 @@ impl Dimension {
 }
 
 /*
- * Supported Java versions, newest first, using Axolotl version codes
+ * Supported Java versions, newest first, using MC-Trin version codes
  * (major * 10000 + minor * 100 + patch) that the cubiomes bridge maps to its
  * own engine versions.
  */
@@ -276,13 +276,13 @@ pub fn version_profiles() -> Vec<VersionProfile> {
                 dimensions.push(Dimension::End);
             }
             let mc = if available {
-                unsafe { axolotl_seed_map_java_version(code) }
+                unsafe { mctrin_seed_map_java_version(code) }
             } else {
                 0
             };
             let capability = |kind, value| {
                 if available {
-                    unsafe { axolotl_seed_map_capability(mc, kind, value) }
+                    unsafe { mctrin_seed_map_capability(mc, kind, value) }
                 } else {
                     0
                 }
@@ -347,7 +347,7 @@ pub fn render_tile(request: TileRequest) -> io::Result<Vec<u8>> {
     let pixel_count = request.width as usize * request.height as usize;
     let mut rgb = vec![0_u8; pixel_count * 3];
     let result = unsafe {
-        axolotl_seed_map_render(
+        mctrin_seed_map_render(
             parse_seed(&request.seed),
             minecraft_version,
             request.edition.generator_flags(),
@@ -396,7 +396,7 @@ pub fn find_features(query: FeatureQuery) -> io::Result<Vec<MapFeature>> {
         4_096
     ];
     let count = unsafe {
-        axolotl_seed_map_find_features(
+        mctrin_seed_map_find_features(
             parse_seed(&query.seed),
             minecraft_version,
             query.edition.generator_flags(),
@@ -441,7 +441,7 @@ pub fn biome_at(
 ) -> io::Result<i32> {
     let (minecraft_version, _) = resolve_java_version(&version)?;
     let biome = unsafe {
-        axolotl_seed_map_biome_at(
+        mctrin_seed_map_biome_at(
             parse_seed(&seed),
             minecraft_version,
             edition.generator_flags(),
@@ -463,7 +463,7 @@ pub fn spawn(
     let mut x = 0;
     let mut z = 0;
     let result = unsafe {
-        axolotl_seed_map_get_spawn(
+        mctrin_seed_map_get_spawn(
             parse_seed(&seed),
             minecraft_version,
             edition.generator_flags(),
@@ -492,7 +492,7 @@ pub(crate) fn resolve_java_version(version: &str) -> io::Result<(i32, i32)> {
         .ok_or_else(|| {
             io::Error::other("This Minecraft version is not supported.")
         })?;
-    let engine_version = unsafe { axolotl_seed_map_java_version(code) };
+    let engine_version = unsafe { mctrin_seed_map_java_version(code) };
     if engine_version == 0 {
         return Err(io::Error::other(
             "The bundled cubiomes version does not support this Minecraft version.",
@@ -1175,7 +1175,7 @@ mod tests {
     #[test]
     #[ignore = "writes preview tiles for manual shading inspection"]
     fn write_preview_tiles() {
-        let Some(dir) = std::env::var_os("AXOLOTL_SEED_MAP_PREVIEW_DIR") else {
+        let Some(dir) = std::env::var_os("MCTRIN_SEED_MAP_PREVIEW_DIR") else {
             return;
         };
         let dir = std::path::PathBuf::from(dir);

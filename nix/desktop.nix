@@ -5,15 +5,15 @@
 }:
 makeDesktopItem {
   categories = [ "Game" ];
-  desktopName = "Axolotl Launcher";
-  exec = "axolotl-launcher";
+  desktopName = "MC-Trin";
+  exec = "MC-Trin";
   icon = "${../apps/app/icons/icon.png}";
   mimeTypes = [
     "application/x-modrinth-modpack+zip"
-    "x-scheme-handler/axolotl"
+    "x-scheme-handler/mctrin"
   ];
-  name = "Axolotl Launcher";
-  startupWMClass = "Axolotl Launcher";
+  name = "MC-Trin";
+  startupWMClass = "MC-Trin";
   terminal = false;
   type = "Application";
 }

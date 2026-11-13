@@ -1,6 +1,7 @@
 use crate::api::Result;
 use async_zip::base::read::seek::ZipFileReader;
 use image::ImageEncoder;
+use mctrin::instance::get_full_path;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
@@ -10,7 +11,6 @@ use std::sync::{LazyLock, Mutex};
 use std::time::SystemTime;
 use tauri::{Emitter, Runtime};
 use tauri_plugin_dialog::DialogExt;
-use theseus::instance::get_full_path;
 
 const STUDIO_FILES_CHANGED_EVENT: &str = "studio-files-changed";
 
@@ -109,7 +109,7 @@ pub async fn studio_trash(instance_id: &str, file_path: &str) -> Result<()> {
     let source = tokio::fs::canonicalize(base.join(file_path)).await?;
     let canonical_base = tokio::fs::canonicalize(&base).await?;
     if !source.starts_with(&canonical_base) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "file_path escapes the instance directory".to_string(),
         ))
         .into());
@@ -117,12 +117,12 @@ pub async fn studio_trash(instance_id: &str, file_path: &str) -> Result<()> {
     tokio::task::spawn_blocking(move || trash::delete(source))
         .await
         .map_err(|error| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "Failed to send file to trash: {error}"
             )))
         })?
         .map_err(|error| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "Failed to send file to trash: {error}"
             )))
         })?;
@@ -138,7 +138,7 @@ pub async fn studio_read_text(
     let source = tokio::fs::canonicalize(base.join(file_path)).await?;
     let canonical_base = tokio::fs::canonicalize(&base).await?;
     if !source.starts_with(&canonical_base) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "file_path escapes the instance directory".to_string(),
         ))
         .into());
@@ -146,13 +146,13 @@ pub async fn studio_read_text(
 
     let bytes = tokio::fs::read(source).await?;
     if bytes.contains(&0) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "File is not a text file".to_string(),
         ))
         .into());
     }
     String::from_utf8(bytes).map_err(|_| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "File is not a UTF-8 text file".to_string(),
         ))
         .into()
@@ -167,7 +167,7 @@ async fn studio_file_path(
     let source = tokio::fs::canonicalize(base.join(file_path)).await?;
     let canonical_base = tokio::fs::canonicalize(&base).await?;
     if !source.starts_with(&canonical_base) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "file_path escapes the instance directory".to_string(),
         ))
         .into());
@@ -205,7 +205,7 @@ pub async fn studio_watch_register<R: Runtime>(
 ) -> Result<String> {
     let root = get_full_path(&instance_id).await?;
     if !root.is_dir() {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "Instance directory does not exist".to_string(),
         ))
         .into());
@@ -253,7 +253,7 @@ pub async fn studio_watch_register<R: Runtime>(
         },
     )
     .map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to create Studio file watcher: {error}"
         )))
     })?;
@@ -261,13 +261,13 @@ pub async fn studio_watch_register<R: Runtime>(
     watcher
         .watch(&root, RecursiveMode::Recursive)
         .map_err(|error| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "Failed to watch instance directory: {error}"
             )))
         })?;
 
     let mut watchers = state.watchers.lock().map_err(|_| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "Studio watcher state is unavailable".to_string(),
         ))
     })?;
@@ -290,7 +290,7 @@ pub fn studio_watch_unregister(
     registration_id: String,
 ) -> Result<()> {
     let mut watchers = state.watchers.lock().map_err(|_| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "Studio watcher state is unavailable".to_string(),
         ))
     })?;
@@ -315,7 +315,7 @@ pub async fn file_read_dragged_file(
 ) -> Result<tauri::ipc::Response> {
     let metadata = tokio::fs::metadata(&path).await?;
     if !metadata.is_file() {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "Dropped path is not a file".to_string(),
         ))
         .into());
@@ -341,7 +341,7 @@ pub async fn screenshot_thumbnail(
         tokio::fs::canonicalize(base.join(file_path)).await?;
     let canonical_base = tokio::fs::canonicalize(&base).await?;
     if !canonical_source.starts_with(&canonical_base) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "file_path escapes the instance directory".to_string(),
         ))
         .into());
@@ -356,7 +356,7 @@ pub async fn screenshot_thumbnail(
         max_dimension,
     };
     let _permit = SCREENSHOT_DECODER.acquire().await.map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(error.to_string()))
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(error.to_string()))
     })?;
     if let Ok(mut cache) = SCREENSHOT_THUMBNAILS.lock()
         && let Some(index) = cache.iter().position(|(cached, _)| cached == &key)
@@ -410,7 +410,7 @@ pub async fn screenshot_thumbnail(
     })
     .await
     .map_err(|e| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Screenshot thumbnail task failed: {e}"
         )))
     })??;
@@ -533,13 +533,13 @@ pub(crate) async fn local_instance_icon_path(
             )
             .await
             .map_err(|error| {
-                theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+                mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                     "Instance icon thumbnail task failed: {error}"
                 )))
             })??;
 
             let cached_path =
-                theseus::instance::cache_icon(cache_name, processed).await?;
+                mctrin::instance::cache_icon(cache_name, processed).await?;
             Ok(Some(cached_path))
         }
         .await;
@@ -572,8 +572,8 @@ pub async fn instance_icon_thumbnail(
     local_instance_icon_path(instance_id, max_dimension).await
 }
 
-fn thumbnail_error(error: image::ImageError) -> theseus::Error {
-    theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+fn thumbnail_error(error: image::ImageError) -> mctrin::Error {
+    mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
         "Failed to process screenshot: {error}"
     )))
 }
@@ -590,7 +590,7 @@ pub async fn file_extract_zip(
     let canonical_zip = tokio::fs::canonicalize(&zip_path).await?;
     let canonical_base = tokio::fs::canonicalize(&base).await?;
     if !canonical_zip.starts_with(&canonical_base) {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "file_path escapes the instance directory".to_string(),
         ))
         .into());
@@ -604,7 +604,7 @@ pub async fn file_extract_zip(
     let reader = Cursor::new(file_bytes);
 
     let zip_reader = ZipFileReader::with_tokio(reader).await.map_err(|e| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to read zip file: {e}"
         )))
     })?;
@@ -670,7 +670,7 @@ pub async fn file_extract_zip(
         let mut file_bytes = Vec::new();
         let mut entry_reader =
             zip_reader.reader_with_entry(*index).await.map_err(|e| {
-                theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+                mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                     "Failed to read zip entry: {e}"
                 )))
             })?;
@@ -678,7 +678,7 @@ pub async fn file_extract_zip(
             .read_to_end_checked(&mut file_bytes)
             .await
             .map_err(|e| {
-                theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+                mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                     "Failed to extract zip entry: {e}"
                 )))
             })?;
@@ -713,7 +713,7 @@ pub async fn file_save_as<R: Runtime>(
 
     if let Some(dest) = rx.await.unwrap_or(None) {
         let dest_path = std::path::PathBuf::try_from(dest).map_err(|e| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "Invalid save path: {e}"
             )))
         })?;

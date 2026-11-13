@@ -29,7 +29,7 @@ export type SeedMapHistoryDraft = {
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
-export const SEED_MAP_HISTORY_KEY = 'axolotl.lab.seed-map.history.v1'
+export const SEED_MAP_HISTORY_KEY = 'mctrin.lab.seed-map.history.v1'
 export const SEED_MAP_HISTORY_LIMIT = 60
 
 const SOURCES: readonly SeedMapHistorySource[] = ['manual', 'random', 'instance', 'share']

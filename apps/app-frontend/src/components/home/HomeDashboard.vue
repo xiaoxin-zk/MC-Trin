@@ -56,7 +56,6 @@ import HomeCalendar from '@/components/home/HomeCalendar.vue'
 import HomeGreeting from '@/components/home/HomeGreeting.vue'
 import HomeGreetingSettingsModal from '@/components/home/HomeGreetingSettingsModal.vue'
 import HomePinnedInstances from '@/components/home/HomePinnedInstances.vue'
-import HomePinnedServers from '@/components/home/HomePinnedServers.vue'
 import HomePinnedWorlds from '@/components/home/HomePinnedWorlds.vue'
 import HomeRecentWorlds from '@/components/home/HomeRecentWorlds.vue'
 import HomeShortcutWidget from '@/components/home/HomeShortcutWidget.vue'
@@ -673,12 +672,6 @@ defineExpose({ openWidgetPicker, setLayout })
                             />
                             <HomePinnedWorlds
                                 v-else-if="widget.kind === 'pinned-worlds'"
-                                :instances="instances"
-                                :dashboard-size="effectiveSize(widget)"
-                                dashboard
-                            />
-                            <HomePinnedServers
-                                v-else-if="widget.kind === 'pinned-servers'"
                                 :instances="instances"
                                 :dashboard-size="effectiveSize(widget)"
                                 dashboard

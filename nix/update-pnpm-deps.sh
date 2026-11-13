@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Recompute the `pnpmDeps` fixed-output hash in nix/axolotl.nix from the current
+# Recompute the `pnpmDeps` fixed-output hash in nix/mctrin.nix from the current
 # pnpm lockfile. Run it from the repository root, e.g.
 # `nix develop . --command update-pnpm-deps`.
 set -euo pipefail
 
 readonly repository_root="$PWD"
-readonly target="$repository_root/nix/axolotl.nix"
-readonly pnpm_deps_pattern='-axolotl-pnpm-deps\.drv$'
+readonly target="$repository_root/nix/mctrin.nix"
+readonly pnpm_deps_pattern='-mctrin-pnpm-deps\.drv$'
 
 if [[ ! -f "$target" ]]; then
-  echo "error: run update-pnpm-deps from the Axolotl repository root" >&2
+  echo "error: run update-pnpm-deps from the MC-Trin repository root" >&2
   exit 1
 fi
 
@@ -18,8 +18,8 @@ trap 'rm -f "$build_log"' EXIT
 
 # Instantiate the launcher once and pick the pnpm dependency derivation out of
 # its derivation closure, so only that fixed-output derivation gets built.
-wrapper_drv="$(nix eval --raw --accept-flake-config "$repository_root#axolotl-launcher.drvPath")" || {
-  echo "error: cannot evaluate ${repository_root}#axolotl-launcher.drvPath" >&2
+wrapper_drv="$(nix eval --raw --accept-flake-config "$repository_root#mctrin-launcher.drvPath")" || {
+  echo "error: cannot evaluate ${repository_root}#mctrin-launcher.drvPath" >&2
   exit 1
 }
 

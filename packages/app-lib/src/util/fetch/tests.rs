@@ -3192,7 +3192,7 @@ fn redirect_hops_rebuild_the_same_range_header() {
 #[tokio::test]
 async fn verifies_streaming_integrity_algorithms() {
     let file = tempfile::NamedTempFile::new().unwrap();
-    std::fs::write(file.path(), b"axolotl download").unwrap();
+    std::fs::write(file.path(), b"mctrin download").unwrap();
     let integrity = Integrity {
 			size: Some(16),
 			sha1: Some("90e438ead880c77ea2d7e726b5aa74e6d21a805f".to_string()),

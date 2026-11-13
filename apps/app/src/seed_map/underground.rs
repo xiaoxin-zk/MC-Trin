@@ -157,7 +157,7 @@ pub fn generate_volume(request: VolumeRequest) -> io::Result<Vec<u8>> {
             let x = request.x + cx * 16;
             let z = request.z + cz * 16;
             let status = unsafe {
-                super::axolotl_seed_map_underground_volume(
+                super::mctrin_seed_map_underground_volume(
                     parse_seed(&request.seed),
                     mc,
                     request.edition.generator_flags(),
@@ -285,7 +285,7 @@ fn generate_chunk(
     let mut data = vec![0_u8; 18 * 18 * height as usize];
     let mut heights = vec![0_i32; 18 * 18];
     let status = unsafe {
-        super::axolotl_seed_map_underground_chunk(
+        super::mctrin_seed_map_underground_chunk(
             parse_seed(&request.seed),
             mc,
             request.edition.generator_flags(),

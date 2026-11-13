@@ -484,8 +484,8 @@ it('keeps selected marker names above overlapping markers and clips long names w
 })
 
 beforeEach(() => {
-    localStorage.removeItem('axolotl.lab.seed-map.v1')
-    localStorage.removeItem('axolotl.lab.seed-map.history.v1')
+    localStorage.removeItem('mctrin.lab.seed-map.v1')
+    localStorage.removeItem('mctrin.lab.seed-map.history.v1')
     backend.tiles = []
     backend.spawns = []
     backend.features.mockReset().mockResolvedValue([])
@@ -506,7 +506,7 @@ it.each([-2, 0, 0.5])(
     'opens a saved workspace at zoom %s without reading uninitialized layout dependencies',
     async (zoom) => {
         localStorage.setItem(
-            'axolotl.lab.seed-map.v1',
+            'mctrin.lab.seed-map.v1',
             JSON.stringify({ ...createDefaultSeedMapWorkspace(), zoom }),
         )
         const { vm } = await openMap()
@@ -517,7 +517,7 @@ it.each([-2, 0, 0.5])(
 
 it('can leave a close-zoom map with pending work and navigate back through the app transition shell', async () => {
     localStorage.setItem(
-        'axolotl.lab.seed-map.v1',
+        'mctrin.lab.seed-map.v1',
         JSON.stringify({ ...createDefaultSeedMapWorkspace(), zoom: 0 }),
     )
     const errors: unknown[] = []
@@ -671,10 +671,10 @@ it('automatically paints visible layouts without a selection, shares requests wi
         () => expect(wrapper!.get('aside canvas').attributes('data-ready')).toBe('true'),
         { timeout: 10000 },
     )
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper!.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-split-desktop.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-split-desktop.png`,
         })
     ;(wrapper!.element as HTMLElement).style.width = '650px'
     await vi.waitFor(() => expect(wrapper!.find('[role="separator"]').exists()).toBe(false))
@@ -682,10 +682,10 @@ it('automatically paints visible layouts without a selection, shares requests wi
     expect(mapRegion.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         wrapper!.get('aside').element.getBoundingClientRect().top + 1,
     )
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper!.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-split-narrow.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-split-narrow.png`,
         })
     await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
     expect(vm.selection).toBeNull()
@@ -915,7 +915,7 @@ it('leaves underground mode when the selected dimension no longer supports 3D ge
 
 it('restores a saved underground workspace directly into 3D after profiles load without generating 2D tiles', async () => {
     localStorage.setItem(
-        'axolotl.lab.seed-map.v1',
+        'mctrin.lab.seed-map.v1',
         JSON.stringify({ ...createDefaultSeedMapWorkspace(), displayMode: 'underground' }),
     )
     wrapper = mount(LabSeedMap, {

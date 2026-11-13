@@ -50,7 +50,6 @@ import {
 } from '@/components/instance/studio/useStudioDocuments'
 import { type StudioTreeNode, useStudioTree } from '@/components/instance/studio/useStudioTree'
 import { useStudioWatcher } from '@/components/instance/studio/useStudioWatcher'
-import type { ServerView } from '@/composables/useServers'
 import { get_full_path } from '@/helpers/instance'
 import {
     listenStudioFilesChanged,
@@ -66,7 +65,6 @@ import { highlightInFolder, openPath } from '@/helpers/utils'
 
 const props = defineProps<{
     instance?: GameInstance
-    server?: ServerView
 }>()
 
 const messages = defineMessages({
@@ -279,14 +277,6 @@ async function writeBinary(path: string, bytes: Uint8Array): Promise<void> {
 }
 
 function exitStudio() {
-    if (props.server) {
-        void router.push({
-            name: 'MultiplayerServerDetail',
-            params: { id: props.server.id },
-            query: { tab: 'files' },
-        })
-        return
-    }
     if (props.instance) {
         void router.push({ name: 'Files', params: { id: props.instance.id } })
     }
@@ -543,7 +533,6 @@ const studioWatcher = useStudioWatcher(
     (error) => console.warn('Failed to watch Studio files', error),
 )
 function startStudioWatcher() {
-    if (props.server) return studioWatcher.start({ kind: 'workspace', path: instanceRoot.value })
     if (props.instance) return studioWatcher.start({ kind: 'instance', id: props.instance.id })
     return studioWatcher.stop()
 }
@@ -703,12 +692,11 @@ let initializationGeneration = 0
 onScopeDispose(() => initializationGeneration++)
 async function initialize() {
     const generation = ++initializationGeneration
-    const serverPath = props.server?.path
     const instanceId = props.instance?.id
     await studioWatcher.stop()
     if (generation !== initializationGeneration) return false
     resetTree()
-    const root = serverPath ?? (instanceId ? await get_full_path(instanceId) : '')
+    const root = instanceId ? await get_full_path(instanceId) : ''
     if (generation !== initializationGeneration) return false
     instanceRoot.value = root
     resetDocuments()
@@ -720,7 +708,7 @@ async function initialize() {
 if (await initialize()) await startStudioWatcher()
 
 watch(
-    () => props.instance?.id ?? props.server?.id,
+    () => props.instance?.id,
     async () => {
         if (await initialize()) await startStudioWatcher()
     },

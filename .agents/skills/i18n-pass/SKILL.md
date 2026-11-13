@@ -14,4 +14,4 @@ Read the [i18n standard](../../../standards/frontend/INTERNATIONALIZATION.md) an
 5. **Define messages** with `defineMessages` or the repository's existing catalog API and stable, domain-based IDs. Read [the i18n standard](../../../standards/frontend/INTERNATIONALIZATION.md) for ICU and rich-text rules.
 6. **Replace strings in templates** with `formatMessage()` calls, or `<IntlFormatted>` for strings containing links or markup.
 7. **Handle ICU edge cases** — add a space before `}}` if an ICU placeholder ends at a Vue template delimiter boundary.
-8. **Verify** changed UI copy has a localization source and run `pnpm axolotl:i18n-check` when edited files are covered by the check. Run affected package tests. Preserve behavior and avoid unrelated locale changes.
+8. **Verify** changed UI copy has a localization source and run `pnpm mctrin:i18n-check` when edited files are covered by the check. Run affected package tests. Preserve behavior and avoid unrelated locale changes.

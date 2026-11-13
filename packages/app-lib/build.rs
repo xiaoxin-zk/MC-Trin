@@ -3,7 +3,7 @@ use std::process::{Command, exit};
 use std::{env, fs};
 
 /// Build-time opt-in to a private launcher data directory. Read by
-/// `theseus::brand::app_data_dir_identifier`, which appends it to the directory
+/// `mctrin::brand::app_data_dir_identifier`, which appends it to the directory
 /// name.
 const DATA_DIR_SUFFIX_VAR: &str = "MCTRIN_DATA_DIR_SUFFIX";
 /// Previous variable name, still honored so existing `.env` files and CI
@@ -11,7 +11,7 @@ const DATA_DIR_SUFFIX_VAR: &str = "MCTRIN_DATA_DIR_SUFFIX";
 const LEGACY_DATA_DIR_SUFFIX_VAR: &str = "AXOLOTL_DATA_DIR_SUFFIX";
 
 /// Public service defaults for downstream builds that have no `.env`.
-/// Private Modrinth services remain disabled by Axolotl capabilities at runtime.
+/// Private Modrinth services remain disabled by MC-Trin capabilities at runtime.
 const MODRINTH_ENV_DEFAULTS: &[(&str, &str)] = &[
     ("MODRINTH_API_BASE_URL", "https://api.modrinth.com"),
     ("MODRINTH_API_URL", "https://api.modrinth.com/v2/"),
@@ -38,7 +38,7 @@ fn main() {
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
     println!("cargo::rerun-if-changed=java/settings.gradle.kts");
     println!("cargo::rerun-if-changed=java/gradle.properties");
-    println!("cargo::rerun-if-env-changed=AXOLOTL_SKIP_JAVA_TESTS");
+    println!("cargo::rerun-if-env-changed=MCTRIN_SKIP_JAVA_TESTS");
 
     #[cfg(target_os = "windows")]
     if env::var_os("CARGO_FEATURE_TAURI").is_some() {
@@ -82,7 +82,7 @@ fn set_env() {
     // Single source of truth for env!() service URLs. Prefer local .env, then
     // an explicit process-env export, then public defaults. Always emit
     // rustc-env so Cargo does not mix process-env fingerprints with a
-    // different baked value (which marked theseus dirty on every rebuild).
+    // different baked value (which marked mctrin dirty on every rebuild).
     for (name, default) in MODRINTH_ENV_DEFAULTS {
         let value = dotenv_values
             .iter()
@@ -110,7 +110,8 @@ fn set_env() {
                 .ok()
                 .filter(|suffix| !suffix.is_empty())
                 .or_else(|| {
-                    read_dotenv_literal(var_name).filter(|suffix| !suffix.is_empty())
+                    read_dotenv_literal(var_name)
+                        .filter(|suffix| !suffix.is_empty())
                 })
                 .map(|suffix| (var_name, suffix))
         });
@@ -177,9 +178,9 @@ fn newest_mtime(path: &PathBuf) -> Option<std::time::SystemTime> {
 }
 
 fn java_jars_are_fresh(out_dir: &std::path::Path) -> bool {
-    let theseus_jar = out_dir.join("java/libs/theseus.jar");
+    let mctrin_jar = out_dir.join("java/libs/mctrin.jar");
     let authlib_jar = out_dir.join("java/libs/authlib-injector.jar");
-    let Ok(theseus_time) = theseus_jar.metadata().and_then(|m| m.modified())
+    let Ok(mctrin_time) = mctrin_jar.metadata().and_then(|m| m.modified())
     else {
         return false;
     };
@@ -198,18 +199,18 @@ fn java_jars_are_fresh(out_dir: &std::path::Path) -> bool {
     input_paths.iter().all(|input| {
         newest_mtime(input)
             .map(|input_time| {
-                input_time <= theseus_time && input_time <= authlib_time
+                input_time <= mctrin_time && input_time <= authlib_time
             })
             .unwrap_or(true)
     })
 }
 
 fn build_java_jars() {
-    println!("cargo::rerun-if-env-changed=AXOLOTL_BUILD_RESOURCES");
-    if let Some(resources) = env::var_os("AXOLOTL_BUILD_RESOURCES") {
+    println!("cargo::rerun-if-env-changed=MCTRIN_BUILD_RESOURCES");
+    if let Some(resources) = env::var_os("MCTRIN_BUILD_RESOURCES") {
         let resources = PathBuf::from(resources);
         let status = Command::new("node")
-            .arg("scripts/axolotl/prepare-build-resources.mjs")
+            .arg("scripts/mctrin/prepare-build-resources.mjs")
             .arg("--verify")
             .arg("--output")
             .arg(&resources)
@@ -252,7 +253,7 @@ fn build_java_jars() {
     let mut command = Command::new(gradle_path);
     command
         .arg(format!(
-            "-PaxolotlBuildDir={}",
+            "-PmctrinBuildDir={}",
             out_dir.join("java").display()
         ))
         .arg("build")
@@ -262,7 +263,7 @@ fn build_java_jars() {
     // Native Rust tests do not need to execute the Java test suite. Keep the
     // default build strict, while allowing focused Rust test runs to avoid an
     // unrelated Java test-process failure on a developer machine.
-    if env::var("AXOLOTL_SKIP_JAVA_TESTS").as_deref() == Ok("1") {
+    if env::var("MCTRIN_SKIP_JAVA_TESTS").as_deref() == Ok("1") {
         command.arg("-x").arg("test");
     }
 

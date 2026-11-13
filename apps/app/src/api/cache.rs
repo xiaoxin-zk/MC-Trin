@@ -1,6 +1,6 @@
 use crate::api::search_cancellation::{self, SearchCancellation};
-use crate::api::{Result, TheseusSerializableError};
-use theseus::prelude::*;
+use crate::api::{MctrinSerializableError, Result};
+use mctrin::prelude::*;
 
 macro_rules! impl_cache_methods {
     ($(($variant:ident, $type:ty)),*) => {
@@ -9,7 +9,7 @@ macro_rules! impl_cache_methods {
                 #[tauri::command]
                 pub async fn [<get_ $variant:snake>](id: &str, cache_behaviour: Option<CacheBehaviour>) -> Result<Option<$type>>
                 {
-                    Ok(theseus::cache::[<get_ $variant:snake>](id, cache_behaviour).await?)
+                    Ok(mctrin::cache::[<get_ $variant:snake>](id, cache_behaviour).await?)
                 }
 
                 #[tauri::command]
@@ -20,7 +20,7 @@ macro_rules! impl_cache_methods {
                 {
                     let ids = ids.iter().map(|x| &**x).collect::<Vec<&str>>();
                     let entries =
-                        theseus::cache::[<get_ $variant:snake _many>](&*ids, cache_behaviour).await?;
+                        mctrin::cache::[<get_ $variant:snake _many>](&*ids, cache_behaviour).await?;
 
                     Ok(entries)
                 }
@@ -47,14 +47,14 @@ pub async fn get_search_results_v3(
 ) -> Result<Option<SearchResultsV3>> {
     let Some(request_id) = request_id else {
         return Ok(
-            theseus::cache::get_search_results_v3(id, cache_behaviour).await?
+            mctrin::cache::get_search_results_v3(id, cache_behaviour).await?
         );
     };
     let cancellation = SearchCancellation::register(request_id);
 
     tokio::select! {
-        result = theseus::cache::get_search_results_v3(id, cache_behaviour) => Ok(result?),
-        _ = cancellation.cancelled() => Err(TheseusSerializableError::SearchCancelled(
+        result = mctrin::cache::get_search_results_v3(id, cache_behaviour) => Ok(result?),
+        _ = cancellation.cancelled() => Err(MctrinSerializableError::SearchCancelled(
             "Modrinth browse search".to_string(),
         )),
     }
@@ -67,7 +67,7 @@ pub async fn get_search_results_v3_many(
 ) -> Result<Vec<SearchResultsV3>> {
     let ids = ids.iter().map(|x| &**x).collect::<Vec<&str>>();
     Ok(
-        theseus::cache::get_search_results_v3_many(&ids, cache_behaviour)
+        mctrin::cache::get_search_results_v3_many(&ids, cache_behaviour)
             .await?,
     )
 }
@@ -111,7 +111,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[tauri::command]
 pub async fn purge_cache_types(cache_types: Vec<String>) -> Result<()> {
     let cache_types = supported_cache_types(&cache_types);
-    Ok(theseus::cache::purge_cache_types(&cache_types).await?)
+    Ok(mctrin::cache::purge_cache_types(&cache_types).await?)
 }
 
 fn supported_cache_types(cache_types: &[String]) -> Vec<CacheValueType> {
@@ -135,7 +135,7 @@ pub async fn get_project_versions(
     cache_behaviour: Option<CacheBehaviour>,
 ) -> Result<Option<Vec<Version>>> {
     Ok(
-        theseus::cache::get_project_versions(project_id, cache_behaviour)
+        mctrin::cache::get_project_versions(project_id, cache_behaviour)
             .await?,
     )
 }
@@ -143,7 +143,7 @@ pub async fn get_project_versions(
 #[cfg(test)]
 mod tests {
     use super::supported_cache_types;
-    use theseus::prelude::CacheValueType;
+    use mctrin::prelude::CacheValueType;
 
     #[test]
     fn cache_purge_keeps_supported_types_and_ignores_unknown_types() {

@@ -1249,7 +1249,7 @@ mod tests {
             assert_eq!(get_full_path(&instance.id).await.unwrap(), game_dir);
             write_world(&game_dir, 1_900_000_000_000 - index as i64 * 100_000);
             if label == "managed" {
-                // Axolotl's instance timestamp can be newer even when a
+                // MC-Trin's instance timestamp can be newer even when a
                 // linked world has been played more recently through PCL.
                 sqlx::query(
                     "UPDATE instances SET last_played = ? WHERE id = ?",

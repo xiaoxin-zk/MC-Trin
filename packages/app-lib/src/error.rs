@@ -1,4 +1,4 @@
-//! Theseus error type
+//! MC-Trin error type
 use std::sync::Arc;
 
 use crate::util;

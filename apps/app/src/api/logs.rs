@@ -1,11 +1,11 @@
 use crate::api::Result;
 use async_zip::tokio::write::ZipFileWriter;
-use std::path::PathBuf;
-use theseus::logs::LogType;
-use theseus::logs::{
+use mctrin::logs::LogType;
+use mctrin::logs::{
     self, CensoredString, CrashAnalysis, CrashAnalysisAiSettings,
     LatestLogCursor, LogShareSettings, LogShareUploadResponse, Logs, SharedLog,
 };
+use std::path::PathBuf;
 
 /*
 A log is a struct containing the filename string, stdout, and stderr, as follows:
@@ -178,9 +178,9 @@ pub async fn logs_logagent_prepare(
 #[tauri::command]
 pub async fn logs_logagent_model_turn(
     run_id: &str,
-    turn: theseus::ai::chat::ChatTurn,
+    turn: mctrin::ai::chat::ChatTurn,
     on_event: tauri::ipc::Channel<logs::logagent::AnalysisEvent>,
-) -> Result<theseus::ai::chat::ChatMessage> {
+) -> Result<mctrin::ai::chat::ChatMessage> {
     Ok(logs::logagent::model_turn(run_id, turn, |event| {
         let _ = on_event.send(event);
     })
@@ -231,7 +231,7 @@ pub async fn logs_export_crash_context(
     let archive = tokio::fs::File::create(&output_path).await?;
     let mut writer = ZipFileWriter::with_tokio(archive);
     let report = serde_json::to_vec_pretty(&analysis).map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to serialize crash analysis: {error}"
         )))
     })?;

@@ -774,12 +774,12 @@ pub async fn check_java_at_filepath(path: &Path) -> crate::Result<JavaVersion> {
     }
 
     let (_temp, file_path) =
-        get_resource_file!(env "JAVA_JARS_DIR" / "theseus.jar")?;
+        get_resource_file!(env "JAVA_JARS_DIR" / "mctrin.jar")?;
 
     let output = java_environment::command(&java)
         .arg("-cp")
         .arg(file_path)
-        .arg("com.modrinth.theseus.JavaInfo")
+        .arg("com.mctrin.launcher.JavaInfo")
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -14,5 +14,5 @@ Launcher release announcements are bundled with `apps/app-frontend` and shown af
 - Preserve startup dialog priority: initialization errors, first-run onboarding, then the post-update announcement as the final layer; the community announcement layer is currently not implemented. A replayed onboarding tour must not consume a pending post-update announcement.
 - If the announcement schema, categories, fallback behavior, or dialog priority changes, update the catalog types, both announcement display surfaces, and this instruction file together.
 - Keep launcher release notes exclusively in the catalog. Do not create or maintain a separate `UPDATE_LOG.md` file.
-- The GitHub release workflow generates its release body from the matching catalog entry with `scripts/axolotl/create-release-notes.mjs`; a release tag without a catalog entry must fail preflight.
+- The GitHub release workflow generates its release body from the matching catalog entry with `scripts/mctrin/create-release-notes.mjs`; a release tag without a catalog entry must fail preflight.
 - Local development builds expose a preview button in Settings > Updates. Use it to test the real announcement modal without changing onboarding or pending-update state; do not add per-version preview branches.

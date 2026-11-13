@@ -6,7 +6,7 @@ plugins {
     id("com.gradleup.shadow") version "9.2.2"
 }
 
-providers.gradleProperty("axolotlBuildDir").orNull?.let {
+providers.gradleProperty("mctrinBuildDir").orNull?.let {
     layout.buildDirectory.set(file(it))
 }
 
@@ -46,14 +46,14 @@ tasks.jar {
 }
 
 tasks.shadowJar {
-    archiveFileName = "theseus.jar"
+    archiveFileName = "mctrin.jar"
     manifest {
-        attributes["Premain-Class"] = "com.modrinth.theseus.agent.TheseusAgent"
+        attributes["Premain-Class"] = "com.mctrin.launcher.agent.MctrinAgent"
     }
 
     addMultiReleaseAttribute = false
     enableAutoRelocation = true
-    relocationPrefix = "com.modrinth.theseus.shadow"
+    relocationPrefix = "com.mctrin.launcher.shadow"
 }
 
 val authlibInjector by tasks.registering {

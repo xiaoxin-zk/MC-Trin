@@ -1,5 +1,5 @@
 {
-  description = "Axolotl Launcher: Your last launcher.";
+  description = "MC-Trin: a desktop Minecraft Java Edition launcher focused on Simplified Chinese users.";
 
   nixConfig = {
     extra-substituters = [
@@ -33,8 +33,8 @@
           default = pkgs.callPackage ./nix/devShell.nix { inherit inputs; };
         }) legacyPackages;
         packages = builtins.mapAttrs (system: pkgs: rec {
-          default = axolotl-launcher;
-          axolotl-launcher = pkgs.callPackage ./nix/package.nix { inherit inputs; };
+          default = mctrin-launcher;
+          mctrin-launcher = pkgs.callPackage ./nix/package.nix { inherit inputs; };
         }) legacyPackages;
         homeModules = import ./nix/home-module.nix { inherit inputs legacyPackages; };
       }

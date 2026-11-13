@@ -77,11 +77,11 @@ fn blockbench_skin_is_fresh(
 }
 
 fn build_blockbench_skin_editor() {
-    println!("cargo:rerun-if-env-changed=AXOLOTL_BUILD_RESOURCES");
-    if let Some(resources) = std::env::var_os("AXOLOTL_BUILD_RESOURCES") {
+    println!("cargo:rerun-if-env-changed=MCTRIN_BUILD_RESOURCES");
+    if let Some(resources) = std::env::var_os("MCTRIN_BUILD_RESOURCES") {
         run_command(
             Command::new("node")
-                .arg("scripts/axolotl/prepare-build-resources.mjs")
+                .arg("scripts/mctrin/prepare-build-resources.mjs")
                 .arg("--consume")
                 .arg("--output")
                 .arg(&resources)
@@ -97,11 +97,11 @@ fn build_blockbench_skin_editor() {
         return;
     }
 
-    if std::env::var_os("AXOLOTL_SKIP_BLOCKBENCH_BUILD").is_some_and(|value| {
+    if std::env::var_os("MCTRIN_SKIP_BLOCKBENCH_BUILD").is_some_and(|value| {
         !value.is_empty() && value != "0" && value != "false"
     }) {
         println!(
-            "cargo:warning=AXOLOTL_SKIP_BLOCKBENCH_BUILD set; skipping Blockbench skin editor build"
+            "cargo:warning=MCTRIN_SKIP_BLOCKBENCH_BUILD set; skipping Blockbench skin editor build"
         );
         return;
     }
@@ -137,7 +137,7 @@ fn build_blockbench_skin_editor() {
     );
     run_command(
         Command::new("node")
-            .arg("scripts/axolotl/sync-blockbench-skin-editor.mjs")
+            .arg("scripts/mctrin/sync-blockbench-skin-editor.mjs")
             .current_dir("../.."),
         "Blockbench skin editor resource sync",
     );
@@ -208,12 +208,12 @@ fn build_seed_map_engine() {
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
     println!("cargo:rerun-if-changed=vendor/cubiomes");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        println!("cargo:rerun-if-env-changed=AXOLOTL_CUBIOMES_CC");
-        let compiler = std::env::var_os("AXOLOTL_CUBIOMES_CC")
+        println!("cargo:rerun-if-env-changed=MCTRIN_CUBIOMES_CC");
+        let compiler = std::env::var_os("MCTRIN_CUBIOMES_CC")
             .unwrap_or_else(|| "gcc".into());
         let out =
             std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-        let dll = out.join("axolotl-cubiomes.dll");
+        let dll = out.join("mctrin-cubiomes.dll");
         // MinGW's linker cannot create output files under some non-ASCII
         // workspace paths. Link in the system temp directory, then copy the
         // finished DLL to Cargo's output directory.
@@ -269,13 +269,13 @@ fn build_seed_map_engine() {
         let _ = std::fs::remove_file(&compiler_dll);
         let resources = std::path::Path::new("resources/seed-map");
         std::fs::create_dir_all(resources).expect("Create seed map resources");
-        copy_if_changed(&dll, &resources.join("axolotl-cubiomes.dll"));
+        copy_if_changed(&dll, &resources.join("mctrin-cubiomes.dll"));
         copy_if_changed(
             &source.join("LICENSE"),
             &resources.join("LICENSE.cubiomes.txt"),
         );
         println!(
-            "cargo:rustc-env=AXOLOTL_CUBIOMES_BUILD_DLL={}",
+            "cargo:rustc-env=MCTRIN_CUBIOMES_BUILD_DLL={}",
             dll.display()
         );
     } else {
@@ -288,7 +288,7 @@ fn build_seed_map_engine() {
             .flag_if_supported("-fwrapv")
             .flag_if_supported("-std=gnu11")
             .warnings(false)
-            .compile("axolotl-cubiomes");
+            .compile("mctrin-cubiomes");
         println!("cargo:rustc-link-lib=m");
     }
 }
@@ -418,7 +418,7 @@ fn main() {
                     ),
             )
             .plugin(
-                "axolotl-resources",
+                "mctrin-resources",
                 InlinedPlugin::new()
                     .commands(&[
                         "resource_sources",
@@ -1125,41 +1125,6 @@ fn main() {
                         "multiplayer_reset",
                         "multiplayer_get_player_name",
                         "multiplayer_open_hongshi_logs",
-                    ])
-                    .default_permission(
-                        DefaultPermissionRule::AllowAllCommands,
-                    ),
-            )
-            .plugin(
-                "servers",
-                InlinedPlugin::new()
-                    .commands(&[
-                        "servers_list",
-                        "servers_get",
-                        "servers_create",
-                        "servers_update_settings",
-                        "servers_set_icon",
-                        "servers_set_linked_world",
-                        "servers_is_local_address",
-                        "servers_wait_until_ready",
-                        "servers_delete",
-                        "servers_read_file",
-                        "servers_write_file",
-                        "servers_download_file",
-                        "servers_install_forge",
-                        "servers_install_neoforge",
-                        "servers_install_modpack",
-                        "servers_start",
-                        "servers_send_console_input",
-                        "servers_resize_console",
-                        "servers_stop",
-                        "servers_kill",
-                        "servers_kill_port_process",
-                        "servers_port_process",
-                        "servers_get_log_buffer",
-                        "servers_get_log_delta",
-                        "servers_get_console_delta",
-                        "servers_clear_log",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

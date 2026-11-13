@@ -1,4 +1,4 @@
-//! Theseus tag management interface
+//! MC-Trin tag management interface
 use crate::state::{CacheBehaviour, CachedEntry};
 pub use crate::{
     State,

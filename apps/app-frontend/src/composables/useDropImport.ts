@@ -716,11 +716,11 @@ export function useDropImport(options: DropImportOptions) {
             .map((path) => ({ path: path.trim(), mode: 'automatic' as const }))
         if (roots.length === 0) return false
         try {
-            const raw = localStorage.getItem('axolotl-minecraft-directories')
+            const raw = localStorage.getItem('mctrin-minecraft-directories')
             const existing = raw ? JSON.parse(raw) : []
             const merged = [...(Array.isArray(existing) ? existing : []), ...roots]
             const unique = [...new Map(merged.map((root) => [root.path, root])).values()]
-            localStorage.setItem('axolotl-minecraft-directories', JSON.stringify(unique))
+            localStorage.setItem('mctrin-minecraft-directories', JSON.stringify(unique))
             const report = await syncConfiguredDirectLinks(unique)
             dropDebug('gamedir flow: direct-link sync completed', { roots: unique, report })
             if (report.errors.length > 0) {

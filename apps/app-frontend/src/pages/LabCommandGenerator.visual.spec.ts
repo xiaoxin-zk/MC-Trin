@@ -80,7 +80,7 @@ vi.mock('@modrinth/ui', async () => {
 
 const wrappers: Array<{ unmount: () => void }> = []
 beforeEach(() => {
-    localStorage.removeItem('axolotl:command-generator:user-presets')
+    localStorage.removeItem('mctrin:command-generator:user-presets')
     config.global.directives.tooltip = () => {}
 })
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()))

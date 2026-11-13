@@ -2,7 +2,7 @@
 //!
 //! HMCL and PCL auto-download missing libraries, assets, and logging configs
 //! into their `.minecraft` before launching. A directly associated instance
-//! shares that folder with those launchers, so Axolotl completes the same
+//! shares that folder with those launchers, so MC-Trin completes the same
 //! files in the same places before building the launch command:
 //!
 //! - `libraries/<maven path>` — classpath jars and native classifier jars;
@@ -13,7 +13,7 @@
 //! resources are ever created. Version JSONs (`versions/**/*.json`),
 //! launcher-private configuration (`PCL/`, `.hmcl/`), and game data (mods,
 //! config, saves, resourcepacks, options.txt, ...) are never written; native
-//! extraction continues to happen inside Axolotl's own cache.
+//! extraction continues to happen inside MC-Trin's own cache.
 //!
 //! Every download streams to a sibling `.part` file, verifies its declared
 //! SHA1, and is renamed into place atomically (see `download_to_path`), so a
@@ -1248,7 +1248,7 @@ mod tests {
             "rules": [{"action": "allow", "features": {"is_demo_user": true}}],
             "downloads": {"artifact": {"path": "b/1/b-1.jar", "sha1": "", "size": 0, "url": ""}}
         }));
-        // The demo-user feature never applies to an ordinary launch (Axolotl
+        // The demo-user feature never applies to an ordinary launch (MC-Trin
         // never requests it), so the entry point must not produce a plan for
         // it; the empty declared URL would otherwise fail URL resolution for
         // a library that should have been skipped.
@@ -2049,7 +2049,7 @@ mod tests {
 
         // Native extraction consumes the ensured classifier jar, like on any
         // normal launch.
-        let target = root.path().join("axolotl-cache");
+        let target = root.path().join("mctrin-cache");
         extract_linked_natives(
             &direct,
             std::slice::from_ref(&library),

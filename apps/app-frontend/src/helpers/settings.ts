@@ -1,5 +1,5 @@
 /**
- * All theseus API calls return serialized values (both return values and errors);
+ * All mctrin API calls return serialized values (both return values and errors);
  * So, for example, addDefaultInstance creates a blank instance object, where the Rust struct is serialized,
  *  and deserialized into a usable JS object.
  */
@@ -108,8 +108,8 @@ export async function setUpdatePreferences(preferences: UpdatePreferences): Prom
 export type BrowseContentSource =
     'all' | 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft'
 
-const BROWSE_CONTENT_SOURCE_STORAGE_KEY = 'axolotl-browse-content-source'
-const BROWSE_DEFAULT_INSTANCE_STORAGE_KEY = 'axolotl-browse-default-instance'
+const BROWSE_CONTENT_SOURCE_STORAGE_KEY = 'mctrin-browse-content-source'
+const BROWSE_DEFAULT_INSTANCE_STORAGE_KEY = 'mctrin-browse-default-instance'
 
 export function getLastBrowseContentSource(): BrowseContentSource | null {
     const value = localStorage.getItem(BROWSE_CONTENT_SOURCE_STORAGE_KEY)

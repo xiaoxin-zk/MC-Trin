@@ -212,7 +212,7 @@ pub(super) async fn run_request(
                 },
                 // TODO(B2): apply overrides to launcher-specific importers
                 // (MultiMC/Prism/ATLauncher/GDLauncher/Curseforge/ModrinthApp);
-                // generic/PCL/HMCL/Axolotl paths already consume them.
+                // generic/PCL/HMCL/MC-Trin paths already consume them.
                 InstallProgressReporter::new(job_id, job_state.clone()),
                 symlink,
             )

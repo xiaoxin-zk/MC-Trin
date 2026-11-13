@@ -908,7 +908,7 @@ fn installer_parser_merges_profile_and_embedded_artifacts() {
         library.name == "example:generated:1.0" && !library.downloadable
     }));
     let data = parsed.profile.data.unwrap();
-    assert!(data["BINPATCH"].client.starts_with("[com.axolotl."));
+    assert!(data["BINPATCH"].client.starts_with("[com.mctrin."));
     assert_eq!(
         data[INSTALLER_URL_KEY].client,
         "https://example.com/installer.jar"

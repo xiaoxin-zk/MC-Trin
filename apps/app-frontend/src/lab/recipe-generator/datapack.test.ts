@@ -23,7 +23,7 @@ test('creates pack.mcmeta with legacy and ranged pack formats', () => {
 test('creates a datapack file name with a timestamp', () => {
     assert.equal(
         createDatapackFileName('1.21', new Date('2026-01-02T03:04:05')),
-        'axolotl-recipes-1.21-20260102-030405.zip',
+        'mctrin-recipes-1.21-20260102-030405.zip',
     )
 })
 

@@ -1,8 +1,8 @@
 # `@modrinth/assets`
 
-This package contains various assets used across Axolotl, including icons, images, and branding materials.
+This package contains various assets used across MC-Trin, including icons, images, and branding materials.
 
-Axolotl uses the [Lucide icon set](https://lucide.dev/) for its icons, which are automatically imported and exported in the `index.ts` file. This file is generated through the `pnpm run fix` command, which also ensures that all icons are consistent and correctly formatted.
+MC-Trin uses the [Lucide icon set](https://lucide.dev/) for its icons, which are automatically imported and exported in the `index.ts` file. This file is generated through the `pnpm run fix` command, which also ensures that all icons are consistent and correctly formatted.
 
 ## Adding New Assets
 

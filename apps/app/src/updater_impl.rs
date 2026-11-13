@@ -1,5 +1,6 @@
 use crate::api::Result;
 use futures::StreamExt;
+use mctrin::{LoadingBarType, emit_loading, init_loading, launcher_user_agent};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -9,9 +10,6 @@ use tauri::{Manager, ResourceId, Runtime, Webview};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_http::reqwest::ClientBuilder;
 use tauri_plugin_updater::{Error, Update, UpdaterExt};
-use theseus::{
-    LoadingBarType, emit_loading, init_loading, launcher_user_agent,
-};
 use tokio::time::Instant;
 use url::Url;
 
@@ -76,7 +74,7 @@ fn apt_deb_arch() -> Result<&'static str> {
     match std::env::consts::ARCH {
         "x86_64" => Ok("amd64"),
         "aarch64" => Ok("arm64"),
-        arch => Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        arch => Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             format!("Unsupported architecture for apt updates: {arch}"),
         ))
         .into()),
@@ -115,7 +113,7 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
         .find(|asset| asset.name.contains(version))
         .or_else(|| candidates.first())
         .ok_or_else(|| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "The GitHub release has no .deb asset for {version} ({arch})"
             )))
         })?;
@@ -126,14 +124,14 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
         .and_then(|digest| digest.strip_prefix("sha256:"))
         .map(str::to_owned)
         .ok_or_else(|| {
-            theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+            mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                 "The GitHub release has no sha256 digest for {}",
                 asset.name
             )))
         })?;
 
     let url = Url::parse(&asset.browser_download_url).map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Invalid download URL for {}: {error}",
             asset.name
         )))
@@ -156,16 +154,16 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
 fn update_channel(channel: &str) -> Result<&str> {
     match channel {
         "release" | "beta" => Ok(channel),
-        _ => Err(theseus::Error::from(theseus::ErrorKind::OtherError(
-            format!("Unknown update channel: {channel}"),
-        ))
+        _ => Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
+            "Unknown update channel: {channel}"
+        )))
         .into()),
     }
 }
 
 fn update_endpoint() -> Result<Url> {
     Url::parse(UPDATE_MANIFEST_URL).map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(error.to_string()))
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(error.to_string()))
             .into()
     })
 }
@@ -187,13 +185,13 @@ async fn check_with_endpoints<R: Runtime>(
     let updater = {
         let install_dir = std::env::current_exe()
             .map_err(|error| {
-                theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+                mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
                     "Failed to resolve current executable: {error}"
                 )))
             })?
             .parent()
             .ok_or_else(|| {
-                theseus::Error::from(theseus::ErrorKind::OtherError(
+                mctrin::Error::from(mctrin::ErrorKind::OtherError(
                     "Current executable has no parent directory".to_string(),
                 ))
             })?
@@ -389,7 +387,7 @@ pub async fn enqueue_update_for_installation<R: Runtime>(
         }
 
         if buffer.len() as u64 != asset.size {
-            return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+            return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
                 format!(
                     "Downloaded deb size mismatch: expected {}, got {}",
                     asset.size,
@@ -405,7 +403,7 @@ pub async fn enqueue_update_for_installation<R: Runtime>(
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         if digest_hex != asset.sha256 {
-            return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+            return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
                 "Downloaded deb sha256 mismatch".to_string(),
             ))
             .into());
@@ -453,7 +451,7 @@ pub fn remove_enqueued_update<R: Runtime>(webview: Webview<R>) {
 
 // ── Debian / derivatives apt update ─────────────────────────────
 
-/// Whether this Linux system updates Axolotl through apt (Debian and its
+/// Whether this Linux system updates MC-Trin through apt (Debian and its
 /// derivatives) and has `pkexec` available for a single privileged prompt.
 #[tauri::command]
 pub fn is_apt_linux() -> bool {
@@ -478,7 +476,7 @@ pub fn is_apt_linux() -> bool {
 /// of a temporary file, which is removed afterwards.
 pub async fn install_apt_package(version: &str, data: &[u8]) -> Result<()> {
     if !is_apt_linux() {
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             "apt updates are only supported on Debian-based Linux systems with pkexec"
                 .to_string(),
         ))
@@ -489,7 +487,7 @@ pub async fn install_apt_package(version: &str, data: &[u8]) -> Result<()> {
     let deb_path =
         std::env::temp_dir().join(format!("MC-Trin_{version}_{arch}.deb"));
     std::fs::write(&deb_path, data).map_err(|io| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to write the downloaded deb: {io}"
         )))
     })?;
@@ -506,19 +504,19 @@ pub async fn install_apt_package(version: &str, data: &[u8]) -> Result<()> {
     })
     .await
     .map_err(|join| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to run the apt updater: {join}"
         )))
     })?
     .map_err(|io| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to start pkexec: {io}"
         )))
     })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::OtherError(
             format!("apt install failed: {}", stderr.trim()),
         ))
         .into());

@@ -536,8 +536,8 @@ pub(crate) const DOWNLOAD_DNS_NO_USABLE_DOH_ADDRESS_FAMILY_BEFORE_DEADLINE:
 pub(crate) const DOWNLOAD_DNS_SYSTEM_CANDIDATE_DNS_LOOKUP_TIMED_OUT: &str =
     "System candidate DNS lookup timed out";
 pub const DOWNLOAD_META_HEADER: &str = "modrinth-download-meta";
-pub(crate) const ENDPOINT_CATALOG_ENV: &str = "AXOLOTL_MODRINTH_CATALOG";
-pub(crate) const ENDPOINT_SELECTION_ENV: &str = "AXOLOTL_MODRINTH_IP_SELECTION";
+pub(crate) const ENDPOINT_CATALOG_ENV: &str = "MCTRIN_MODRINTH_CATALOG";
+pub(crate) const ENDPOINT_SELECTION_ENV: &str = "MCTRIN_MODRINTH_IP_SELECTION";
 pub(crate) const ENDPOINT_STORE_FILE_NAME: &str =
     "modrinth-endpoint-hints.json";
 pub(crate) const FASTLY_KNOWN_CNAME: &str = "72b69f.atlas.fastly.net";
@@ -547,7 +547,7 @@ pub(crate) const FETCH_ALIYUN: &str = "aliyun";
 pub(crate) const FETCH_ALTERNATE: &str = "alternate";
 pub(crate) const FETCH_API: &str = "API";
 pub(crate) const FETCH_AUTHORIZATION: &str = "authorization";
-pub(crate) const FETCH_AXOLOTL_RETRY: &str = "axolotl_retry";
+pub(crate) const FETCH_MCTRIN_RETRY: &str = "axolotl_retry";
 pub(crate) const FETCH_BMCLAPI: &str = "bmclapi";
 pub(crate) const FETCH_BMCLAPI2_BANGBANG93_COM: &str =
     "bmclapi2.bangbang93.com";
@@ -683,7 +683,7 @@ pub(crate) const FETCH_V3_FRIEND: &str = "/v3/friend/";
 pub(crate) const FETCH_V3_FRIENDS: &str = "/v3/friends";
 pub(crate) const FETCH_V3_NOTIFICATION: &str = "/v3/notification";
 pub(crate) const H2_DOWNLOAD_ASSET: &str = "asset";
-pub(crate) const H2_DOWNLOAD_AXOLOTL_LAUNCHER: &str = "MC-Trin";
+pub(crate) const H2_DOWNLOAD_MCTRIN_LAUNCHER: &str = "MC-Trin";
 pub(crate) const H2_DOWNLOAD_BELOW_EXPECTATION: &str = "below expectation";
 pub(crate) const H2_DOWNLOAD_BYTES_0_0: &str = "bytes=0-0";
 pub(crate) const H2_DOWNLOAD_CONTENT_RANGE: &str = "Content-Range";

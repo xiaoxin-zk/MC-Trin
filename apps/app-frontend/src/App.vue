@@ -640,7 +640,7 @@ function handleDirectLinkSyncReport(event: Event) {
 function startDirectLinkSync() {
     const readRoots = () => {
         try {
-            const parsed = JSON.parse(localStorage.getItem('axolotl-minecraft-directories') ?? '[]')
+            const parsed = JSON.parse(localStorage.getItem('mctrin-minecraft-directories') ?? '[]')
             return Array.isArray(parsed)
                 ? parsed.flatMap((value) => {
                       if (typeof value === 'string' && value.trim()) {
@@ -2609,8 +2609,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         :class="{
             'navigation-expanded': navigationExpanded,
             'sidebar-enabled': sidebarVisible,
-            'studio-mode':
-                route.name === 'FileStudio' || route.name === 'MultiplayerServerFileStudio',
+            'studio-mode': route.name === 'FileStudio',
             'disable-advanced-rendering': !themeStore.advancedRendering,
             'has-custom-background':
                 themeStore.customBackgroundPath && !themeStore.transparentBackground,

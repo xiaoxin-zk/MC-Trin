@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::api::Result;
-use theseus::pack::import::{ImportLauncherType, ImportableInstance};
+use mctrin::pack::import::{ImportLauncherType, ImportableInstance};
 
-use theseus::pack::import;
+use mctrin::pack::import;
 
 const IMPORT_SCAN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const IMPORT_VALIDATION_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -32,7 +32,7 @@ pub async fn get_importable_instances(
     )
     .await
     .map_err(|_| {
-        theseus::Error::from(theseus::ErrorKind::InputError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::InputError(format!(
             "Launcher instance scan timed out after {} minutes",
             IMPORT_SCAN_TIMEOUT.as_secs() / 60
         )))
@@ -52,7 +52,7 @@ pub async fn is_valid_importable_instance(
     )
     .await
     .map_err(|_| {
-        theseus::Error::from(theseus::ErrorKind::InputError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::InputError(format!(
             "Launcher instance validation timed out after {} minutes",
             IMPORT_VALIDATION_TIMEOUT.as_secs() / 60
         )))

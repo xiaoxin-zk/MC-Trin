@@ -1,6 +1,6 @@
 //! Managed dedicated Minecraft servers: manifests, downloads, and process control.
 //! Each server lives in its own directory under the launcher's `servers` folder
-//! and is described by an `axolotl-server.json` manifest.
+//! and is described by an `mctrin-server.json` manifest.
 
 mod console;
 mod fabric;

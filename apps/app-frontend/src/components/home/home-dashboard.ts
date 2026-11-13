@@ -34,7 +34,6 @@ export type HomeWidgetKind =
     | 'calendar'
     | 'pinned-instances'
     | 'pinned-worlds'
-    | 'pinned-servers'
     | 'instance'
     | 'world'
     | 'server'
@@ -103,7 +102,6 @@ export const HOME_WIDGET_SIZE_OPTIONS: Record<HomeWidgetKind, readonly HomeWidge
     calendar: ['1x2'],
     'pinned-instances': HOME_WIDGET_STANDARD_SIZES,
     'pinned-worlds': HOME_WIDGET_STANDARD_SIZES,
-    'pinned-servers': HOME_WIDGET_STANDARD_SIZES,
     instance: ['1x1', '2x1'],
     world: ['1x1', '2x1'],
     server: ['1x1', '2x1'],
@@ -115,7 +113,6 @@ export const HOME_WIDGET_DEFAULT_SIZE: Record<HomeWidgetKind, HomeWidgetSize> = 
     calendar: '1x2',
     'pinned-instances': '2x2',
     'pinned-worlds': '1x2',
-    'pinned-servers': '1x2',
     instance: '1x1',
     world: '1x1',
     server: '1x1',
@@ -166,7 +163,6 @@ export function createDefaultHomeDashboard(includeRecent = true): HomeDashboardC
             createPlacement('calendar'),
             ...(includeRecent ? [createPlacement('recent')] : []),
             createPlacement('pinned-worlds'),
-            createPlacement('pinned-servers', '2x2'),
             createPlacement('pinned-instances', '2x1'),
         ],
     }

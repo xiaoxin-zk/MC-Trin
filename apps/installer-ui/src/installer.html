@@ -1313,7 +1313,7 @@
             </section>
         </main>
         <script>
-            const boot = window.__AXOLOTL_INSTALLER__ || {
+            const boot = window.__MCTRIN_INSTALLER__ || {
                 language: 'zhCn',
                 version: 'v2.0.0 (Preview)',
                 logoDataUrl: '../../app/icons/128x128.png',
@@ -1551,7 +1551,7 @@
             // so a later change of folder must be able to clear it. Once the
             // user has touched it, the choice is theirs and is left alone.
             let portableTouched = false
-            // Mirrors AxlDetectPortableLayout in installer.nsi step for step,
+            // Mirrors MctrinDetectPortableLayout in installer.nsi step for step,
             // so the preview and the submitted folder are spelled the same way
             // the detector will read them back: forward slashes are folded to
             // backslashes, then trailing separators are dropped. Interior
@@ -1724,7 +1724,7 @@
                 state.failed = false
                 state.launchFailed = false
                 if (boot.uninstall) {
-                    window.axolotlInstaller.receive({ type: 'installStarted' })
+                    window.mctrinInstaller.receive({ type: 'installStarted' })
                     state.launchAfter = false
                     post({ command: 'uninstall', deleteAppData: $('#delete-app-data').checked })
                     return
@@ -1739,16 +1739,16 @@
                 })
 
                 // Developer Preview Mock
-                if (!window.__AXOLOTL_INSTALLER__) {
-                    window.axolotlInstaller.receive({ type: 'installStarted' })
+                if (!window.__MCTRIN_INSTALLER__) {
+                    window.mctrinInstaller.receive({ type: 'installStarted' })
                     let p = 4
                     const timer = setInterval(() => {
                         p += Math.floor(Math.random() * 15) + 5
                         if (p >= 100) {
                             clearInterval(timer)
-                            window.axolotlInstaller.receive({ type: 'installFinished' })
+                            window.mctrinInstaller.receive({ type: 'installFinished' })
                         } else {
-                            window.axolotlInstaller.receive({ type: 'progress', value: p })
+                            window.mctrinInstaller.receive({ type: 'progress', value: p })
                         }
                     }, 600)
                 }
@@ -1809,7 +1809,7 @@
                 boot.uninstall ? post({ command: 'close' }) : setScreen('welcome'),
             )
 
-            window.axolotlInstaller = {
+            window.mctrinInstaller = {
                 receive(message) {
                     if (message.type === 'pathSelected') {
                         const field = $(`#${message.target}-dir`)

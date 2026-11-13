@@ -39,7 +39,7 @@ pub fn temporary_path(
     Ok(output
         .parent()
         .ok_or_else(|| invalid("output has no parent directory"))?
-        .join(format!(".axolotl-export-{id}.tmp")))
+        .join(format!(".mctrin-export-{id}.tmp")))
 }
 
 pub async fn cleanup_partial(

@@ -2,10 +2,10 @@ $ErrorActionPreference = 'Stop'
 $testRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../target/uninstall-verification'))
 $install = Join-Path $testRoot '安装目录 with spaces'
 $status = Join-Path $testRoot 'uninstall.status'
-$bundle = 'red.ghs.axolotl.uninstall-fixture'
+$bundle = 'red.ghs.mctrin.uninstall-fixture'
 $roaming = Join-Path $env:APPDATA $bundle
 $local = Join-Path $env:LOCALAPPDATA $bundle
-$reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Axolotl Uninstall Fixture'
+$reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Mctrin Uninstall Fixture'
 function Run-Core([string]$file, [string]$arguments) {
   $info = [System.Diagnostics.ProcessStartInfo]::new($file, $arguments)
   $info.UseShellExecute = $false
@@ -16,9 +16,9 @@ function Run-Core([string]$file, [string]$arguments) {
 function Install-Fixture {
   $code = Run-Core (Join-Path $testRoot 'setup.exe') ('/S /NO_RUN_AFTER_INSTALL /INSTALL_DIR="' + $install + '"')
   if ($code -ne 0) { throw "Install failed: $code" }
-  if (!(Test-Path (Join-Path $install 'AxolotlUninstallFixture.exe'))) { throw 'Missing main binary' }
+  if (!(Test-Path (Join-Path $install 'MctrinUninstallFixture.exe'))) { throw 'Missing main binary' }
   if (!(Test-Path $reg)) { throw 'Missing uninstall registration' }
-  $script:shortcutPaths = @((Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs/Axolotl Uninstall Fixture.lnk'), (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Axolotl Uninstall Fixture.lnk'))
+  $script:shortcutPaths = @((Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs/Mctrin Uninstall Fixture.lnk'), (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Mctrin Uninstall Fixture.lnk'))
   if (!($script:shortcutPaths | Where-Object { Test-Path $_ })) { throw 'Fixture did not create any shortcuts' }
   Copy-Item (Join-Path $install 'uninstall.exe') (Join-Path $testRoot 'core.exe') -Force
 }
@@ -32,7 +32,7 @@ Set-Content (Join-Path $local 'keep.txt') 'cache'
 Set-Content (Join-Path $install 'unrelated.txt') 'user-owned file'
 $code = Uninstall-Fixture
 if ($code -ne 0 -or (Get-Content $status -Raw) -ne '100') { throw "Uninstall failed: $code, $(Get-Content $status)" }
-if (Test-Path (Join-Path $install 'AxolotlUninstallFixture.exe')) { throw 'Main binary remains' }
+if (Test-Path (Join-Path $install 'MctrinUninstallFixture.exe')) { throw 'Main binary remains' }
 if (Test-Path (Join-Path $install 'resources\resource.txt')) { throw 'Resource remains' }
 if (Test-Path (Join-Path $install 'uninstall.exe')) { throw 'Uninstaller remains' }
 if (Test-Path $reg) { throw 'Registration remains' }
@@ -61,7 +61,7 @@ Write-Output 'PASS: retry succeeds, selected app data removed, junction target p
 # Access denied must behave like any other failed deletion, even when directory creation succeeds.
 Install-Fixture
 $principal = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$mainPath = Join-Path $install 'AxolotlUninstallFixture.exe'
+$mainPath = Join-Path $install 'MctrinUninstallFixture.exe'
 & icacls $mainPath /deny ('*' + $principal + ':(D)') | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Failed to set file permissions for test' }
 & icacls $install /deny ('*' + $principal + ':(DC)') | Out-Null

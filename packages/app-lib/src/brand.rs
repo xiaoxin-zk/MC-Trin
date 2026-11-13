@@ -78,20 +78,20 @@ mod tests {
     #[test]
     fn data_dir_identifier_without_suffix_keeps_the_identifier() {
         assert_eq!(
-            data_dir_identifier("red.ghs.axolotl", None),
-            "red.ghs.axolotl"
+            data_dir_identifier("red.ghs.mctrin", None),
+            "red.ghs.mctrin"
         );
     }
 
     #[test]
     fn data_dir_identifier_appends_a_readable_suffix() {
         for (suffix, expected) in [
-            ("pr538", "red.ghs.axolotl-pr538"),
-            ("fix_issue_538", "red.ghs.axolotl-fix_issue_538"),
-            ("v1.2.3", "red.ghs.axolotl-v1.2.3"),
+            ("pr538", "red.ghs.mctrin-pr538"),
+            ("fix_issue_538", "red.ghs.mctrin-fix_issue_538"),
+            ("v1.2.3", "red.ghs.mctrin-v1.2.3"),
         ] {
             assert_eq!(
-                data_dir_identifier("red.ghs.axolotl", Some(suffix)),
+                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
                 expected,
                 "unexpected identifier for suffix {suffix:?}"
             );
@@ -114,7 +114,7 @@ mod tests {
             "..-.-",
         ] {
             let identifier =
-                data_dir_identifier("red.ghs.axolotl", Some(suffix));
+                data_dir_identifier("red.ghs.mctrin", Some(suffix));
 
             assert!(
                 !identifier.contains(['/', '\\', ':']),
@@ -126,7 +126,7 @@ mod tests {
             );
 
             let remainder = identifier
-                .strip_prefix("red.ghs.axolotl-")
+                .strip_prefix("red.ghs.mctrin-")
                 .map_or(identifier.as_str(), |remainder| remainder);
             assert!(
                 !remainder.is_empty() && remainder != "." && remainder != "..",
@@ -141,8 +141,8 @@ mod tests {
         // one. The identifier always carries the prefix, so it never is.
         for suffix in ["CON", "NUL", "PRN", "AUX", "COM1", "LPT1"] {
             assert_eq!(
-                data_dir_identifier("red.ghs.axolotl", Some(suffix)),
-                format!("red.ghs.axolotl-{suffix}")
+                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
+                format!("red.ghs.mctrin-{suffix}")
             );
         }
     }
@@ -150,18 +150,18 @@ mod tests {
     #[test]
     fn data_dir_identifier_drops_characters_that_are_unsafe_in_a_path() {
         for (suffix, expected) in [
-            ("a b", "red.ghs.axolotl-ab"),
-            ("a:b", "red.ghs.axolotl-ab"),
+            ("a b", "red.ghs.mctrin-ab"),
+            ("a:b", "red.ghs.mctrin-ab"),
             // Fullwidth solidus: not a separator the filesystem honours, but no
             // more welcome in a directory name than any other non-ASCII.
-            ("a\u{ff0f}b", "red.ghs.axolotl-ab"),
+            ("a\u{ff0f}b", "red.ghs.mctrin-ab"),
             // Every non-ASCII character goes, so a suffix typed in another
             // script keeps only its ASCII part - which may be nothing at all.
-            ("版本v2", "red.ghs.axolotl-v2"),
-            ("版本", "red.ghs.axolotl"),
+            ("版本v2", "red.ghs.mctrin-v2"),
+            ("版本", "red.ghs.mctrin"),
         ] {
             assert_eq!(
-                data_dir_identifier("red.ghs.axolotl", Some(suffix)),
+                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
                 expected,
                 "unexpected identifier for suffix {suffix:?}"
             );
@@ -175,8 +175,8 @@ mod tests {
         let suffix = format!("{}abc", ".".repeat(40));
 
         assert_eq!(
-            data_dir_identifier("red.ghs.axolotl", Some(&suffix)),
-            "red.ghs.axolotl-abc"
+            data_dir_identifier("red.ghs.mctrin", Some(&suffix)),
+            "red.ghs.mctrin-abc"
         );
     }
 
@@ -184,8 +184,8 @@ mod tests {
     fn data_dir_identifier_ignores_unusable_suffixes() {
         for suffix in ["", "   ", "..", "--", "///", "..-.-"] {
             assert_eq!(
-                data_dir_identifier("red.ghs.axolotl", Some(suffix)),
-                "red.ghs.axolotl",
+                data_dir_identifier("red.ghs.mctrin", Some(suffix)),
+                "red.ghs.mctrin",
                 "suffix {suffix:?} should have been ignored"
             );
         }
@@ -194,11 +194,11 @@ mod tests {
     #[test]
     fn data_dir_identifier_bounds_the_suffix_length() {
         let identifier =
-            data_dir_identifier("red.ghs.axolotl", Some(&"a".repeat(200)));
+            data_dir_identifier("red.ghs.mctrin", Some(&"a".repeat(200)));
 
         assert_eq!(
             identifier,
-            format!("red.ghs.axolotl-{}", "a".repeat(MAX_DATA_DIR_SUFFIX_LEN))
+            format!("red.ghs.mctrin-{}", "a".repeat(MAX_DATA_DIR_SUFFIX_LEN))
         );
     }
 }

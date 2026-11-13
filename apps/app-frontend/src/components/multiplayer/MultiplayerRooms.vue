@@ -408,8 +408,8 @@ const {
     updateTerracotta,
 } = useMultiplayerSession()
 
-const providerStorageKey = 'axolotl-multiplayer-provider'
-const nodeStorageKey = 'axolotl-hongshi-node'
+const providerStorageKey = 'mctrin-multiplayer-provider'
+const nodeStorageKey = 'mctrin-hongshi-node'
 const route = useRoute()
 const storedProvider =
     typeof route.query.provider === 'string'

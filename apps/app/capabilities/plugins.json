@@ -123,24 +123,6 @@
         },
         {
           "path": "$CONFIG/profiles/**"
-        },
-        {
-          "path": "$APPDATA/servers"
-        },
-        {
-          "path": "$APPDATA/servers/**"
-        },
-        {
-          "path": "$APPCONFIG/servers"
-        },
-        {
-          "path": "$APPCONFIG/servers/**"
-        },
-        {
-          "path": "$CONFIG/servers"
-        },
-        {
-          "path": "$CONFIG/servers/**"
         }
       ]
     },
@@ -158,7 +140,7 @@
     "cache:default",
     "content-search:default",
     "content-favorites:default",
-    "axolotl-resources:default",
+    "mctrin-resources:default",
     "curseforge:default",
     "mcarchive:default",
     "datapacks:default",
@@ -178,7 +160,6 @@
     "drop:default",
     "terracotta:default",
     "multiplayer:default",
-    "servers:default",
     "friends:default",
     "planet-minecraft:default"
   ]

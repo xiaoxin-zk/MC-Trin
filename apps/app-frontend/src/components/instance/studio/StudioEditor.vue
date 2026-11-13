@@ -5,7 +5,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 declare global {
     interface Window {
-        __axolotlMonacoRuntime?: Promise<typeof Monaco>
+        __mctrinMonacoRuntime?: Promise<typeof Monaco>
         require?: {
             config(config: Record<string, unknown>): void
             (dependencies: string[], callback: (monaco: typeof Monaco) => void): void
@@ -56,9 +56,9 @@ function loadCodiconStyles() {
 }
 
 function loadMonaco(): Promise<typeof Monaco> {
-    if (window.__axolotlMonacoRuntime) return window.__axolotlMonacoRuntime
+    if (window.__mctrinMonacoRuntime) return window.__mctrinMonacoRuntime
 
-    window.__axolotlMonacoRuntime = new Promise((resolve, reject) => {
+    window.__mctrinMonacoRuntime = new Promise((resolve, reject) => {
         loadCodiconStyles()
         const initialize = () => {
             const require = window.require
@@ -97,7 +97,7 @@ function loadMonaco(): Promise<typeof Monaco> {
         document.head.append(loader)
     })
 
-    return window.__axolotlMonacoRuntime
+    return window.__mctrinMonacoRuntime
 }
 
 function cssVariable(name: string): string {
@@ -107,7 +107,7 @@ function cssVariable(name: string): string {
 function applyTheme() {
     if (!monaco) return
     const isLight = document.documentElement.classList.contains('light-mode')
-    monaco.editor.defineTheme('axolotl-studio', {
+    monaco.editor.defineTheme('mctrin-studio', {
         base: isLight ? 'vs' : 'vs-dark',
         inherit: true,
         rules: [],
@@ -120,7 +120,7 @@ function applyTheme() {
             'editorCursor.foreground': cssVariable('--color-brand'),
         },
     })
-    monaco.editor.setTheme('axolotl-studio')
+    monaco.editor.setTheme('mctrin-studio')
 }
 
 function registerStudioLanguages() {
@@ -183,7 +183,7 @@ function createModel() {
         props.content,
         props.language,
         monaco.Uri.parse(
-            `axolotl-instance://studio/${props.filePath.split('/').map(encodeURIComponent).join('/')}`,
+            `mctrin-instance://studio/${props.filePath.split('/').map(encodeURIComponent).join('/')}`,
         ),
     )
     editor.setModel(model)
@@ -214,7 +214,7 @@ onMounted(async () => {
         readOnly: props.readOnly,
         renderWhitespace: 'selection',
         scrollBeyondLastLine: false,
-        theme: 'axolotl-studio',
+        theme: 'mctrin-studio',
     })
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => emit('save'))
     editor.onDidBlurEditorWidget(() => emit('blur'))

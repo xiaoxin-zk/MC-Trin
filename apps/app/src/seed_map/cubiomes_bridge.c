@@ -13,13 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static float axolotl_clamp(float value, float low, float high);
+static float mctrin_clamp(float value, float low, float high);
 
 /* Sample coarse Overworld pixels at the centre of their block cell while
  * retaining the same 3D Voronoi surface lookup used by scale=1. Without
  * this, scale=16+ reads the raw noise point directly and can select a
  * different vertical biome layer at tile boundaries. */
-static void axolotl_gen_surface_biomes(
+static void mctrin_gen_surface_biomes(
     int *out,
     const Generator *generator,
     int32_t x,
@@ -42,7 +42,7 @@ static void axolotl_gen_surface_biomes(
     }
 }
 
-static int axolotl_map_approx_height(
+static int mctrin_map_approx_height(
     float *heights,
     const Generator *generator,
     const SurfaceNoise *surface_noise,
@@ -72,71 +72,71 @@ static int axolotl_map_approx_height(
 }
 
 enum {
-    AXOLOTL_FEATURE_VILLAGE = 1 << 0,
-    AXOLOTL_FEATURE_OUTPOST = 1 << 1,
-    AXOLOTL_FEATURE_SHIPWRECK = 1 << 2,
-    AXOLOTL_FEATURE_MONUMENT = 1 << 3,
-    AXOLOTL_FEATURE_MANSION = 1 << 4,
-    AXOLOTL_FEATURE_ANCIENT_CITY = 1 << 5,
-    AXOLOTL_FEATURE_TRAIL_RUINS = 1 << 6,
-    AXOLOTL_FEATURE_TRIAL_CHAMBERS = 1 << 7,
-    AXOLOTL_FEATURE_RUINED_PORTAL = 1 << 8,
-    AXOLOTL_FEATURE_STRONGHOLD = 1 << 9,
-    AXOLOTL_FEATURE_SLIME_CHUNK = 1 << 10,
-    AXOLOTL_FEATURE_DESERT_PYRAMID = 1 << 11,
-    AXOLOTL_FEATURE_JUNGLE_TEMPLE = 1 << 12,
-    AXOLOTL_FEATURE_SWAMP_HUT = 1 << 13,
-    AXOLOTL_FEATURE_IGLOO = 1 << 14,
-    AXOLOTL_FEATURE_OCEAN_RUIN = 1 << 15,
-    AXOLOTL_FEATURE_BURIED_TREASURE = 1 << 16,
-    AXOLOTL_FEATURE_MINESHAFT = 1 << 17,
-    AXOLOTL_FEATURE_DESERT_WELL = 1 << 18,
-    AXOLOTL_FEATURE_GEODE = 1 << 19,
-    AXOLOTL_FEATURE_FORTRESS = 1 << 20,
-    AXOLOTL_FEATURE_BASTION = 1 << 21,
-    AXOLOTL_FEATURE_END_CITY = 1 << 22,
-    AXOLOTL_FEATURE_END_GATEWAY = 1 << 23,
-    AXOLOTL_FEATURE_ABANDONED_CAMP = 1 << 24,
-    AXOLOTL_FEATURE_NETHER_FOSSIL = 1 << 25,
+    MCTRIN_FEATURE_VILLAGE = 1 << 0,
+    MCTRIN_FEATURE_OUTPOST = 1 << 1,
+    MCTRIN_FEATURE_SHIPWRECK = 1 << 2,
+    MCTRIN_FEATURE_MONUMENT = 1 << 3,
+    MCTRIN_FEATURE_MANSION = 1 << 4,
+    MCTRIN_FEATURE_ANCIENT_CITY = 1 << 5,
+    MCTRIN_FEATURE_TRAIL_RUINS = 1 << 6,
+    MCTRIN_FEATURE_TRIAL_CHAMBERS = 1 << 7,
+    MCTRIN_FEATURE_RUINED_PORTAL = 1 << 8,
+    MCTRIN_FEATURE_STRONGHOLD = 1 << 9,
+    MCTRIN_FEATURE_SLIME_CHUNK = 1 << 10,
+    MCTRIN_FEATURE_DESERT_PYRAMID = 1 << 11,
+    MCTRIN_FEATURE_JUNGLE_TEMPLE = 1 << 12,
+    MCTRIN_FEATURE_SWAMP_HUT = 1 << 13,
+    MCTRIN_FEATURE_IGLOO = 1 << 14,
+    MCTRIN_FEATURE_OCEAN_RUIN = 1 << 15,
+    MCTRIN_FEATURE_BURIED_TREASURE = 1 << 16,
+    MCTRIN_FEATURE_MINESHAFT = 1 << 17,
+    MCTRIN_FEATURE_DESERT_WELL = 1 << 18,
+    MCTRIN_FEATURE_GEODE = 1 << 19,
+    MCTRIN_FEATURE_FORTRESS = 1 << 20,
+    MCTRIN_FEATURE_BASTION = 1 << 21,
+    MCTRIN_FEATURE_END_CITY = 1 << 22,
+    MCTRIN_FEATURE_END_GATEWAY = 1 << 23,
+    MCTRIN_FEATURE_ABANDONED_CAMP = 1 << 24,
+    MCTRIN_FEATURE_NETHER_FOSSIL = 1 << 25,
 };
 
-typedef struct AxolotlStructureDefinition {
+typedef struct MctrinStructureDefinition {
     int type;
     uint32_t flag;
-} AxolotlStructureDefinition;
+} MctrinStructureDefinition;
 
-static const AxolotlStructureDefinition AXOLOTL_STRUCTURES[] = {
-    {Village, AXOLOTL_FEATURE_VILLAGE},
-    {Outpost, AXOLOTL_FEATURE_OUTPOST},
-    {Shipwreck, AXOLOTL_FEATURE_SHIPWRECK},
-    {Monument, AXOLOTL_FEATURE_MONUMENT},
-    {Mansion, AXOLOTL_FEATURE_MANSION},
-    {Ancient_City, AXOLOTL_FEATURE_ANCIENT_CITY},
-    {Trail_Ruins, AXOLOTL_FEATURE_TRAIL_RUINS},
-    {Trial_Chambers, AXOLOTL_FEATURE_TRIAL_CHAMBERS},
-    {Ruined_Portal, AXOLOTL_FEATURE_RUINED_PORTAL},
-    {Ruined_Portal_N, AXOLOTL_FEATURE_RUINED_PORTAL},
-    {Desert_Pyramid, AXOLOTL_FEATURE_DESERT_PYRAMID},
-    {Jungle_Temple, AXOLOTL_FEATURE_JUNGLE_TEMPLE},
-    {Swamp_Hut, AXOLOTL_FEATURE_SWAMP_HUT},
-    {Igloo, AXOLOTL_FEATURE_IGLOO},
-    {Ocean_Ruin, AXOLOTL_FEATURE_OCEAN_RUIN},
-    {Treasure, AXOLOTL_FEATURE_BURIED_TREASURE},
-    {Mineshaft, AXOLOTL_FEATURE_MINESHAFT},
-    {Desert_Well, AXOLOTL_FEATURE_DESERT_WELL},
-    {Geode, AXOLOTL_FEATURE_GEODE},
-    {Fortress, AXOLOTL_FEATURE_FORTRESS},
-    {Bastion, AXOLOTL_FEATURE_BASTION},
-    {End_City, AXOLOTL_FEATURE_END_CITY},
-    {End_Gateway, AXOLOTL_FEATURE_END_GATEWAY},
-    {Abandoned_Camp, AXOLOTL_FEATURE_ABANDONED_CAMP},
-    {Nether_Fossil, AXOLOTL_FEATURE_NETHER_FOSSIL},
+static const MctrinStructureDefinition MCTRIN_STRUCTURES[] = {
+    {Village, MCTRIN_FEATURE_VILLAGE},
+    {Outpost, MCTRIN_FEATURE_OUTPOST},
+    {Shipwreck, MCTRIN_FEATURE_SHIPWRECK},
+    {Monument, MCTRIN_FEATURE_MONUMENT},
+    {Mansion, MCTRIN_FEATURE_MANSION},
+    {Ancient_City, MCTRIN_FEATURE_ANCIENT_CITY},
+    {Trail_Ruins, MCTRIN_FEATURE_TRAIL_RUINS},
+    {Trial_Chambers, MCTRIN_FEATURE_TRIAL_CHAMBERS},
+    {Ruined_Portal, MCTRIN_FEATURE_RUINED_PORTAL},
+    {Ruined_Portal_N, MCTRIN_FEATURE_RUINED_PORTAL},
+    {Desert_Pyramid, MCTRIN_FEATURE_DESERT_PYRAMID},
+    {Jungle_Temple, MCTRIN_FEATURE_JUNGLE_TEMPLE},
+    {Swamp_Hut, MCTRIN_FEATURE_SWAMP_HUT},
+    {Igloo, MCTRIN_FEATURE_IGLOO},
+    {Ocean_Ruin, MCTRIN_FEATURE_OCEAN_RUIN},
+    {Treasure, MCTRIN_FEATURE_BURIED_TREASURE},
+    {Mineshaft, MCTRIN_FEATURE_MINESHAFT},
+    {Desert_Well, MCTRIN_FEATURE_DESERT_WELL},
+    {Geode, MCTRIN_FEATURE_GEODE},
+    {Fortress, MCTRIN_FEATURE_FORTRESS},
+    {Bastion, MCTRIN_FEATURE_BASTION},
+    {End_City, MCTRIN_FEATURE_END_CITY},
+    {End_Gateway, MCTRIN_FEATURE_END_GATEWAY},
+    {Abandoned_Camp, MCTRIN_FEATURE_ABANDONED_CAMP},
+    {Nether_Fossil, MCTRIN_FEATURE_NETHER_FOSSIL},
 };
 
-uint32_t axolotl_seed_map_abi_version(void) { return 2; }
-uint64_t axolotl_seed_map_engine_revision(void) { return UINT64_C(0xa49d5bc5b709e6e2); }
+uint32_t mctrin_seed_map_abi_version(void) { return 2; }
+uint64_t mctrin_seed_map_engine_revision(void) { return UINT64_C(0xa49d5bc5b709e6e2); }
 
-int32_t axolotl_seed_map_java_version(int32_t version) {
+int32_t mctrin_seed_map_java_version(int32_t version) {
     switch (version) {
         case -10700: return MC_B1_7;
         case -10800: return MC_B1_8;
@@ -196,9 +196,9 @@ int32_t axolotl_seed_map_java_version(int32_t version) {
     }
 }
 
-static const unsigned char AXOLOTL_END_VOID[3] = {0x4B, 0x4B, 0xAB};
+static const unsigned char MCTRIN_END_VOID[3] = {0x4B, 0x4B, 0xAB};
 
-static int axolotl_smooth_height_grid(
+static int mctrin_smooth_height_grid(
     float *grid,
     int width,
     int height,
@@ -237,7 +237,7 @@ static int axolotl_smooth_height_grid(
  * from void. Like the reference map, the height grid is smoothed before slope
  * lighting so surface noise does not make the broad, flat islands look hilly.
  */
-static void axolotl_render_end(
+static void mctrin_render_end(
     uint8_t *rgb,
     const Generator *generator,
     const SurfaceNoise *surface_noise,
@@ -273,7 +273,7 @@ static void axolotl_render_end(
                 heights[(row + padding) * grid_width + column + padding] > 4.0f;
         }
     }
-    if (axolotl_smooth_height_grid(heights, grid_width, grid_height, passes) != 0) {
+    if (mctrin_smooth_height_grid(heights, grid_width, grid_height, passes) != 0) {
         free(land);
         free(heights);
         return;
@@ -283,7 +283,7 @@ static void axolotl_render_end(
             const size_t index = (size_t)row * (size_t)width + (size_t)column;
             uint8_t *pixel = rgb + index * 3;
             if (!land[index]) {
-                memcpy(pixel, AXOLOTL_END_VOID, 3);
+                memcpy(pixel, MCTRIN_END_VOID, 3);
                 continue;
             }
             const int grid_row = row + padding;
@@ -299,14 +299,14 @@ static void axolotl_render_end(
             } else {
                 const int slope = 3 * surface - west - north - northwest;
                 if (slope != 0) {
-                    const float delta = axolotl_clamp((float)slope / 16.0f, -0.3f, 0.3f);
+                    const float delta = mctrin_clamp((float)slope / 16.0f, -0.3f, 0.3f);
                     factor = 1.0f + delta + (delta > 0.0f ? 0.1f : -0.1f);
                     if (factor < 0.72f) factor = 0.72f;
                 }
             }
             for (int channel = 0; channel < 3; channel++) {
                 pixel[channel] =
-                    (uint8_t)axolotl_clamp((float)pixel[channel] * factor, 0.0f, 255.0f);
+                    (uint8_t)mctrin_clamp((float)pixel[channel] * factor, 0.0f, 255.0f);
             }
         }
     }
@@ -314,7 +314,7 @@ static void axolotl_render_end(
     free(heights);
 }
 
-static int axolotl_block_height(
+static int mctrin_block_height(
     const float *grid,
     int grid_width,
     int grid_height,
@@ -328,7 +328,7 @@ static int axolotl_block_height(
     return (int)floorf(grid[row * grid_width + column]);
 }
 
-static float axolotl_clamp(float value, float low, float high) {
+static float mctrin_clamp(float value, float low, float high) {
     if (value < low) return low;
     if (value > high) return high;
     return value;
@@ -339,7 +339,7 @@ static float axolotl_clamp(float value, float low, float high) {
  * discrete brightness levels for the slope. The reference map applies the
  * same rule to its cubiomes height grid, including 16-block contour bands.
  */
-static void axolotl_shade_height_map(
+static void mctrin_shade_height_map(
     uint8_t *rgb,
     int32_t width,
     int32_t height,
@@ -360,13 +360,13 @@ static void axolotl_shade_height_map(
                 grid_origin_column + (int)(((int64_t)column * numerator) / denominator);
             const size_t index = (size_t)row * (size_t)width + (size_t)column;
             const int here =
-                axolotl_block_height(grid, grid_width, grid_height, cell_column, cell_row);
+                mctrin_block_height(grid, grid_width, grid_height, cell_column, cell_row);
             const int west =
-                axolotl_block_height(grid, grid_width, grid_height, cell_column - 1, cell_row);
+                mctrin_block_height(grid, grid_width, grid_height, cell_column - 1, cell_row);
             const int north =
-                axolotl_block_height(grid, grid_width, grid_height, cell_column, cell_row - 1);
+                mctrin_block_height(grid, grid_width, grid_height, cell_column, cell_row - 1);
             const int northwest =
-                axolotl_block_height(grid, grid_width, grid_height, cell_column - 1, cell_row - 1);
+                mctrin_block_height(grid, grid_width, grid_height, cell_column - 1, cell_row - 1);
             float factor = 1.0f;
             if (contours) {
                 const int band = here / 16;
@@ -375,7 +375,7 @@ static void axolotl_shade_height_map(
             if (factor == 1.0f) {
                 const int slope = 3 * here - west - north - northwest;
                 if (slope != 0) {
-                    const float delta = axolotl_clamp((float)slope / 16.0f, -0.3f, 0.3f);
+                    const float delta = mctrin_clamp((float)slope / 16.0f, -0.3f, 0.3f);
                     factor = 1.0f + delta + (delta > 0.0f ? 0.1f : -0.1f);
                     if (factor < 0.72f) factor = 0.72f;
                 }
@@ -388,7 +388,7 @@ static void axolotl_shade_height_map(
                 factor = (strongest - 25.0f) / strongest;
             for (int channel = 0; channel < 3; channel++) {
                 const float shaded = (float)pixel[channel] * factor;
-                pixel[channel] = (uint8_t)axolotl_clamp(shaded, 0.0f, 255.0f);
+                pixel[channel] = (uint8_t)mctrin_clamp(shaded, 0.0f, 255.0f);
             }
         }
     }
@@ -399,7 +399,7 @@ static void axolotl_shade_height_map(
  * relief comes from a sparse grid sampled point by point at each cell
  * center. The grid stays coarse enough to keep far tiles interactive.
  */
-static int axolotl_fill_sparse_height_grid(
+static int mctrin_fill_sparse_height_grid(
     const Generator *generator,
     const SurfaceNoise *surface_noise,
     int64_t min_block_x,
@@ -414,7 +414,7 @@ static int axolotl_fill_sparse_height_grid(
         for (int column = 0; column < grid; column++) {
             const int64_t block_x =
                 min_block_x + span_blocks * (2 * column + 1) / (2 * grid);
-            if (axolotl_map_approx_height(
+            if (mctrin_map_approx_height(
                     out + (size_t)row * grid + column, generator, surface_noise,
                     (int)(block_x >> 2), (int)(block_z >> 2), 1, 1, 1) != 0) {
                 return -1;
@@ -424,7 +424,7 @@ static int axolotl_fill_sparse_height_grid(
     return 0;
 }
 
-int axolotl_seed_map_render(
+int mctrin_seed_map_render(
     uint64_t seed,
     int32_t minecraft_version,
     int32_t generator_flags,
@@ -463,7 +463,7 @@ int axolotl_seed_map_render(
     int result;
     if (dimension == DIM_OVERWORLD && minecraft_version >= MC_1_18) {
         /* Use the same surface/Voronoi path at every coarse scale. */
-        axolotl_gen_surface_biomes(
+        mctrin_gen_surface_biomes(
             biomes, &generator, x, z, scale, width, height, render_elevation);
         result = 0;
     } else {
@@ -503,7 +503,7 @@ int axolotl_seed_map_render(
     if (terrain && dimension == DIM_END) {
         SurfaceNoise surface_noise;
         initSurfaceNoise(&surface_noise, DIM_END, seed);
-        axolotl_render_end(
+        mctrin_render_end(
             rgb, &generator, &surface_noise,
             x, z, scale, width, height, contours);
     }
@@ -521,10 +521,10 @@ int axolotl_seed_map_render(
             float *heights =
                 malloc((size_t)grid_width * (size_t)grid_height * sizeof(float));
             if (heights) {
-                if (axolotl_map_approx_height(
+                if (mctrin_map_approx_height(
                         heights, &generator, &surface_noise,
                         grid_x, grid_z, grid_width, grid_height, 0) == 0) {
-                    axolotl_shade_height_map(
+                    mctrin_shade_height_map(
                         rgb, width, height, contours,
                         heights, grid_width, grid_height, 1, 1, scale, 4);
                 }
@@ -534,10 +534,10 @@ int axolotl_seed_map_render(
             const int grid = scale == 16 ? 96 : 64;
             float *heights = malloc((size_t)grid * (size_t)grid * sizeof(float));
             if (heights) {
-                if (axolotl_fill_sparse_height_grid(
+                if (mctrin_fill_sparse_height_grid(
                         &generator, &surface_noise, min_block_x, min_block_z,
                         (int64_t)width * scale, grid, heights) == 0) {
-                    axolotl_shade_height_map(
+                    mctrin_shade_height_map(
                         rgb, width, height, contours,
                         heights, grid, grid, 0, 0, grid, width);
                 }
@@ -551,7 +551,7 @@ int axolotl_seed_map_render(
 }
 
 static int add_feature(
-    AxolotlSeedMapFeature *out,
+    MctrinSeedMapFeature *out,
     size_t out_len,
     size_t *count,
     int x,
@@ -570,7 +570,7 @@ static int add_feature(
     return 1;
 }
 
-static int8_t axolotl_end_city_has_ship(uint64_t seed, int block_x, int block_z) {
+static int8_t mctrin_end_city_has_ship(uint64_t seed, int block_x, int block_z) {
     Piece pieces[END_CITY_PIECES_MAX];
     const int count = getEndCityPieces(pieces, seed, block_x >> 4, block_z >> 4);
     for (int index = 0; index < count; index++) {
@@ -579,7 +579,7 @@ static int8_t axolotl_end_city_has_ship(uint64_t seed, int block_x, int block_z)
     return 0;
 }
 
-size_t axolotl_seed_map_find_features(
+size_t mctrin_seed_map_find_features(
     uint64_t seed,
     int32_t minecraft_version,
     int32_t generator_flags,
@@ -589,7 +589,7 @@ size_t axolotl_seed_map_find_features(
     int32_t max_x,
     int32_t max_z,
     uint32_t feature_mask,
-    AxolotlSeedMapFeature *out,
+    MctrinSeedMapFeature *out,
     size_t out_len
 ) {
     if (!out || out_len == 0) return 0;
@@ -599,12 +599,12 @@ size_t axolotl_seed_map_find_features(
     SurfaceNoise end_surface_noise;
     if (dimension == DIM_END) initSurfaceNoise(&end_surface_noise, DIM_END, seed);
     BlendedNoise nether_terrain;
-    if (dimension == DIM_NETHER && (feature_mask & AXOLOTL_FEATURE_NETHER_FOSSIL))
+    if (dimension == DIM_NETHER && (feature_mask & MCTRIN_FEATURE_NETHER_FOSSIL))
         initBlendedNoise(&nether_terrain, seed, DIM_NETHER);
 
     size_t count = 0;
-    for (size_t index = 0; index < sizeof(AXOLOTL_STRUCTURES) / sizeof(AXOLOTL_STRUCTURES[0]); index++) {
-        const AxolotlStructureDefinition definition = AXOLOTL_STRUCTURES[index];
+    for (size_t index = 0; index < sizeof(MCTRIN_STRUCTURES) / sizeof(MCTRIN_STRUCTURES[0]); index++) {
+        const MctrinStructureDefinition definition = MCTRIN_STRUCTURES[index];
         if (!(feature_mask & definition.flag)) continue;
 
         StructureConfig config;
@@ -642,7 +642,7 @@ size_t axolotl_seed_map_find_features(
                     !isViableStructureTerrain(definition.type, &generator, position.x, position.z))
                     continue;
                 const int8_t end_ship = definition.type == End_City
-                    ? axolotl_end_city_has_ship(seed, position.x, position.z)
+                    ? mctrin_end_city_has_ship(seed, position.x, position.z)
                     : -1;
                 if (!add_feature(
                         out, out_len, &count, position.x, position.z,
@@ -651,7 +651,7 @@ size_t axolotl_seed_map_find_features(
         }
     }
 
-    if (dimension == DIM_OVERWORLD && feature_mask & AXOLOTL_FEATURE_STRONGHOLD) {
+    if (dimension == DIM_OVERWORLD && feature_mask & MCTRIN_FEATURE_STRONGHOLD) {
         StrongholdIter stronghold;
         initFirstStronghold(&stronghold, minecraft_version, seed);
         for (int index = 0; index < 32; index++) {
@@ -659,12 +659,12 @@ size_t axolotl_seed_map_find_features(
             if (stronghold.pos.x >= min_x && stronghold.pos.x <= max_x && stronghold.pos.z >= min_z && stronghold.pos.z <= max_z) {
                 if (!add_feature(
                         out, out_len, &count, stronghold.pos.x, stronghold.pos.z,
-                        AXOLOTL_FEATURE_STRONGHOLD, 0, -1)) return count;
+                        MCTRIN_FEATURE_STRONGHOLD, 0, -1)) return count;
             }
         }
     }
 
-    if (dimension == DIM_OVERWORLD && feature_mask & AXOLOTL_FEATURE_SLIME_CHUNK) {
+    if (dimension == DIM_OVERWORLD && feature_mask & MCTRIN_FEATURE_SLIME_CHUNK) {
         const int min_chunk_x = min_x >= 0 ? min_x / 16 : (min_x - 15) / 16;
         const int min_chunk_z = min_z >= 0 ? min_z / 16 : (min_z - 15) / 16;
         const int max_chunk_x = max_x >= 0 ? max_x / 16 : (max_x - 15) / 16;
@@ -674,7 +674,7 @@ size_t axolotl_seed_map_find_features(
                 if (!isSlimeChunk(seed, chunk_x, chunk_z)) continue;
                 if (!add_feature(
                         out, out_len, &count, chunk_x * 16 + 8, chunk_z * 16 + 8,
-                        AXOLOTL_FEATURE_SLIME_CHUNK, 0, -1)) return count;
+                        MCTRIN_FEATURE_SLIME_CHUNK, 0, -1)) return count;
             }
         }
     }
@@ -682,7 +682,7 @@ size_t axolotl_seed_map_find_features(
     return count;
 }
 
-int axolotl_seed_map_get_spawn(
+int mctrin_seed_map_get_spawn(
     uint64_t seed,
     int32_t minecraft_version,
     int32_t generator_flags,
@@ -699,7 +699,7 @@ int axolotl_seed_map_get_spawn(
     return 0;
 }
 
-int32_t axolotl_seed_map_biome_at(
+int32_t mctrin_seed_map_biome_at(
     uint64_t seed,
     int32_t minecraft_version,
     int32_t generator_flags,
@@ -798,18 +798,18 @@ static size_t scan_ores_cancellable(
     return count;
 }
 
-size_t axolotl_seed_map_scan_ores(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
+size_t mctrin_seed_map_scan_ores(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity) {
     return scan_ores_cancellable(seed, mc, flags, dimension, cx, cz, kind, xyz, capacity, 0, NULL);
 }
 
-size_t axolotl_seed_map_scan_ores_cancellable(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
+size_t mctrin_seed_map_scan_ores_cancellable(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity,
     uint64_t request_id, int32_t (*canceled)(uint64_t)) {
     return scan_ores_cancellable(seed, mc, flags, dimension, cx, cz, kind, xyz, capacity, request_id, canceled);
 }
 
-int axolotl_seed_map_surface_heights(
+int mctrin_seed_map_surface_heights(
     uint64_t seed,
     int32_t minecraft_version,
     int32_t generator_flags,
@@ -828,14 +828,14 @@ int axolotl_seed_map_surface_heights(
     return mapApproxHeight(out, NULL, &generator, &surface_noise, x, z, width, height);
 }
 
-int32_t axolotl_seed_map_capability(int32_t mc, int32_t capability, int32_t value) {
+int32_t mctrin_seed_map_capability(int32_t mc, int32_t capability, int32_t value) {
     if (capability == 0) return biomeExists(mc, value);
     if (capability == 1) {
-        uint32_t mask = value == DIM_OVERWORLD ? AXOLOTL_FEATURE_SLIME_CHUNK : 0;
-        if (value == DIM_OVERWORLD && mc >= MC_B1_8) mask |= AXOLOTL_FEATURE_STRONGHOLD;
-        for (size_t i = 0; i < sizeof(AXOLOTL_STRUCTURES) / sizeof(AXOLOTL_STRUCTURES[0]); i++) {
+        uint32_t mask = value == DIM_OVERWORLD ? MCTRIN_FEATURE_SLIME_CHUNK : 0;
+        if (value == DIM_OVERWORLD && mc >= MC_B1_8) mask |= MCTRIN_FEATURE_STRONGHOLD;
+        for (size_t i = 0; i < sizeof(MCTRIN_STRUCTURES) / sizeof(MCTRIN_STRUCTURES[0]); i++) {
             StructureConfig config;
-            if (getStructureConfig(AXOLOTL_STRUCTURES[i].type, mc, &config) && config.dim == value) mask |= AXOLOTL_STRUCTURES[i].flag;
+            if (getStructureConfig(MCTRIN_STRUCTURES[i].type, mc, &config) && config.dim == value) mask |= MCTRIN_STRUCTURES[i].flag;
         }
         return (int32_t)mask;
     }

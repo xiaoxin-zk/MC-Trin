@@ -1,6 +1,6 @@
 # Desktop Onboarding
 
-When adding or materially changing a desktop app page, route, navigation entry, large user-facing component, core workflow, settings section, or content-management feature under `apps/app-frontend`, assess the Axolotl onboarding experience.
+When adding or materially changing a desktop app page, route, navigation entry, large user-facing component, core workflow, settings section, or content-management feature under `apps/app-frontend`, assess the MC-Trin onboarding experience.
 
 - Update the onboarding when the feature is relevant to a new user's first-use journey or changes an existing guided workflow.
 - Define tours and localized message descriptors in `apps/app-frontend/src/components/ui/onboarding/onboardingConfig.ts`. Keep `OnboardingOverlay` presentational and put reusable runtime behavior in `useOnboardingTour`; do not add step-ID-specific branches to either file.

@@ -9,7 +9,7 @@ static PORTABLE_MODE: AtomicBool = AtomicBool::new(false);
 
 /// 在启动时初始化便携模式
 /// 检查 `.MC-Trin` 文件夹是否存在且可写
-/// 如果存在且可写，将 `THESEUS_CONFIG_DIR` 环境变量设置为该路径
+/// 如果存在且可写，将 `MCTRIN_CONFIG_DIR` 环境变量设置为该路径
 /// 返回 `true` 如果便携模式已启用，否则返回 `false`
 ///
 /// 必须在 main() 开头、任何其他线程（包括 tokio runtime）启动之前调用。
@@ -59,12 +59,12 @@ pub unsafe fn init_portable_mode() -> bool {
 
     // SAFETY: 调用者保证此时没有其他线程访问环境变量
     unsafe {
-        std::env::set_var("THESEUS_CONFIG_DIR", &portable_dir);
+        std::env::set_var("MCTRIN_CONFIG_DIR", &portable_dir);
     }
     PORTABLE_MODE.store(true, Ordering::Relaxed);
 
     tracing::info!(
-        "Portable mode enabled: THESEUS_CONFIG_DIR={}",
+        "Portable mode enabled: MCTRIN_CONFIG_DIR={}",
         portable_dir.display()
     );
 

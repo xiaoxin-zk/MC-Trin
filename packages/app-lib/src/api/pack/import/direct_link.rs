@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{ImportLauncherType, generic, hmcl, instance_json, pcl};
 use crate::state::ModLoader;
 
-const TEMP_IMPORT_DIR: &str = "axolotl-launcher-import";
+const TEMP_IMPORT_DIR: &str = "mctrin-launcher-import";
 
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedDirectLink {

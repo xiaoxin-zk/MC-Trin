@@ -518,7 +518,7 @@ const autoPlaceSlots = computed<RecipeSlot[]>(() => {
     }
 })
 
-const RECIPE_SLOT_MIME_TYPE = 'application/x-axolotl-recipe-slot'
+const RECIPE_SLOT_MIME_TYPE = 'application/x-mctrin-recipe-slot'
 const TWO_BY_TWO_DISABLED_SLOTS = new Set<RecipeSlot>([
     'crafting.3',
     'crafting.6',
@@ -1643,9 +1643,7 @@ function slotEditorSlots(type: RecipeType): RecipeSlot[] {
                                 :data-recipe-slot="entry.targetSlot"
                                 :style="slotBoxStyle(entry.box)"
                                 @click="onHotspotClick(entry.targetSlot)"
-                                @axolotl-recipe-slot-drop="
-                                    onSlotDropEvent($event, entry.targetSlot)
-                                "
+                                @mctrin-recipe-slot-drop="onSlotDropEvent($event, entry.targetSlot)"
                                 @dragover="onHotspotDragOver"
                                 @drop="onHotspotDrop($event, entry.targetSlot)"
                                 @wheel="onResultSlotWheel(entry.targetSlot, $event)"

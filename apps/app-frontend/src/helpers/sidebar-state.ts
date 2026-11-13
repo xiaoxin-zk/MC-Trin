@@ -1,4 +1,4 @@
-const SIDEBAR_EXPANDED_STORAGE_KEY = 'axolotl-right-sidebar-expanded'
+const SIDEBAR_EXPANDED_STORAGE_KEY = 'mctrin-right-sidebar-expanded'
 
 export function getSidebarExpanded(): boolean {
     const value = localStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY)

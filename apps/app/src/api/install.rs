@@ -1,14 +1,14 @@
 use crate::api::Result;
 use crate::api::instance::InstanceLink;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use theseus::data::ModLoader;
-use theseus::install::{
+use mctrin::data::ModLoader;
+use mctrin::install::{
     ImportPlanRequest, InstallJobSnapshot, InstallModpackPreview,
     InstallPostInstallEdit,
 };
-use theseus::pack::import::ImportLauncherType;
-use theseus::pack::install_from::CreatePackLocation;
+use mctrin::pack::import::ImportLauncherType;
+use mctrin::pack::install_from::CreatePackLocation;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
@@ -56,7 +56,7 @@ pub struct InstallCreateInstanceRequest {
     pub loader: ModLoader,
     pub loader_version: Option<String>,
     #[serde(default)]
-    pub adjuncts: Vec<theseus::data::LoaderComponent>,
+    pub adjuncts: Vec<mctrin::data::LoaderComponent>,
     pub icon_path: Option<String>,
     pub link: Option<InstanceLink>,
     #[serde(default)]
@@ -90,14 +90,14 @@ impl InstallPostInstallEditRequest {
 pub async fn install_get_modpack_preview(
     location: CreatePackLocation,
 ) -> Result<InstallModpackPreview> {
-    Ok(theseus::pack::install_from::get_instance_from_pack(location).await?)
+    Ok(mctrin::pack::install_from::get_instance_from_pack(location).await?)
 }
 
 #[tauri::command]
 pub async fn install_create_instance(
     request: InstallCreateInstanceRequest,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::create_instance_with_adjuncts(
+    Ok(mctrin::install::create_instance_with_adjuncts(
         request.name.trim().to_string(),
         request.game_version,
         request.loader,
@@ -106,7 +106,7 @@ pub async fn install_create_instance(
         request.icon_path,
         match request.link {
             Some(link) => link.into_core()?,
-            None => theseus::data::InstanceLink::Unmanaged,
+            None => mctrin::data::InstanceLink::Unmanaged,
         },
         request.game_dir_override,
     )
@@ -118,7 +118,7 @@ pub async fn install_create_modpack_instance(
     location: CreatePackLocation,
     post_install_edit: Option<InstallPostInstallEditRequest>,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::create_modpack_instance(
+    Ok(mctrin::install::create_modpack_instance(
         location,
         post_install_edit.map(|edit| edit.into_core()).transpose()?,
     )
@@ -147,9 +147,9 @@ pub async fn install_import_instance(
     // after the import; a symlink into it would dangle immediately.
     if symlink
         && base_path
-            .starts_with(std::env::temp_dir().join("axolotl-launcher-import"))
+            .starts_with(std::env::temp_dir().join("mctrin-launcher-import"))
     {
-        return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::InputError(
             "Symbolic-link import is unavailable for extracted archives: \
              the temporary folder is deleted after the import completes. \
              Choose copy instead."
@@ -157,7 +157,7 @@ pub async fn install_import_instance(
         ))
         .into());
     }
-    Ok(theseus::install::import_instance_with_plan(
+    Ok(mctrin::install::import_instance_with_plan(
         launcher_type,
         base_path,
         instance_folder,
@@ -175,19 +175,19 @@ pub async fn install_import_instance(
 pub async fn install_start_import_plan(
     request: ImportPlanRequest,
 ) -> Result<String> {
-    Ok(theseus::install::start_import_plan(request)?)
+    Ok(mctrin::install::start_import_plan(request)?)
 }
 
 #[tauri::command]
 pub async fn install_cancel_import_plan(request_id: String) -> Result<()> {
-    Ok(theseus::install::cancel_import_plan(&request_id).await?)
+    Ok(mctrin::install::cancel_import_plan(&request_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_duplicate_instance(
     source_instance_id: String,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::duplicate_instance(source_instance_id).await?)
+    Ok(mctrin::install::duplicate_instance(source_instance_id).await?)
 }
 
 #[tauri::command]
@@ -195,7 +195,7 @@ pub async fn install_existing_instance(
     instance_id: String,
     force: bool,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::install_existing_instance(instance_id, force).await?)
+    Ok(mctrin::install::install_existing_instance(instance_id, force).await?)
 }
 
 #[tauri::command]
@@ -204,7 +204,7 @@ pub async fn install_pack_to_existing_instance(
     location: CreatePackLocation,
     post_install_edit: Option<InstallPostInstallEditRequest>,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::install_pack_to_existing_instance(
+    Ok(mctrin::install::install_pack_to_existing_instance(
         instance_id,
         location,
         post_install_edit.map(|edit| edit.into_core()).transpose()?,
@@ -216,52 +216,52 @@ pub async fn install_pack_to_existing_instance(
 pub async fn install_job_list(
     include_finished: bool,
 ) -> Result<Vec<InstallJobSnapshot>> {
-    Ok(theseus::install::list_jobs(include_finished).await?)
+    Ok(mctrin::install::list_jobs(include_finished).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_get(job_id: Uuid) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::get_job(job_id).await?)
+    Ok(mctrin::install::get_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_retry(job_id: Uuid) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::retry_job(job_id).await?)
+    Ok(mctrin::install::retry_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_repair_cache_and_retry(
     job_id: Uuid,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::repair_cache_and_retry_job(job_id).await?)
+    Ok(mctrin::install::repair_cache_and_retry_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_resume(job_id: Uuid) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::resume_job(job_id).await?)
+    Ok(mctrin::install::resume_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_skip_missing_content(
     job_id: Uuid,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::skip_missing_content_and_resume_job(job_id).await?)
+    Ok(mctrin::install::skip_missing_content_and_resume_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_missing_files(
     job_id: Uuid,
-) -> Result<theseus::install::MissingModpackContentView> {
-    Ok(theseus::install::list_missing_modpack_files(job_id).await?)
+) -> Result<mctrin::install::MissingModpackContentView> {
+    Ok(mctrin::install::list_missing_modpack_files(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_scan_missing_files(
     job_id: Uuid,
     scan_directory: Option<PathBuf>,
-) -> Result<theseus::install::MissingModpackScanResult> {
+) -> Result<mctrin::install::MissingModpackScanResult> {
     Ok(
-        theseus::install::scan_missing_modpack_files(job_id, scan_directory)
+        mctrin::install::scan_missing_modpack_files(job_id, scan_directory)
             .await?,
     )
 }
@@ -271,7 +271,7 @@ pub async fn install_job_retry_missing_file(
     job_id: Uuid,
     item_id: String,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::retry_missing_modpack_file(job_id, item_id).await?)
+    Ok(mctrin::install::retry_missing_modpack_file(job_id, item_id).await?)
 }
 
 #[tauri::command]
@@ -280,7 +280,7 @@ pub async fn install_job_import_missing_file(
     item_id: String,
     selected_file_path: PathBuf,
 ) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::import_missing_modpack_file(
+    Ok(mctrin::install::import_missing_modpack_file(
         job_id,
         item_id,
         selected_file_path,
@@ -290,12 +290,12 @@ pub async fn install_job_import_missing_file(
 
 #[tauri::command]
 pub async fn install_job_cancel(job_id: Uuid) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::cancel_job(job_id).await?)
+    Ok(mctrin::install::cancel_job(job_id).await?)
 }
 
 #[tauri::command]
 pub async fn install_job_dismiss(job_id: Uuid) -> Result<()> {
-    Ok(theseus::install::dismiss_job(job_id).await?)
+    Ok(mctrin::install::dismiss_job(job_id).await?)
 }
 
 #[tauri::command]
@@ -305,7 +305,7 @@ pub async fn install_job_support_details(job_id: String) -> Result<String> {
         // identifiers and do not expose backend diagnostic details.
         return Ok(String::new());
     };
-    Ok(theseus::install::job_support_details(uuid).await?)
+    Ok(mctrin::install::job_support_details(uuid).await?)
 }
 
 #[derive(Deserialize, Default)]
@@ -330,7 +330,7 @@ pub async fn download_job_list(
     request: Option<DownloadJobListRequest>,
 ) -> Result<DownloadJobPage> {
     let request = request.unwrap_or_default();
-    let mut jobs = theseus::install::list_jobs(true).await?;
+    let mut jobs = mctrin::install::list_jobs(true).await?;
     if let Some(status) = request.status.as_deref() {
         jobs.retain(|job| job.status.as_str() == status);
     }
@@ -376,7 +376,7 @@ pub async fn download_job_get(job_id: Uuid) -> Result<InstallJobSnapshot> {
 
 #[tauri::command]
 pub async fn download_job_retry(job_id: Uuid) -> Result<InstallJobSnapshot> {
-    Ok(theseus::install::retry_job_as_new(job_id).await?)
+    Ok(mctrin::install::retry_job_as_new(job_id).await?)
 }
 
 #[tauri::command]
@@ -396,7 +396,7 @@ pub async fn download_job_delete(job_id: Uuid) -> Result<()> {
 
 #[tauri::command]
 pub async fn download_history_clear() -> Result<u64> {
-    Ok(theseus::install::clear_job_history().await?)
+    Ok(mctrin::install::clear_job_history().await?)
 }
 
 #[tauri::command]

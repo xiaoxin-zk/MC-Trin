@@ -29,5 +29,5 @@ it('reuses a cached explicit preference before the database becomes available', 
     await setAppLocale('en-US')
     await initializeLocale()
     expect(i18n.global.locale.value).toBe('de-DE')
-    localStorage.removeItem('axolotl.startup-locale')
+    localStorage.removeItem('mctrin.startup-locale')
 })

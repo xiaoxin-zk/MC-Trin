@@ -39,11 +39,11 @@ jobs:
         run: |
           set -euo pipefail
           cutoff="$(date -u -d "-${DAYS} days" +%Y-%m-%dT%H:%M:%S)"
-          echo "Pruning v0-rust-axolotl-desktop-* entries last accessed before ${cutoff}Z (dry_run=${DRY_RUN})"
+          echo "Pruning v0-rust-mctrin-desktop-* entries last accessed before ${cutoff}Z (dry_run=${DRY_RUN})"
           gh cache list --limit 100 --json id,key,lastAccessedAt \
             | jq -r --arg cutoff "${cutoff}" '
                 .[]
-                | select(.key | startswith("v0-rust-axolotl-desktop-"))
+                | select(.key | startswith("v0-rust-mctrin-desktop-"))
                 | select(.lastAccessedAt < $cutoff)
                 | "\(.id)\t\(.key)"
               ' \

@@ -348,16 +348,20 @@ impl ZipEntrySet {
         })
     }
 
-    /// Whether `axolotl_config.json` exists under `base`.
-    fn has_axolotl_config(&self, base: &str) -> bool {
-        self.has_file(base, "axolotl_config.json")
+    /// Whether an instance config file exists under `base`, using either the
+    /// current name or the pre-rename one.
+    fn has_mctrin_config(&self, base: &str) -> bool {
+        self.has_file(base, "mctrin_config.json")
+            || self.has_file(base, "axolotl_config.json")
     }
 
-    /// Whether a direct child folder under `base` has `axolotl_config.json`
-    /// (a container of Axolotl instances).
-    fn has_direct_axolotl_config(&self, base: &str) -> bool {
+    /// Whether a direct child folder under `base` has an instance config file
+    /// (a container of MC-Trin instances).
+    fn has_direct_mctrin_config(&self, base: &str) -> bool {
         self.child_folders(base).iter().any(|child| {
-            self.has_file(&format!("{base}{child}/"), "axolotl_config.json")
+            let child_base = format!("{base}{child}/");
+            self.has_file(&child_base, "mctrin_config.json")
+                || self.has_file(&child_base, "axolotl_config.json")
         })
     }
 
@@ -724,10 +728,10 @@ fn classify_zip_entries<R: std::io::Read + std::io::Seek>(
     // 2. Compressed instances / `.minecraft`. Checked before the content
     //    markers because instances embed resource packs, shader packs and
     //    worlds.
-    let launcher_type = if entries.has_axolotl_config(base)
-        || entries.has_direct_axolotl_config(base)
+    let launcher_type = if entries.has_mctrin_config(base)
+        || entries.has_direct_mctrin_config(base)
     {
-        Some(ImportLauncherType::Axolotl)
+        Some(ImportLauncherType::Mctrin)
     } else if entries.has_file(base, "multimc.cfg") {
         Some(ImportLauncherType::MultiMC)
     } else if entries.has_file(base, "prismlauncher.cfg") {
@@ -1628,9 +1632,9 @@ fn classify_folder_content_inner(
         return cancelled_result();
     }
     // Check launcher signatures in priority order.
-    if is_axolotl_folder(path) {
+    if is_mctrin_folder(path) {
         return DroppedItemType::Launcher {
-            launcher_type: ImportLauncherType::Axolotl,
+            launcher_type: ImportLauncherType::Mctrin,
             base_path: path.to_path_buf(),
             inner_base: None,
         };
@@ -2376,21 +2380,24 @@ fn has_direct_version_json(path: &Path) -> bool {
     })
 }
 
-/// Whether `path` is an Axolotl instance root or a container whose direct
-/// child folders are Axolotl instances.
-fn is_axolotl_folder(path: &Path) -> bool {
-    path.join("axolotl_config.json").is_file()
-        || has_direct_axolotl_config(path)
+/// Whether `path` is an MC-Trin instance root or a container whose direct
+/// child folders are MC-Trin instances.
+fn is_mctrin_folder(path: &Path) -> bool {
+    path.join("mctrin_config.json").is_file()
+        || path.join("axolotl_config.json").is_file()
+        || has_direct_mctrin_config(path)
 }
 
-/// Whether a direct child folder of `path` has `axolotl_config.json`.
-fn has_direct_axolotl_config(path: &Path) -> bool {
+/// Whether a direct child folder of `path` has an instance config file.
+fn has_direct_mctrin_config(path: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(path) else {
         return false;
     };
     entries.flatten().any(|entry| {
         let child = entry.path();
-        child.is_dir() && child.join("axolotl_config.json").is_file()
+        child.is_dir()
+            && (child.join("mctrin_config.json").is_file()
+                || child.join("axolotl_config.json").is_file())
     })
 }
 

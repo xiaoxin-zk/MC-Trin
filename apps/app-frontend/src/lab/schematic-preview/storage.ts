@@ -1,6 +1,6 @@
 import type { SchematicPreviewSource } from './backend'
 
-const RECENT_KEY = 'axolotl:lab:schematic-preview:recent:v1'
+const RECENT_KEY = 'mctrin:lab:schematic-preview:recent:v1'
 const MAX_RECENT = 5
 
 export type RecentSchematic = {

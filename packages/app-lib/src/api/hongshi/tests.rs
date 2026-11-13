@@ -738,7 +738,7 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let path = std::env::temp_dir()
-            .join(format!("axolotl-hongshi-test-{}", uuid::Uuid::new_v4()));
+            .join(format!("mctrin-hongshi-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }

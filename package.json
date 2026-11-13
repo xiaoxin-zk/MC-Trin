@@ -1,5 +1,5 @@
 {
-  "name": "@axolotl/monorepo",
+  "name": "@mctrin/monorepo",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -21,13 +21,13 @@
     "prepr:website": "turbo run prepr --filter=@mctrin/website",
     "icons:add": "pnpm --filter @modrinth/assets icons:add",
     "scripts": "node scripts/run.mjs",
-    "axolotl:brand-guard": "node scripts/axolotl/brand-guard.mjs",
-    "axolotl:check-agents": "node scripts/axolotl/check-agents.mjs",
-    "axolotl:check-css-vars": "node scripts/axolotl/check-css-vars.mjs",
-    "axolotl:check-orphan-components": "node scripts/axolotl/check-orphan-components.mjs",
-    "blockbench:skin:sync": "node scripts/axolotl/sync-blockbench-skin-editor.mjs",
-    "axolotl:i18n-check": "node scripts/axolotl/i18n-check.mjs",
-    "axolotl:check-chinese": "node scripts/axolotl/check-chinese-hardcoded.mjs"
+    "mctrin:brand-guard": "node scripts/mctrin/brand-guard.mjs",
+    "mctrin:check-agents": "node scripts/mctrin/check-agents.mjs",
+    "mctrin:check-css-vars": "node scripts/mctrin/check-css-vars.mjs",
+    "mctrin:check-orphan-components": "node scripts/mctrin/check-orphan-components.mjs",
+    "blockbench:skin:sync": "node scripts/mctrin/sync-blockbench-skin-editor.mjs",
+    "mctrin:i18n-check": "node scripts/mctrin/i18n-check.mjs",
+    "mctrin:check-chinese": "node scripts/mctrin/check-chinese-hardcoded.mjs"
   },
   "devDependencies": {
     "@clack/prompts": "^1.0.0",

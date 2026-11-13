@@ -23,7 +23,7 @@ export interface UserPreset {
     createdAt: number
 }
 
-const STORAGE_KEY = 'axolotl:command-generator:user-presets'
+const STORAGE_KEY = 'mctrin:command-generator:user-presets'
 
 export function getUserPresets(): UserPreset[] {
     try {

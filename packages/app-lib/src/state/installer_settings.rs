@@ -138,7 +138,7 @@ mod windows {
         pool: &SqlitePool,
         app_identifier: &str,
     ) -> crate::Result<()> {
-        if std::env::var_os("THESEUS_CONFIG_DIR").is_some() {
+        if std::env::var_os("MCTRIN_CONFIG_DIR").is_some() {
             return Ok(());
         }
 
@@ -184,7 +184,7 @@ mod windows {
         use super::*;
 
         fn default_directory() -> PathBuf {
-            PathBuf::from(r"C:\Users\Test\AppData\Roaming\red.ghs.axolotl")
+            PathBuf::from(r"C:\Users\Test\AppData\Roaming\red.ghs.mctrin")
         }
 
         #[test]
@@ -205,12 +205,12 @@ mod windows {
         fn applies_a_custom_installer_directory() {
             assert_eq!(
                 decide_pending_directory(
-                    r"D:\Minecraft\Axolotl",
+                    r"D:\Minecraft\MC-Trin",
                     &default_directory(),
                     false,
                 ),
                 PendingDirectoryDecision::Apply {
-                    custom_dir: r"D:\Minecraft\Axolotl".to_string(),
+                    custom_dir: r"D:\Minecraft\MC-Trin".to_string(),
                     prev_custom_dir: default_directory()
                         .to_string_lossy()
                         .to_string(),
@@ -222,7 +222,7 @@ mod windows {
         fn clears_a_default_installer_directory() {
             assert_eq!(
                 decide_pending_directory(
-                    r"C:\Users\Test\AppData\Roaming\red.ghs.axolotl\",
+                    r"C:\Users\Test\AppData\Roaming\red.ghs.mctrin\",
                     &default_directory(),
                     false,
                 ),
@@ -234,7 +234,7 @@ mod windows {
         fn does_not_override_existing_settings() {
             assert_eq!(
                 decide_pending_directory(
-                    r"D:\Minecraft\Axolotl",
+                    r"D:\Minecraft\MC-Trin",
                     &default_directory(),
                     true,
                 ),
@@ -259,7 +259,7 @@ mod windows {
                 custom_dir: _,
                 prev_custom_dir,
             } = decide_pending_directory(
-                r"D:\Minecraft\Axolotl",
+                r"D:\Minecraft\MC-Trin",
                 &default_directory(),
                 false,
             )

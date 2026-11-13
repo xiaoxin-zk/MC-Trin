@@ -1,18 +1,18 @@
-use serde::{Deserialize, Serialize};
-use tauri::Runtime;
-use tauri_plugin_opener::OpenerExt;
-use theseus::{
+use mctrin::{
     handler,
     prelude::{CommandPayload, DirectoryInfo, app_db_backup_dir},
 };
+use serde::{Deserialize, Serialize};
+use tauri::Runtime;
+use tauri_plugin_opener::OpenerExt;
 
-use crate::api::{Result, TheseusSerializableError};
+use crate::api::{MctrinSerializableError, Result};
 use async_zip::tokio::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use dashmap::DashMap;
+use mctrin::prelude::canonicalize;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use theseus::prelude::canonicalize;
 use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
 
@@ -57,7 +57,7 @@ pub fn get_os() -> OS {
 
 #[tauri::command]
 pub async fn is_network_metered() -> Result<bool> {
-    Ok(theseus::prelude::is_network_metered().await?)
+    Ok(mctrin::prelude::is_network_metered().await?)
 }
 
 // Lists active progress bars
@@ -65,8 +65,8 @@ pub async fn is_network_metered() -> Result<bool> {
 // Values provided should not be used directly, as they are not guaranteed to be up-to-date
 #[tauri::command]
 pub async fn progress_bars_list()
--> Result<DashMap<uuid::Uuid, theseus::LoadingBar>> {
-    let res = theseus::EventState::list_progress_bars().await?;
+-> Result<DashMap<uuid::Uuid, mctrin::LoadingBar>> {
+    let res = mctrin::EventState::list_progress_bars().await?;
     Ok(res)
 }
 
@@ -246,7 +246,7 @@ pub async fn export_launcher_logs(
 ) -> Result<()> {
     // Censoring needs the app state (credentials, IPs). Without it an export
     // would silently ship secrets, so fail rather than degrade.
-    let state = theseus::State::get().await?;
+    let state = mctrin::State::get().await?;
     let archive = tokio::fs::File::create(&output_path).await?;
     let mut writer = ZipFileWriter::with_tokio(archive);
 
@@ -331,7 +331,7 @@ pub async fn export_launcher_logs(
 
     if include_crash_analysis
         && let Some((instance_id, _)) = recent_instance.as_ref()
-        && let Ok(analysis) = theseus::logs::analyze_crash(instance_id).await
+        && let Ok(analysis) = mctrin::logs::analyze_crash(instance_id).await
         && (analysis.crashed || !analysis.findings.is_empty())
         && let Ok(report) = serde_json::to_vec_pretty(&analysis)
     {
@@ -352,16 +352,16 @@ pub async fn export_launcher_logs(
 
     if include_network_connections {
         let report = build_network_report(|target| {
-            theseus::test_network_connection(
+            mctrin::test_network_connection(
                 target,
-                theseus::NetworkTestMode::Launcher,
+                mctrin::NetworkTestMode::Launcher,
             )
         })
         .await;
         let report = serde_json::to_string_pretty(&report)
-            .map_err(theseus::Error::from)?;
+            .map_err(mctrin::Error::from)?;
         let report =
-            theseus::install::censor_shared_credentials(report, &state).await?;
+            mctrin::install::censor_shared_credentials(report, &state).await?;
         write_zip_entry(
             &mut writer,
             "network-connections.json",
@@ -376,12 +376,11 @@ pub async fn export_launcher_logs(
 
 async fn build_network_report<F, Fut>(mut probe: F) -> serde_json::Value
 where
-    F: FnMut(theseus::NetworkTestTarget) -> Fut,
-    Fut: std::future::Future<
-            Output = theseus::Result<theseus::NetworkTestResult>,
-        >,
+    F: FnMut(mctrin::NetworkTestTarget) -> Fut,
+    Fut:
+        std::future::Future<Output = mctrin::Result<mctrin::NetworkTestResult>>,
 {
-    use theseus::NetworkTestTarget;
+    use mctrin::NetworkTestTarget;
 
     let generated_at = chrono::Utc::now().to_rfc3339();
     let mut tests = Vec::new();
@@ -426,16 +425,16 @@ mod network_export_tests {
             let report = build_network_report(|target| {
                 attempts.push(serde_json::to_value(target).unwrap());
                 async move {
-                    if matches!(target, theseus::NetworkTestTarget::ModrinthApi)
+                    if matches!(target, mctrin::NetworkTestTarget::ModrinthApi)
                     {
-                        return Err(theseus::ErrorKind::InputError(
+                        return Err(mctrin::ErrorKind::InputError(
                             "proxy https://user:secret@localhost".to_string(),
                         )
                         .as_error());
                     }
-                    Ok(theseus::NetworkTestResult {
+                    Ok(mctrin::NetworkTestResult {
                         target,
-                        mode: theseus::NetworkTestMode::Launcher,
+                        mode: mctrin::NetworkTestMode::Launcher,
                         tested_at: "2026-10-19T00:00:00Z".to_string(),
                         launcher_version: "test".to_string(),
                         platform: "test".to_string(),
@@ -496,7 +495,7 @@ async fn write_exported_logs(
     writer: &mut ZipFileWriter<tokio::fs::File>,
     range: LogExportRange,
     level: LogExportLevel,
-    state: &theseus::State,
+    state: &mctrin::State,
 ) -> Result<(usize, Vec<String>)> {
     let Some(directories) = DirectoryInfo::global_handle_if_ready() else {
         return Ok((0, Vec::new()));
@@ -535,7 +534,7 @@ async fn write_exported_logs(
             skipped.push(file_name);
             continue;
         };
-        let filtered = theseus::filter_log_contents(
+        let filtered = mctrin::filter_log_contents(
             &contents,
             range.max_age(),
             level.minimum(),
@@ -558,9 +557,9 @@ async fn write_exported_logs(
 /// propagate so an export never ships unredacted content.
 async fn censor_export_text(
     text: String,
-    state: &theseus::State,
+    state: &mctrin::State,
 ) -> Result<String> {
-    Ok(theseus::install::censor_shared_text(text, state).await?)
+    Ok(mctrin::install::censor_shared_text(text, state).await?)
 }
 
 fn build_environment_report() -> String {
@@ -577,7 +576,7 @@ fn build_environment_report() -> String {
 
 /// The instance whose log was written most recently, if any.
 async fn newest_instance_log(
-    state: &theseus::State,
+    state: &mctrin::State,
 ) -> Option<(String, PathBuf)> {
     let instances_dir = state.directories.instances_dir();
     let mut entries = tokio::fs::read_dir(&instances_dir).await.ok()?;
@@ -662,8 +661,8 @@ pub(crate) async fn write_zip_entry(
 
 pub(crate) fn zip_error(
     error: async_zip::error::ZipError,
-) -> TheseusSerializableError {
-    theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+) -> MctrinSerializableError {
+    mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
         "Failed to create ZIP archive: {error}"
     )))
     .into()
@@ -725,18 +724,15 @@ pub async fn get_opening_command() -> Result<Option<CommandPayload>> {
 #[tauri::command]
 pub async fn get_minecraft_news(
     limit: Option<usize>,
-) -> Result<Vec<theseus::minecraft_news::MinecraftNewsItem>> {
-    Ok(
-        theseus::minecraft_news::get_minecraft_news(limit.unwrap_or(12))
-            .await?,
-    )
+) -> Result<Vec<mctrin::minecraft_news::MinecraftNewsItem>> {
+    Ok(mctrin::minecraft_news::get_minecraft_news(limit.unwrap_or(12)).await?)
 }
 
 // helper function called when redirected by a weblink (ie: modrith://do-something) or when redirected by a .mrpack file (in which case its a filepath)
 // We hijack the deep link library (which also contains functionality for instance-checking)
 pub async fn handle_command(command: String) -> Result<()> {
     tracing::info!("handle command: {command}");
-    Ok(theseus::handler::parse_and_emit_command(&command).await?)
+    Ok(mctrin::handler::parse_and_emit_command(&command).await?)
 }
 
 // Remove when (and if) https://github.com/tauri-apps/tauri/issues/12022 is implemented
@@ -746,20 +742,18 @@ pub(crate) fn tauri_convert_file_src(path: &Path) -> Result<Url> {
     #[cfg(not(any(windows, target_os = "android")))]
     const BASE: &str = "asset://localhost/";
 
-    macro_rules! theseus_try {
+    macro_rules! mctrin_try {
         ($test:expr) => {
             match $test {
                 Ok(val) => val,
-                Err(e) => {
-                    return Err(TheseusSerializableError::Theseus(e.into()))
-                }
+                Err(e) => return Err(MctrinSerializableError::Mctrin(e.into())),
             }
         };
     }
 
-    let path = theseus_try!(canonicalize(path));
+    let path = mctrin_try!(canonicalize(path));
     let path = path.to_string_lossy();
     let encoded = urlencoding::encode(&path);
 
-    Ok(theseus_try!(Url::parse(&format!("{BASE}{encoded}"))))
+    Ok(mctrin_try!(Url::parse(&format!("{BASE}{encoded}"))))
 }

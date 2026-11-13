@@ -77,7 +77,7 @@ pub(crate) mod multimc;
 pub mod optifine;
 pub mod quick_play_version;
 
-const UTF8_GAME_ARGUMENT_PREFIX: &str = "__THESEUS_UTF8__:";
+const UTF8_GAME_ARGUMENT_PREFIX: &str = "__MCTRIN_UTF8__:";
 
 fn encode_game_argument(argument: String) -> String {
     if argument.is_ascii() && !argument.starts_with(UTF8_GAME_ARGUMENT_PREFIX) {
@@ -2218,7 +2218,7 @@ pub async fn launch_minecraft(
         // 2.9.4-nightly-20150209, and the natives-only `lwjgl-platform`
         // carrier whose root-level `lwjgl.dll` would otherwise be what
         // `System.loadLibrary("lwjgl")` resolves first), plus the vanilla JNA
-        // platform and Mojang ICU (pre-existing Axolotl Cleanroom rule) —
+        // platform and Mojang ICU (pre-existing MC-Trin Cleanroom rule) —
         // covers direct ensure, classpath, and launch at once; the Cleanroom
         // LWJGL 3 line, lwjglxx, and the vanilla JNA core are never affected.
         for removed_library in
@@ -2448,7 +2448,7 @@ pub async fn launch_minecraft(
         .await
     {
         // The linked launcher configured its own Java runtime for this
-        // version; prefer it over Axolotl's discovery.
+        // version; prefer it over MC-Trin's discovery.
         java
     } else if let (Some(direct), Some(pcl)) =
         (direct_launch.as_ref(), pcl_launch.as_ref())
@@ -2459,7 +2459,7 @@ pub async fn launch_minecraft(
         && let Some(java) = select_pcl_java(direct, pcl).await
     {
         // The linked PCL/PCL-CE instance selected its own Java runtime;
-        // prefer it over Axolotl's discovery.
+        // prefer it over MC-Trin's discovery.
         java
     } else {
         let key = required_java_major(&version_info);
@@ -2696,8 +2696,8 @@ pub async fn launch_minecraft(
     } else {
         state.directories.version_natives_dir(&version_jar)
     };
-    // Linked native archives can change outside Axolotl, so rebuild only the
-    // Axolotl-owned linked cache on every launch. Never mutate linked folders.
+    // Linked native archives can change outside MC-Trin, so rebuild only the
+    // MC-Trin-owned linked cache on every launch. Never mutate linked folders.
     if direct_launch.is_some() && natives_dir.exists() {
         io::remove_dir_all(&natives_dir).await?;
     }
@@ -2707,7 +2707,7 @@ pub async fn launch_minecraft(
     if let (Some(direct), Some(libraries)) =
         (direct_launch.clone(), linked_libraries.clone())
     {
-        // Linked instances rebuild the Axolotl-owned natives cache on every
+        // Linked instances rebuild the MC-Trin-owned natives cache on every
         // launch; the managed restore path below must never touch them.
         let target = natives_dir.clone();
         let java_arch = java_version.architecture.clone();
@@ -2786,7 +2786,7 @@ pub async fn launch_minecraft(
     }
 
     let (main_class_keep_alive, main_class_path) =
-        get_resource_file!(env "JAVA_JARS_DIR" / "theseus.jar")?;
+        get_resource_file!(env "JAVA_JARS_DIR" / "mctrin.jar")?;
     let yggdrasil_agent = if credentials.is_yggdrasil() {
         let account = credentials.yggdrasil.as_ref().ok_or_else(|| {
             crate::ErrorKind::LauncherError(
@@ -2911,7 +2911,7 @@ pub async fn launch_minecraft(
         .game_assets_dir(&state.directories, version_info.assets == "legacy");
 
     command
-        .arg("com.modrinth.theseus.MinecraftLaunch")
+        .arg("com.mctrin.launcher.MinecraftLaunch")
         .arg(version_info.main_class.clone())
         .args(
             args::get_minecraft_arguments(
@@ -3146,6 +3146,7 @@ fn update_offline_skin_resource_pack_option(
 ) -> crate::Result<()> {
     use crate::minecraft_skins::{
         OFFLINE_SKIN_PACK_LEGACY_ID, OFFLINE_SKIN_PACK_MODERN_ID,
+        OFFLINE_SKIN_PACK_RETIRED_ID, OFFLINE_SKIN_PACK_RETIRED_MODERN_ID,
     };
 
     let resource_packs = Regex::new(r"(?m)^resourcePacks:(.*)$")?;
@@ -3153,9 +3154,15 @@ fn update_offline_skin_resource_pack_option(
         .captures(options_string)
         .and_then(|captures| captures.get(1))
         .map_or("[]", |value| value.as_str().trim());
-    if offline_skin_pack.enabled_pack_id.is_none()
-        && !existing_value.contains(OFFLINE_SKIN_PACK_LEGACY_ID)
-        && !existing_value.contains(OFFLINE_SKIN_PACK_MODERN_ID)
+    let pack_id_written_somewhere = [
+        OFFLINE_SKIN_PACK_LEGACY_ID,
+        OFFLINE_SKIN_PACK_MODERN_ID,
+        OFFLINE_SKIN_PACK_RETIRED_ID,
+        OFFLINE_SKIN_PACK_RETIRED_MODERN_ID,
+    ]
+    .iter()
+    .any(|pack_id| existing_value.contains(pack_id));
+    if offline_skin_pack.enabled_pack_id.is_none() && !pack_id_written_somewhere
     {
         return Ok(());
     }
@@ -3170,6 +3177,8 @@ fn update_offline_skin_resource_pack_option(
     packs.retain(|pack| {
         pack != OFFLINE_SKIN_PACK_LEGACY_ID
             && pack != OFFLINE_SKIN_PACK_MODERN_ID
+            && pack != OFFLINE_SKIN_PACK_RETIRED_ID
+            && pack != OFFLINE_SKIN_PACK_RETIRED_MODERN_ID
     });
     if let Some(pack_id) = offline_skin_pack.enabled_pack_id
         && !packs.iter().any(|pack| pack == pack_id)
@@ -3731,7 +3740,7 @@ mod offline_skin_resource_pack_tests {
 
         assert_eq!(
             options,
-            "resourcePacks:[\"vanilla\",\"file/Axolotl Offline Skin.zip\"]"
+            "resourcePacks:[\"vanilla\",\"file/MC-Trin Offline Skin.zip\"]"
         );
     }
 
@@ -3752,13 +3761,13 @@ mod offline_skin_resource_pack_tests {
 
         assert_eq!(
             options,
-            "resourcePacks:[\"vanilla\",\"file/user-pack.zip\",\"file/Axolotl Offline Skin.zip\"]"
+            "resourcePacks:[\"vanilla\",\"file/user-pack.zip\",\"file/MC-Trin Offline Skin.zip\"]"
         );
     }
 
     #[test]
     fn removes_both_offline_skin_pack_id_variants() {
-        let mut options = "resourcePacks:[\"vanilla\",\"Axolotl Offline Skin.zip\",\"file/Axolotl Offline Skin.zip\"]".to_string();
+        let mut options = "resourcePacks:[\"vanilla\",\"Axolotl Offline Skin.zip\",\"file/Axolotl Offline Skin.zip\",\"MC-Trin Offline Skin.zip\",\"file/MC-Trin Offline Skin.zip\"]".to_string();
 
         update_offline_skin_resource_pack_option(
             &mut options,

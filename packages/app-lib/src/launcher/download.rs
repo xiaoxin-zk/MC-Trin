@@ -1435,13 +1435,28 @@ fn normalize_version_timestamps(
 }
 
 fn derived_version_cache_marker_path(path: &Path) -> PathBuf {
+    path.with_extension("json.mctrin-format")
+}
+
+/// Marker file name written by releases before the MC-Trin rename. It is read
+/// as a fallback and removed when the renamed marker is written.
+fn legacy_derived_version_cache_marker_path(path: &Path) -> PathBuf {
     path.with_extension("json.axolotl-format")
 }
 
 async fn derived_version_cache_is_current(path: &Path) -> bool {
-    tokio::fs::read_to_string(derived_version_cache_marker_path(path))
-        .await
-        .is_ok_and(|format| format.trim() == DERIVED_VERSION_CACHE_FORMAT)
+    for marker in [
+        derived_version_cache_marker_path(path),
+        legacy_derived_version_cache_marker_path(path),
+    ] {
+        if tokio::fs::read_to_string(&marker)
+            .await
+            .is_ok_and(|format| format.trim() == DERIVED_VERSION_CACHE_FORMAT)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 async fn write_derived_version_cache_marker(path: &Path) -> crate::Result<()> {
@@ -1450,6 +1465,9 @@ async fn write_derived_version_cache_marker(path: &Path) -> crate::Result<()> {
         DERIVED_VERSION_CACHE_FORMAT,
     )
     .await?;
+    let _ =
+        tokio::fs::remove_file(legacy_derived_version_cache_marker_path(path))
+            .await;
     Ok(())
 }
 

@@ -11,7 +11,7 @@
   !endif
 !endif
 
-!macro AxlCheckReparseRemoved PATH
+!macro MctrinCheckReparseRemoved PATH
     System::Call 'kernel32::GetFileAttributes(t "${PATH}") i.r5'
     ${If} $5 != -1
         SetErrorLevel 2
@@ -80,7 +80,10 @@ Var /GLOBAL OldInstallDir
             MessageBox MB_ICONINFORMATION|MB_OK "An old installation of MC-Trin was detected that requires administrator permission to update from. You will be prompted with an admin prompt shortly."
         ${EndIf}
 
-        ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+        ReadRegStr $4 SHCTX "${MCTRIN_SETTINGSKEY}" ""
+        ${If} $4 == ""
+            ReadRegStr $4 SHCTX "${MCTRIN_LEGACY_SETTINGSKEY}" ""
+        ${EndIf}
         ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
 
         ReadRegStr $OldInstallDir SHCTX "${UNINSTKEY}" "InstallLocation"
@@ -172,7 +175,7 @@ Function un.RemoveReparsePoints
     ${If} $4 != -1
     ${AndIf} $5 != 0
         RmDir "$0"
-        !insertmacro AxlCheckReparseRemoved "$0"
+        !insertmacro MctrinCheckReparseRemoved "$0"
         Goto restore
     ${EndIf}
 
@@ -198,11 +201,11 @@ Function un.RemoveReparsePoints
 
             removeDirLink:
                 RmDir "$3" ; removes the junction / directory symlink itself
-                !insertmacro AxlCheckReparseRemoved "$3"
+                !insertmacro MctrinCheckReparseRemoved "$3"
                 Goto next
             removeFileLink:
                 Delete "$3" ; removes the file symlink itself
-                !insertmacro AxlCheckReparseRemoved "$3"
+                !insertmacro MctrinCheckReparseRemoved "$3"
                 Goto next
 
         notReparse:

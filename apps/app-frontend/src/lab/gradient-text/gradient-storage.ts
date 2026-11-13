@@ -28,7 +28,7 @@ export type GradientTextLabState = {
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
-export const GRADIENT_TEXT_STORAGE_KEY = 'axolotl.lab.gradient-text.v1'
+export const GRADIENT_TEXT_STORAGE_KEY = 'mctrin.lab.gradient-text.v1'
 
 export function createDefaultGradientTextState(): GradientTextLabState {
     return {

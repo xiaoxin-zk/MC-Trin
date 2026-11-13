@@ -50,8 +50,8 @@ const editorUrl = computed(() => {
     if (!platformName.value) return ''
     const baseUrl =
         platformName.value === 'windows'
-            ? 'http://axolotl-skin.localhost'
-            : 'axolotl-skin://localhost'
+            ? 'http://mctrin-skin.localhost'
+            : 'mctrin-skin://localhost'
     return `${baseUrl}/index.html?embed=skin&lang=${encodeURIComponent(blockbenchLocale.value)}`
 })
 
@@ -97,7 +97,7 @@ async function reloadEditor() {
 
 function sendThemeToEditor() {
     frame.value?.contentWindow?.postMessage(
-        { type: 'axolotl-skin-theme', theme: createSkinEditorTheme() },
+        { type: 'mctrin-skin-theme', theme: createSkinEditorTheme() },
         '*',
     )
 }
@@ -110,13 +110,13 @@ async function handleEditorMessage(event: MessageEvent<unknown>) {
     if (event.source !== frame.value?.contentWindow) return
     if (!event.data || typeof event.data !== 'object') return
     const message = event.data as { type?: unknown; name?: unknown; dataUrl?: unknown }
-    if (message.type === 'axolotl-skin-theme-ready') {
+    if (message.type === 'mctrin-skin-theme-ready') {
         sendThemeToEditor()
         markEditorReady()
         return
     }
     if (
-        message.type !== 'axolotl-skin-export' ||
+        message.type !== 'mctrin-skin-export' ||
         typeof message.name !== 'string' ||
         typeof message.dataUrl !== 'string'
     )

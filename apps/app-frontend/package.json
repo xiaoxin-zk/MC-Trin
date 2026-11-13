@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "contributors:sync": "node ../../scripts/axolotl/sync-contributors.mjs",
+    "contributors:sync": "node ../../scripts/mctrin/sync-contributors.mjs",
     "tsc:check": "vue-tsc --noEmit",
     "lint": "eslint . && prettier --check .",
     "fix": "eslint . --fix && prettier --write .",

@@ -37,7 +37,7 @@ Pinia — 纯 UI 态：theme、breadcrumbs、导航/返回流 UI
     ↓
 Domain services / providers — 安装、下载、内容流（DI，文件级可拆薄）
     ↓
-TanStack Query（远程读） + theseus 命令（写 / 权威配置）
+TanStack Query（远程读） + mctrin 命令（写 / 权威配置）
     ↓
 settings_dir / SQLite（权威持久化）
 ```
@@ -51,7 +51,7 @@ settings_dir / SQLite（权威持久化）
 | browse/upgrade 返回流 | Pinia 或显式 store（阶段 1 新建） | 模块级可变 map |
 | 远程列表/搜索 | TanStack Query | 手写无缓存 fetch 到组件 |
 | 安装/下载/内容选择流 | `providers/*` DI | 页面直接 invoke 业务命令 |
-| 权威设置 | theseus Settings / 命令 | 前端私自当真相 |
+| 权威设置 | mctrin Settings / 命令 | 前端私自当真相 |
 | 轻量 UI 偏好 | 单一 storage 入口（helpers 已有键） | 各处散落 `localStorage` |
 
 ### [S2.2] 路由契约（阶段 1）
@@ -103,7 +103,7 @@ settings_dir / SQLite（权威持久化）
 
 - 整库 Element/Naive/Vuetify/Quasar 替换
 - 重写 MC 内容卡 / 安装流 / 皮肤预览 / 终端
-- 后端 theseus Settings 语义变更
+- 后端 mctrin Settings 语义变更
 - URL 重命名或导航 IA 增删
 - 桌面 onboarding 步骤语义变更（仅保证目标 id 仍存在）
 - 官网信息架构重构

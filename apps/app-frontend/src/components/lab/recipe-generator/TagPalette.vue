@@ -35,7 +35,7 @@ let lastPickAt = 0
 const draggingTagUid = ref('')
 let suppressClicksUntil = 0
 
-const RECIPE_SLOT_MIME_TYPE = 'application/x-axolotl-recipe-slot'
+const RECIPE_SLOT_MIME_TYPE = 'application/x-mctrin-recipe-slot'
 const isTauriRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const TAG_ROW_HEIGHT = 44.8
 

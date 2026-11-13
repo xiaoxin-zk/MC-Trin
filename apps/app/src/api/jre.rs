@@ -1,7 +1,7 @@
 use crate::api::Result;
+use mctrin::prelude::*;
 use std::path::PathBuf;
 use tauri::plugin::TauriPlugin;
-use theseus::prelude::*;
 
 pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
     tauri::plugin::Builder::new("jre")
@@ -137,8 +137,8 @@ pub async fn jre_get_memory_status(
 
 #[tauri::command]
 pub async fn jre_optimize_memory()
--> Result<theseus::memory::MemoryOptimizationResult> {
-    Ok(theseus::memory::optimize().await?)
+-> Result<mctrin::memory::MemoryOptimizationResult> {
+    Ok(mctrin::memory::optimize().await?)
 }
 
 #[tauri::command]
@@ -165,6 +165,6 @@ pub async fn download_java_from_feed(
 pub async fn download_java(
     vendor: String,
     version: u32,
-) -> Result<theseus::install::InstallJobSnapshot> {
-    Ok(theseus::install::download_java(vendor, version).await?)
+) -> Result<mctrin::install::InstallJobSnapshot> {
+    Ok(mctrin::install::download_java(vendor, version).await?)
 }

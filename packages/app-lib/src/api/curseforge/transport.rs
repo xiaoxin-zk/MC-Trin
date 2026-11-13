@@ -45,13 +45,13 @@ pub(crate) fn api_key() -> Option<String> {
     api_key_with_source().0
 }
 
-/// A key set in the launcher wins over `AXOLOTL_CURSEFORGE_API_KEY`, which in
+/// A key set in the launcher wins over `MCTRIN_CURSEFORGE_API_KEY`, which in
 /// turn wins over the one this build was given. Either of the launcher sources
 /// can be absent: builds without `CURSEFORGE_API_KEY` stay valid, they just
 /// cannot reach the official API until a key is provided.
 pub(crate) fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource)
 {
-    let launcher_key = std::env::var("AXOLOTL_CURSEFORGE_API_KEY")
+    let launcher_key = std::env::var("MCTRIN_CURSEFORGE_API_KEY")
         .ok()
         .or_else(|| option_env!("CURSEFORGE_API_KEY").map(str::to_string));
 
@@ -74,7 +74,7 @@ pub(super) fn resolve_api_key(
 
 fn api_base_url() -> String {
     #[cfg(debug_assertions)]
-    if let Ok(value) = std::env::var("AXOLOTL_CURSEFORGE_API_BASE_URL")
+    if let Ok(value) = std::env::var("MCTRIN_CURSEFORGE_API_BASE_URL")
         && value.starts_with("http://127.0.0.1:")
     {
         return value.trim_end_matches('/').to_string();

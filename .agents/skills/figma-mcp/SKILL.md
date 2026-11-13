@@ -10,7 +10,7 @@ Read the [Figma standard](../../../standards/frontend/FIGMA_MCP_USAGE.md), [shar
 1. **Parse the Figma URL** from the user-supplied URL — extract the `fileKey` and `nodeId`. Convert `-` to `:` in the node ID.
 2. **Read the standards above** for tool availability and adaptation rules before calling Figma tools.
 3. **Call `get_design_context`** with the extracted `nodeId` and `fileKey`, using `clientLanguages: "typescript,html,css"` and `clientFrameworks: "vue"`. This is the first Figma design tool call.
-4. **Adapt the output to the Axolotl codebase:**
+4. **Adapt the output to the MC-Trin codebase:**
    - Map Figma color variables to `surface-*` / `text-*` tokens — never use Figma's aliased names directly.
    - Check `packages/ui/src/components/` for existing components that match elements in the design (buttons, cards, modals, inputs, etc.).
    - Check `packages/assets/styles/variables.scss` for tokens not exposed in Figma.

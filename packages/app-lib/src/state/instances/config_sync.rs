@@ -13,8 +13,13 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
-pub(crate) const CONFIG_FILE_NAME: &str = "axolotl_config.json";
-pub(crate) const CONFIG_FILE_TEMP_NAME: &str = "axolotl_config.json.tmp";
+pub(crate) const CONFIG_FILE_NAME: &str = "mctrin_config.json";
+pub(crate) const CONFIG_FILE_TEMP_NAME: &str = "mctrin_config.json.tmp";
+/// Config file names written by releases before the MC-Trin rename. They are
+/// still recognized so existing instances keep syncing, and the legacy files
+/// are removed once the renamed config has been written.
+pub(crate) const LEGACY_CONFIG_FILE_NAME: &str = "axolotl_config.json";
+pub(crate) const LEGACY_CONFIG_FILE_TEMP_NAME: &str = "axolotl_config.json.tmp";
 
 const CONFIG_SCHEMA_VERSION: u32 = 1;
 const DIRTY_POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -145,6 +150,7 @@ async fn sync_instance_with_dirs(
 
     let bytes = serde_json::to_vec_pretty(&config_file(&metadata, Utc::now()))?;
     write_config_file(&config_path, &temp_path, &bytes).await?;
+    remove_legacy_config_files(dirs, &metadata.instance.path).await?;
     config_sync_rows::update_config_sync_generated_at(
         instance_id,
         Utc::now().timestamp(),
@@ -195,14 +201,29 @@ pub(crate) async fn remove_config_file(
     dirs: &DirectoryInfo,
     instance_path: &str,
 ) -> crate::Result<()> {
-    remove_if_exists(&config_path(dirs, instance_path)).await?;
-    remove_if_exists(
-        &dirs
-            .instances_dir()
-            .join(instance_path)
-            .join(CONFIG_FILE_TEMP_NAME),
-    )
-    .await?;
+    for name in [
+        CONFIG_FILE_NAME,
+        CONFIG_FILE_TEMP_NAME,
+        LEGACY_CONFIG_FILE_NAME,
+        LEGACY_CONFIG_FILE_TEMP_NAME,
+    ] {
+        remove_if_exists(&dirs.instances_dir().join(instance_path).join(name))
+            .await?;
+    }
+
+    Ok(())
+}
+
+/// Removes the pre-rename config files after the renamed config was written,
+/// so watcher classification and drop detection never see both at once.
+async fn remove_legacy_config_files(
+    dirs: &DirectoryInfo,
+    instance_path: &str,
+) -> crate::Result<()> {
+    for name in [LEGACY_CONFIG_FILE_NAME, LEGACY_CONFIG_FILE_TEMP_NAME] {
+        remove_if_exists(&dirs.instances_dir().join(instance_path).join(name))
+            .await?;
+    }
 
     Ok(())
 }
@@ -271,7 +292,7 @@ async fn write_config_file(
 
     let rename_result = io::retry_windows_sharing_violation(
         config_path,
-        "renaming axolotl_config.json",
+        "renaming mctrin_config.json",
         || tokio::fs::rename(temp_path, config_path),
     )
     .await;

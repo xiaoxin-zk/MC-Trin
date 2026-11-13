@@ -1031,7 +1031,7 @@ function formatAdapterName(adapterId: GradientFormatId): string {
 
 <style scoped>
 @font-face {
-    font-family: 'axolotl-lab-minecraft';
+    font-family: 'mctrin-lab-minecraft';
     font-style: normal;
     font-weight: 400;
     font-display: swap;
@@ -1193,7 +1193,7 @@ function formatAdapterName(adapterId: GradientFormatId): string {
     background-position: center bottom;
     background-repeat: no-repeat;
     background-size: cover;
-    font-family: 'axolotl-lab-minecraft', monospace;
+    font-family: 'mctrin-lab-minecraft', monospace;
     font-size: 18px;
     line-height: 24px;
     word-break: break-all;

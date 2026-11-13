@@ -96,7 +96,7 @@ export async function getTranslationSettings(): Promise<TranslationSettings> {
     return await invoke('plugin:translation|translation_get_settings')
 }
 
-const AUTO_TRANSLATE_HINT_STORAGE_KEY = 'axolotl.auto-translate-hint-shown'
+const AUTO_TRANSLATE_HINT_STORAGE_KEY = 'mctrin.auto-translate-hint-shown'
 const AUTO_TRANSLATE_HINT_CLICK_THRESHOLD = 3
 let manualTranslateClickCount = 0
 

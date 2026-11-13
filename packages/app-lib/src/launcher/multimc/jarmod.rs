@@ -101,7 +101,7 @@ impl Artifact {
             local,
             download,
             cache_path: PathBuf::from(format!(
-                "com/axolotl/multimc/artifacts/{digest}.jar"
+                "com/mctrin/multimc/artifacts/{digest}.jar"
             )),
             always_stale: raw.get("MMC-hint").and_then(Value::as_str)
                 == Some("always-stale"),
@@ -329,7 +329,7 @@ impl PreparedRuntime {
         }
         let base = base.to_path_buf();
         let mods = self.jar_mods.clone();
-        let output = game_dir.join(".axolotl/multimc-minecraft.jar");
+        let output = game_dir.join(".mctrin/multimc-minecraft.jar");
         let target = output.clone();
         let lock = fetch::destination_download_lock(&output);
         let _guard = lock.lock().await;
@@ -879,12 +879,12 @@ mod tests {
 
     /// Verifies a real export without starting the bundled game or installer.
     #[tokio::test]
-    #[ignore = "requires AXOLOTL_TEST_MULTIMC_ARCHIVE and AXOLOTL_TEST_MULTIMC_FIXTURE"]
+    #[ignore = "requires MCTRIN_TEST_MULTIMC_ARCHIVE and MCTRIN_TEST_MULTIMC_FIXTURE"]
     async fn multimc_real_bta_jar_mod_archive() {
         let archive_path =
-            std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE").unwrap();
+            std::env::var_os("MCTRIN_TEST_MULTIMC_ARCHIVE").unwrap();
         let fixture = PathBuf::from(
-            std::env::var_os("AXOLOTL_TEST_MULTIMC_FIXTURE").unwrap(),
+            std::env::var_os("MCTRIN_TEST_MULTIMC_FIXTURE").unwrap(),
         );
         let root = tempfile::tempdir().unwrap();
         let game = root.path().join("minecraft");

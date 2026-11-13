@@ -33,15 +33,15 @@ ${StrLoc}
 
 ; Declared before the hooks include below, because a hook can expand the
 ; macro that writes them.
-Var AxlPortableLayout
-Var AxlPortableValue
-Var AxlPortablePath
-Var AxlPortableChar
-Var AxlPortableOut
-Var AxlPortableIndex
-Var AxlPortableLen
+Var MctrinPortableLayout
+Var MctrinPortableValue
+Var MctrinPortablePath
+Var MctrinPortableChar
+Var MctrinPortableOut
+Var MctrinPortableIndex
+Var MctrinPortableLen
 
-; Sets $AxlPortableLayout to "1" when the installation is portable.
+; Sets $MctrinPortableLayout to "1" when the installation is portable.
 ;
 ; PortableInstall stores the folder the record applies to, not a bare flag, so
 ; a record left behind by an install elsewhere cannot reclassify this one.
@@ -64,26 +64,26 @@ Var AxlPortableLen
 ; from an internal counter and so stay unique on every expansion. A hand written
 ; label would be defined again by each insertion and fail to assemble the
 ; second time.
-!macro AxlDetectPortableLayout
-  StrCpy $AxlPortableLayout "0"
+!macro MctrinDetectPortableLayout
+  StrCpy $MctrinPortableLayout "0"
 
   ; Windows accepts either separator in a path, but the record is compared as a
   ; string, so both spellings are folded to a backslash first. Without this,
   ; "D:/mc/x" and "D:\mc\x" - the same folder - would not match.
-  StrCpy $AxlPortableOut ""
-  StrCpy $AxlPortableIndex 0
+  StrCpy $MctrinPortableOut ""
+  StrCpy $MctrinPortableIndex 0
   ${DoWhile} 1 == 1
-    StrCpy $AxlPortableChar "$INSTDIR" 1 $AxlPortableIndex
-    ${If} $AxlPortableChar == ""
+    StrCpy $MctrinPortableChar "$INSTDIR" 1 $MctrinPortableIndex
+    ${If} $MctrinPortableChar == ""
       ${ExitDo}
     ${EndIf}
-    ${If} $AxlPortableChar == "/"
-      StrCpy $AxlPortableChar "\"
+    ${If} $MctrinPortableChar == "/"
+      StrCpy $MctrinPortableChar "\"
     ${EndIf}
-    StrCpy $AxlPortableOut "$AxlPortableOut$AxlPortableChar"
-    IntOp $AxlPortableIndex $AxlPortableIndex + 1
+    StrCpy $MctrinPortableOut "$MctrinPortableOut$MctrinPortableChar"
+    IntOp $MctrinPortableIndex $MctrinPortableIndex + 1
   ${Loop}
-  StrCpy $AxlPortablePath "$AxlPortableOut"
+  StrCpy $MctrinPortablePath "$MctrinPortableOut"
 
   ; Every trailing separator is dropped, not just one, because /INSTALL_DIR= and
   ; typed input can both carry a run of them.
@@ -94,15 +94,15 @@ Var AxlPortableLen
   ; "\\server\share\" to "\\server\share" is correct, and the loop then stops
   ; naturally because that string no longer ends in a separator.
   ${DoWhile} 1 == 1
-    StrCpy $AxlPortableChar "$AxlPortablePath" 1 -1
-    ${If} $AxlPortableChar != "\"
+    StrCpy $MctrinPortableChar "$MctrinPortablePath" 1 -1
+    ${If} $MctrinPortableChar != "\"
       ${ExitDo}
     ${EndIf}
-    StrLen $AxlPortableLen "$AxlPortablePath"
-    ${If} $AxlPortableLen <= 3
+    StrLen $MctrinPortableLen "$MctrinPortablePath"
+    ${If} $MctrinPortableLen <= 3
       ${ExitDo}
     ${EndIf}
-    StrCpy $AxlPortablePath "$AxlPortablePath" -1
+    StrCpy $MctrinPortablePath "$MctrinPortablePath" -1
   ${Loop}
 
   ; The record stores the folder it applies to, so one left behind by an
@@ -110,10 +110,13 @@ Var AxlPortableLen
   ; builds matches no folder and is ignored; those installs are still found
   ; through their marker below.
   ClearErrors
-  ReadRegStr $AxlPortableValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
-  ${If} $AxlPortableValue != ""
-  ${AndIf} $AxlPortableValue == $AxlPortablePath
-    StrCpy $AxlPortableLayout "1"
+  ReadRegStr $MctrinPortableValue HKCU "${MCTRIN_SETTINGSKEY}" "PortableInstall"
+  ${If} $MctrinPortableValue == ""
+    ReadRegStr $MctrinPortableValue HKCU "${MCTRIN_LEGACY_SETTINGSKEY}" "PortableInstall"
+  ${EndIf}
+  ${If} $MctrinPortableValue != ""
+  ${AndIf} $MctrinPortableValue == $MctrinPortablePath
+    StrCpy $MctrinPortableLayout "1"
   ${EndIf}
 
   ; The marker the launcher itself keys portable mode off is checked as well,
@@ -121,12 +124,12 @@ Var AxlPortableLen
   ; whose uninstall registration was lost, and the pre-rename layout. Both the
   ; plain path and the wildcard form are tested, so the result does not depend
   ; on how IfFileExists treats a directory in this NSIS version.
-  ${If} $AxlPortableLayout == "0"
-    ${If} ${FileExists} "$AxlPortablePath\.MC-Trin"
-    ${OrIf} ${FileExists} "$AxlPortablePath\.MC-Trin\*"
-    ${OrIf} ${FileExists} "$AxlPortablePath\.Axolotl"
-    ${OrIf} ${FileExists} "$AxlPortablePath\.Axolotl\*"
-      StrCpy $AxlPortableLayout "1"
+  ${If} $MctrinPortableLayout == "0"
+    ${If} ${FileExists} "$MctrinPortablePath\.MC-Trin"
+    ${OrIf} ${FileExists} "$MctrinPortablePath\.MC-Trin\*"
+    ${OrIf} ${FileExists} "$MctrinPortablePath\.Axolotl"
+    ${OrIf} ${FileExists} "$MctrinPortablePath\.Axolotl\*"
+      StrCpy $MctrinPortableLayout "1"
     ${EndIf}
   ${EndIf}
 !macroend
@@ -166,32 +169,39 @@ Var AxlPortableLen
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !define MANUKEY "Software\${MANUFACTURER}"
 !define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
+; Settings live under the brand key instead of the manufacturer/product pair.
+; Installs made before the rename stored them under the old key, so every
+; reader falls back to ${MCTRIN_LEGACY_SETTINGSKEY} when the new key is empty,
+; and the uninstaller removes both.
+!define MCTRIN_SETTINGSKEY "Software\MCTrin"
+!define MCTRIN_LEGACY_SETTINGSKEY "Software\ghs\Axolotl Launcher"
+!define MCTRIN_LEGACY_MANUKEY "Software\ghs"
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
 
-!define AXL_BACKGROUND 16181C
-!define AXL_SURFACE 1D1F23
-!define AXL_RAISED 27292E
-!define AXL_CONTROL 34363C
-!define AXL_BORDER 42444A
-!define AXL_TEXT FFFFFF
-!define AXL_TEXT_MUTED B0BAC5
-!define AXL_TEXT_SECONDARY 96A2B0
-!define AXL_BRAND F472B6
-!define AXL_SUCCESS 1BD96A
-!define AXL_ERROR FF496E
+!define MCTRIN_BACKGROUND 16181C
+!define MCTRIN_SURFACE 1D1F23
+!define MCTRIN_RAISED 27292E
+!define MCTRIN_CONTROL 34363C
+!define MCTRIN_BORDER 42444A
+!define MCTRIN_TEXT FFFFFF
+!define MCTRIN_TEXT_MUTED B0BAC5
+!define MCTRIN_TEXT_SECONDARY 96A2B0
+!define MCTRIN_BRAND F472B6
+!define MCTRIN_SUCCESS 1BD96A
+!define MCTRIN_ERROR FF496E
 
-!define MUI_BGCOLOR ${AXL_BACKGROUND}
-!define MUI_TEXTCOLOR ${AXL_TEXT}
-!define MUI_INSTFILESPAGE_COLORS "${AXL_TEXT} ${AXL_BACKGROUND}"
-!define MUI_WELCOMEPAGE_TITLE "$(axlWelcomeTitle)"
-!define MUI_WELCOMEPAGE_TEXT "$(axlWelcomeText)"
-!define MUI_FINISHPAGE_TITLE "$(axlFinishTitle)"
-!define MUI_FINISHPAGE_TEXT "$(axlFinishText)"
+!define MUI_BGCOLOR ${MCTRIN_BACKGROUND}
+!define MUI_TEXTCOLOR ${MCTRIN_TEXT}
+!define MUI_INSTFILESPAGE_COLORS "${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}"
+!define MUI_WELCOMEPAGE_TITLE "$(mctrinWelcomeTitle)"
+!define MUI_WELCOMEPAGE_TEXT "$(mctrinWelcomeText)"
+!define MUI_FINISHPAGE_TITLE "$(mctrinFinishTitle)"
+!define MUI_FINISHPAGE_TEXT "$(mctrinFinishText)"
 !define MUI_ABORTWARNING
-!define MUI_CUSTOMFUNCTION_GUIINIT ApplyAxolotlTheme
-!define MUI_CUSTOMFUNCTION_UNGUIINIT un.ApplyAxolotlTheme
+!define MUI_CUSTOMFUNCTION_GUIINIT ApplyMctrinTheme
+!define MUI_CUSTOMFUNCTION_UNGUIINIT un.ApplyMctrinTheme
 
 Var PassiveMode
 Var UpdateMode
@@ -221,13 +231,13 @@ Var UninstallFailure
 Var PortableMode
 Var PortableCheckbox
 
-!macro AxlUninstallFile PATH
+!macro MctrinUninstallFile PATH
   Delete "${PATH}"
   Push "${PATH}"
   Call un.CheckPathRemoved
 !macroend
 
-!macro AxlStyleControl CONTROL FOREGROUND BACKGROUND
+!macro MctrinStyleControl CONTROL FOREGROUND BACKGROUND
   SetCtlColors ${CONTROL} ${FOREGROUND} ${BACKGROUND}
   System::Call 'uxtheme::SetWindowTheme(p ${CONTROL}, w "DarkMode_Explorer", w "")'
 !macroend
@@ -317,7 +327,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Define registry key to store installer language
 !define MUI_LANGDLL_REGISTRY_ROOT "HKCU"
-!define MUI_LANGDLL_REGISTRY_KEY "${MANUPRODUCTKEY}"
+!define MUI_LANGDLL_REGISTRY_KEY "${MCTRIN_SETTINGSKEY}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
 
 ; Installer pages, must be ordered as they appear
@@ -427,21 +437,21 @@ Function PageReinstall
     nsDialogs::Create 1018
     Pop $R4
     ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
-    SetCtlColors $R4 ${AXL_TEXT} ${AXL_BACKGROUND}
+    SetCtlColors $R4 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
 
     ${NSD_CreateLabel} 0 0 100% 24u $R1
     Pop $R1
-    SetCtlColors $R1 ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
+    SetCtlColors $R1 ${MCTRIN_TEXT_MUTED} ${MCTRIN_BACKGROUND}
     SendMessage $R1 ${WM_SETFONT} $InstallerBodyFont 1
 
     ${NSD_CreateRadioButton} 30u 50u -30u 8u $R2
     Pop $R2
-    !insertmacro AxlStyleControl $R2 ${AXL_TEXT} ${AXL_BACKGROUND}
+    !insertmacro MctrinStyleControl $R2 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
     ${NSD_OnClick} $R2 PageReinstallUpdateSelection
 
     ${NSD_CreateRadioButton} 30u 70u -30u 8u $R3
     Pop $R3
-    !insertmacro AxlStyleControl $R3 ${AXL_TEXT} ${AXL_BACKGROUND}
+    !insertmacro MctrinStyleControl $R3 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
     ; Disable this radio button if downgrading and downgrades are disabled
     !if "${ALLOWDOWNGRADES}" == "false"
       ${IfThen} $R0 = -1 ${|} EnableWindow $R3 0 ${|}
@@ -514,7 +524,10 @@ Function PageLeaveReinstall
       ReadRegStr $R1 HKLM "$R6" "UninstallString"
       ExecWait '$R1' $0
     ${Else}
-      ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+      ReadRegStr $4 SHCTX "${MCTRIN_SETTINGSKEY}" ""
+      ${If} $4 == ""
+        ReadRegStr $4 SHCTX "${MCTRIN_LEGACY_SETTINGSKEY}" ""
+      ${EndIf}
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
@@ -546,7 +559,7 @@ Function PageLeaveReinstall
   reinst_done:
 FunctionEnd
 
-Function ApplyAxolotlTheme
+Function ApplyMctrinTheme
   CreateFont $InstallerBodyFont "Segoe UI" 9 400
   CreateFont $InstallerTitleFont "Segoe UI" 16 700
   CreateFont $InstallerSmallFont "Segoe UI" 8 400
@@ -556,38 +569,38 @@ Function ApplyAxolotlTheme
     System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 19, *i 1, i 4)'
   ${EndIf}
 
-  SetCtlColors $HWNDPARENT ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $HWNDPARENT ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   GetDlgItem $0 $HWNDPARENT 1
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   GetDlgItem $0 $HWNDPARENT 2
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   GetDlgItem $0 $HWNDPARENT 3
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   GetDlgItem $0 $HWNDPARENT 1028
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT_SECONDARY} ${AXL_BACKGROUND}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT_SECONDARY} ${MCTRIN_BACKGROUND}
 FunctionEnd
 
 Function StyleCurrentPage
   FindWindow $0 "#32770" "" $HWNDPARENT
-  SetCtlColors $0 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $0 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $0 ${WM_SETFONT} $InstallerBodyFont 1
 
   GetDlgItem $1 $0 1200
-  SetCtlColors $1 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $1 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $1 ${WM_SETFONT} $InstallerTitleFont 1
   GetDlgItem $1 $0 1201
-  SetCtlColors $1 ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
+  SetCtlColors $1 ${MCTRIN_TEXT_MUTED} ${MCTRIN_BACKGROUND}
   SendMessage $1 ${WM_SETFONT} $InstallerBodyFont 1
   GetDlgItem $1 $0 1004
-  !insertmacro AxlStyleControl $1 ${AXL_TEXT_MUTED} ${AXL_SURFACE}
+  !insertmacro MctrinStyleControl $1 ${MCTRIN_TEXT_MUTED} ${MCTRIN_SURFACE}
   GetDlgItem $1 $0 1027
-  !insertmacro AxlStyleControl $1 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $1 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
 FunctionEnd
 
 Function WelcomeShow
   Call StyleCurrentPage
   GetDlgItem $0 $HWNDPARENT 1
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(axlStart)"
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(mctrinStart)"
 FunctionEnd
 
 Function InstFilesShow
@@ -597,7 +610,7 @@ FunctionEnd
 Function FinishShow
   Call StyleCurrentPage
   GetDlgItem $0 $HWNDPARENT 1
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(axlFinishButton)"
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(mctrinFinishButton)"
 FunctionEnd
 
 Function ReportInstallerProgress
@@ -622,8 +635,8 @@ Function UpdateResourceDirectoryNotice
 
   ${NSD_GetText} $ResourceDirInput $ResourceDir
   ${If} ${FileExists} "$ResourceDir\*.*"
-    ${NSD_SetText} $ResourceDirNotice "$(axlExistingDirectoryNotice)"
-    SetCtlColors $ResourceDirNotice ${AXL_TEXT_SECONDARY} ${AXL_BACKGROUND}
+    ${NSD_SetText} $ResourceDirNotice "$(mctrinExistingDirectoryNotice)"
+    SetCtlColors $ResourceDirNotice ${MCTRIN_TEXT_SECONDARY} ${MCTRIN_BACKGROUND}
     ShowWindow $ResourceDirNotice ${SW_SHOW}
   ${Else}
     ShowWindow $ResourceDirNotice ${SW_HIDE}
@@ -634,16 +647,16 @@ Function UpdatePortableModeNotice
   ${NSD_GetState} $PortableCheckbox $0
   ${If} $0 == ${BST_CHECKED}
     StrCpy $PortableMode 1
-    ${NSD_SetText} $ResourceDirNotice "$(axlPortableHint)"
+    ${NSD_SetText} $ResourceDirNotice "$(mctrinPortableHint)"
   ${Else}
     StrCpy $PortableMode 0
-    ${NSD_SetText} $ResourceDirNotice "$(axlDataSubfolderNotice)"
+    ${NSD_SetText} $ResourceDirNotice "$(mctrinDataSubfolderNotice)"
   ${EndIf}
 FunctionEnd
 
 Function BrowseInstallDirectory
   ${NSD_GetText} $InstallDirInput $INSTDIR
-  nsDialogs::SelectFolderDialog "$(axlSelectInstallDirectory)" "$INSTDIR"
+  nsDialogs::SelectFolderDialog "$(mctrinSelectInstallDirectory)" "$INSTDIR"
   Pop $0
   ${If} $0 != error
     ${NSD_SetText} $InstallDirInput $0
@@ -652,7 +665,7 @@ FunctionEnd
 
 Function BrowseResourceDirectory
   ${NSD_GetText} $ResourceDirInput $ResourceDir
-  nsDialogs::SelectFolderDialog "$(axlSelectResourceDirectory)" "$ResourceDir"
+  nsDialogs::SelectFolderDialog "$(mctrinSelectResourceDirectory)" "$ResourceDir"
   Pop $0
   ${If} $0 != error
     ${NSD_SetText} $ResourceDirInput $0
@@ -669,67 +682,67 @@ Function PageOptions
   nsDialogs::Create 1018
   Pop $OptionsDialog
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
-  SetCtlColors $OptionsDialog ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $OptionsDialog ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
 
-  ${NSD_CreateLabel} 0 0 100% 18u "$(axlOptionsTitle)"
+  ${NSD_CreateLabel} 0 0 100% 18u "$(mctrinOptionsTitle)"
   Pop $0
-  SetCtlColors $0 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $0 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $0 ${WM_SETFONT} $InstallerTitleFont 1
 
-  ${NSD_CreateLabel} 0 25u 100% 10u "$(axlInstallDirectoryLabel)"
+  ${NSD_CreateLabel} 0 25u 100% 10u "$(mctrinInstallDirectoryLabel)"
   Pop $0
-  SetCtlColors $0 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $0 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $0 ${WM_SETFONT} $InstallerBodyFont 1
 
   ${NSD_CreateText} 0 38u 77% 14u "$INSTDIR"
   Pop $InstallDirInput
-  !insertmacro AxlStyleControl $InstallDirInput ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $InstallDirInput ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   SendMessage $InstallDirInput ${WM_SETFONT} $InstallerBodyFont 1
 
-  ${NSD_CreateButton} 79% 38u 21% 14u "$(axlBrowse)"
+  ${NSD_CreateButton} 79% 38u 21% 14u "$(mctrinBrowse)"
   Pop $0
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   ${NSD_OnClick} $0 BrowseInstallDirectory
 
   ${If} $FreshInstall = 1
-    ${NSD_CreateLabel} 0 61u 100% 18u "$(axlDataSubfolderNotice)"
+    ${NSD_CreateLabel} 0 61u 100% 18u "$(mctrinDataSubfolderNotice)"
     Pop $ResourceDirDescription
-    SetCtlColors $ResourceDirDescription ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
+    SetCtlColors $ResourceDirDescription ${MCTRIN_TEXT_MUTED} ${MCTRIN_BACKGROUND}
     SendMessage $ResourceDirDescription ${WM_SETFONT} $InstallerSmallFont 1
 
-    ${NSD_CreateCheckbox} 0 84u 100% 12u "$(axlPortableCheckbox)"
+    ${NSD_CreateCheckbox} 0 84u 100% 12u "$(mctrinPortableCheckbox)"
     Pop $PortableCheckbox
-    !insertmacro AxlStyleControl $PortableCheckbox ${AXL_TEXT} ${AXL_BACKGROUND}
+    !insertmacro MctrinStyleControl $PortableCheckbox ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
     SendMessage $PortableCheckbox ${WM_SETFONT} $InstallerBodyFont 1
     ${NSD_SetState} $PortableCheckbox $PortableMode
     ${NSD_OnClick} $PortableCheckbox UpdatePortableModeNotice
 
-    ${NSD_CreateLabel} 0 99u 100% 18u "$(axlPortableHint)"
+    ${NSD_CreateLabel} 0 99u 100% 18u "$(mctrinPortableHint)"
     Pop $ResourceDirNotice
-    SetCtlColors $ResourceDirNotice ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
+    SetCtlColors $ResourceDirNotice ${MCTRIN_TEXT_MUTED} ${MCTRIN_BACKGROUND}
     SendMessage $ResourceDirNotice ${WM_SETFONT} $InstallerSmallFont 1
   ${Else}
-    ${NSD_CreateLabel} 0 64u 100% 34u "$(axlExistingInstallDirectoryPreserved)"
+    ${NSD_CreateLabel} 0 64u 100% 34u "$(mctrinExistingInstallDirectoryPreserved)"
     Pop $0
-    SetCtlColors $0 ${AXL_TEXT_MUTED} ${AXL_SURFACE}
+    SetCtlColors $0 ${MCTRIN_TEXT_MUTED} ${MCTRIN_SURFACE}
     SendMessage $0 ${WM_SETFONT} $InstallerBodyFont 1
   ${EndIf}
 
   ${NSD_CreateCheckbox} 0 134u 100% 12u "$(createDesktop)"
   Pop $DesktopShortcutCheckbox
-  !insertmacro AxlStyleControl $DesktopShortcutCheckbox ${AXL_TEXT} ${AXL_BACKGROUND}
+  !insertmacro MctrinStyleControl $DesktopShortcutCheckbox ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $DesktopShortcutCheckbox ${WM_SETFONT} $InstallerBodyFont 1
   ${NSD_SetState} $DesktopShortcutCheckbox $DesktopShortcutState
 
   ${NSD_CreateLabel} 0 151u 100% 20u ""
   Pop $OptionsError
-  SetCtlColors $OptionsError ${AXL_ERROR} ${AXL_BACKGROUND}
+  SetCtlColors $OptionsError ${MCTRIN_ERROR} ${MCTRIN_BACKGROUND}
   SendMessage $OptionsError ${WM_SETFONT} $InstallerSmallFont 1
 
   GetDlgItem $0 $HWNDPARENT 1
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(axlInstallButton)"
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(mctrinInstallButton)"
   GetDlgItem $0 $HWNDPARENT 3
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(axlBack)"
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(mctrinBack)"
   ${NSD_SetFocus} $InstallDirInput
   nsDialogs::Show
 FunctionEnd
@@ -740,13 +753,13 @@ Function PageLeaveOptions
   ; run of trailing separators. Normalising here - with the same macro the
   ; detection uses - keeps the validated path, $ResourceDir, the recorded
   ; PortableInstall value and the UI preview spelled one way. The macro only
-  ; writes its own AxlPortable variables, so the portable choice and the update
+  ; writes its own MctrinPortable variables, so the portable choice and the update
   ; detection decided earlier are untouched.
-  !insertmacro AxlDetectPortableLayout
-  StrCpy $INSTDIR "$AxlPortablePath"
+  !insertmacro MctrinDetectPortableLayout
+  StrCpy $INSTDIR "$MctrinPortablePath"
   ${GetRoot} "$INSTDIR" $0
   ${If} $0 == ""
-    ${NSD_SetText} $OptionsError "$(axlInstallDirectoryInvalid)"
+    ${NSD_SetText} $OptionsError "$(mctrinInstallDirectoryInvalid)"
     Abort
   ${EndIf}
 
@@ -756,8 +769,8 @@ Function PageLeaveOptions
     ; The layout was chosen on the first install, so an update must reuse it
     ; instead of assuming a data subfolder: a portable install keeps everything
     ; beside the program and has no data folder at all.
-    !insertmacro AxlDetectPortableLayout
-    ${If} $AxlPortableLayout == "1"
+    !insertmacro MctrinDetectPortableLayout
+    ${If} $MctrinPortableLayout == "1"
       StrCpy $PortableMode 1
       StrCpy $ResourceDir "$INSTDIR"
     ${Else}
@@ -781,15 +794,15 @@ Function PageLeaveOptions
 
   ClearErrors
   CreateDirectory "$ResourceDir"
-  FileOpen $1 "$ResourceDir\.axolotl-write-test" w
+  FileOpen $1 "$ResourceDir\.mctrin-write-test" w
   ${If} ${Errors}
     ClearErrors
-    ${NSD_SetText} $OptionsError "$(axlResourceDirectoryNotWritable)"
+    ${NSD_SetText} $OptionsError "$(mctrinResourceDirectoryNotWritable)"
     Abort
   ${EndIf}
   FileWrite $1 "MC-Trin"
   FileClose $1
-  Delete "$ResourceDir\.axolotl-write-test"
+  Delete "$ResourceDir\.mctrin-write-test"
 FunctionEnd
 
 ; 5. Choose program and application directories
@@ -858,9 +871,9 @@ Function un.ConfirmShow ; Add add a `Delete app data` check box
   ; The checkbox is created by this page, so its label can follow the layout:
   ; on a portable install the same tick removes the program folder itself,
   ; which the generic wording does not convey.
-  !insertmacro AxlDetectPortableLayout
-  ${If} $AxlPortableLayout == "1"
-    StrCpy $0 "$(axlDeleteAppDataPortable)"
+  !insertmacro MctrinDetectPortableLayout
+  ${If} $MctrinPortableLayout == "1"
+    StrCpy $0 "$(mctrinDeleteAppDataPortable)"
   ${Else}
     StrCpy $0 "$(deleteAppData)"
   ${EndIf}
@@ -868,10 +881,10 @@ Function un.ConfirmShow ; Add add a `Delete app data` check box
   Pop $DeleteAppDataCheckbox
   SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
   SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
-  SetCtlColors $HWNDPARENT ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $HWNDPARENT ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   FindWindow $1 "#32770" "" $HWNDPARENT
-  SetCtlColors $1 ${AXL_TEXT} ${AXL_BACKGROUND}
-  SetCtlColors $DeleteAppDataCheckbox ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $1 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
+  SetCtlColors $DeleteAppDataCheckbox ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   System::Call 'uxtheme::SetWindowTheme(p $DeleteAppDataCheckbox, w "DarkMode_Explorer", w "")'
 FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
@@ -890,7 +903,7 @@ FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.FinishShow
 !insertmacro MUI_UNPAGE_FINISH
 
-Function un.ApplyAxolotlTheme
+Function un.ApplyMctrinTheme
   CreateFont $InstallerBodyFont "Segoe UI" 9 400
   CreateFont $InstallerTitleFont "Segoe UI" 16 700
   CreateFont $InstallerSmallFont "Segoe UI" 8 400
@@ -898,29 +911,29 @@ Function un.ApplyAxolotlTheme
   ${If} $0 <> 0
     System::Call 'dwmapi::DwmSetWindowAttribute(p $HWNDPARENT, i 19, *i 1, i 4)'
   ${EndIf}
-  SetCtlColors $HWNDPARENT ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $HWNDPARENT ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   GetDlgItem $0 $HWNDPARENT 1
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   GetDlgItem $0 $HWNDPARENT 2
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
   GetDlgItem $0 $HWNDPARENT 3
-  !insertmacro AxlStyleControl $0 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $0 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
 FunctionEnd
 
 Function un.StyleCurrentPage
   FindWindow $0 "#32770" "" $HWNDPARENT
-  SetCtlColors $0 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $0 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $0 ${WM_SETFONT} $InstallerBodyFont 1
   GetDlgItem $1 $0 1200
-  SetCtlColors $1 ${AXL_TEXT} ${AXL_BACKGROUND}
+  SetCtlColors $1 ${MCTRIN_TEXT} ${MCTRIN_BACKGROUND}
   SendMessage $1 ${WM_SETFONT} $InstallerTitleFont 1
   GetDlgItem $1 $0 1201
-  SetCtlColors $1 ${AXL_TEXT_MUTED} ${AXL_BACKGROUND}
+  SetCtlColors $1 ${MCTRIN_TEXT_MUTED} ${MCTRIN_BACKGROUND}
   SendMessage $1 ${WM_SETFONT} $InstallerBodyFont 1
   GetDlgItem $1 $0 1004
-  !insertmacro AxlStyleControl $1 ${AXL_TEXT_MUTED} ${AXL_SURFACE}
+  !insertmacro MctrinStyleControl $1 ${MCTRIN_TEXT_MUTED} ${MCTRIN_SURFACE}
   GetDlgItem $1 $0 1027
-  !insertmacro AxlStyleControl $1 ${AXL_TEXT} ${AXL_CONTROL}
+  !insertmacro MctrinStyleControl $1 ${MCTRIN_TEXT} ${MCTRIN_CONTROL}
 FunctionEnd
 
 Function un.InstFilesShow
@@ -940,61 +953,61 @@ FunctionEnd
   !include "{{this}}"
 {{/each}}
 
-LangString axlWelcomeTitle ${LANG_ENGLISH} "Install MC-Trin"
-LangString axlWelcomeText ${LANG_ENGLISH} "A modern home for your Minecraft instances.$\r$\n$\r$\nVersion ${VERSION} · 64-bit · Current user"
-LangString axlStart ${LANG_ENGLISH} "Start"
-LangString axlOptionsTitle ${LANG_ENGLISH} "Installation settings"
-LangString axlInstallDirectoryLabel ${LANG_ENGLISH} "Program installation location"
-LangString axlResourceDirectoryLabel ${LANG_ENGLISH} "Application directory"
-LangString axlResourceDirectoryDescription ${LANG_ENGLISH} "Stores game instances, Java runtimes, resources, and caches. This directory can grow significantly."
-LangString axlBrowse ${LANG_ENGLISH} "Browse..."
-LangString axlSelectInstallDirectory ${LANG_ENGLISH} "Select the program installation location"
-LangString axlSelectResourceDirectory ${LANG_ENGLISH} "Select the application directory"
-LangString axlExistingDirectoryNotice ${LANG_ENGLISH} "This directory already contains files. MC-Trin will keep them."
-LangString axlExistingInstallDirectoryPreserved ${LANG_ENGLISH} "Your existing application directory will be preserved. You can change it later in Settings > Resource management."
-LangString axlInstallButton ${LANG_ENGLISH} "Install"
-LangString axlBack ${LANG_ENGLISH} "Back"
-LangString axlInstallDirectoryInvalid ${LANG_ENGLISH} "Choose an absolute program installation location."
-LangString axlResourceDirectoryAbsolute ${LANG_ENGLISH} "Choose an absolute application directory."
-LangString axlResourceDirectoryRoot ${LANG_ENGLISH} "The root of a drive or network share cannot be used as the application directory."
-LangString axlResourceDirectoryInsideInstall ${LANG_ENGLISH} "The application directory must be separate from the program installation location."
-LangString axlResourceDirectoryNotWritable ${LANG_ENGLISH} "MC-Trin cannot write to this application directory. Choose another location or change its permissions."
-LangString axlFinishTitle ${LANG_ENGLISH} "MC-Trin is installed"
-LangString axlFinishText ${LANG_ENGLISH} "Everything is ready. Your application directory is:$\r$\n$ResourceDir"
-LangString axlFinishButton ${LANG_ENGLISH} "Finish"
-LangString axlPortableCheckbox ${LANG_ENGLISH} "Portable install: keep everything in one folder"
-LangString axlPortableHint ${LANG_ENGLISH} "Uninstalling also removes instances, saves and caches."
-LangString axlDataSubfolderNotice ${LANG_ENGLISH} "Instances, Java, assets and caches go into the data subfolder; uninstalling keeps them by default."
-LangString axlUninstallKeepData ${LANG_ENGLISH} "Keep instances, saves and caches"
-LangString axlDeleteAppDataPortable ${LANG_ENGLISH} "Delete MC-Trin and everything in this folder"
+LangString mctrinWelcomeTitle ${LANG_ENGLISH} "Install MC-Trin"
+LangString mctrinWelcomeText ${LANG_ENGLISH} "A modern home for your Minecraft instances.$\r$\n$\r$\nVersion ${VERSION} · 64-bit · Current user"
+LangString mctrinStart ${LANG_ENGLISH} "Start"
+LangString mctrinOptionsTitle ${LANG_ENGLISH} "Installation settings"
+LangString mctrinInstallDirectoryLabel ${LANG_ENGLISH} "Program installation location"
+LangString mctrinResourceDirectoryLabel ${LANG_ENGLISH} "Application directory"
+LangString mctrinResourceDirectoryDescription ${LANG_ENGLISH} "Stores game instances, Java runtimes, resources, and caches. This directory can grow significantly."
+LangString mctrinBrowse ${LANG_ENGLISH} "Browse..."
+LangString mctrinSelectInstallDirectory ${LANG_ENGLISH} "Select the program installation location"
+LangString mctrinSelectResourceDirectory ${LANG_ENGLISH} "Select the application directory"
+LangString mctrinExistingDirectoryNotice ${LANG_ENGLISH} "This directory already contains files. MC-Trin will keep them."
+LangString mctrinExistingInstallDirectoryPreserved ${LANG_ENGLISH} "Your existing application directory will be preserved. You can change it later in Settings > Resource management."
+LangString mctrinInstallButton ${LANG_ENGLISH} "Install"
+LangString mctrinBack ${LANG_ENGLISH} "Back"
+LangString mctrinInstallDirectoryInvalid ${LANG_ENGLISH} "Choose an absolute program installation location."
+LangString mctrinResourceDirectoryAbsolute ${LANG_ENGLISH} "Choose an absolute application directory."
+LangString mctrinResourceDirectoryRoot ${LANG_ENGLISH} "The root of a drive or network share cannot be used as the application directory."
+LangString mctrinResourceDirectoryInsideInstall ${LANG_ENGLISH} "The application directory must be separate from the program installation location."
+LangString mctrinResourceDirectoryNotWritable ${LANG_ENGLISH} "MC-Trin cannot write to this application directory. Choose another location or change its permissions."
+LangString mctrinFinishTitle ${LANG_ENGLISH} "MC-Trin is installed"
+LangString mctrinFinishText ${LANG_ENGLISH} "Everything is ready. Your application directory is:$\r$\n$ResourceDir"
+LangString mctrinFinishButton ${LANG_ENGLISH} "Finish"
+LangString mctrinPortableCheckbox ${LANG_ENGLISH} "Portable install: keep everything in one folder"
+LangString mctrinPortableHint ${LANG_ENGLISH} "Uninstalling also removes instances, saves and caches."
+LangString mctrinDataSubfolderNotice ${LANG_ENGLISH} "Instances, Java, assets and caches go into the data subfolder; uninstalling keeps them by default."
+LangString mctrinUninstallKeepData ${LANG_ENGLISH} "Keep instances, saves and caches"
+LangString mctrinDeleteAppDataPortable ${LANG_ENGLISH} "Delete MC-Trin and everything in this folder"
 
-LangString axlWelcomeTitle ${LANG_SIMPCHINESE} "安装 MC-Trin"
-LangString axlWelcomeText ${LANG_SIMPCHINESE} "为你的 Minecraft 实例准备的现代化启动器。$\r$\n$\r$\n版本 ${VERSION} · 64 位 · 当前用户"
-LangString axlStart ${LANG_SIMPCHINESE} "开始"
-LangString axlOptionsTitle ${LANG_SIMPCHINESE} "安装设置"
-LangString axlInstallDirectoryLabel ${LANG_SIMPCHINESE} "程序安装位置"
-LangString axlResourceDirectoryLabel ${LANG_SIMPCHINESE} "应用目录"
-LangString axlResourceDirectoryDescription ${LANG_SIMPCHINESE} "用于保存游戏实例、Java、游戏资源和缓存，后续可能占用较多空间。"
-LangString axlBrowse ${LANG_SIMPCHINESE} "浏览..."
-LangString axlSelectInstallDirectory ${LANG_SIMPCHINESE} "选择程序安装位置"
-LangString axlSelectResourceDirectory ${LANG_SIMPCHINESE} "选择应用目录"
-LangString axlExistingDirectoryNotice ${LANG_SIMPCHINESE} "此目录中已有文件，MC-Trin 会保留这些内容。"
-LangString axlExistingInstallDirectoryPreserved ${LANG_SIMPCHINESE} "将保留现有应用目录。之后仍可在“设置 > 资源管理”中修改。"
-LangString axlInstallButton ${LANG_SIMPCHINESE} "安装"
-LangString axlBack ${LANG_SIMPCHINESE} "上一步"
-LangString axlInstallDirectoryInvalid ${LANG_SIMPCHINESE} "请选择有效的绝对程序安装路径。"
-LangString axlResourceDirectoryAbsolute ${LANG_SIMPCHINESE} "请选择有效的绝对应用目录。"
-LangString axlResourceDirectoryRoot ${LANG_SIMPCHINESE} "不能将磁盘或网络共享根目录直接用作应用目录。"
-LangString axlResourceDirectoryInsideInstall ${LANG_SIMPCHINESE} "应用目录必须与程序安装位置分开。"
-LangString axlResourceDirectoryNotWritable ${LANG_SIMPCHINESE} "MC-Trin 无法写入该应用目录，请更换位置或调整目录权限。"
-LangString axlFinishTitle ${LANG_SIMPCHINESE} "MC-Trin 已安装"
-LangString axlFinishText ${LANG_SIMPCHINESE} "一切准备就绪。当前应用目录：$\r$\n$ResourceDir"
-LangString axlFinishButton ${LANG_SIMPCHINESE} "完成"
-LangString axlPortableCheckbox ${LANG_SIMPCHINESE} "便携安装：所有内容集中在一个文件夹"
-LangString axlPortableHint ${LANG_SIMPCHINESE} "日后卸载会同时删除实例、存档与缓存。"
-LangString axlDataSubfolderNotice ${LANG_SIMPCHINESE} "实例、Java、资源与缓存存放在 data 子文件夹，卸载默认保留。"
-LangString axlUninstallKeepData ${LANG_SIMPCHINESE} "保留实例、存档与缓存"
-LangString axlDeleteAppDataPortable ${LANG_SIMPCHINESE} "删除 MC-Trin 及此文件夹中的所有内容"
+LangString mctrinWelcomeTitle ${LANG_SIMPCHINESE} "安装 MC-Trin"
+LangString mctrinWelcomeText ${LANG_SIMPCHINESE} "为你的 Minecraft 实例准备的现代化启动器。$\r$\n$\r$\n版本 ${VERSION} · 64 位 · 当前用户"
+LangString mctrinStart ${LANG_SIMPCHINESE} "开始"
+LangString mctrinOptionsTitle ${LANG_SIMPCHINESE} "安装设置"
+LangString mctrinInstallDirectoryLabel ${LANG_SIMPCHINESE} "程序安装位置"
+LangString mctrinResourceDirectoryLabel ${LANG_SIMPCHINESE} "应用目录"
+LangString mctrinResourceDirectoryDescription ${LANG_SIMPCHINESE} "用于保存游戏实例、Java、游戏资源和缓存，后续可能占用较多空间。"
+LangString mctrinBrowse ${LANG_SIMPCHINESE} "浏览..."
+LangString mctrinSelectInstallDirectory ${LANG_SIMPCHINESE} "选择程序安装位置"
+LangString mctrinSelectResourceDirectory ${LANG_SIMPCHINESE} "选择应用目录"
+LangString mctrinExistingDirectoryNotice ${LANG_SIMPCHINESE} "此目录中已有文件，MC-Trin 会保留这些内容。"
+LangString mctrinExistingInstallDirectoryPreserved ${LANG_SIMPCHINESE} "将保留现有应用目录。之后仍可在“设置 > 资源管理”中修改。"
+LangString mctrinInstallButton ${LANG_SIMPCHINESE} "安装"
+LangString mctrinBack ${LANG_SIMPCHINESE} "上一步"
+LangString mctrinInstallDirectoryInvalid ${LANG_SIMPCHINESE} "请选择有效的绝对程序安装路径。"
+LangString mctrinResourceDirectoryAbsolute ${LANG_SIMPCHINESE} "请选择有效的绝对应用目录。"
+LangString mctrinResourceDirectoryRoot ${LANG_SIMPCHINESE} "不能将磁盘或网络共享根目录直接用作应用目录。"
+LangString mctrinResourceDirectoryInsideInstall ${LANG_SIMPCHINESE} "应用目录必须与程序安装位置分开。"
+LangString mctrinResourceDirectoryNotWritable ${LANG_SIMPCHINESE} "MC-Trin 无法写入该应用目录，请更换位置或调整目录权限。"
+LangString mctrinFinishTitle ${LANG_SIMPCHINESE} "MC-Trin 已安装"
+LangString mctrinFinishText ${LANG_SIMPCHINESE} "一切准备就绪。当前应用目录：$\r$\n$ResourceDir"
+LangString mctrinFinishButton ${LANG_SIMPCHINESE} "完成"
+LangString mctrinPortableCheckbox ${LANG_SIMPCHINESE} "便携安装：所有内容集中在一个文件夹"
+LangString mctrinPortableHint ${LANG_SIMPCHINESE} "日后卸载会同时删除实例、存档与缓存。"
+LangString mctrinDataSubfolderNotice ${LANG_SIMPCHINESE} "实例、Java、资源与缓存存放在 data 子文件夹，卸载默认保留。"
+LangString mctrinUninstallKeepData ${LANG_SIMPCHINESE} "保留实例、存档与缓存"
+LangString mctrinDeleteAppDataPortable ${LANG_SIMPCHINESE} "删除 MC-Trin 及此文件夹中的所有内容"
 
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
@@ -1028,6 +1041,18 @@ Function .onInit
   ${EndIf}
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
+    ; MUI reads the language selection from a single key without a fallback, so
+    ; a choice stored under the pre-rename key is copied to the new key first.
+    ; The uninstaller removes both keys, so the copy never outlives the
+    ; installation that created it.
+    ReadRegStr $0 HKCU "${MCTRIN_LEGACY_SETTINGSKEY}" "Installer Language"
+    ${If} $0 != ""
+      ClearErrors
+      ReadRegStr $1 HKCU "${MCTRIN_SETTINGSKEY}" "Installer Language"
+      ${If} $1 == ""
+        WriteRegStr HKCU "${MCTRIN_SETTINGSKEY}" "Installer Language" "$0"
+      ${EndIf}
+    ${EndIf}
     !insertmacro MUI_LANGDLL_DISPLAY
   !endif
 
@@ -1107,8 +1132,8 @@ Function .onInit
   ; detector compares a folded path. Quoted values with spaces have already been
   ; unquoted by GetOptions, and the macro preserves interior separators and
   ; roots, so this only folds "/" and drops trailing separators.
-  !insertmacro AxlDetectPortableLayout
-  StrCpy $INSTDIR "$AxlPortablePath"
+  !insertmacro MctrinDetectPortableLayout
+  StrCpy $INSTDIR "$MctrinPortablePath"
 
   ; A portable install keeps its settings and database inside the marker
   ; directory, which the probe above cannot see because it only knows the
@@ -1136,8 +1161,8 @@ Function .onInit
     ; portable flag, so no second directory is passed in and nothing can
     ; disagree about where it points. The layout is passed so an update of an
     ; existing portable install keeps deriving the folder beside the program.
-    !insertmacro AxlDetectPortableLayout
-    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
+    !insertmacro MctrinDetectPortableLayout
+    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --installer "$EXEPATH" --version "${VERSION}" --install-dir "$INSTDIR" --portable "$MctrinPortableLayout" --fresh-install "$FreshInstall" --language "$LANGUAGE"' $0
     ${If} $0 <> 2
       Quit
     ${EndIf}
@@ -1311,7 +1336,7 @@ Section Install
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   ; Save $INSTDIR in registry for future installations
-  WriteRegStr SHCTX "${MANUPRODUCTKEY}" "" $INSTDIR
+  WriteRegStr SHCTX "${MCTRIN_SETTINGSKEY}" "" $INSTDIR
 
   !if "${INSTALLMODE}" == "both"
     ; Save install mode to be selected by default for the next installation such as updating
@@ -1391,19 +1416,19 @@ Section Install
       CreateDirectory "$INSTDIR\.MC-Trin"
       ; The folder field can rewrite $INSTDIR after the macro last ran in
       ; .onInit, so it is re-run here to normalise the value actually chosen.
-      ; Only $AxlPortablePath is read; the layout it also computes is unused.
-      !insertmacro AxlDetectPortableLayout
-      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "$AxlPortablePath"
-      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
+      ; Only $MctrinPortablePath is read; the layout it also computes is unused.
+      !insertmacro MctrinDetectPortableLayout
+      WriteRegStr HKCU "${MCTRIN_SETTINGSKEY}" "PortableInstall" "$MctrinPortablePath"
+      DeleteRegValue HKCU "${MCTRIN_SETTINGSKEY}" "PendingResourceDirectory"
     ${Else}
       ${StrCase} $0 "$ResourceDir" "L"
       ${StrCase} $1 "$APPDATA\${BUNDLEID}" "L"
       ${If} $0 == $1
-        DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory"
+        DeleteRegValue HKCU "${MCTRIN_SETTINGSKEY}" "PendingResourceDirectory"
       ${Else}
-        WriteRegStr HKCU "${MANUPRODUCTKEY}" "PendingResourceDirectory" "$ResourceDir"
+        WriteRegStr HKCU "${MCTRIN_SETTINGSKEY}" "PendingResourceDirectory" "$ResourceDir"
       ${EndIf}
-      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+      DeleteRegValue HKCU "${MCTRIN_SETTINGSKEY}" "PortableInstall"
     ${EndIf}
   ${EndIf}
 
@@ -1411,11 +1436,11 @@ Section Install
   ; looks at the marker directory, so an update of an old portable folder
   ; writes the value here and the uninstaller no longer has to infer it.
   ${If} $FreshInstall <> 1
-    !insertmacro AxlDetectPortableLayout
-    ${If} $AxlPortableLayout == "1"
-      WriteRegStr HKCU "${MANUPRODUCTKEY}" "PortableInstall" "$AxlPortablePath"
+    !insertmacro MctrinDetectPortableLayout
+    ${If} $MctrinPortableLayout == "1"
+      WriteRegStr HKCU "${MCTRIN_SETTINGSKEY}" "PortableInstall" "$MctrinPortablePath"
     ${Else}
-      DeleteRegValue HKCU "${MANUPRODUCTKEY}" "PortableInstall"
+      DeleteRegValue HKCU "${MCTRIN_SETTINGSKEY}" "PortableInstall"
     ${EndIf}
   ${EndIf}
 
@@ -1491,8 +1516,8 @@ Function un.onInit
     File "/oname=$PLUGINSDIR\MCTRINInstallerUI.exe" "${MCTRIN_INSTALLER_UI_PATH}"
     ; The UI needs the layout to describe what the optional cleanup removes:
     ; a portable install has no data subfolder, everything is in $INSTDIR.
-    !insertmacro AxlDetectPortableLayout
-    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --portable "$AxlPortableLayout" --version "${VERSION}" --language "$LANGUAGE"' $0
+    !insertmacro MctrinDetectPortableLayout
+    ExecWait '"$PLUGINSDIR\MCTRINInstallerUI.exe" --uninstaller "$EXEPATH" --install-dir "$INSTDIR" --portable "$MctrinPortableLayout" --version "${VERSION}" --language "$LANGUAGE"' $0
     SetErrorLevel $0
     Quit
   ${EndIf}
@@ -1611,16 +1636,16 @@ Section Uninstall
 
   Push 26
   Call un.ReportInstallerProgress
-  !insertmacro AxlUninstallFile "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro MctrinUninstallFile "$INSTDIR\${MAINBINARYNAME}.exe"
 
   ; Delete resources
   {{#each resources}}
-    !insertmacro AxlUninstallFile "$INSTDIR\\{{this.[1]}}"
+    !insertmacro MctrinUninstallFile "$INSTDIR\\{{this.[1]}}"
   {{/each}}
 
   ; Delete external binaries
   {{#each binaries}}
-    !insertmacro AxlUninstallFile "$INSTDIR\\{{this}}"
+    !insertmacro MctrinUninstallFile "$INSTDIR\\{{this}}"
   {{/each}}
 
   ; Keep the uninstaller and registration available if optional data removal fails.
@@ -1629,8 +1654,8 @@ Section Uninstall
     ; The layout comes from the recorded choice or the marker directory, not
     ; from PendingResourceDirectory: the launcher consumes that one-shot value
     ; on its first start and deletes it, so it is gone by uninstall time.
-    !insertmacro AxlDetectPortableLayout
-    ${If} $AxlPortableLayout == "1"
+    !insertmacro MctrinDetectPortableLayout
+    ${If} $MctrinPortableLayout == "1"
       ; A portable install keeps instances, saves and caches beside the
       ; program, so removing the application data removes the whole folder.
       Call un.RemovePortableDirectory
@@ -1680,14 +1705,14 @@ Section Uninstall
     Pop $0
     ${If} $0 = 1
       !insertmacro UnpinShortcut "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
-      !insertmacro AxlUninstallFile "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+      !insertmacro MctrinUninstallFile "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
       RMDir "$SMPROGRAMS\$AppStartMenuFolder"
     ${EndIf}
     !insertmacro IsShortcutTarget "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
     Pop $0
     ${If} $0 = 1
       !insertmacro UnpinShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk"
-      !insertmacro AxlUninstallFile "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+      !insertmacro MctrinUninstallFile "$SMPROGRAMS\${PRODUCTNAME}.lnk"
     ${EndIf}
 
     ; Remove desktop shortcuts
@@ -1695,7 +1720,7 @@ Section Uninstall
     Pop $0
     ${If} $0 = 1
       !insertmacro UnpinShortcut "$DESKTOP\${PRODUCTNAME}.lnk"
-      !insertmacro AxlUninstallFile "$DESKTOP\${PRODUCTNAME}.lnk"
+      !insertmacro MctrinUninstallFile "$DESKTOP\${PRODUCTNAME}.lnk"
     ${EndIf}
   ${EndIf}
 
@@ -1711,14 +1736,18 @@ Section Uninstall
   ; and if not updating
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
-    ; Clear the install location $INSTDIR from registry
-    DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
-    DeleteRegKey /ifempty SHCTX "${MANUKEY}"
+    ; Clear the install location $INSTDIR from registry, including the copy
+    ; left under the pre-rename key so it cannot resurrect the record.
+    DeleteRegKey SHCTX "${MCTRIN_SETTINGSKEY}"
+    DeleteRegKey SHCTX "${MCTRIN_LEGACY_SETTINGSKEY}"
+    DeleteRegKey /ifempty SHCTX "${MCTRIN_LEGACY_MANUKEY}"
 
     ; Clear the install language from registry
-    DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
-    DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
-    DeleteRegKey /ifempty HKCU "${MANUKEY}"
+    DeleteRegValue HKCU "${MCTRIN_SETTINGSKEY}" "Installer Language"
+    DeleteRegValue HKCU "${MCTRIN_LEGACY_SETTINGSKEY}" "Installer Language"
+    DeleteRegKey /ifempty HKCU "${MCTRIN_SETTINGSKEY}"
+    DeleteRegKey /ifempty HKCU "${MCTRIN_LEGACY_SETTINGSKEY}"
+    DeleteRegKey /ifempty HKCU "${MCTRIN_LEGACY_MANUKEY}"
 
   ${EndIf}
 
@@ -1734,7 +1763,7 @@ Section Uninstall
   ${If} $EXEPATH == "$INSTDIR\uninstall.exe"
     Delete /REBOOTOK "$INSTDIR\uninstall.exe"
   ${Else}
-    !insertmacro AxlUninstallFile "$INSTDIR\uninstall.exe"
+    !insertmacro MctrinUninstallFile "$INSTDIR\uninstall.exe"
   ${EndIf}
 
   ClearErrors
@@ -1755,7 +1784,10 @@ Section Uninstall
 SectionEnd
 
 Function RestorePreviousInstallLocation
-  ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+  ReadRegStr $4 SHCTX "${MCTRIN_SETTINGSKEY}" ""
+  ${If} $4 == ""
+    ReadRegStr $4 SHCTX "${MCTRIN_LEGACY_SETTINGSKEY}" ""
+  ${EndIf}
   StrCmp $4 "" +2 0
     StrCpy $INSTDIR $4
 FunctionEnd

@@ -1,4 +1,4 @@
-//! Theseus instance management interface
+//! MC-Trin instance management interface
 
 mod backup;
 mod content;
@@ -15,12 +15,12 @@ mod screenshot_groups;
 mod screenshots;
 pub(crate) mod synced_options;
 pub(crate) mod synced_packs {
-    pub(crate) use super::synced_packs_axolotl::{
+    pub(crate) use super::synced_packs_mctrin::{
         capture_resource_pack_selection_change, detach,
         prepare_instance_update, reconcile, seed_from_instance,
     };
 }
-mod synced_packs_axolotl;
+mod synced_packs_mctrin;
 pub(crate) mod synced_servers;
 mod upgrade;
 
@@ -149,7 +149,7 @@ pub(crate) use self::synced_options::{
     reconcile_changed_file as reconcile_synced_option_file,
     remove_generated_instance_files,
 };
-pub use self::synced_packs_axolotl::{
+pub use self::synced_packs_mctrin::{
     PackSyncPreview, PackSyncTarget, desync_pack, get_pack_sync_preview,
     list_synced_packs, remove_synced_pack, set_synced_pack_enabled, sync_pack,
     upload_synced_pack,

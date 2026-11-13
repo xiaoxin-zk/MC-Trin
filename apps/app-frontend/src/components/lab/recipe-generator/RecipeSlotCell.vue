@@ -10,7 +10,7 @@ import type { RecipeSlot, SlotValue } from '@/lab/recipe-generator/types'
 
 import RecipeItemIcon from './RecipeItemIcon.vue'
 
-const RECIPE_SLOT_MIME_TYPE = 'application/x-axolotl-recipe-slot'
+const RECIPE_SLOT_MIME_TYPE = 'application/x-mctrin-recipe-slot'
 
 const props = withDefaults(
     defineProps<{
@@ -130,7 +130,7 @@ function onDrop(event: DragEvent) {
         class="flex min-w-0 flex-col items-center gap-[0.35rem]"
         :class="{ 'is-drag-target': dragActive }"
         :data-recipe-slot="recipeSlot"
-        @axolotl-recipe-slot-drop="onSlotDropEvent"
+        @mctrin-recipe-slot-drop="onSlotDropEvent"
         @dragenter="onDragEnter"
         @dragover="onDragOver"
         @dragleave="onDragLeave"

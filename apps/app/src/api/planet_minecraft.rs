@@ -12,20 +12,20 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 
 #[tauri::command]
 pub fn planet_minecraft_connector_available() -> bool {
-    theseus::planet_minecraft::connector_base_url().is_ok()
+    mctrin::planet_minecraft::connector_base_url().is_ok()
 }
 
 #[tauri::command]
 pub async fn planet_minecraft_search_projects(
     query: &str,
     game_version: Option<&str>,
-) -> Result<Vec<theseus::planet_minecraft::PlanetMinecraftProject>> {
-    Ok(theseus::planet_minecraft::search_projects(query, game_version).await?)
+) -> Result<Vec<mctrin::planet_minecraft::PlanetMinecraftProject>> {
+    Ok(mctrin::planet_minecraft::search_projects(query, game_version).await?)
 }
 
 #[tauri::command]
 pub async fn planet_minecraft_get_project(
     id: &str,
-) -> Result<theseus::planet_minecraft::PlanetMinecraftProject> {
-    Ok(theseus::planet_minecraft::get_project(id).await?)
+) -> Result<mctrin::planet_minecraft::PlanetMinecraftProject> {
+    Ok(mctrin::planet_minecraft::get_project(id).await?)
 }

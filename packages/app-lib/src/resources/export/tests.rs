@@ -779,7 +779,7 @@ async fn export_failure_cancel_and_file_changes_preserve_existing_output() {
         e.unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with(".axolotl-export-")
+            .starts_with(".mctrin-export-")
     }));
     let token = CancellationToken::new();
     assert!(

@@ -19,7 +19,10 @@ use std::{
 use tokio::sync::{RwLock, mpsc::channel};
 
 use super::adapters::sqlite::instance_rows;
-use super::config_sync::{CONFIG_FILE_NAME, CONFIG_FILE_TEMP_NAME};
+use super::config_sync::{
+    CONFIG_FILE_NAME, CONFIG_FILE_TEMP_NAME, LEGACY_CONFIG_FILE_NAME,
+    LEGACY_CONFIG_FILE_TEMP_NAME,
+};
 
 pub struct FileWatcher {
     watcher: RwLock<Debouncer<RecommendedWatcher>>,
@@ -732,7 +735,10 @@ fn crash_task(instance_id: String) {
 
 fn is_config_sync_file_name(name: &std::ffi::OsStr) -> bool {
     let name = name.to_string_lossy();
-    name == CONFIG_FILE_NAME || name == CONFIG_FILE_TEMP_NAME
+    name == CONFIG_FILE_NAME
+        || name == CONFIG_FILE_TEMP_NAME
+        || name == LEGACY_CONFIG_FILE_NAME
+        || name == LEGACY_CONFIG_FILE_TEMP_NAME
 }
 
 #[cfg(test)]
@@ -870,6 +876,10 @@ mod config_file_name_tests {
 
     #[test]
     fn recognizes_sync_config_files_but_not_other_instance_events() {
+        assert!(is_config_sync_file_name(OsStr::new("mctrin_config.json")));
+        assert!(is_config_sync_file_name(OsStr::new(
+            "mctrin_config.json.tmp"
+        )));
         assert!(is_config_sync_file_name(OsStr::new("axolotl_config.json")));
         assert!(is_config_sync_file_name(OsStr::new(
             "axolotl_config.json.tmp"

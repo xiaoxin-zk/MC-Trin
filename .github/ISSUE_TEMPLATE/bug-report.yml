@@ -1,12 +1,12 @@
 name: 🐛 错误报告
-description: 报告 Axolotl Launcher 中可以复现的问题
+description: 报告 MC-Trin 中可以复现的问题
 title: '[错误] '
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢你帮助改进 Axolotl Launcher。请尽量完整地填写以下信息，以便我们定位问题。
+        感谢你帮助改进 MC-Trin。请尽量完整地填写以下信息，以便我们定位问题。
         上传日志或截图前，请移除账号、访问令牌、设备路径等隐私信息。
 
   - type: checkboxes
@@ -14,9 +14,9 @@ body:
     attributes:
       label: 提交前确认
       options:
-        - label: 我已搜索[现有 Issues](https://github.com/Mystic-Stars/Axolotl/issues)，没有发现相同问题
+        - label: 我已搜索[现有 Issues](https://github.com/xiaoxin-zk/MC-Trin/issues)，没有发现相同问题
           required: true
-        - label: 我正在使用最新版本的 Axolotl Launcher，或已确认该问题在最新版本中仍然存在
+        - label: 我正在使用最新版本的 MC-Trin，或已确认该问题在最新版本中仍然存在
           required: true
         - label: 我已从日志、截图和描述中移除账号、访问令牌等敏感信息
           required: true
@@ -24,7 +24,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Axolotl Launcher 版本
+      label: MC-Trin 版本
       description: 可在启动器设置或“关于”页面中查看，例如 1.2.3。
       placeholder: 例如 1.2.3
     validations:
@@ -74,7 +74,7 @@ body:
     id: reproduction
     attributes:
       label: 复现步骤
-      description: 请从启动 Axolotl 开始，按顺序列出能够触发问题的操作。
+      description: 请从启动 MC-Trin 开始，按顺序列出能够触发问题的操作。
       placeholder: |
         1. 打开……
         2. 点击……

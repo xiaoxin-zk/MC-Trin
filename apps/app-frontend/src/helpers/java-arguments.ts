@@ -11,4 +11,4 @@ export const FALLEN_AUTH_PROXY_JAVA_ARGS = [
 
 export const FALLEN_AUTH_PROXY_JAVA_ARGS_STRING = FALLEN_AUTH_PROXY_JAVA_ARGS.join(' ')
 
-export const AUTO_GC_PRESET_ARG = '@axolotl:gc:auto'
+export const AUTO_GC_PRESET_ARG = '@mctrin:gc:auto'

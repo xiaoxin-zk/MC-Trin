@@ -853,7 +853,7 @@ const notificationId = ref<string | number | null>(null)
 // Dismissing the download notification has to survive a restart: the jobs it
 // describes (such as an install interrupted by closing the launcher) are still
 // stored, so the notification would otherwise be rebuilt on every launch.
-const DISMISSED_DOWNLOAD_NOTIFICATION_KEY = 'axolotl:dismissed-download-notification-v1'
+const DISMISSED_DOWNLOAD_NOTIFICATION_KEY = 'mctrin:dismissed-download-notification-v1'
 
 function loadDismissedDownloadSignature(): string | null {
     try {

@@ -22,7 +22,7 @@ function formatter(locale: 'en-US' | 'zh-CN') {
 it('localizes serialized rename failures without changing the original diagnostics', () => {
     const message =
         'moving "mods/example.jar" to "mods/example.removing" on same disk\n\nCaused by:\n    另一个程序正在使用此文件，进程无法访问。 (os error 32), path: mods/example.jar'
-    const error = { field_name: 'Theseus', message }
+    const error = { field_name: 'Mctrin', message }
     expect(fileOperationError(error, 'windows', formatter('zh-CN'))).toBe(
         '文件正被占用，请关闭游戏或其他占用该文件的程序后重试。',
     )

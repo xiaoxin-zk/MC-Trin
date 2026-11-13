@@ -1,7 +1,7 @@
 use crate::api::Result;
+use mctrin::prelude::*;
+use mctrin::{ProxyConfig, ProxyTestResult};
 use tauri::{Emitter, Runtime};
-use theseus::prelude::*;
-use theseus::{ProxyConfig, ProxyTestResult};
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("settings")
@@ -35,9 +35,9 @@ static NETWORK_TEST_SLOTS: tokio::sync::Semaphore =
 #[tauri::command]
 pub async fn network_test(
     request_id: uuid::Uuid,
-    target: theseus::NetworkTestTarget,
-    mode: theseus::NetworkTestMode,
-) -> Result<Option<theseus::NetworkTestResult>> {
+    target: mctrin::NetworkTestTarget,
+    mode: mctrin::NetworkTestMode,
+) -> Result<Option<mctrin::NetworkTestResult>> {
     let cancellation = super::search_cancellation::SearchCancellation::register(
         format!("network-test:{request_id}"),
     );
@@ -48,7 +48,7 @@ pub async fn network_test(
             let _permit = NETWORK_TEST_SLOTS.acquire().await.map_err(|_| {
                 std::io::Error::other("Network diagnostics are unavailable")
             })?;
-            Ok(Some(theseus::test_network_connection(target, mode).await?))
+            Ok(Some(mctrin::test_network_connection(target, mode).await?))
         } => result,
     }
 }
@@ -90,7 +90,7 @@ pub async fn settings_patch(
     let log_level = settings.log_level.clone();
     // Apply the log level right away so the new verbosity takes effect without
     // a restart. Invalid values are rejected by the settings table itself.
-    if let Err(error) = theseus::set_log_level(&log_level) {
+    if let Err(error) = mctrin::set_log_level(&log_level) {
         tracing::warn!("Keeping the previous log level: {error}");
     }
     let _ = app.emit("settings", ());
@@ -160,5 +160,5 @@ pub async fn proxy_set(
 
 #[tauri::command]
 pub async fn proxy_test(config: ProxyConfig) -> Result<ProxyTestResult> {
-    Ok(theseus::test_proxy_connection(&config).await?)
+    Ok(mctrin::test_proxy_connection(&config).await?)
 }

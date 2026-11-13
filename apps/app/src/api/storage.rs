@@ -1,12 +1,12 @@
 use crate::api::Result;
+use mctrin::storage::{
+    CacheCleanupResult, MetaAnalysis, MetaCleanupResult, StoragePath,
+    StoragePathKind, StorageScanEvent, StorageTree,
+};
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::Runtime;
 use tauri_plugin_opener::OpenerExt;
-use theseus::storage::{
-    CacheCleanupResult, MetaAnalysis, MetaCleanupResult, StoragePath,
-    StoragePathKind, StorageScanEvent, StorageTree,
-};
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("storage")
@@ -40,7 +40,7 @@ pub async fn storage_scan(
     on_progress: tauri::ipc::Channel<StorageScanEvent>,
 ) -> Result<StorageTree> {
     Ok(
-        theseus::storage::scan_storage_with_progress(force, &move |event| {
+        mctrin::storage::scan_storage_with_progress(force, &move |event| {
             let _ = on_progress.send(event);
         })
         .await?,
@@ -49,12 +49,12 @@ pub async fn storage_scan(
 
 #[tauri::command]
 pub async fn storage_cache_clear() -> Result<CacheCleanupResult> {
-    Ok(theseus::storage::clear_cache().await?)
+    Ok(mctrin::storage::clear_cache().await?)
 }
 
 #[tauri::command]
 pub async fn storage_meta_analyze() -> Result<MetaAnalysis> {
-    Ok(theseus::storage::analyze_meta().await?)
+    Ok(mctrin::storage::analyze_meta().await?)
 }
 
 #[tauri::command]
@@ -62,7 +62,7 @@ pub async fn storage_meta_clean(
     id: String,
     groups: Vec<String>,
 ) -> Result<MetaCleanupResult> {
-    Ok(theseus::storage::clean_meta(id, groups).await?)
+    Ok(mctrin::storage::clean_meta(id, groups).await?)
 }
 
 #[tauri::command]

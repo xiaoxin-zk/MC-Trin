@@ -4,7 +4,7 @@ const host = '127.0.0.1'
 const port = Number(process.env.CURSEFORGE_MOCK_PORT ?? 18081)
 const projectId = 100001
 const fileId = 200001
-const fileBody = Buffer.from('Axolotl CurseForge local fixture\n')
+const fileBody = Buffer.from('MC-Trin CurseForge local fixture\n')
 const now = '2026-07-14T00:00:00Z'
 
 const file = {
@@ -13,7 +13,7 @@ const file = {
 	modId: projectId,
 	isAvailable: true,
 	displayName: 'Local Fixture 1.0.0',
-	fileName: 'axolotl-local-fixture-1.0.0.jar',
+	fileName: 'mctrin-local-fixture-1.0.0.jar',
 	releaseType: 1,
 	fileStatus: 4,
 	hashes: [],
@@ -21,7 +21,7 @@ const file = {
 	fileLength: fileBody.length,
 	downloadCount: 1,
 	fileSizeOnDisk: fileBody.length,
-	downloadUrl: `http://${host}:${port}/files/axolotl-local-fixture-1.0.0.jar`,
+	downloadUrl: `http://${host}:${port}/files/mctrin-local-fixture-1.0.0.jar`,
 	gameVersions: ['1.21.1', 'Fabric'],
 	sortableGameVersions: [],
 	dependencies: [],
@@ -39,8 +39,8 @@ const file = {
 const project = {
 	id: projectId,
 	gameId: 432,
-	name: 'Axolotl Local Fixture',
-	slug: 'axolotl-local-fixture',
+	name: 'MC-Trin Local Fixture',
+	slug: 'mctrin-local-fixture',
 	links: {
 		websiteUrl: 'https://www.curseforge.com/minecraft/mc-mods',
 		wikiUrl: null,
@@ -106,7 +106,7 @@ const server = createServer((request, response) => {
 	const path = url.pathname
 	process.stdout.write(`${request.method} ${url.pathname}${url.search}\n`)
 
-	if (path === '/files/axolotl-local-fixture-1.0.0.jar') {
+	if (path === '/files/mctrin-local-fixture-1.0.0.jar') {
 		response.writeHead(200, {
 			'content-type': 'application/java-archive',
 			'content-length': fileBody.length,

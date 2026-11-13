@@ -1,3 +1,4 @@
+use mctrin::prelude::CommandPayload;
 use serde::Serialize;
 use std::{
     collections::{HashSet, VecDeque},
@@ -11,7 +12,6 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::WindowBuilder,
 };
-use theseus::prelude::CommandPayload;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const LIGHTWEIGHT_HOST_WINDOW_LABEL: &str = "lightweight-host";
@@ -127,16 +127,16 @@ impl LightweightMode {
 
         state.active = true;
         state.frontend_ready = false;
-        if let Some(theseus_state) = theseus::State::get_if_initialized() {
-            theseus_state.pause_background_services();
+        if let Some(mctrin_state) = mctrin::State::get_if_initialized() {
+            mctrin_state.pause_background_services();
         }
         drop(state);
         if let Err(error) = destroy_main_window(app) {
             if let Ok(mut state) = self.0.lock() {
                 state.active = false;
             }
-            if let Some(theseus_state) = theseus::State::get_if_initialized() {
-                theseus_state.resume_background_services();
+            if let Some(mctrin_state) = mctrin::State::get_if_initialized() {
+                mctrin_state.resume_background_services();
             }
             destroy_lightweight_host_window(app);
             return Err(error);
@@ -167,8 +167,8 @@ impl LightweightMode {
         destroy_lightweight_host_window(app);
         if let Ok(mut state) = self.0.lock() {
             state.active = false;
-            if let Some(theseus_state) = theseus::State::get_if_initialized() {
-                theseus_state.resume_background_services();
+            if let Some(mctrin_state) = mctrin::State::get_if_initialized() {
+                mctrin_state.resume_background_services();
             }
         }
         schedule_tray_menu_update(app);
@@ -254,10 +254,10 @@ impl LightweightMode {
                                 // lightweight mode; only resume the gate when
                                 // it still matches a non-lightweight state.
                                 if !state.active
-                                    && let Some(theseus_state) =
-                                        theseus::State::get_if_initialized()
+                                    && let Some(mctrin_state) =
+                                        mctrin::State::get_if_initialized()
                                 {
-                                    theseus_state.resume_background_services();
+                                    mctrin_state.resume_background_services();
                                 }
                             }
                         }
@@ -303,7 +303,7 @@ impl LightweightMode {
                         )
                         .await;
                     }
-                    let settings = match theseus::settings::get().await {
+                    let settings = match mctrin::settings::get().await {
                         Ok(settings) => settings,
                         Err(error) => {
                             tracing::warn!(
@@ -379,14 +379,14 @@ impl LightweightMode {
 /// destroyed webview's processes had a moment to exit.
 fn schedule_lightweight_maintenance(idle: bool) {
     tauri::async_runtime::spawn(async move {
-        if idle && let Err(error) = theseus::multiplayer::stop().await {
+        if idle && let Err(error) = mctrin::multiplayer::stop().await {
             tracing::debug!(
                 "Failed to stop multiplayer tunnels entering lightweight mode: {error}"
             );
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         if let Some((before, after)) =
-            theseus::memory::trim_launcher_working_set().await
+            mctrin::memory::trim_launcher_working_set().await
         {
             tracing::info!(
                 before_bytes = before,
@@ -757,7 +757,7 @@ async fn rebuild_tray_menu(
     has_running_processes: bool,
     running_instance_ids: &HashSet<String>,
 ) -> Result<(), String> {
-    let locale = theseus::settings::get()
+    let locale = mctrin::settings::get()
         .await
         .map(|settings| settings.locale)
         .unwrap_or_default();
@@ -785,7 +785,7 @@ async fn rebuild_tray_menu(
         .map_err(|error| error.to_string())?;
     let second_separator = PredefinedMenuItem::separator(app)
         .map_err(|error| error.to_string())?;
-    let instances = theseus::instance::list().await.unwrap_or_else(|error| {
+    let instances = mctrin::instance::list().await.unwrap_or_else(|error| {
         tracing::debug!("Tray instance list is unavailable: {error}");
         Vec::new()
     });
@@ -866,9 +866,9 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
                 .trim_start_matches(LAUNCH_INSTANCE_PREFIX)
                 .to_string();
             tauri::async_runtime::spawn(async move {
-                if let Err(error) = theseus::instance::run(
+                if let Err(error) = mctrin::instance::run(
                     &instance_id,
-                    theseus::instance::QuickPlayType::None,
+                    mctrin::instance::QuickPlayType::None,
                     false,
                 )
                 .await

@@ -1,4 +1,4 @@
-//! Theseus process management interface
+//! MC-Trin process management interface
 
 use crate::state::ProcessMetadata;
 pub use crate::{

@@ -10,10 +10,10 @@ import {
 import { getLastLibraryDisplayMode, setLastLibraryDisplayMode } from './library-display-mode.ts'
 import { getSidebarExpanded, setSidebarExpanded } from './sidebar-state.ts'
 
-const storageKey = 'axolotl-browse-content-display-mode'
-const projectTypeStorageKey = 'axolotl-browse-content-project-type'
-const libraryDisplayModeStorageKey = 'axolotl-library-display-mode'
-const sidebarStorageKey = 'axolotl-right-sidebar-expanded'
+const storageKey = 'mctrin-browse-content-display-mode'
+const projectTypeStorageKey = 'mctrin-browse-content-project-type'
+const libraryDisplayModeStorageKey = 'mctrin-library-display-mode'
+const sidebarStorageKey = 'mctrin-right-sidebar-expanded'
 const originalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
 
 function installMemoryStorage() {

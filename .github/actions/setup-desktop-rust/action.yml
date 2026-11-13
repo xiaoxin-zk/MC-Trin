@@ -48,7 +48,7 @@ runs:
       if: inputs.restore-cache == 'true'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        shared-key: axolotl-desktop-v3-${{ inputs.profile }}-${{ inputs.target || 'host' }}
+        shared-key: mctrin-desktop-v3-${{ inputs.profile }}-${{ inputs.target || 'host' }}
         save-if: ${{ inputs.save-cache }}
         cache-on-failure: true
         # A bare `all` cache costs 1.4-1.8 GiB per platform. The ci and release

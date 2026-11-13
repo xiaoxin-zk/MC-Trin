@@ -122,7 +122,7 @@ function handlePointerEnd(event: PointerEvent) {
         const slot = target?.closest<HTMLElement>('[data-recipe-slot]')
         if (slot) {
             slot.dispatchEvent(
-                new CustomEvent('axolotl-recipe-slot-drop', {
+                new CustomEvent('mctrin-recipe-slot-drop', {
                     detail: { value: current.value },
                     bubbles: true,
                 }),

@@ -1,7 +1,7 @@
 /*!
-# Theseus
+# MC-Trin
 
-Theseus is a library which provides utilities for launching minecraft, creating Modrinth mod packs,
+MC-Trin is a library which provides utilities for launching minecraft, creating Modrinth mod packs,
 and launching Modrinth mod packs
 */
 #![warn(unused_import_braces)]

@@ -1,9 +1,9 @@
 export type LabCategoryFilter = 'all' | 'creation' | 'maintenance' | 'world'
 export type LabFavoriteFilter = 'all' | 'favorite' | 'unfavorite'
 
-const LAB_FAVORITE_TOOL_IDS_STORAGE_KEY = 'axolotl-lab-favorite-tool-ids'
-const LAB_CATEGORY_FILTER_STORAGE_KEY = 'axolotl-lab-category-filter'
-const LAB_FAVORITE_FILTER_STORAGE_KEY = 'axolotl-lab-favorite-filter'
+const LAB_FAVORITE_TOOL_IDS_STORAGE_KEY = 'mctrin-lab-favorite-tool-ids'
+const LAB_CATEGORY_FILTER_STORAGE_KEY = 'mctrin-lab-category-filter'
+const LAB_FAVORITE_FILTER_STORAGE_KEY = 'mctrin-lab-favorite-filter'
 
 function readStringArray(key: string): string[] {
     try {

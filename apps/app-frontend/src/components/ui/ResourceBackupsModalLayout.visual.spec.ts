@@ -96,9 +96,9 @@ it.each([1000, 480])(
                     .findAllComponents(Checkbox)
                     .filter((checkbox) => checkbox.props('disabled')),
             ).toHaveLength(1)
-            if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+            if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
                 await page.screenshot({
-                    path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/backups-list-${width}.png`,
+                    path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/backups-list-${width}.png`,
                 })
             const input = dialog().querySelector('input')!
             input.value = 'Create'
@@ -120,9 +120,9 @@ it.each([1000, 480])(
                 'permanently removes 1 available rollback backups',
             )
             expect(resourceExecuteHistoryCleanup).not.toHaveBeenCalled()
-            if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+            if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
                 await page.screenshot({
-                    path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/backups-review-${width}.png`,
+                    path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/backups-review-${width}.png`,
                 })
             const confirm = [...dialog().querySelectorAll('button')].find((button) =>
                 button.textContent?.includes('Delete these backups'),

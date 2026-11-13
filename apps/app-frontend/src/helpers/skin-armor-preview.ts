@@ -7,7 +7,7 @@ import {
     createDefaultArmorPreviewConfig,
 } from '@modrinth/ui'
 
-const STORAGE_KEY = 'axolotl:skin-armor-preview'
+const STORAGE_KEY = 'mctrin:skin-armor-preview'
 
 function includes<T extends string>(values: readonly T[], value: unknown): value is T {
     return typeof value === 'string' && values.some((item) => item === value)

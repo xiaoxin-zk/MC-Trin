@@ -10,7 +10,10 @@ use super::{OAUTH_CREDENTIAL, input_error};
 // UTF-16, so each entry can hold at most 1280 code units.
 const MAX_PASSWORD_UNITS: usize = 1280;
 const MAX_CHUNKS: usize = 1024;
-const MANIFEST_PREFIX: &str = "axolotl-oauth-chunks-v1:";
+const MANIFEST_PREFIX: &str = "mctrin-oauth-chunks-v1:";
+/// Manifest prefix written by releases before the MC-Trin rename; still
+/// parsed so stored OAuth credentials survive the upgrade.
+const LEGACY_MANIFEST_PREFIX: &str = "axolotl-oauth-chunks-v1:";
 
 pub(super) trait Store {
     fn read(&self, name: &str) -> crate::Result<Option<String>>;
@@ -30,7 +33,10 @@ impl Manifest {
 }
 
 fn parse_manifest(value: &str) -> crate::Result<Option<Manifest>> {
-    let Some(value) = value.strip_prefix(MANIFEST_PREFIX) else {
+    let Some(value) = value
+        .strip_prefix(MANIFEST_PREFIX)
+        .or_else(|| value.strip_prefix(LEGACY_MANIFEST_PREFIX))
+    else {
         return Ok(None);
     };
     let manifest: Manifest = serde_json::from_str(value).map_err(|_| {
@@ -349,7 +355,7 @@ mod tests {
 
         // This namespace is unique to the test and never uses app credentials.
         let store =
-            WindowsStore(format!("axolotl-oauth-test-{}", Uuid::new_v4()));
+            WindowsStore(format!("mctrin-oauth-test-{}", Uuid::new_v4()));
         store
             .write(OAUTH_CREDENTIAL, Some(&"a".repeat(1280)))
             .unwrap();

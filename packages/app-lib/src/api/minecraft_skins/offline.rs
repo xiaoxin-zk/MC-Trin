@@ -13,9 +13,16 @@ use crate::{
 
 use super::{Credentials, png_util};
 
-pub(crate) const OFFLINE_SKIN_PACK_FILE_NAME: &str = "Axolotl Offline Skin.zip";
-pub(crate) const OFFLINE_SKIN_PACK_LEGACY_ID: &str = "Axolotl Offline Skin.zip";
+pub(crate) const OFFLINE_SKIN_PACK_FILE_NAME: &str = "MC-Trin Offline Skin.zip";
+pub(crate) const OFFLINE_SKIN_PACK_LEGACY_ID: &str = "MC-Trin Offline Skin.zip";
 pub(crate) const OFFLINE_SKIN_PACK_MODERN_ID: &str =
+    "file/MC-Trin Offline Skin.zip";
+/// Pack id and file name written by releases before the MC-Trin rename. They
+/// are cleaned out of instances so old selections do not linger next to the
+/// renamed pack.
+pub(crate) const OFFLINE_SKIN_PACK_RETIRED_ID: &str =
+    "Axolotl Offline Skin.zip";
+pub(crate) const OFFLINE_SKIN_PACK_RETIRED_MODERN_ID: &str =
     "file/Axolotl Offline Skin.zip";
 
 #[derive(Debug, Clone, Copy)]
@@ -120,6 +127,7 @@ pub(crate) async fn prepare_offline_skin_resource_pack(
     let resource_pack_dir = instance_path.join("resourcepacks");
     let resource_pack_path =
         resource_pack_dir.join(OFFLINE_SKIN_PACK_FILE_NAME);
+    remove_retired_pack_files(&resource_pack_dir).await?;
     let Some(version) = MinecraftReleaseVersion::parse(game_version) else {
         remove_pack_if_present(&resource_pack_path).await?;
         return Ok(OfflineSkinPackOptions {
@@ -189,6 +197,17 @@ pub(crate) async fn prepare_offline_skin_resource_pack(
             OFFLINE_SKIN_PACK_LEGACY_ID
         }),
     })
+}
+
+/// Removes the pre-rename pack files, which stay behind in the instance's
+/// resource pack folder after the pack itself was renamed.
+async fn remove_retired_pack_files(
+    resource_pack_dir: &Path,
+) -> crate::Result<()> {
+    for name in [OFFLINE_SKIN_PACK_RETIRED_ID] {
+        remove_pack_if_present(&resource_pack_dir.join(name)).await?;
+    }
+    Ok(())
 }
 
 async fn remove_pack_if_present(path: &Path) -> crate::Result<()> {

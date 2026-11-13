@@ -8,14 +8,14 @@
   ...
 }:
 let
-  axolotl = callPackage ./axolotl.nix { inherit inputs; };
+  mctrin = callPackage ./mctrin.nix { inherit inputs; };
 in
   buildFHSEnv {
-    name = "axolotl-launcher";
+    name = "mctrin-launcher";
     targetPkgs = pkgs: builtins.concatLists [
-      [ axolotl ]
+      [ mctrin ]
       (with pkgs; [
-      # For Axolotl
+      # For MC-Trin
         libnotify
         gtk3
         webkitgtk_4_1
@@ -58,6 +58,6 @@ in
       set +o allexport
     '';
     runScript = ''
-      "${axolotl}/bin/Axolotl Launcher"
+      "${mctrin}/bin/MC-Trin"
     '';
   }

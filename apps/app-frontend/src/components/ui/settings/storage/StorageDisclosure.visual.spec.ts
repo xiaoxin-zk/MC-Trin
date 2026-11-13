@@ -23,10 +23,10 @@ it('bridges expansion and collapse without jumping or trapping rapid toggles', a
     const details = wrapper.get('details').element as HTMLDetailsElement
     const height = () => details.getBoundingClientRect().height
     const closed = height()
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/expand-start.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/expand-start.png`,
         })
     if (
         CSS.supports('interpolate-size', 'allow-keywords') &&
@@ -45,10 +45,10 @@ it('bridges expansion and collapse without jumping or trapping rapid toggles', a
     await waitFor(() => height() > closed, { label: 'disclosure to start expanding' })
     expect(height()).toBeLessThanOrEqual(closed + 120)
     await waitFor(() => height() >= closed + 119)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/expand-end.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/expand-end.png`,
         })
     await wrapper.get('summary').trigger('click')
     await frame()

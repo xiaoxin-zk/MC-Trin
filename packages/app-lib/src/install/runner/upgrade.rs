@@ -1144,7 +1144,7 @@ pub(super) async fn apply_upgrade_content(
     let fail_after_mutations = injected_upgrade_failure_after_mutations();
     #[cfg(debug_assertions)]
     tracing::warn!(
-        raw_env = ?std::env::var("AXOLOTL_TEST_UPGRADE_FAIL_AFTER_MUTATIONS"),
+        raw_env = ?std::env::var("MCTRIN_TEST_UPGRADE_FAIL_AFTER_MUTATIONS"),
         parsed = ?fail_after_mutations,
         "T11 upgrade fault injection enabled"
     );
@@ -1156,7 +1156,7 @@ pub(super) async fn apply_upgrade_content(
     let pause_after_mutations = injected_upgrade_pause_after_mutations();
     #[cfg(debug_assertions)]
     tracing::warn!(
-        raw_env = ?std::env::var("AXOLOTL_TEST_UPGRADE_PAUSE_AFTER_MUTATIONS"),
+        raw_env = ?std::env::var("MCTRIN_TEST_UPGRADE_PAUSE_AFTER_MUTATIONS"),
         parsed = ?pause_after_mutations,
         "T12 upgrade crash-test pause configured"
     );
@@ -1336,14 +1336,14 @@ pub(super) async fn apply_upgrade_content(
 
 #[cfg(debug_assertions)]
 fn injected_upgrade_failure_after_mutations() -> Option<usize> {
-    std::env::var("AXOLOTL_TEST_UPGRADE_FAIL_AFTER_MUTATIONS")
+    std::env::var("MCTRIN_TEST_UPGRADE_FAIL_AFTER_MUTATIONS")
         .ok()
         .and_then(|value| debug_mutation_count(&value))
 }
 
 #[cfg(debug_assertions)]
 fn injected_upgrade_pause_after_mutations() -> Option<usize> {
-    std::env::var("AXOLOTL_TEST_UPGRADE_PAUSE_AFTER_MUTATIONS")
+    std::env::var("MCTRIN_TEST_UPGRADE_PAUSE_AFTER_MUTATIONS")
         .ok()
         .and_then(|value| debug_mutation_count(&value))
 }

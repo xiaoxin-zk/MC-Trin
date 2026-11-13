@@ -1,5 +1,5 @@
-const SHOW_SCROLL_TOP_STORAGE_KEY = 'axolotl-show-scroll-top'
-const QUICK_SCROLL_ENABLED_STORAGE_KEY = 'axolotl-quick-scroll-enabled'
+const SHOW_SCROLL_TOP_STORAGE_KEY = 'mctrin-show-scroll-top'
+const QUICK_SCROLL_ENABLED_STORAGE_KEY = 'mctrin-quick-scroll-enabled'
 
 export function getShowScrollTop(): boolean {
     const value = localStorage.getItem(SHOW_SCROLL_TOP_STORAGE_KEY)

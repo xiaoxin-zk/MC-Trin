@@ -1,5 +1,5 @@
 use crate::api::Result;
-use theseus::content_favorites::{
+use mctrin::content_favorites::{
     self, ContentFavorite, ContentFavoriteInput, ContentFavoriteProvider,
 };
 

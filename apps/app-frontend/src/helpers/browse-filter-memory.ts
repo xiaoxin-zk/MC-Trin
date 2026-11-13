@@ -6,7 +6,7 @@ export interface BrowseFilterMemory {
     overriddenProvidedFilterTypes: string[]
 }
 
-const BROWSE_FILTER_MEMORY_STORAGE_KEY = 'axolotl-browse-filter-memory-v1'
+const BROWSE_FILTER_MEMORY_STORAGE_KEY = 'mctrin-browse-filter-memory-v1'
 
 function isFilterValue(value: unknown): value is FilterValue {
     if (!value || typeof value !== 'object') return false

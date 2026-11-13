@@ -763,7 +763,7 @@ const messages = defineMessages({
     },
 })
 
-const MINECRAFT_DIRECTORIES_STORAGE_KEY = 'axolotl-minecraft-directories'
+const MINECRAFT_DIRECTORIES_STORAGE_KEY = 'mctrin-minecraft-directories'
 
 /** @typedef {import('@/helpers/instance').ExternalMinecraftRoot} ExternalMinecraftRoot */
 

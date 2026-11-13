@@ -24,7 +24,7 @@ pub enum CurseForgeApiKeySource {
     /// Set by the user in the launcher.
     Override,
     /// Injected when the launcher was built, or exported as
-    /// `AXOLOTL_CURSEFORGE_API_KEY` before starting it.
+    /// `MCTRIN_CURSEFORGE_API_KEY` before starting it.
     Launcher,
     /// No key is available at all.
     Missing,

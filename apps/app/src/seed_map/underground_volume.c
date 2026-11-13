@@ -13,7 +13,7 @@ static uint64_t mix64(uint64_t value) {
     return value ^ (value >> 31);
 }
 
-int32_t axolotl_seed_map_underground_volume_surface(
+int32_t mctrin_seed_map_underground_volume_surface(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, int32_t y, int32_t width, int32_t height,
     uint8_t *blocks, uint64_t length, int32_t *surface_heights
@@ -102,16 +102,16 @@ int32_t axolotl_seed_map_underground_volume_surface(
     return 0;
 }
 
-int32_t axolotl_seed_map_underground_volume(
+int32_t mctrin_seed_map_underground_volume(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, int32_t y, int32_t width, int32_t height,
     uint8_t *blocks, uint64_t length
 ) {
-    return axolotl_seed_map_underground_volume_surface(seed, mc, flags, dimension,
+    return mctrin_seed_map_underground_volume_surface(seed, mc, flags, dimension,
         x, z, y, width, height, blocks, length, NULL);
 }
 
-int32_t axolotl_seed_map_underground_chunk(
+int32_t mctrin_seed_map_underground_chunk(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, uint8_t *blocks, uint64_t length,
     int32_t *surface_heights, uint64_t request_id, int32_t (*canceled)(uint64_t)

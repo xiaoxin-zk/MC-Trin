@@ -229,7 +229,7 @@ pub fn run() -> Result<(), String> {
         WebViewBuilder::new_with_web_context(&mut webview_context)
             .with_html(HTML)
             .with_initialization_script(format!(
-                "window.__AXOLOTL_INSTALLER__ = {bootstrap};"
+                "window.__MCTRIN_INSTALLER__ = {bootstrap};"
             ))
             .with_background_color((22, 24, 28, 255))
             .with_ipc_handler(handler)
@@ -475,7 +475,7 @@ fn webview_data_directory() -> Result<PathBuf, String> {
         .map(PathBuf::from)
         .unwrap_or_else(env::temp_dir);
     let directory = root
-        .join("Axolotl")
+        .join("MC-Trin")
         .join("InstallerUI")
         .join(format!("WebView2-{}", std::process::id()));
 
@@ -510,8 +510,8 @@ fn validate_request(
     if fs::create_dir_all(&resource_dir).is_err() {
         return Err(("resource", "notWritable"));
     }
-    let write_test = resource_dir
-        .join(format!(".axolotl-write-test-{}", std::process::id()));
+    let write_test =
+        resource_dir.join(format!(".mctrin-write-test-{}", std::process::id()));
     if fs::write(&write_test, b"MC-Trin").is_err() {
         return Err(("resource", "notWritable"));
     }
@@ -540,7 +540,7 @@ fn start_install(
 ) {
     thread::spawn(move || {
         let status_path = env::temp_dir().join(format!(
-            "axolotl-installer-{}-{}.status",
+            "mctrin-installer-{}-{}.status",
             std::process::id(),
             thread_id_suffix()
         ));
@@ -568,7 +568,7 @@ fn start_uninstall(
 ) {
     thread::spawn(move || {
         let status_path = env::temp_dir().join(format!(
-            "axolotl-uninstaller-{}-{}.status",
+            "mctrin-uninstaller-{}-{}.status",
             std::process::id(),
             thread_id_suffix()
         ));
@@ -785,7 +785,7 @@ fn install_dir_requires_elevation(install_dir: &Path) -> bool {
     };
 
     let write_test = existing_directory.join(format!(
-        ".axolotl-install-write-test-{}-{}",
+        ".mctrin-install-write-test-{}-{}",
         std::process::id(),
         thread_id_suffix(),
     ));
@@ -928,7 +928,7 @@ fn send_to_webview(webview: Option<&WebView>, payload: serde_json::Value) {
     };
     if let Ok(payload) = serde_json::to_string(&payload) {
         let _ = webview.evaluate_script(&format!(
-            "window.axolotlInstaller && window.axolotlInstaller.receive({payload});"
+            "window.mctrinInstaller && window.mctrinInstaller.receive({payload});"
         ));
     }
 }

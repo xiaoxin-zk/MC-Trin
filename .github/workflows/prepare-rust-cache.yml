@@ -10,7 +10,7 @@ on:
       - rust-toolchain.toml
       - '**/.cargo/config.toml'
       - .github/actions/setup-desktop-rust/**
-      - .github/workflows/axolotl-release.yml
+      - .github/workflows/mctrin-release.yml
       - .github/workflows/prepare-rust-cache.yml
 
 permissions:
@@ -76,7 +76,7 @@ jobs:
           # desktop builds still use the repository lockfile with --locked.
           args=(--recipe-path "$RUNNER_TEMP/desktop-recipe.json" --release --target-dir "$target_dir")
           if [ -n "$BUILD_TARGET" ]; then args+=(--target "$BUILD_TARGET"); fi
-          cargo chef cook "${args[@]}" --package theseus_gui --features tauri/custom-protocol
+          cargo chef cook "${args[@]}" --package mctrin-gui --features tauri/custom-protocol
           if [ "$RUNNER_OS" = Windows ]; then
             cargo chef cook "${args[@]}" --package mctrin-installer-ui
           fi

@@ -120,9 +120,9 @@ impl From<std::io::Error> for TranslateError {
     }
 }
 
-impl From<theseus::Error> for TranslateError {
-    fn from(error: theseus::Error) -> Self {
-        use theseus::ErrorKind;
+impl From<mctrin::Error> for TranslateError {
+    fn from(error: mctrin::Error) -> Self {
+        use mctrin::ErrorKind;
 
         let message = error.to_string();
         let code = match error.raw.as_ref() {

@@ -153,7 +153,7 @@ test('prepares an assistant session without an instance and forwards the selecte
 
 test('keeps structured Tauri provider errors readable for the assistant alert', async () => {
     const providerError = {
-        field_name: 'Theseus',
+        field_name: 'Mctrin',
         message: 'AI_AUTHENTICATION_FAILED: DeepSeek returned HTTP 401 Unauthorized',
     }
     const scope = effectScope()

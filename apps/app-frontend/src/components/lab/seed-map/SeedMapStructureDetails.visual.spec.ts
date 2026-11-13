@@ -264,9 +264,9 @@ it('loads original End city and ship geometry on demand and switches modes witho
     await wrapper.setProps({ selected: 0 })
     await vi.waitFor(() => expect(pixels()).not.toEqual(selected))
     await wrapper.setProps({ selected: undefined })
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE) {
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE) {
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-end-city-blocks.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-end-city-blocks.png`,
         })
     }
     const blocksImage = pixels()
@@ -394,9 +394,9 @@ it.each([
         if (source.limits.includes('partial_layout'))
             expect(wrapper.text()).toContain('The engine simulates only part of this structure')
         if (kind === 'nether-fossil') expect(wrapper.text()).toContain('Nether fossil 14')
-        if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
             await page.screenshot({
-                path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-${kind}-blocks.png`,
+                path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-${kind}-blocks.png`,
             })
         await wrapper.get('[data-testid="seed-map-frames-mode"]').trigger('click')
         expect(canvas.dataset.renderMode).toBe('frames')
@@ -809,10 +809,10 @@ it('renders interactive 3D bounds and keeps map selection synchronized without i
     await wrapper.get('[data-piece-id="0"]').trigger('click')
     expect(wrapper.emitted('focus')?.at(-1)?.[0]).toMatchObject({ id: 0 })
     expect(wrapper.text()).toContain('Vertical relationships are relative')
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-layout-3d.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-layout-3d.png`,
         })
 })
 
@@ -904,10 +904,10 @@ it.each(['en-US', 'zh-CN'])(
         expect(calls.loot).not.toHaveBeenCalled()
         await wrapper.get('button[aria-label]').trigger('click')
         expect(wrapper.emitted('close')).toHaveLength(1)
-        if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
             await page.screenshot({
                 element: wrapper.element,
-                path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-unavailable-${locale}.png`,
+                path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/seed-map-unavailable-${locale}.png`,
             })
     },
 )

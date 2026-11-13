@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// Resolves the directory whose game content (`mods`, `resourcepacks`, ...)
 /// belongs to this instance.
 ///
-/// Ordinary instances own their profile directory under Axolotl's instances
+/// Ordinary instances own their profile directory under MC-Trin's instances
 /// folder, honouring a per-instance `game_dir_override`
 /// (`DirectoryInfo::instance_game_dir`). Directly associated instances have no
 /// profile directory: their content lives inside the externally managed
@@ -104,7 +104,7 @@ async fn sync_instance_content_files_with_verification(
         .map(|snapshot| snapshot.dirty_paths.clone())
         .unwrap_or_default();
     let content_root = instance_content_root(&state.directories, instance)?;
-    // The hash-cache layer resolves key paths against Axolotl's own instances
+    // The hash-cache layer resolves key paths against MC-Trin's own instances
     // folder (`state/cache.rs`). For directly associated instances the
     // absolute linked root is passed as the "instance path": joining an
     // absolute path replaces the base, so the cache layer hashes the linked
@@ -894,7 +894,7 @@ mod tests {
         );
 
         // A second refresh re-hashes the existing row. It must continue to
-        // use the linked external root rather than the Axolotl profile path.
+        // use the linked external root rather than the MC-Trin profile path.
         let refreshed = sync_instance_content_files(&instance, &state)
             .await
             .unwrap();

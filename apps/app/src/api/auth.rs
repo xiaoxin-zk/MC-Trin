@@ -1,13 +1,13 @@
 use crate::api::Result;
 use crate::api::oauth_utils;
 use chrono::{Duration, Utc};
+use mctrin::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration as StdDuration;
 use tauri::plugin::TauriPlugin;
 use tauri::{Emitter, Manager, Runtime, UserAttentionType};
 use tauri_plugin_opener::OpenerExt;
-use theseus::prelude::*;
 use tokio::sync::{mpsc, oneshot};
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
@@ -67,7 +67,7 @@ pub async fn network_scope() -> Result<String> {
 #[tauri::command]
 pub async fn set_mojang_auth_use_mirror(
     use_mirror: bool,
-    expected_source: theseus::settings::DownloadSourceMode,
+    expected_source: mctrin::settings::DownloadSourceMode,
 ) -> Result<bool> {
     Ok(
         minecraft_auth::set_mojang_auth_use_mirror(use_mirror, expected_source)
@@ -96,7 +96,7 @@ enum MinecraftLoginAlternative {
 }
 
 async fn notify_anti_piracy_status<R: Runtime>(app: &tauri::AppHandle<R>) {
-    let status = theseus::anti_piracy::status().await;
+    let status = mctrin::anti_piracy::status().await;
     if let Err(error) = app.emit("anti-piracy-status-changed", status) {
         tracing::warn!(%error, "Could not notify frontend of official Minecraft login");
     }
@@ -118,7 +118,7 @@ pub async fn login<R: Runtime>(
     let (alternative_tx, mut alternative_rx) = mpsc::unbounded_channel();
     let trouble_links =
         serde_json::to_string(&trouble_links).map_err(|error| {
-            theseus::ErrorKind::OtherError(format!(
+            mctrin::ErrorKind::OtherError(format!(
                 "Failed to serialize Minecraft sign-in help links: {error}"
             ))
             .as_error()
@@ -128,10 +128,10 @@ pub async fn login<R: Runtime>(
         (() => {{
             const labels = {trouble_links};
             const addHelpBar = () => {{
-                if (document.getElementById('axolotl-minecraft-login-help')) return;
+                if (document.getElementById('mctrin-minecraft-login-help')) return;
 
                 const bar = document.createElement('div');
-                bar.id = 'axolotl-minecraft-login-help';
+                bar.id = 'mctrin-minecraft-login-help';
                 bar.style.cssText = 'box-sizing:border-box;position:sticky;top:0;z-index:2147483647;display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:8px 16px;background:#fff;color:#1f1f1f;border-bottom:1px solid #d1d1d1;font:13px/20px system-ui,sans-serif;';
                 const trouble = document.createElement('span');
                 trouble.textContent = labels.trouble;
@@ -145,11 +145,11 @@ pub async fn login<R: Runtime>(
                     return link;
                 }};
 
-                bar.append(createLink(labels.browserLogin, 'axolotl-auth://browser'));
+                bar.append(createLink(labels.browserLogin, 'mctrin-auth://browser'));
                 const separator = document.createElement('span');
                 separator.textContent = '|';
                 bar.append(separator);
-                bar.append(createLink(labels.deviceCode, 'axolotl-auth://device-code'));
+                bar.append(createLink(labels.deviceCode, 'mctrin-auth://device-code'));
                 document.body.prepend(bar);
             }};
 
@@ -166,7 +166,7 @@ pub async fn login<R: Runtime>(
         "signin",
         tauri::WebviewUrl::External(flow.auth_request_uri.parse().map_err(
             |_| {
-                theseus::ErrorKind::OtherError(
+                mctrin::ErrorKind::OtherError(
                     "Error parsing auth redirect URL".to_string(),
                 )
                 .as_error()
@@ -179,10 +179,10 @@ pub async fn login<R: Runtime>(
     .initialization_script(help_bar_script)
     .on_navigation(move |url| {
         let alternative = match url.host_str() {
-            Some("browser") if url.scheme() == "axolotl-auth" => {
+            Some("browser") if url.scheme() == "mctrin-auth" => {
                 Some(MinecraftLoginAlternative::Browser)
             }
-            Some("device-code") if url.scheme() == "axolotl-auth" => {
+            Some("device-code") if url.scheme() == "mctrin-auth" => {
                 Some(MinecraftLoginAlternative::DeviceCode)
             }
             _ => None,
@@ -230,26 +230,26 @@ pub async fn login<R: Runtime>(
                 .find(|x| x.0 == "state")
                 .map(|(_, state)| state.into_owned())
                 .ok_or_else(|| {
-                    theseus::ErrorKind::InputError(
+                    mctrin::ErrorKind::InputError(
                         "Microsoft sign-in response did not include state"
                             .into(),
                     )
                     .as_error()
                 })?;
             if state != flow.state {
-                return Err(theseus::ErrorKind::InputError("Microsoft sign-in response did not match the active login request".into()).as_error().into());
+                return Err(mctrin::ErrorKind::InputError("Microsoft sign-in response did not match the active login request".into()).as_error().into());
             }
             if let Some((_, error)) =
                 callback_url.query_pairs().find(|x| x.0 == "error")
             {
-                return Err(theseus::ErrorKind::InputError(format!(
+                return Err(mctrin::ErrorKind::InputError(format!(
                     "Microsoft sign-in was not completed ({error})"
                 ))
                 .as_error()
                 .into());
             }
             let code = callback_url.query_pairs().find(|x| x.0 == "code" && !x.1.trim().is_empty()).map(|(_, code)| code.into_owned()).ok_or_else(|| {
-                theseus::ErrorKind::InputError("Microsoft sign-in response did not include an authorization code".into()).as_error()
+                mctrin::ErrorKind::InputError("Microsoft sign-in response did not include an authorization code".into()).as_error()
             })?;
             let val = minecraft_auth::finish_login(&code, &state, flow).await?;
 
@@ -269,7 +269,7 @@ pub async fn browser_login<R: Runtime>(
 ) -> Result<Option<Credentials>> {
     let flow = minecraft_auth::begin_browser_login().await?;
     let callback_url = url::Url::parse(&flow.redirect_uri).map_err(|_| {
-        theseus::ErrorKind::InputError(
+        mctrin::ErrorKind::InputError(
             "Invalid Microsoft callback address".into(),
         )
         .as_error()
@@ -286,7 +286,7 @@ pub async fn browser_login<R: Runtime>(
         ));
     listen_socket.await.map_err(|_| {
         auth_code.abort();
-        theseus::ErrorKind::OtherError(
+        mctrin::ErrorKind::OtherError(
             "Browser sign-in listener stopped before binding".into(),
         )
         .as_error()
@@ -296,8 +296,8 @@ pub async fn browser_login<R: Runtime>(
         app.opener().open_url(&flow.auth_request_uri, None::<&str>)
     {
         auth_code.abort();
-        return Err(crate::api::TheseusSerializableError::Theseus(
-            theseus::ErrorKind::OtherError(format!(
+        return Err(crate::api::MctrinSerializableError::Mctrin(
+            mctrin::ErrorKind::OtherError(format!(
                 "Failed to open browser sign-in: {error}"
             ))
             .into(),
@@ -309,13 +309,13 @@ pub async fn browser_login<R: Runtime>(
             .await
             .map_err(|_| {
                 auth_code.abort();
-                theseus::ErrorKind::OtherError(
+                mctrin::ErrorKind::OtherError(
                     "Browser sign-in timed out".into(),
                 )
                 .as_error()
             })?;
     let auth_code = auth_code.map_err(|error| {
-        theseus::ErrorKind::OtherError(format!(
+        mctrin::ErrorKind::OtherError(format!(
             "Browser sign-in listener stopped unexpectedly: {error}"
         ))
         .as_error()
@@ -325,7 +325,7 @@ pub async fn browser_login<R: Runtime>(
     };
 
     let state = reply.state.ok_or_else(|| {
-        theseus::ErrorKind::InputError(
+        mctrin::ErrorKind::InputError(
             "Microsoft sign-in response did not include state".into(),
         )
         .as_error()
@@ -450,7 +450,7 @@ fn yggdrasil_password_entry(
 ) -> Result<keyring::Entry> {
     let login = login.trim();
     if login.is_empty() {
-        return Err(theseus::ErrorKind::InputError(
+        return Err(mctrin::ErrorKind::InputError(
             "The Yggdrasil account name cannot be empty".to_string(),
         )
         .as_error()
@@ -458,7 +458,7 @@ fn yggdrasil_password_entry(
     }
     let api_root = minecraft_auth::normalize_yggdrasil_api_root(api_root)?;
     keyring::Entry::new(
-        theseus::brand::BUNDLE_IDENTIFIER,
+        mctrin::brand::BUNDLE_IDENTIFIER,
         &format!("{api_root}\n{login}"),
     )
     .map_err(keyring_error)
@@ -470,7 +470,7 @@ fn normalize_saved_yggdrasil_login(
 ) -> Result<SavedYggdrasilLogin> {
     let login = login.trim();
     if login.is_empty() {
-        return Err(theseus::ErrorKind::InputError(
+        return Err(mctrin::ErrorKind::InputError(
             "The Yggdrasil account name cannot be empty".to_string(),
         )
         .as_error()
@@ -484,7 +484,7 @@ fn normalize_saved_yggdrasil_login(
 
 fn yggdrasil_saved_logins_entry() -> Result<keyring::Entry> {
     keyring::Entry::new(
-        theseus::brand::BUNDLE_IDENTIFIER,
+        mctrin::brand::BUNDLE_IDENTIFIER,
         YGGDRASIL_SAVED_LOGINS_KEY,
     )
     .map_err(keyring_error)
@@ -519,7 +519,7 @@ fn write_yggdrasil_saved_logins(
 
     let saved_logins =
         serde_json::to_string(saved_logins).map_err(|error| {
-            theseus::ErrorKind::OtherError(format!(
+            mctrin::ErrorKind::OtherError(format!(
                 "Unable to serialize saved Yggdrasil logins: {error}"
             ))
             .as_error()
@@ -547,10 +547,8 @@ fn remove_saved_yggdrasil_login(
     saved_logins.retain(|entry| entry != saved_login);
 }
 
-fn keyring_error(
-    error: keyring::Error,
-) -> crate::api::TheseusSerializableError {
-    theseus::ErrorKind::OtherError(format!(
+fn keyring_error(error: keyring::Error) -> crate::api::MctrinSerializableError {
+    mctrin::ErrorKind::OtherError(format!(
         "Unable to access the system credential store: {error}"
     ))
     .as_error()
@@ -565,7 +563,7 @@ fn parse_custom_uuid(uuid: Option<String>) -> Result<Option<uuid::Uuid>> {
     if uuid.len() != 32
         || !uuid.chars().all(|character| character.is_ascii_hexdigit())
     {
-        return Err(theseus::ErrorKind::InputError(
+        return Err(mctrin::ErrorKind::InputError(
             "Custom UUID must be 32 hexadecimal characters; hyphens are optional"
                 .to_string(),
         )
@@ -574,7 +572,7 @@ fn parse_custom_uuid(uuid: Option<String>) -> Result<Option<uuid::Uuid>> {
     }
 
     Ok(Some(uuid::Uuid::parse_str(&uuid).map_err(|_| {
-        theseus::ErrorKind::InputError("Invalid custom UUID".to_string())
+        mctrin::ErrorKind::InputError("Invalid custom UUID".to_string())
             .as_error()
     })?))
 }
@@ -619,16 +617,16 @@ pub async fn get_users(
 }
 
 #[tauri::command]
-pub async fn get_anti_piracy_status() -> theseus::anti_piracy::Status {
-    theseus::anti_piracy::status().await
+pub async fn get_anti_piracy_status() -> mctrin::anti_piracy::Status {
+    mctrin::anti_piracy::status().await
 }
 
 #[tauri::command]
 pub async fn clear_official_login_marker<R: Runtime>(
     app: tauri::AppHandle<R>,
-) -> Result<theseus::anti_piracy::Status> {
-    theseus::anti_piracy::clear_official_login().await?;
-    let status = theseus::anti_piracy::status().await;
+) -> Result<mctrin::anti_piracy::Status> {
+    mctrin::anti_piracy::clear_official_login().await?;
+    let status = mctrin::anti_piracy::status().await;
     if let Err(error) = app.emit("anti-piracy-status-changed", status) {
         tracing::warn!(%error, "Could not notify frontend of cleared official Minecraft login");
     }

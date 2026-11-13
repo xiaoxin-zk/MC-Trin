@@ -58,7 +58,7 @@ test('falls back to automatic node selection when a cached preference disappears
 
 test('reads cancellation messages from serialized Tauri errors', () => {
     assert.equal(
-        multiplayerErrorText({ field_name: 'Theseus', message: 'RedStone operation cancelled' }),
+        multiplayerErrorText({ field_name: 'Mctrin', message: 'RedStone operation cancelled' }),
         'RedStone operation cancelled',
     )
     assert.equal(

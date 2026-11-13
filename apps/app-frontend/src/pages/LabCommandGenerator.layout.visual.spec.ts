@@ -19,7 +19,7 @@ vi.mock('@/components/lab/command-generator/CommandGeneratorItemPickerModal.vue'
 }))
 
 it('keeps the command workspace readable across window widths and themes', async () => {
-    localStorage.removeItem('axolotl:command-generator:user-presets')
+    localStorage.removeItem('mctrin:command-generator:user-presets')
     const teleports = document.createElement('div')
     teleports.id = 'teleports'
     document.body.append(teleports)
@@ -68,10 +68,10 @@ it('keeps the command workspace readable across window widths and themes', async
             const result = wrapper.get('aside').element.getBoundingClientRect()
             if (width >= 1024) expect(result.left).toBeGreaterThan(editor.right)
             else expect(result.top).toBeGreaterThan(editor.bottom)
-            if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+            if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
                 await page.screenshot({
                     element: root,
-                    path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/command-${width}-${theme}.png`,
+                    path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/command-${width}-${theme}.png`,
                 })
         }
         await page.viewport(1280, 1400)
@@ -94,10 +94,10 @@ it('keeps the command workspace readable across window widths and themes', async
             document.querySelector('.tooltip-popper')!.getBoundingClientRect().width,
         ).toBeGreaterThan(0)
         await remove.trigger('mouseleave')
-        if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
             await page.screenshot({
                 element: wrapper.element,
-                path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/command-execute.png`,
+                path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/command-execute.png`,
             })
         expect(wrapper.findAll('[title]')).toHaveLength(0)
         wrapper.findAllComponents(Combobox)[3].vm.$emit('update:modelValue', 'give')
@@ -111,10 +111,10 @@ it('keeps the command workspace readable across window widths and themes', async
         await page.viewport(650, 1400)
         await flushPromises()
         expect(wrapper.element.scrollWidth).toBeLessThanOrEqual(wrapper.element.clientWidth + 1)
-        if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
             await page.screenshot({
                 element: wrapper.element,
-                path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/command-nbt-narrow.png`,
+                path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/command-nbt-narrow.png`,
             })
     } finally {
         wrapper.unmount()

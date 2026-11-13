@@ -2,16 +2,16 @@
     tracing is set basd on the environment variable RUST_LOG=xxx, depending on the amount of logs to show
         ERROR > WARN > INFO > DEBUG > TRACE
     eg. RUST_LOG=info will show info, warn, and error logs
-        RUST_LOG="theseus=trace" will show *all* messages but from theseus only (and not dependencies using similar crates)
-        RUST_LOG="theseus=trace" will show *all* messages but from theseus only (and not dependencies using similar crates)
+        RUST_LOG="mctrin=trace" will show *all* messages but from mctrin only (and not dependencies using similar crates)
+        RUST_LOG="mctrin=trace" will show *all* messages but from mctrin only (and not dependencies using similar crates)
 
     Error messages returned to Tauri will display as traced error logs if they return an error.
     This will also include an attached span trace if the error is from a tracing error, and the level is set to info, debug, or trace
 
     on unix:
-        RUST_LOG="theseus=trace" {run command}
+        RUST_LOG="mctrin=trace" {run command}
 
-    The default is theseus=show, meaning only logs from theseus will be displayed, and at the info or higher level.
+    The default is mctrin=show, meaning only logs from mctrin will be displayed, and at the info or higher level.
 
 */
 
@@ -55,7 +55,7 @@ static LOG_FILTER_RELOAD: std::sync::OnceLock<LogFilterReloadHandle> =
     std::sync::OnceLock::new();
 
 fn log_level_directives(level: &str) -> String {
-    format!("theseus={level},theseus_gui={level}")
+    format!("mctrin={level},mctrin_gui={level}")
 }
 
 fn add_third_party_directives(
@@ -1314,7 +1314,7 @@ mod tests {
         level: &str,
         message: &str,
     ) -> String {
-        format!("{} {level} theseus: {message}\n", (now - age).to_rfc3339())
+        format!("{} {level} mctrin: {message}\n", (now - age).to_rfc3339())
     }
 
     #[test]
@@ -1361,7 +1361,7 @@ mod tests {
         let now = test_now();
         let stale = (now - chrono::Duration::hours(3)).to_rfc3339();
         let contents = format!(
-            "{stale} DEBUG theseus: dropped header\n  dropped continuation\n{stale} INFO theseus: kept header\n  kept continuation\n"
+            "{stale} DEBUG mctrin: dropped header\n  dropped continuation\n{stale} INFO mctrin: kept header\n  kept continuation\n"
         );
 
         let pruned = String::from_utf8(
@@ -1444,7 +1444,7 @@ mod tests {
         let stale = (now - chrono::Duration::hours(3)).to_rfc3339();
         let fresh = (now - chrono::Duration::minutes(1)).to_rfc3339();
         let contents = format!(
-            "{stale} DEBUG theseus: dropped header\n{stale} NOTICE theseus: unclassified line\n{fresh} TRACE theseus: kept trace\n"
+            "{stale} DEBUG mctrin: dropped header\n{stale} NOTICE mctrin: unclassified line\n{fresh} TRACE mctrin: kept trace\n"
         );
 
         let pruned = String::from_utf8(
@@ -1518,16 +1518,16 @@ mod tests {
 
         tracing::subscriber::with_default(subscriber, || {
             tracing::debug!(
-                target: "theseus::logger::reload_test",
+                target: "mctrin::logger::reload_test",
                 "hidden before reload"
             );
             tracing::info!(
-                target: "theseus::logger::reload_test",
+                target: "mctrin::logger::reload_test",
                 "visible before reload"
             );
             reload_log_level(&reload_handle, "debug").unwrap();
             tracing::debug!(
-                target: "theseus::logger::reload_test",
+                target: "mctrin::logger::reload_test",
                 "visible after reload"
             );
         });

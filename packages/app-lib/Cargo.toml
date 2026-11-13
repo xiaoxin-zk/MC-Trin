@@ -1,6 +1,6 @@
 [package]
-name = "theseus"
-# The actual version is set at release time by scripts/axolotl/set-version.mjs from the release tag
+name = "mctrin"
+# The actual version is set at release time by scripts/mctrin/set-version.mjs from the release tag
 version = "1.10.0"
 edition.workspace = true
 

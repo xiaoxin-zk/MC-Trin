@@ -1,4 +1,4 @@
-//! Theseus settings file
+//! MC-Trin settings file
 
 use crate::util::download::constants::{
     AUTO_DOWNLOAD_CONCURRENCY_INITIAL, DOWNLOAD_CONCURRENCY_HARD_MAX,
@@ -103,7 +103,7 @@ impl<'de> Deserialize<'de> for HomeLayout {
     }
 }
 
-/// Global Theseus settings
+/// Global MC-Trin settings
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Settings {
     #[serde(default = "default_true")]
@@ -1243,7 +1243,7 @@ impl<'de> Deserialize<'de> for AccentColor {
     }
 }
 
-/// Theseus theme
+/// MC-Trin theme
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {

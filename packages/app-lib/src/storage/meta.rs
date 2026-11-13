@@ -162,6 +162,7 @@ impl References {
         match parts.as_slice() {
             ["versions", version, name] => (name == &format!("{version}.jar")
                 || name == &format!("{version}.json")
+                || name == &format!("{version}.json.mctrin-format")
                 || name == &format!("{version}.json.axolotl-format"))
                 .then_some(false),
             ["natives", _, ..] => Some(false),

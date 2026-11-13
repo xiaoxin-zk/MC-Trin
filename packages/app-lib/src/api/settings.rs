@@ -1,4 +1,4 @@
-//! Theseus settings management interface
+//! MC-Trin settings management interface
 
 pub use crate::{
     State,
@@ -171,7 +171,7 @@ pub async fn set_privacy(
     transaction.commit().await?;
 
     if let Err(error) = state.discord_rpc.clear_to_default(true).await {
-        tracing::debug!(target: "theseus::privacy", %error, "Failed to apply Discord RPC state");
+        tracing::debug!(target: "mctrin::privacy", %error, "Failed to apply Discord RPC state");
     }
     get_privacy().await
 }
@@ -185,7 +185,7 @@ pub async fn set_discord_rpc(enabled: bool) -> crate::Result<PrivacySettings> {
         .execute(&state.pool)
         .await?;
     if let Err(error) = state.discord_rpc.clear_to_default(true).await {
-        tracing::debug!(target: "theseus::privacy", %error, "Failed to apply Discord RPC state");
+        tracing::debug!(target: "mctrin::privacy", %error, "Failed to apply Discord RPC state");
     }
     get_privacy().await
 }

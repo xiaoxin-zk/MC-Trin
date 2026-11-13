@@ -4,7 +4,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const CONNECTOR_URL_ENV: &str = "AXOLOTL_PLANET_MINECRAFT_CONNECTOR_URL";
+const CONNECTOR_URL_ENV: &str = "MCTRIN_PLANET_MINECRAFT_CONNECTOR_URL";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

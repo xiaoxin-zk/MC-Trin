@@ -1,4 +1,4 @@
-//! Theseus state management system
+//! MC-Trin state management system
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};

@@ -48,7 +48,7 @@ export async function setAppLocale(locale: string): Promise<void> {
     await localeLoader.select(availableLocales.includes(locale) ? locale : 'en-US')
 }
 
-const STARTUP_LOCALE_KEY = 'axolotl.startup-locale'
+const STARTUP_LOCALE_KEY = 'mctrin.startup-locale'
 
 export async function initializeLocale(): Promise<void> {
     let storedLocale: string | null = null
@@ -81,7 +81,7 @@ export function resolveInitialLocale(preferredLocales: readonly string[]): strin
 }
 
 export const SYSTEM_LOCALE_VALUE = 'system'
-const FOLLOW_SYSTEM_LOCALE_KEY = 'axolotl.follow-system-locale'
+const FOLLOW_SYSTEM_LOCALE_KEY = 'mctrin.follow-system-locale'
 
 function preferredNavigatorLocales(): readonly string[] {
     return navigator.languages?.length ? navigator.languages : [navigator.language ?? 'en-US']

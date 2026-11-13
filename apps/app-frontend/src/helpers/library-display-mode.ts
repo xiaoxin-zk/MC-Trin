@@ -1,6 +1,6 @@
 export type LibraryDisplayMode = 'standard' | 'cards'
 
-const LIBRARY_DISPLAY_MODE_STORAGE_KEY = 'axolotl-library-display-mode'
+const LIBRARY_DISPLAY_MODE_STORAGE_KEY = 'mctrin-library-display-mode'
 
 export function getLastLibraryDisplayMode(): LibraryDisplayMode {
     const value = globalThis.localStorage?.getItem(LIBRARY_DISPLAY_MODE_STORAGE_KEY)

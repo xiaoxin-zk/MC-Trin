@@ -36,7 +36,7 @@ struct NativeResult(*mut std::ffi::c_char);
 
 impl Drop for NativeResult {
     fn drop(&mut self) {
-        unsafe { super::axolotl_seed_map_free_result(self.0) };
+        unsafe { super::mctrin_seed_map_free_result(self.0) };
     }
 }
 
@@ -61,7 +61,7 @@ fn ancient_city_layout(
         io::Error::other("Ancient city layout contains an invalid byte.")
     })?;
     let result = NativeResult(unsafe {
-        super::axolotl_seed_map_ancient_city_layout(
+        super::mctrin_seed_map_ancient_city_layout(
             parse_seed(&query.seed),
             mc,
             query.x,
@@ -337,7 +337,7 @@ fn ancient_city_container_loot(
         CString::new(serde_json::to_vec(table).map_err(io::Error::other)?)
             .map_err(io::Error::other)?;
     let result = NativeResult(unsafe {
-        super::axolotl_seed_map_generate_loot(
+        super::mctrin_seed_map_generate_loot(
             table_json.as_ptr(),
             table_json.as_bytes().len(),
             estimate_ancient_city_loot_seed(parse_seed(&query.seed), container),
@@ -374,7 +374,7 @@ pub fn structure_details(
         return Err(io::Error::other("The structure query is invalid."));
     }
     let supported = unsafe {
-        super::axolotl_seed_map_capability(mc, 1, query.dimension.as_cubiomes())
+        super::mctrin_seed_map_capability(mc, 1, query.dimension.as_cubiomes())
     } as u32;
     if supported & query.feature_mask == 0 {
         return Err(io::Error::other(
@@ -477,7 +477,7 @@ pub fn structure_details(
         return Ok(result);
     }
     let result = NativeResult(unsafe {
-        super::axolotl_seed_map_structure_details(
+        super::mctrin_seed_map_structure_details(
             parse_seed(&query.seed),
             mc,
             query.edition.generator_flags(),
@@ -531,7 +531,7 @@ pub fn underground_tile(request: UndergroundRequest) -> io::Result<Vec<u8>> {
         ));
     }
     let supported = unsafe {
-        super::axolotl_seed_map_capability(mc, 3, tile.dimension.as_cubiomes())
+        super::mctrin_seed_map_capability(mc, 3, tile.dimension.as_cubiomes())
     } as u32;
     if request.layers & !supported != 0 {
         return Err(io::Error::other(
@@ -540,7 +540,7 @@ pub fn underground_tile(request: UndergroundRequest) -> io::Result<Vec<u8>> {
     }
     let mut rgba = vec![0; tile.width as usize * tile.height as usize * 4];
     let status = unsafe {
-        super::axolotl_seed_map_underground(
+        super::mctrin_seed_map_underground(
             parse_seed(&tile.seed),
             mc,
             tile.edition.generator_flags(),

@@ -19,7 +19,10 @@ use tokio::time::timeout;
 use tracing::warn;
 
 /// Marker token the frontend persists to mean "auto-select GC".
-pub const AUTO_GC_PRESET_ARG: &str = "@axolotl:gc:auto";
+pub const AUTO_GC_PRESET_ARG: &str = "@mctrin:gc:auto";
+/// Marker persisted by releases before the MC-Trin rename. It is still
+/// recognized in saved java-argument lists so the auto preset keeps matching.
+pub const LEGACY_AUTO_GC_PRESET_ARG: &str = "@axolotl:gc:auto";
 
 /// An `-XX:` flag whose key starts with `+Use` is a collector selector
 /// (`UseG1GC`, `UseShenandoahGC`, `UseZGC`). Dropping it silently changes the
@@ -37,7 +40,7 @@ pub struct GcLaunchIntent {
     /// `gc-shenandoah` or `gc-zgc`).
     pub active_preset_id: String,
     /// Exact tokens currently present in the effective java args that belong
-    /// to this preset — or just the `@axolotl:gc:auto` marker for auto.
+    /// to this preset — or just the `@mctrin:gc:auto` marker for auto.
     pub block_tokens: Vec<String>,
     /// Strategy id for each candidate (`zgc`, `shenandoah`, `g1gc-mojang`,
     /// `g1gc-pcl`, `minimal-g1`). Parallel to `candidates`, `[0]` preferred.
@@ -302,14 +305,19 @@ pub fn replace_gc_block(
 ) {
     let block_set: HashSet<&str> =
         intent.block_tokens.iter().map(String::as_str).collect();
-    let is_auto = block_set.contains(AUTO_GC_PRESET_ARG)
-        || intent.block_tokens.iter().any(|t| t == AUTO_GC_PRESET_ARG);
+    let is_auto =
+        [AUTO_GC_PRESET_ARG, LEGACY_AUTO_GC_PRESET_ARG]
+            .iter()
+            .any(|marker| {
+                block_set.contains(*marker)
+                    || intent.block_tokens.iter().any(|t| t == *marker)
+            });
 
     let mut out: Vec<String> = Vec::with_capacity(args.len() + chosen.len());
     let mut inserted = false;
     for arg in args.iter() {
         let belongs_to_block = if is_auto {
-            arg == AUTO_GC_PRESET_ARG
+            arg == AUTO_GC_PRESET_ARG || arg == LEGACY_AUTO_GC_PRESET_ARG
         } else {
             block_set.contains(arg.as_str())
         };
@@ -416,7 +424,7 @@ mod tests {
     async fn preferred_candidate_accepted_untouched() {
         let intent = GcLaunchIntent {
             active_preset_id: "gc-auto".to_string(),
-            block_tokens: vec!["@axolotl:gc:auto".to_string()],
+            block_tokens: vec!["@mctrin:gc:auto".to_string()],
             candidate_ids: vec!["zgc".to_string(), "g1gc-mojang".to_string()],
             candidates: vec![
                 vec!["-XX:+UseZGC".to_string()],
@@ -437,7 +445,7 @@ mod tests {
     async fn prunes_unsupported_tuning_flag_and_keeps_strategy() {
         let intent = GcLaunchIntent {
             active_preset_id: "gc-auto".to_string(),
-            block_tokens: vec!["@axolotl:gc:auto".to_string()],
+            block_tokens: vec!["@mctrin:gc:auto".to_string()],
             candidate_ids: vec!["zgc".to_string()],
             candidates: vec![vec![
                 "-XX:+UseZGC".to_string(),
@@ -473,7 +481,7 @@ mod tests {
     async fn selector_unsupported_falls_back_to_next_candidate() {
         let intent = GcLaunchIntent {
             active_preset_id: "gc-auto".to_string(),
-            block_tokens: vec!["@axolotl:gc:auto".to_string()],
+            block_tokens: vec!["@mctrin:gc:auto".to_string()],
             candidate_ids: vec!["zgc".to_string(), "g1gc-mojang".to_string()],
             candidates: vec![
                 vec!["-XX:+UseZGC".to_string()],
@@ -508,7 +516,7 @@ mod tests {
     async fn all_candidates_fail_falls_back_to_empty_block() {
         let intent = GcLaunchIntent {
             active_preset_id: "gc-auto".to_string(),
-            block_tokens: vec!["@axolotl:gc:auto".to_string()],
+            block_tokens: vec!["@mctrin:gc:auto".to_string()],
             candidate_ids: vec![
                 "g1gc-mojang".to_string(),
                 "minimal-g1".to_string(),
@@ -539,12 +547,12 @@ mod tests {
     fn replaces_auto_marker_block() {
         let intent = GcLaunchIntent {
             active_preset_id: "gc-auto".to_string(),
-            block_tokens: vec!["@axolotl:gc:auto".to_string()],
+            block_tokens: vec!["@mctrin:gc:auto".to_string()],
             candidate_ids: vec!["g1gc-mojang".to_string()],
             candidates: vec![vec!["-XX:+UseG1GC".to_string()]],
         };
         let mut args =
-            vec!["-Xmx2G".to_string(), "@axolotl:gc:auto".to_string()];
+            vec!["-Xmx2G".to_string(), "@mctrin:gc:auto".to_string()];
         replace_gc_block(&mut args, &intent, &["-XX:+UseG1GC".to_string()]);
         assert_eq!(args, vec!["-Xmx2G", "-XX:+UseG1GC"]);
     }

@@ -43,6 +43,11 @@ static ACTIVE_INSTANCE_OPERATIONS: LazyLock<DashMap<String, Uuid>> =
 const DATABASE_FILE: &str = "backup.db";
 const OBJECTS_DIR: &str = "objects";
 const STAGING_DIR: &str = ".staging";
+/// Marker identifying a backup repository as an MC-Trin repository.
+const BACKUP_SCHEMA_MARKER: &str = "mctrin-instance-backups";
+/// Marker written by releases before the MC-Trin rename; still accepted when
+/// verifying a moved repository.
+const LEGACY_BACKUP_SCHEMA_MARKER: &str = "axolotl-instance-backups";
 const RESTORE_PREFIX: &str = ".backup-restore-";
 const RESTORE_JOURNAL: &str = "restore.json";
 const RESTORE_COMMITTED: &str = "committed";
@@ -333,7 +338,26 @@ async fn open_repository_at(
         .connect_with(options)
         .await?;
     BACKUP_MIGRATOR.run(&pool).await?;
+    normalize_backup_schema_marker(&pool).await?;
     Ok(Some(pool))
+}
+
+/// Rewrites the repository schema marker written by the bootstrap migration to
+/// the current name. The migration stays immutable, so repositories created by
+/// older builds keep carrying `axolotl-instance-backups` until the first open
+/// upgrades them in place; verification accepts both values.
+async fn normalize_backup_schema_marker(
+    pool: &SqlitePool,
+) -> crate::Result<()> {
+    sqlx::query(
+        "UPDATE repository_meta SET schema_name = ?1 \
+         WHERE id = 0 AND schema_name = ?2",
+    )
+    .bind(BACKUP_SCHEMA_MARKER)
+    .bind(LEGACY_BACKUP_SCHEMA_MARKER)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 fn parse_backup_operation_type(
@@ -3856,7 +3880,7 @@ pub(crate) async fn move_default_repository_for_launcher_directory(
     }
 
     let temporary = destination_parent
-        .join(format!(".axolotl-backup-move-{}", Uuid::new_v4()));
+        .join(format!(".mctrin-backup-move-{}", Uuid::new_v4()));
     let copy_result: crate::Result<()> = async {
         // SQLite recreates its shared-memory and WAL files at the destination;
         // copying them either races the engine deleting them or carries a
@@ -4034,7 +4058,7 @@ async fn move_repository_inner(destination: PathBuf) -> crate::Result<()> {
             rename_backup_path(&source, &destination).await?;
         } else {
             let temporary = destination_parent
-                .join(format!(".axolotl-backup-move-{}", Uuid::new_v4()));
+                .join(format!(".mctrin-backup-move-{}", Uuid::new_v4()));
             let copy_result: crate::Result<()> = async {
                 // SQLite recreates its shared-memory and WAL files at the
                 // destination; copying them either races the engine deleting
@@ -4168,7 +4192,9 @@ async fn validate_repository_at(root: &Path) -> crate::Result<()> {
         )
         .into());
     }
-    if schema_name != "axolotl-instance-backups" {
+    if schema_name != BACKUP_SCHEMA_MARKER
+        && schema_name != LEGACY_BACKUP_SCHEMA_MARKER
+    {
         return Err(crate::ErrorKind::FSError(
             "Moved directory is not an MC-Trin backup repository".to_string(),
         )

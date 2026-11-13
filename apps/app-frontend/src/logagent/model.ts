@@ -70,7 +70,7 @@ function serializeMessage(message: BaseMessage): ModelMessage {
 
 /** Keeps credentials and transport in Rust while preserving opaque provider state. */
 export class LogAgentModel extends BaseChatModel<ModelOptions> {
-    modelName = 'axolotl-logagent:diagnostics'
+    modelName = 'mctrin-logagent:diagnostics'
     private gateway: AgentGateway
 
     constructor(gateway: AgentGateway) {
@@ -79,7 +79,7 @@ export class LogAgentModel extends BaseChatModel<ModelOptions> {
     }
 
     _llmType() {
-        return 'axolotl-logagent'
+        return 'mctrin-logagent'
     }
 
     get callKeys() {

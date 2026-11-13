@@ -830,7 +830,7 @@ mod tests {
     #[test]
     fn cleanroom_named_forge_version_detects_as_cleanroom() {
         let root = std::env::temp_dir().join(format!(
-            "axolotl-instance-json-cleanroom-{}-{}",
+            "mctrin-instance-json-cleanroom-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -865,7 +865,7 @@ mod tests {
     #[test]
     fn forge_version_without_cleanroom_marker_stays_forge() {
         let root = std::env::temp_dir().join(format!(
-            "axolotl-instance-json-forge-{}-{}",
+            "mctrin-instance-json-forge-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

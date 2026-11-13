@@ -37,7 +37,7 @@ test('armor preview selections survive storage round trips', () => {
 test('invalid stored armor values fall back per slot and field', () => {
     withStorage((values) => {
         values.set(
-            'axolotl:skin-armor-preview',
+            'mctrin:skin-armor-preview',
             JSON.stringify({
                 helmet: { material: 'diamond', trimPattern: 'invalid', trimMaterial: 'gold' },
                 boots: { material: 'turtle', trimPattern: 'sentry', trimMaterial: 'invalid' },

@@ -83,7 +83,7 @@ static void add_loot(cJSON *result, const Piece *piece, int chest, int mc) {
     }
 }
 
-char *axolotl_seed_map_structure_details(
+char *mctrin_seed_map_structure_details(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, uint32_t feature, int32_t container
 ) {
@@ -207,9 +207,9 @@ finish:
     }
 }
 
-void axolotl_seed_map_free_result(char *result) { cJSON_free(result); }
+void mctrin_seed_map_free_result(char *result) { cJSON_free(result); }
 
-char *axolotl_seed_map_generate_loot(
+char *mctrin_seed_map_generate_loot(
     const char *table_json, size_t table_len, uint64_t seed, int32_t mc
 ) {
     if (!table_json || !table_len || table_len > 1024 * 1024) return NULL;
@@ -271,7 +271,7 @@ char *axolotl_seed_map_generate_loot(
     return json;
 }
 
-int32_t axolotl_seed_map_underground(
+int32_t mctrin_seed_map_underground(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, int32_t scale, int32_t width, int32_t height,
     int32_t y, uint32_t layers, uint8_t *rgba, uint64_t length

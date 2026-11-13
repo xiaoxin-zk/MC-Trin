@@ -15,7 +15,10 @@ use crate::pack::import::mmc::MMCPack;
 use crate::state::ModLoader;
 use crate::util::io;
 
-pub(crate) const PROFILE_DIR: &str = ".axolotl/multimc";
+pub(crate) const PROFILE_DIR: &str = ".mctrin/multimc";
+/// Profile directory written by releases before the MC-Trin rename. It is
+/// still read so existing MultiMC-backed instances keep launching.
+pub(crate) const LEGACY_PROFILE_DIR: &str = ".axolotl/multimc";
 
 pub(crate) struct MultiMcProfile {
     root: PathBuf,
@@ -53,8 +56,11 @@ impl MultiMcProfile {
             return Ok(None);
         }
         let retained = game_dir.join(PROFILE_DIR);
+        let legacy_retained = game_dir.join(LEGACY_PROFILE_DIR);
         let root = if retained.join("mmc-pack.json").is_file() {
             retained
+        } else if legacy_retained.join("mmc-pack.json").is_file() {
+            legacy_retained
         } else {
             // A linked MultiMC instance points at its minecraft directory.
             let game_dir = io::canonicalize(game_dir)?;
@@ -111,7 +117,7 @@ impl MultiMcProfile {
             let path =
                 root.join("patches").join(format!("{}.json", component.uid));
             if !path.is_file() {
-                // These components are supplied by Axolotl's normal Minecraft
+                // These components are supplied by MC-Trin's normal Minecraft
                 // and loader metadata. Other components must never disappear.
                 if !component.uid.starts_with("net.legacyfabric")
                     && !component.uid.starts_with("com.cleanroommc")
@@ -524,7 +530,7 @@ impl MultiMcProfile {
             let hash = sha1_smol::Sha1::from(&bytes).hexdigest();
             // Namespace bundled JARs by content so importing a patch cannot
             // overwrite another instance's library with the same coordinate.
-            library.name = format!("com.axolotl.multimc:local-{hash}:1");
+            library.name = format!("com.mctrin.multimc:local-{hash}:1");
             library.downloadable = false;
             library.downloads = None;
             let destination = libraries_dir
@@ -726,13 +732,13 @@ mod tests {
         }
     }
 
-    /// Run with AXOLOTL_TEST_MULTIMC_ARCHIVE pointing to a local MultiMC export.
+    /// Run with MCTRIN_TEST_MULTIMC_ARCHIVE pointing to a local MultiMC export.
     #[tokio::test]
     #[ignore = "requires an external local MultiMC archive"]
     async fn local_multimc_archive_profile_applies() {
         let path = PathBuf::from(
-            std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE")
-                .expect("set AXOLOTL_TEST_MULTIMC_ARCHIVE"),
+            std::env::var_os("MCTRIN_TEST_MULTIMC_ARCHIVE")
+                .expect("set MCTRIN_TEST_MULTIMC_ARCHIVE"),
         );
         let detected =
             crate::api::pack::detect::detect_local_pack_sync(&path).unwrap();
@@ -1055,10 +1061,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set AXOLOTL_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
+    #[ignore = "Set MCTRIN_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
     async fn multimc_real_gtnh_archive() {
         use std::io::Read;
-        let archive_path = std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE")
+        let archive_path = std::env::var_os("MCTRIN_TEST_MULTIMC_ARCHIVE")
             .expect("local archive path");
         let mut archive =
             zip::ZipArchive::new(std::fs::File::open(archive_path).unwrap())
@@ -1140,7 +1146,7 @@ mod tests {
                 .count()
                 > 20
         );
-        if let Some(java_home) = std::env::var_os("AXOLOTL_TEST_JAVA_HOME") {
+        if let Some(java_home) = std::env::var_os("MCTRIN_TEST_JAVA_HOME") {
             let java_home = PathBuf::from(java_home);
             let source = directory.path().join("MultiMcBootstrapProbe.java");
             std::fs::write(&source, r#"public class MultiMcBootstrapProbe {

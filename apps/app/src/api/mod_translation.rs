@@ -181,7 +181,7 @@ pub struct TaskSnapshot {
 }
 
 async fn workspace_root() -> crate::api::Result<PathBuf> {
-    let state = theseus::State::get().await?;
+    let state = mctrin::State::get().await?;
     Ok(state.directories.caches_dir().join(WORKSPACE_SUBDIR))
 }
 
@@ -242,7 +242,7 @@ async fn validate_ai_config(
     provider_id: &str,
     model_id: &str,
 ) -> Result<(), String> {
-    let state = theseus::ai::get_state()
+    let state = mctrin::ai::get_state()
         .await
         .map_err(|error| error.to_string())?;
     if !state.settings.enabled {

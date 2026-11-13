@@ -1302,10 +1302,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Set AXOLOTL_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
+    #[ignore = "Set MCTRIN_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
     fn real_gtnh_archive_extracts_all_files() {
         let archive_path = PathBuf::from(
-            std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE")
+            std::env::var_os("MCTRIN_TEST_MULTIMC_ARCHIVE")
                 .expect("local archive path"),
         );
         let root = tempfile::tempdir().unwrap();

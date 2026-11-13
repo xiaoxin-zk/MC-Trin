@@ -14,12 +14,11 @@ use super::retired_sources;
 use crate::util::download::constants::{
     API_KEY_HEADER, CURSEFORGE_API_HOST, DOWNLOAD_FAIR_SHARE_DIVISOR,
     DOWNLOAD_META_HEADER, DOWNLOAD_SCHEDULER_INTERVAL, H2_DOWNLOAD_ASSET,
-    H2_DOWNLOAD_AXOLOTL_LAUNCHER, H2_DOWNLOAD_BELOW_EXPECTATION,
-    H2_DOWNLOAD_BYTES_0_0, H2_DOWNLOAD_CONTENT_RANGE,
-    H2_DOWNLOAD_DOWNLOADED_ASSET_IS_EMPTY,
+    H2_DOWNLOAD_BELOW_EXPECTATION, H2_DOWNLOAD_BYTES_0_0,
+    H2_DOWNLOAD_CONTENT_RANGE, H2_DOWNLOAD_DOWNLOADED_ASSET_IS_EMPTY,
     H2_DOWNLOAD_DOWNLOADED_FILE_IS_EMPTY, H2_DOWNLOAD_EMPTY, H2_DOWNLOAD_GET,
-    H2_DOWNLOAD_HTTP_2, H2_DOWNLOAD_INVALID_JAR, H2_DOWNLOAD_PROBE,
-    H2_DOWNLOAD_RANGE_STREAM, H2_DOWNLOAD_SEGMENT,
+    H2_DOWNLOAD_HTTP_2, H2_DOWNLOAD_INVALID_JAR, H2_DOWNLOAD_MCTRIN_LAUNCHER,
+    H2_DOWNLOAD_PROBE, H2_DOWNLOAD_RANGE_STREAM, H2_DOWNLOAD_SEGMENT,
     H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_DESTINATION_LOCK,
     H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT,
     IDENTITY_ENCODING, MAX_DOWNLOAD_REDIRECTS, MAX_REDIRECT_LOCATION_BYTES,
@@ -484,7 +483,7 @@ pub(crate) fn request_headers(
     headers.insert(
         USER_AGENT,
         HeaderValue::from_str(&crate::launcher_user_agent()).unwrap_or_else(
-            |_| HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER),
+            |_| HeaderValue::from_static(H2_DOWNLOAD_MCTRIN_LAUNCHER),
         ),
     );
     let route_host = Url::parse(&route.url)
@@ -1459,7 +1458,7 @@ async fn download_asset_item(
             USER_AGENT,
             HeaderValue::from_str(&crate::launcher_user_agent())
                 .unwrap_or_else(|_| {
-                    HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER)
+                    HeaderValue::from_static(H2_DOWNLOAD_MCTRIN_LAUNCHER)
                 }),
         );
         headers.insert(

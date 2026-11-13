@@ -34,7 +34,7 @@ jobs:
       - id: scope
         env:
           CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node scripts/axolotl/ci-changes.mjs
+        run: node scripts/mctrin/ci-changes.mjs
 
   typos:
     name: Run typos checks

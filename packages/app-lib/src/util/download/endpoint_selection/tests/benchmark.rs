@@ -71,7 +71,7 @@ struct Run {
 }
 
 fn size_bytes() -> u64 {
-    let mib = std::env::var("AXOLOTL_BENCH_SIZE_MIB")
+    let mib = std::env::var("MCTRIN_BENCH_SIZE_MIB")
         .ok()
         .map(|value| value.parse::<u64>().expect("integer MiB size"))
         .unwrap_or(64);
@@ -190,14 +190,14 @@ async fn run(
 
 async fn matrix(scenario: Scenario) {
     let size = size_bytes();
-    let modes = match std::env::var("AXOLOTL_BENCH_MODE").ok().as_deref() {
+    let modes = match std::env::var("MCTRIN_BENCH_MODE").ok().as_deref() {
         None => vec![Mode::Off, Mode::DnsOnly, Mode::Expanded],
         Some("off") => vec![Mode::Off],
         Some("dns") => vec![Mode::DnsOnly],
         Some("expanded") => vec![Mode::Expanded],
         Some(_) => panic!("benchmark mode must be off, dns or expanded"),
     };
-    let shard = std::env::var("AXOLOTL_BENCH_SHARD")
+    let shard = std::env::var("MCTRIN_BENCH_SHARD")
         .ok()
         .map(|value| value.parse::<usize>().expect("integer shard index"));
     assert!(shard.is_none_or(|shard| shard < 10));

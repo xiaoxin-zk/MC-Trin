@@ -145,11 +145,11 @@ export async function resourceRequest<T>(
     signal?.throwIfAborted()
     const requestId = crypto.randomUUID()
     const cancel = () => {
-        void invoke('plugin:axolotl-resources|resource_cancel', { requestId }).catch(() => {})
+        void invoke('plugin:mctrin-resources|resource_cancel', { requestId }).catch(() => {})
     }
     signal?.addEventListener('abort', cancel, { once: true })
     try {
-        const result = await invoke<T>(`plugin:axolotl-resources|${command}`, {
+        const result = await invoke<T>(`plugin:mctrin-resources|${command}`, {
             ...args,
             requestId,
         })
@@ -268,10 +268,10 @@ export async function resourceChangelog(reference: SourceReleaseRef, signal?: Ab
     return result.text
 }
 export function resourcePreferredSource() {
-    return invoke<SourceId>('plugin:axolotl-resources|resource_preferred_source')
+    return invoke<SourceId>('plugin:mctrin-resources|resource_preferred_source')
 }
 export function resourceSetPreferredSource(source: SourceId) {
-    return invoke<void>('plugin:axolotl-resources|resource_set_preferred_source', { source })
+    return invoke<void>('plugin:mctrin-resources|resource_set_preferred_source', { source })
 }
 
 export type ResourceCachePolicy =
@@ -472,10 +472,10 @@ export function resourcePrepareOperation(
     )
 }
 export function resourceAnalysisOpen(instanceId: string) {
-    return invoke<string>('plugin:axolotl-resources|resource_analysis_open', { instanceId })
+    return invoke<string>('plugin:mctrin-resources|resource_analysis_open', { instanceId })
 }
 export function resourceAnalysisClose(sessionId: string) {
-    return invoke<void>('plugin:axolotl-resources|resource_analysis_close', { sessionId })
+    return invoke<void>('plugin:mctrin-resources|resource_analysis_close', { sessionId })
 }
 export function resourceAnalysisUpdate(
     sessionId: string,
@@ -511,7 +511,7 @@ export function resourceRevisePlan(
     )
 }
 export function resourceQueuePlan(planId: string, revision: number) {
-    return invoke<InstallJobSnapshot>('plugin:axolotl-resources|resource_queue_plan', {
+    return invoke<InstallJobSnapshot>('plugin:mctrin-resources|resource_queue_plan', {
         planId,
         revision,
     })
@@ -530,14 +530,14 @@ export type ResourceHistoryEntry = {
 }
 
 export function resourceListHistory(instanceId: string, entryId?: string | null) {
-    return invoke<ResourceHistoryEntry[]>('plugin:axolotl-resources|resource_list_history', {
+    return invoke<ResourceHistoryEntry[]>('plugin:mctrin-resources|resource_list_history', {
         instanceId,
         entryId: entryId ?? null,
     })
 }
 
 export function resourceRollback(instanceId: string, entryId: string, historyId: string) {
-    return invoke<InstallJobSnapshot>('plugin:axolotl-resources|resource_rollback', {
+    return invoke<InstallJobSnapshot>('plugin:mctrin-resources|resource_rollback', {
         instanceId,
         entryId,
         historyId,
@@ -560,19 +560,19 @@ export type ResourceHistoryCleanupPlan = {
     files: ResourceBackupFile[]
 }
 export function resourceScanBackups(instanceId: string) {
-    return invoke<ResourceBackupFile[]>('plugin:axolotl-resources|resource_scan_backups', {
+    return invoke<ResourceBackupFile[]>('plugin:mctrin-resources|resource_scan_backups', {
         instanceId,
     })
 }
 export function resourcePrepareHistoryCleanup(instanceId: string, historyIds: string[]) {
     return invoke<ResourceHistoryCleanupPlan>(
-        'plugin:axolotl-resources|resource_prepare_history_cleanup',
+        'plugin:mctrin-resources|resource_prepare_history_cleanup',
         { instanceId, historyIds },
     )
 }
 export function resourceExecuteHistoryCleanup(cleanupPlanId: string, revision: number) {
     return invoke<{ removed: string[]; failures: [string, string][] }>(
-        'plugin:axolotl-resources|resource_execute_history_cleanup',
+        'plugin:mctrin-resources|resource_execute_history_cleanup',
         { cleanupPlanId, revision },
     )
 }
@@ -683,7 +683,7 @@ export function resourceExportRefreshRetry(
     )
 }
 export function resourceExportClose(sessionId: string) {
-    return invoke<void>('plugin:axolotl-resources|resource_export_close', { sessionId })
+    return invoke<void>('plugin:mctrin-resources|resource_export_close', { sessionId })
 }
 export type ResourceExportFormat = 'modrinth' | 'genericZip' | 'curseForge'
 export interface ResourceExportPlan {
@@ -700,7 +700,7 @@ export function resourceExportPlan(
     packageInfo: { name: string; version: string; summary: string; author: string | null },
     embeddedFailureChoices: ExportEmbeddedFailureChoice[],
 ) {
-    return invoke<ResourceExportPlan>('plugin:axolotl-resources|resource_export_plan', {
+    return invoke<ResourceExportPlan>('plugin:mctrin-resources|resource_export_plan', {
         sessionId,
         selectionRevision,
         format,
@@ -710,7 +710,7 @@ export function resourceExportPlan(
 }
 export function resourceExportExecute(planId: string, revision: number, outputPath: string) {
     return invoke<import('./install').InstallJobSnapshot>(
-        'plugin:axolotl-resources|resource_export_execute',
+        'plugin:mctrin-resources|resource_export_execute',
         { planId, revision, outputPath },
     )
 }
@@ -724,10 +724,10 @@ export function resourceExportQueue(
     outputPath: string,
 ) {
     return invoke<import('./install').InstallJobSnapshot>(
-        'plugin:axolotl-resources|resource_export_queue',
+        'plugin:mctrin-resources|resource_export_queue',
         { sessionId, selectedFiles, format, packageInfo, embeddedFailureChoices, outputPath },
     )
 }
 export function resourceExportCancel(requestIdOrJobId: string) {
-    return invoke<void>('plugin:axolotl-resources|resource_export_cancel', { requestIdOrJobId })
+    return invoke<void>('plugin:mctrin-resources|resource_export_cancel', { requestIdOrJobId })
 }

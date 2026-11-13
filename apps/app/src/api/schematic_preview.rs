@@ -283,7 +283,7 @@ pub async fn schematic_preview_open(
 pub async fn schematic_preview_list_instance_files(
     instance_id: String,
 ) -> Result<Vec<InstanceSchematicFile>, String> {
-    let instance_path = theseus::instance::get_full_path(&instance_id)
+    let instance_path = mctrin::instance::get_full_path(&instance_id)
         .await
         .map_err(|error| error.to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -546,7 +546,7 @@ async fn resolve_source(
             {
                 return Err("Invalid instance schematic path".to_string());
             }
-            let instance_path = theseus::instance::get_full_path(instance_id)
+            let instance_path = mctrin::instance::get_full_path(instance_id)
                 .await
                 .map_err(|error| error.to_string())?;
             let schematics = instance_path.join("schematics");
@@ -574,7 +574,7 @@ async fn resolve_source(
             {
                 return Err("Invalid instance file path".to_string());
             }
-            let instance_path = theseus::instance::get_full_path(instance_id)
+            let instance_path = mctrin::instance::get_full_path(instance_id)
                 .await
                 .map_err(|error| error.to_string())?;
             let candidate = instance_path.join(relative_path);

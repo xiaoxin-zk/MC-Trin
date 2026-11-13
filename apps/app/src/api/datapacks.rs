@@ -1,8 +1,8 @@
 use crate::api::Result;
 use either::Either;
+use mctrin::worlds::{World, WorldDatapack, WorldWithDatapacks};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime};
-use theseus::worlds::{World, WorldDatapack, WorldWithDatapacks};
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("datapacks")
@@ -19,7 +19,7 @@ pub async fn list_datapacks<R: Runtime>(
     app_handle: AppHandle<R>,
     instance_id: &str,
 ) -> Result<Vec<WorldWithDatapacks>> {
-    let mut result = theseus::worlds::list_world_datapacks(instance_id).await?;
+    let mut result = mctrin::worlds::list_world_datapacks(instance_id).await?;
     for world in &mut result {
         adapt_world_icon(&app_handle, &mut world.world);
         for datapack in &mut world.datapacks {
@@ -35,7 +35,7 @@ pub async fn delete_datapack(
     world_path: String,
     file_name: String,
 ) -> Result<()> {
-    theseus::worlds::delete_world_datapack(
+    mctrin::worlds::delete_world_datapack(
         &instance_id,
         &world_path,
         &file_name,
@@ -51,7 +51,7 @@ pub async fn set_datapack_enabled(
     file_name: String,
     enabled: bool,
 ) -> Result<()> {
-    theseus::worlds::set_world_datapack_enabled(
+    mctrin::worlds::set_world_datapack_enabled(
         &instance_id,
         &world_path,
         &file_name,

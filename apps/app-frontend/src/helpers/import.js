@@ -1,5 +1,5 @@
 /**
- * All theseus API calls return serialized values (both return values and errors);
+ * All mctrin API calls return serialized values (both return values and errors);
  * So, for example, addDefaultInstance creates a blank instance object, where the Rust struct is serialized,
  *  and deserialized into a usable JS object.
  */
@@ -11,7 +11,7 @@ import {
     install_start_import_plan,
 } from './install'
 
-/** Create an Axolotl record that directly manages an external version folder. */
+/** Create an MCTrin record that directly manages an external version folder. */
 export async function create_direct_link_instance(
     name,
     launcherType,

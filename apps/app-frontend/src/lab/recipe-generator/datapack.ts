@@ -35,7 +35,7 @@ function formatDatapackTimestamp(date: Date): string {
 }
 
 export function createDatapackFileName(version: JavaVersionId, date = new Date()): string {
-    return `axolotl-recipes-${version}-${formatDatapackTimestamp(date)}.zip`
+    return `mctrin-recipes-${version}-${formatDatapackTimestamp(date)}.zip`
 }
 
 export function createDatapackDescription(productNames: readonly string[]): string {

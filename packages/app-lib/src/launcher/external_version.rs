@@ -157,7 +157,10 @@ fn generated_fml_runtime_libraries(
             crate::ErrorKind::LauncherError(format!("FML client runtime artifact {key} has no Maven coordinate: {}", entry.client))
         })?;
         let path = daedalus::get_path_from_artifact(coordinate)?;
-        if coordinate.starts_with("com.axolotl.loader-installer:embedded:")
+        let is_loader_installer_coordinate = coordinate
+            .starts_with("com.mctrin.loader-installer:embedded:")
+            || coordinate.starts_with("com.axolotl.loader-installer:embedded:");
+        if is_loader_installer_coordinate
             || !direct_ensure::safe_maven_relative_path(&path)
             || !path.ends_with(".jar")
         {
@@ -289,9 +292,13 @@ pub(crate) fn project_manifest(
         .libraries
         .iter()
         .filter(|library| {
-            !library
+            let is_embedded_installer = library
                 .name
-                .starts_with("com.axolotl.loader-installer:embedded:")
+                .starts_with("com.mctrin.loader-installer:embedded:")
+                || library
+                    .name
+                    .starts_with("com.axolotl.loader-installer:embedded:");
+            !is_embedded_installer
                 && (library.include_in_classpath
                     || library.natives.is_some()
                     || is_native_only_library(library)

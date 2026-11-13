@@ -37,7 +37,7 @@ let lastPickAt = 0
 const draggingKey = ref('')
 let suppressClicksUntil = 0
 
-const RECIPE_SLOT_MIME_TYPE = 'application/x-axolotl-recipe-slot'
+const RECIPE_SLOT_MIME_TYPE = 'application/x-mctrin-recipe-slot'
 const isTauriRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const PALETTE_MIN_COLUMN_WIDTH = 72
 const PALETTE_ROW_GAP = 6.4

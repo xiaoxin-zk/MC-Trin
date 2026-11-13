@@ -67,8 +67,8 @@ test('legacy popup keys dismiss notifications with and without progress items', 
     const notification = popupNotification(progressItems('job-1'))
     const dismissed = readDismissals(
         {
-            'axolotl:dismissed-popup-notifications-v2': [],
-            'axolotl:dismissed-popup-notifications': {
+            'mctrin:dismissed-popup-notifications-v2': [],
+            'mctrin:dismissed-popup-notifications': {
                 keys: [legacyPopupNotificationKey(notification)],
             },
         },
@@ -84,10 +84,10 @@ test('six-field popup v2 keys migrate to seven fields without hiding another pro
     const notification = popupNotification()
     const dismissed = readDismissals(
         {
-            'axolotl:dismissed-popup-notifications-v2': {
+            'mctrin:dismissed-popup-notifications-v2': {
                 keys: [JSON.stringify(['安装完成', '实例已安装', 'success', '', '', ''])],
             },
-            'axolotl:dismissed-popup-notifications': {},
+            'mctrin:dismissed-popup-notifications': {},
         },
         7,
         3,
@@ -100,7 +100,7 @@ test('six-field popup v2 keys migrate to seven fields without hiding another pro
 test('seven-field popup keys sort progress ids and distinguish different sets', () => {
     const dismissed = readDismissals(
         {
-            'axolotl:dismissed-popup-notifications-v2': {
+            'mctrin:dismissed-popup-notifications-v2': {
                 keys: [
                     JSON.stringify([
                         '安装完成',
@@ -134,11 +134,11 @@ test('clearedAt and web notification records remain compatible', () => {
     }
     const dismissed = readDismissals(
         {
-            'axolotl:dismissed-web-notifications-v2': {
+            'mctrin:dismissed-web-notifications-v2': {
                 clearedAt: Date.now() + 1000,
                 keys: [webNotificationKey(webNotification)],
             },
-            'axolotl:dismissed-web-notifications': {
+            'mctrin:dismissed-web-notifications': {
                 keys: [JSON.stringify(['legacy', 'content', 'error', 'E_TEST'])],
             },
         },

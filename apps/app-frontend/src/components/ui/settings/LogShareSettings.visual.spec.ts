@@ -225,12 +225,12 @@ it('revokes consent without first toggling auto-upload on', async () => {
 
 it('keeps source choices readable at desktop and narrow widths', async () => {
     await page.viewport(1200, 1400)
-    calls.chinese = !!import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE
+    calls.chinese = !!import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE
     const wrapper = await render()
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/logagent-settings-desktop.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/logagent-settings-desktop.png`,
         })
     await page.viewport(390, 1500)
     wrapper.element.setAttribute(
@@ -239,9 +239,9 @@ it('keeps source choices readable at desktop and narrow widths', async () => {
     )
     for (const radio of wrapper.findAll('[role="radio"]'))
         expect(radio.element.scrollWidth).toBeLessThanOrEqual(radio.element.clientWidth + 1)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/logagent-settings-narrow.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/logagent-settings-narrow.png`,
         })
 })

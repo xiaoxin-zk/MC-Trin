@@ -2,14 +2,14 @@ use crate::api::Result;
 use crate::api::instance::InstanceRunResult;
 use either::Either;
 use enumset::EnumSet;
-use tauri::{AppHandle, Manager, Runtime};
-use theseus::instance::{self, GcLaunchIntent, QuickPlayType, get_full_path};
-use theseus::server_address::ServerAddress;
-use theseus::worlds;
-use theseus::worlds::{
+use mctrin::instance::{self, GcLaunchIntent, QuickPlayType, get_full_path};
+use mctrin::server_address::ServerAddress;
+use mctrin::worlds;
+use mctrin::worlds::{
     DisplayStatus, ProtocolVersion, ServerPackStatus, ServerStatus, World,
     WorldLevelData, WorldSettingsPatch, WorldType, WorldWithInstance,
 };
+use tauri::{AppHandle, Manager, Runtime};
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("worlds")

@@ -31,7 +31,7 @@ Handlebars.registerHelper('no-escape', (value) => new Handlebars.SafeString(valu
 Handlebars.registerHelper('or', (a, b) => a || b)
 Handlebars.registerHelper('association-description', (a, b) => a || b)
 fs.writeFileSync(path.join(out, 'fixture.exe'), 'fixture binary')
-fs.writeFileSync(path.join(out, 'AxolotlUninstallFixture.exe'), 'fixture binary')
+fs.writeFileSync(path.join(out, 'MctrinUninstallFixture.exe'), 'fixture binary')
 fs.writeFileSync(path.join(out, 'resource.txt'), 'fixture resource')
 const hook = fs
     .readFileSync(path.join(root, 'apps/app/nsis/hooks.nsi'), 'utf8')
@@ -45,16 +45,16 @@ for (const file of ['utils.nsh', 'FileAssociation.nsh']) {
 }
 const values = {
     compression: 'none',
-    manufacturer: 'AxolotlUninstallTest',
-    product_name: 'Axolotl Uninstall Fixture',
+    manufacturer: 'MctrinUninstallTest',
+    product_name: 'Mctrin Uninstall Fixture',
     version: '1.0.0',
     version_with_build: '1.0.0.0',
     install_mode: 'currentUser',
     installer_icon: path.join(root, 'apps/app/icons/icon.ico'),
     uninstaller_icon: path.join(root, 'apps/app/icons/icon.ico'),
-    main_binary_name: 'AxolotlUninstallFixture',
-    main_binary_path: path.join(out, 'AxolotlUninstallFixture.exe'),
-    bundle_id: 'red.ghs.axolotl.uninstall-fixture',
+    main_binary_name: 'MctrinUninstallFixture',
+    main_binary_path: path.join(out, 'MctrinUninstallFixture.exe'),
+    bundle_id: 'red.ghs.mctrin.uninstall-fixture',
     out_file: path.join(out, 'setup.exe'),
     arch: 'x64',
     additional_plugins_path: path.join(nsis, 'Plugins/x86-unicode/additional'),
@@ -62,7 +62,7 @@ const values = {
     display_language_selector: 'false',
     install_webview2_mode: 'skip',
     installer_hooks: path.join(out, 'hooks.nsi'),
-    start_menu_folder: 'Axolotl Uninstall Fixture',
+    start_menu_folder: 'Mctrin Uninstall Fixture',
     languages: ['English', 'SimpChinese'],
     language_files: ['English.nsh', 'SimpChinese.nsh'].map((file) => path.join(languageRoot, file)),
     resources: { [path.join(out, 'resource.txt')]: ['fixture', 'resources\\resource.txt'] },

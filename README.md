@@ -40,7 +40,7 @@ pnpm app:dev
 pnpm app:build
 ```
 
-Windows 开发还需要 Visual Studio C++ Build Tools 和 MinGW UCRT64 GCC。Cubiomes 构建找不到 GCC 时，可设置 `AXOLOTL_CUBIOMES_CC` 指向 `gcc.exe`。更多贡献和本地数据隔离说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Windows 开发还需要 Visual Studio C++ Build Tools 和 MinGW UCRT64 GCC。Cubiomes 构建找不到 GCC 时，可设置 `MCTRIN_CUBIOMES_CC` 指向 `gcc.exe`。更多贡献和本地数据隔离说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可
 

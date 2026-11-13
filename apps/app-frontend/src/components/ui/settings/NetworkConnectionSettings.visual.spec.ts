@@ -235,11 +235,11 @@ it('renders Chinese results, long addresses and errors in light, dark and OLED w
         const details = wrapper.findAll('details')[2]
         ;(details.element as HTMLDetailsElement).open = true
         expect(wrapper.element.scrollWidth).toBeLessThanOrEqual(wrapper.element.clientWidth)
-        if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
             await page.screenshot({
                 element: wrapper.element,
                 style: '[data-scale] { transform: none !important; }',
-                path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/network-${theme}.png`,
+                path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/network-${theme}.png`,
             })
         wrapper.unmount()
         wrappers.splice(wrappers.indexOf(wrapper), 1)
@@ -254,10 +254,10 @@ it('renders Chinese results, long addresses and errors in light, dark and OLED w
     ;(narrow.findAll('details')[2].element as HTMLDetailsElement).open = true
     await page.viewport(500, 3000)
     expect(narrow.element.scrollWidth).toBeLessThanOrEqual(narrow.element.clientWidth)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: narrow.element,
             style: '[data-scale] { transform: none !important; }',
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/network-narrow.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/network-narrow.png`,
         })
 })

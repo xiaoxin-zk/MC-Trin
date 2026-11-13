@@ -284,7 +284,7 @@ function record_upgrade_plan_bench(
 
 if (import.meta.env.DEV) {
     Object.assign(globalThis, {
-        __AXOLOTL_UPGRADE_PLAN_BENCH__: {
+        __MCTRIN_UPGRADE_PLAN_BENCH__: {
             samples: upgradePlanBenchSamples,
             reset() {
                 upgradePlanBenchSamples.length = 0

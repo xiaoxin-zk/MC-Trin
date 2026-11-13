@@ -13,6 +13,9 @@ pub(crate) const LOCAL_AI_SOURCE: &str = "custom";
 /// Analysis source that sends crash logs to LogShare.
 pub(crate) const REMOTE_AI_SOURCE: &str = "logshare";
 const LOGSHARE_AI_READ_TIMEOUT_SECS: u64 = 300;
+/// Value of the `source` field reported to the logshare backend. The
+/// `axolotl` prefix is a wire contract with api.logshare.cn, not a local
+/// identifier, so it stays unchanged across the MC-Trin rename.
 const LOGSHARE_SOURCE_PREFIX: &str = "axolotl";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

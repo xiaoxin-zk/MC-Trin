@@ -14,13 +14,13 @@ let
   callPackage = legacyPackages.${pkgs.stdenv.hostPlatform.system}.callPackage;
 in
   {
-    options.programs.axolotl-launcher = {
-      enable = mkEnableOption "Axolotl Launcher";
+    options.programs.mctrin-launcher = {
+      enable = mkEnableOption "MC-Trin";
       launchEnv = mkOption {
         type = with lib.types; attrsOf anything;
         default = {};
         description = ''
-          Environment variables or flags to be passed to Axolotl.
+          Environment variables or flags to be passed to MC-Trin.
         '';
         example = {
           WEBKIT_DISABLE_DMABUF_RENDERER = 1;
@@ -37,7 +37,7 @@ in
       };
     };
 
-    config = with config.programs.axolotl-launcher; mkIf enable {
+    config = with config.programs.mctrin-launcher; mkIf enable {
       home.packages = [ (callPackage ./package.nix { inherit inputs launchEnv; }) ];
     };
   }

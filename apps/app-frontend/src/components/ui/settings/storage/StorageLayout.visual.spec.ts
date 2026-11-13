@@ -47,7 +47,7 @@ const node = (
     type,
     name,
     size: { actual: bytes, symlink: 0 },
-    paths: [{ path: `D:/Minecraft/Axolotl/${id}`, kind: 'directory' }],
+    paths: [{ path: `D:/Minecraft/MCTrin/${id}`, kind: 'directory' }],
     children,
 })
 const categories = () => [
@@ -57,7 +57,7 @@ const categories = () => [
                 node('mods', 'mods', 1200000000, undefined, [
                     {
                         ...node('mod.jar', 'folder', 1000, 'mod.jar'),
-                        paths: [{ path: 'D:/Minecraft/Axolotl/mods/mod.jar', kind: 'file' }],
+                        paths: [{ path: 'D:/Minecraft/MCTrin/mods/mod.jar', kind: 'file' }],
                     },
                 ]),
             ]),
@@ -184,9 +184,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     expect(wrapper.find('strong').exists()).toBe(false)
     expect(wrapper.find('[role="progressbar"]').exists()).toBe(true)
     expect(wrapper.find('.animate-pulse').exists()).toBe(false)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/scan-initial-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/scan-initial-${width}.png`,
             element: wrapper.element,
         })
     finishInitial(initialSnapshot)
@@ -221,9 +221,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('19')
     expect(wrapper.findAll('.tree-row').length).toBe(categoryRows.length)
     expect(wrapper.find('.animate-pulse').exists()).toBe(false)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/scan-progress-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/scan-progress-${width}.png`,
             element: wrapper.element,
         })
     finishScan(previous)
@@ -239,7 +239,7 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     await flushPromises()
     expect(disclosure.open).toBe(false)
     expect(openStoragePaths).toHaveBeenLastCalledWith([
-        { path: 'D:/Minecraft/Axolotl/instance-1', kind: 'directory' },
+        { path: 'D:/Minecraft/MCTrin/instance-1', kind: 'directory' },
     ])
     expect(instanceRow.element.getBoundingClientRect().height).toBe(
         referenceRow.element.getBoundingClientRect().height,
@@ -252,14 +252,14 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     modsRow.get('button[aria-label="在文件管理器中打开文件夹"]').element.click()
     await flushPromises()
     expect(openStoragePaths).toHaveBeenLastCalledWith([
-        { path: 'D:/Minecraft/Axolotl/mods', kind: 'directory' },
+        { path: 'D:/Minecraft/MCTrin/mods', kind: 'directory' },
     ])
     const fileRow = wrapper.findAll('.tree-row').find((row) => row.text().includes('mod.jar'))!
     expect(fileRow.find('button[aria-label="在文件管理器中打开文件夹"]').exists()).toBe(false)
     expect(cacheRow.find('button[aria-label="在文件管理器中打开文件夹"]').exists()).toBe(false)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/instance-folders-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/instance-folders-${width}.png`,
             element: wrapper.element,
         })
     referenceRow.element.click()
@@ -304,9 +304,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
             dialog.getBoundingClientRect().left >= 0
         )
     })
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/cache-result-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/cache-result-${width}.png`,
         })
     const closeCache = [
         ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
@@ -314,9 +314,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     closeCache.click()
     await waitFor(() => !document.querySelector('[role="dialog"]'))
 
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/overview-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/overview-${width}.png`,
             element: wrapper.element,
         })
     const analyze = wrapper
@@ -324,9 +324,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
         .find((button) => button.text().includes('检查可清理'))!
     await analyze.trigger('click')
     await flushPromises()
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/metadata-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/metadata-${width}.png`,
             element: wrapper.element,
         })
     const checkbox = wrapper.findAllComponents(Checkbox)[0]
@@ -353,9 +353,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     expect(
         confirm.getBoundingClientRect().left - cancel.getBoundingClientRect().right,
     ).toBeGreaterThanOrEqual(8)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/review-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/review-${width}.png`,
         })
     let finish!: (result: Awaited<ReturnType<typeof cleanMeta>>) => void
     vi.mocked(cleanMeta).mockReturnValueOnce(
@@ -367,9 +367,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     await flushPromises()
     expect(dialog().textContent).toContain('正在删除文件')
     expect(dialog().textContent).not.toContain('释放')
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/deleting-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/deleting-${width}.png`,
         })
     vi.mocked(scanStorage).mockReturnValueOnce(new Promise(() => {}))
     const nextAnalysis = await vi.mocked(analyzeMeta).mock.results[0].value
@@ -391,9 +391,9 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     await waitFor(() => !document.querySelector('[role="dialog"]'))
     expect(wrapper.text()).toContain('正在刷新占用统计')
     expect(wrapper.text()).toContain('已删除 2 个文件')
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/done-${width}.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/done-${width}.png`,
             element: wrapper.element,
         })
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)

@@ -17,7 +17,7 @@ export async function exportDatapackToWorld(
     instanceId: string,
     worldPath: string,
     files: PackFile[],
-    fileName = 'axolotl-recipes.zip',
+    fileName = 'mctrin-recipes.zip',
 ): Promise<string> {
     const blob = createDatapackBlob(files)
     const bytes = new Uint8Array(await blob.arrayBuffer())

@@ -1,6 +1,6 @@
 use crate::api::Result;
-use theseus::google_ip;
-use theseus::translation::{
+use mctrin::google_ip;
+use mctrin::translation::{
     self, TranslationProvider, TranslationRequest, TranslationResponse,
     TranslationSettings,
 };

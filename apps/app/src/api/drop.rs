@@ -1,12 +1,12 @@
+use mctrin::drop_classifier::{
+    DroppedCandidate, DroppedItemType, ModrinthLookupResult, lookup_mod_hash,
+};
+use mctrin::pack::import::{ImportLauncherType, get_importable_instances};
+use mctrin::{LockingProcess, get_locking_processes};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::time::Duration;
 use tauri::Emitter;
-use theseus::drop_classifier::{
-    DroppedCandidate, DroppedItemType, ModrinthLookupResult, lookup_mod_hash,
-};
-use theseus::pack::import::{ImportLauncherType, get_importable_instances};
-use theseus::{LockingProcess, get_locking_processes};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
@@ -378,7 +378,7 @@ pub async fn drop_classify<R: tauri::Runtime>(
         "Classification",
         DROP_CLASSIFY_TIMEOUT,
         move |cancellation| {
-            Ok(theseus::drop_classifier::classify_dropped_item_with_candidates_cancellable(
+            Ok(mctrin::drop_classifier::classify_dropped_item_with_candidates_cancellable(
                 &path,
                 allow_nested_extraction,
                 &cancellation,
@@ -423,7 +423,7 @@ pub async fn drop_classify_extract<R: tauri::Runtime>(
         "ZIP analysis",
         DROP_EXTRACT_TIMEOUT,
         move |cancellation| {
-            Ok(theseus::drop_classifier::classify_zip_with_extraction_cancellable(
+            Ok(mctrin::drop_classifier::classify_zip_with_extraction_cancellable(
                 &path,
                 &cancellation,
             ))
@@ -451,7 +451,7 @@ pub async fn drop_classify_extract<R: tauri::Runtime>(
 /// are extracted for scanning and importing. Entries are removed with
 /// `drop_remove_temp_dir` once the frontend flow ends.
 fn launcher_import_temp_base() -> std::path::PathBuf {
-    std::env::temp_dir().join("axolotl-launcher-import")
+    std::env::temp_dir().join("mctrin-launcher-import")
 }
 
 /// Remove `drop-*` directories under `base` whose contents are older than
@@ -527,7 +527,7 @@ pub async fn drop_extract_zip_to_temp<R: tauri::Runtime>(
             std::fs::create_dir(&dir)
                 .map_err(|e| format!("Failed to create temp directory: {e}"))?;
             if let Err(error) =
-                theseus::drop_classifier::extract_zip_to_dir_cancellable(
+                mctrin::drop_classifier::extract_zip_to_dir_cancellable(
                     &zip_path,
                     &dir,
                     &cancellation,
@@ -659,13 +659,13 @@ pub async fn drop_scan_launcher_instances<R: tauri::Runtime>(
 pub async fn drop_resolve_gamedirs(
     launcher_type: String,
     base_path: String,
-) -> Result<Vec<theseus::pack::import::gamedir_resolve::ResolvedGamedir>, String>
+) -> Result<Vec<mctrin::pack::import::gamedir_resolve::ResolvedGamedir>, String>
 {
     let launcher_type: ImportLauncherType =
         serde_json::from_str(&format!("\"{launcher_type}\"")).map_err(
             |error| format!("Invalid launcher type '{launcher_type}': {error}"),
         )?;
-    theseus::pack::import::gamedir_resolve::resolve_gamedirs(
+    mctrin::pack::import::gamedir_resolve::resolve_gamedirs(
         launcher_type,
         std::path::PathBuf::from(base_path),
     )
@@ -704,7 +704,7 @@ pub async fn drop_extract_mod_metadata(path: String) -> Result<String, String> {
         move |cancellation| {
             let file_bytes = read_file_cancellable(&path, &cancellation)?;
             let bytes = bytes::Bytes::from(file_bytes);
-            theseus::mod_metadata::extract_mod_metadata(&bytes)
+            mctrin::mod_metadata::extract_mod_metadata(&bytes)
                 .ok_or_else(|| "No mod metadata found in file".to_string())
         },
     )

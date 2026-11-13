@@ -2,7 +2,7 @@ import type { BindingConflict, KeyBinding } from '@modrinth/ui'
 
 import { SHORTCUT_ACTIONS, shortcutAction } from '@/helpers/shortcut-actions'
 
-const BINDING_STORAGE_PREFIX = 'axolotl-shortcut-binding-'
+const BINDING_STORAGE_PREFIX = 'mctrin-shortcut-binding-'
 
 /**
  * Combinations the shell or the operating system answers to before the launcher

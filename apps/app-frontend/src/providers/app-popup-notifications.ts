@@ -5,8 +5,8 @@ import { loadNotificationDismissals } from './notification-dismissals.ts'
 import { legacyPopupNotificationKey, popupNotificationKey } from './notification-keys.ts'
 
 export class AppPopupNotificationManager extends AbstractPopupNotificationManager {
-    private static readonly STORAGE_KEY = 'axolotl:dismissed-popup-notifications-v2'
-    private static readonly LEGACY_STORAGE_KEY = 'axolotl:dismissed-popup-notifications'
+    private static readonly STORAGE_KEY = 'mctrin:dismissed-popup-notifications-v2'
+    private static readonly LEGACY_STORAGE_KEY = 'mctrin:dismissed-popup-notifications'
     private readonly state: Ref<PopupNotification[]>
     private readonly dismissedKeys: Set<string>
     private readonly legacyDismissedKeys: Set<string>

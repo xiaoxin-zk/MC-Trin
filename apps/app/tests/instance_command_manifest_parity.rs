@@ -50,7 +50,7 @@ fn manifest_commands<'a>(source: &'a str, plugin: &str) -> BTreeSet<&'a str> {
 fn resource_analysis_commands_are_registered_and_allowed_for_the_main_window() {
     let runtime = runtime_commands(include_str!("../src/api/resources.rs"));
     let manifest =
-        manifest_commands(include_str!("../build.rs"), "axolotl-resources");
+        manifest_commands(include_str!("../build.rs"), "mctrin-resources");
     for command in [
         "resource_analysis_open",
         "resource_analysis_update",
@@ -76,7 +76,7 @@ fn resource_analysis_commands_are_registered_and_allowed_for_the_main_window() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|permission| permission == "axolotl-resources:default")
+            .any(|permission| permission == "mctrin-resources:default")
     );
 }
 
@@ -122,44 +122,6 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
             .unwrap()
             .iter()
             .any(|permission| permission == "instance:default")
-    );
-}
-
-#[test]
-fn server_log_delta_is_registered_and_allowed_for_the_main_window() {
-    let runtime = runtime_commands(include_str!("../src/api/servers.rs"));
-    let manifest = manifest_commands(include_str!("../build.rs"), "servers");
-    assert!(runtime.contains("servers_get_log_delta"));
-    assert!(manifest.contains("servers_get_log_delta"));
-    for command in [
-        "servers_get_console_delta",
-        "servers_send_console_input",
-        "servers_resize_console",
-        "servers_kill",
-        "servers_update_settings",
-        "servers_install_neoforge",
-        "servers_install_modpack",
-    ] {
-        assert!(runtime.contains(command));
-        assert!(manifest.contains(command));
-    }
-    assert!(runtime.difference(&manifest).next().is_none());
-    let capabilities: serde_json::Value =
-        serde_json::from_str(include_str!("../capabilities/plugins.json"))
-            .unwrap();
-    assert!(
-        capabilities["windows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|window| window == "main")
-    );
-    assert!(
-        capabilities["permissions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|permission| permission == "servers:default")
     );
 }
 

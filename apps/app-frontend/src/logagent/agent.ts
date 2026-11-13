@@ -15,7 +15,7 @@ import type {
     RemoteMcpGateway,
 } from './types.ts'
 
-registerHarnessProfile('axolotl-logagent', {
+registerHarnessProfile('mctrin-logagent', {
     excludedTools: [
         'ls',
         'read_file',

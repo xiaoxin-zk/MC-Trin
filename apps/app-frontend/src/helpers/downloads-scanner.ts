@@ -15,7 +15,7 @@ export interface MissingContentScannerSettings {
 
 type ScannerSettingsStorage = Pick<Storage, 'getItem' | 'setItem'>
 
-const MISSING_CONTENT_SCANNER_SETTINGS_KEY = 'axolotl-missing-content-scanner'
+const MISSING_CONTENT_SCANNER_SETTINGS_KEY = 'mctrin-missing-content-scanner'
 
 export function getMissingContentScannerSettings(
     storage: ScannerSettingsStorage = localStorage,

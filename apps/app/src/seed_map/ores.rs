@@ -156,7 +156,7 @@ pub(super) fn scan_ores_with_budget_cancellable(
             }
             let count = unsafe {
                 if let Some((id, check)) = cancellation {
-                    super::axolotl_seed_map_scan_ores_cancellable(
+                    super::mctrin_seed_map_scan_ores_cancellable(
                         seed,
                         mc,
                         request.edition.generator_flags(),
@@ -170,7 +170,7 @@ pub(super) fn scan_ores_with_budget_cancellable(
                         check,
                     )
                 } else {
-                    super::axolotl_seed_map_scan_ores(
+                    super::mctrin_seed_map_scan_ores(
                         seed,
                         mc,
                         request.edition.generator_flags(),

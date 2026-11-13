@@ -15,7 +15,7 @@ use crate::{
     state::ModLoader,
 };
 
-/// Import a generic launcher instance folder into an Axolotl profile.
+/// Import a generic launcher instance folder into an MC-Trin profile.
 ///
 /// Runs in four stages: resolve the source folder, validate that it contains
 /// a detectable Minecraft version, register the instance metadata, then copy

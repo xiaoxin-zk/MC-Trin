@@ -20,7 +20,7 @@ function deferred() {
 
 for (const kind of ['text', 'nbt'] as const) {
     test(`deleting a dirty ${kind} document cannot recreate its file`, async () => {
-        const directory = await mkdtemp(join(tmpdir(), 'axolotl-studio-'))
+        const directory = await mkdtemp(join(tmpdir(), 'mctrin-studio-'))
         const path = join(directory, 'document')
         try {
             await writeFile(path, 'saved')

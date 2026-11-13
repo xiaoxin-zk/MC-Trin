@@ -229,6 +229,9 @@ const RULES: &[Rule] = &[
 ];
 
 const FORBIDDEN: &[&str] = &[
+    // The current export scratch name plus the pre-rename one, which can
+    // still linger in instances exported by older releases.
+    "**/.mctrin-export-*.tmp",
     "**/.axolotl-export-*.tmp",
     "assets/",
     "versions/",
@@ -256,6 +259,8 @@ const FORBIDDEN: &[&str] = &[
     "accounts.json",
     "launcher_accounts.json",
     "launcher_profiles.json",
+    ".mctrin/",
+    // Launcher-owned folders written before and during the MC-Trin rename.
     ".axolotl/",
     ".theseus/",
 ];

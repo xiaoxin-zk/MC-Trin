@@ -76,7 +76,7 @@ vi.mock('@modrinth/ui', async () => {
     }
 })
 
-beforeEach(() => localStorage.removeItem('axolotl.lab.recipe-generator.v1'))
+beforeEach(() => localStorage.removeItem('mctrin.lab.recipe-generator.v1'))
 
 it('row clone and delete operate on that row while another recipe is selected', async () => {
     const wrapper = mount(LabRecipeGenerator, {

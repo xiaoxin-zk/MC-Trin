@@ -1,4 +1,4 @@
-const NAV_SHORTCUT_STORAGE_PREFIX = 'axolotl-shortcut-nav-'
+const NAV_SHORTCUT_STORAGE_PREFIX = 'mctrin-shortcut-nav-'
 
 /**
  * Whether a navigation shortcut is enabled. Shortcuts are off by default;

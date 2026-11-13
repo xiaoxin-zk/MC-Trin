@@ -148,7 +148,7 @@ fn probe_parent(mut parent: &Path) -> std::io::Result<()> {
         return Err(std::io::ErrorKind::PermissionDenied.into());
     }
     tempfile::Builder::new()
-        .prefix(".axolotl-write-check-")
+        .prefix(".mctrin-write-check-")
         .tempfile_in(parent)?
         .close()
 }

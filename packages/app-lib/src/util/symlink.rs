@@ -198,7 +198,7 @@ fn create_link_elevated_blocking(
     use std::process::Command;
 
     let result_file = std::env::temp_dir()
-        .join(format!("axolotl-link-result-{}.json", uuid::Uuid::new_v4()));
+        .join(format!("mctrin-link-result-{}.json", uuid::Uuid::new_v4()));
     let request = ElevatedLinkRequest {
         target: target.to_path_buf(),
         link: link.to_path_buf(),

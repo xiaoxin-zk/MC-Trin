@@ -7,9 +7,9 @@
 }:
 (
   let
-    axolotl = callPackage ./axolotl.nix { inherit inputs; };
+    mctrin = callPackage ./mctrin.nix { inherit inputs; };
     update-gradle-deps = writeShellScriptBin "update-gradle-deps" ''
-      ${axolotl.mitmCache.updateScript}
+      ${mctrin.mitmCache.updateScript}
     '';
     update-pnpm-deps = writeShellScriptBin "update-pnpm-deps" (
       builtins.readFile ./update-pnpm-deps.sh

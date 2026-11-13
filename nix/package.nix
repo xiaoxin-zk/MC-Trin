@@ -12,18 +12,18 @@ let
   desktop = callPackage ./desktop.nix { inherit inputs; };
 in
   symlinkJoin {
-    name = "axolotl-launcher";
+    name = "mctrin-launcher";
     paths = [
       enwrap desktop
     ];
     meta = {
-      description = "Axolotl Launcher: Your last launcher.";
+      description = "MC-Trin: a desktop Minecraft Java Edition launcher focused on Simplified Chinese users.";
       longDescription = ''
-        Axolotl Launcher is a free, open-source, ad-free, cross-platform Minecraft Java Edition launcher for searching, installing, and updating mods, modpacks, resource packs, and shaders from Modrinth and CurseForge, with Axolotl Labs built in.
+        MC-Trin is a free, open-source, ad-free, cross-platform Minecraft Java Edition launcher for searching, installing, and updating mods, modpacks, resource packs, and shaders from Modrinth and CurseForge, with the built-in Lab tools.
       '';
-      homepage = "https://axlmc.org/";
+      homepage = "https://github.com/xiaoxin-zk/MC-Trin";
       license = lib.licenses.gpl3Only;
       platforms = [ "x86_64-linux" "aarch64-linux" ];
-      mainProgram = "axolotl-launcher";
+      mainProgram = "MC-Trin";
     };
   }

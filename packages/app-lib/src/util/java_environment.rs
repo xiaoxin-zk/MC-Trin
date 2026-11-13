@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn child_environment_probe() {
-        if std::env::var_os("AXOLOTL_JAVA_ENVIRONMENT_TEST").is_none() {
+        if std::env::var_os("MCTRIN_JAVA_ENVIRONMENT_TEST").is_none() {
             return;
         }
         for key in LAUNCHER_RENDERING_ENVIRONMENT
@@ -239,7 +239,7 @@ mod tests {
             "util::java_environment::tests::child_environment_probe",
             "--nocapture",
         ]);
-        command.env("AXOLOTL_JAVA_ENVIRONMENT_TEST", "1");
+        command.env("MCTRIN_JAVA_ENVIRONMENT_TEST", "1");
         command.env("APPDATA", "test-roaming");
         command.env("LOCALAPPDATA", "test-local");
         command.env("USERPROFILE", "test-profile");

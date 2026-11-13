@@ -1,4 +1,4 @@
-//! Theseus directory information
+//! MC-Trin directory information
 use crate::LoadingBarType;
 use crate::event::emit::{emit_loading, init_loading};
 use crate::state::LAUNCHER_STATE;
@@ -129,7 +129,7 @@ impl DirectoryInfo {
     // Get the settings directory
     // init() is not needed for this function
     pub fn initial_settings_dir_path(app_identifier: &str) -> Option<PathBuf> {
-        Self::env_path("THESEUS_CONFIG_DIR").or_else(|| {
+        Self::env_path("MCTRIN_CONFIG_DIR").or_else(|| {
             Some(
                 dirs::data_dir()?.join(crate::brand::app_data_dir_identifier(
                     app_identifier,
@@ -138,7 +138,7 @@ impl DirectoryInfo {
         })
     }
 
-    /// Get all paths needed for Theseus to operate properly
+    /// Get all paths needed for MC-Trin to operate properly
     #[tracing::instrument]
     pub async fn init(
         config_dir: Option<String>,
@@ -151,7 +151,7 @@ impl DirectoryInfo {
 
         fs::create_dir_all(&settings_dir).await.map_err(|err| {
             crate::ErrorKind::FSError(format!(
-                "Error creating Theseus config directory: {err}"
+                "Error creating MC-Trin config directory: {err}"
             ))
         })?;
 
@@ -377,7 +377,7 @@ impl DirectoryInfo {
             .map(|d| d.join(LAUNCHER_LOGS_FOLDER_NAME))
     }
 
-    /// Get the cache directory for Theseus
+    /// Get the cache directory for MC-Trin
     #[inline]
     pub fn caches_dir(&self) -> PathBuf {
         self.config_dir.join(CACHES_FOLDER_NAME)

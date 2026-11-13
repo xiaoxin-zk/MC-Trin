@@ -79,15 +79,15 @@ pub struct ImportPlanSnapshot {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AxolotlConfigMetadata {
+struct MctrinConfigMetadata {
     schema_version: Option<u32>,
     #[serde(default)]
-    content_set: AxolotlContentSetMetadata,
+    content_set: MctrinContentSetMetadata,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AxolotlContentSetMetadata {
+struct MctrinContentSetMetadata {
     #[serde(default)]
     game_version: Option<String>,
     #[serde(default)]
@@ -406,7 +406,7 @@ fn detect_import_plan_info(
             "Detected imported loader adjuncts"
         );
     }
-    let config_info = read_axolotl_config(source);
+    let config_info = read_mctrin_config(source);
     DetectedInstanceInfo {
         vanilla_name: config_info
             .as_ref()
@@ -449,13 +449,15 @@ fn detect_import_plan_info(
     }
 }
 
-fn read_axolotl_config(source: &Path) -> Option<AxolotlConfigMetadata> {
-    let path = source.join("axolotl_config.json");
-    if !path.is_file() {
-        return None;
-    }
+fn read_mctrin_config(source: &Path) -> Option<MctrinConfigMetadata> {
+    // Read the current config name first, then the pre-rename one, so
+    // instances written by older builds still import cleanly.
+    let path = ["mctrin_config.json", "axolotl_config.json"]
+        .iter()
+        .map(|name| source.join(name))
+        .find(|path| path.is_file())?;
     let content = std::fs::read_to_string(&path).ok()?;
-    let config: AxolotlConfigMetadata = serde_json::from_str(&content).ok()?;
+    let config: MctrinConfigMetadata = serde_json::from_str(&content).ok()?;
     (config.schema_version == Some(1)).then_some(config)
 }
 

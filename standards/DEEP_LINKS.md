@@ -45,7 +45,6 @@ mctrin://<命名空间>[/<动作>/<标识>][?<参数>]
 | `mctrin://downloads` | 下载页 | `job=<任务ID>` 聚焦任务 |
 | `mctrin://create` | 创建页 | `pack=<项目ID>`、`name=<名称>` |
 | `mctrin://skins` / `mctrin://worlds` / `mctrin://screenshots` | 聚合页 | `screenshots` 可加 `instance=<id>` 过滤 |
-| `mctrin://multiplayer/servers[/<id>]` | 服务器列表/详情 | — |
 | `mctrin://multiplayer/rooms` | 房间页 | `invite=<口令>` 仅预填 |
 | `mctrin://lab` / `mctrin://lab/<tool>` | Lab / 工具 | tool: `skin-editor/gradient-text/recipe-generator/schematic-preview/mod-translation` |
 | `mctrin://lab/seed-map` | 种子地图 | 全参数透传（旧别名 `seed-map?...` 兼容） |
@@ -67,7 +66,7 @@ mctrin://<命名空间>[/<动作>/<标识>][?<参数>]
 /library[/downloaded|/modpacks|/servers|/custom],
 /instance/<id>[/mods|/files|/files/studio|/logs|/worlds|/screenshots|/upgrade],
 /downloads, /create, /skins, /worlds, /screenshots, /help/drop,
-/multiplayer/servers[/<id>], /multiplayer/rooms,
+/multiplayer/rooms,
 /lab[/skin-editor|/gradient-text|/recipe-generator|/schematic-preview|/mod-translation|/seed-map],
 /settings
 ```

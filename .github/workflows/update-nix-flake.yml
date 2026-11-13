@@ -8,7 +8,7 @@ on:
       - flake.nix
       - flake.lock
       - pnpm-lock.yaml
-      - nix/axolotl.nix
+      - nix/mctrin.nix
       - packages/app-lib/java/**
       - .github/workflows/update-nix-flake.yml
   # Triggered after releases so the commits with release tags use legacy locks.
@@ -97,11 +97,11 @@ jobs:
         id: pnpm-deps
         run: |
           read_hash() {
-            sed -nE 's|^[[:space:]]*hash = "(sha256-[A-Za-z0-9+/=]+)";[[:space:]]*$|\1|p' nix/axolotl.nix
+            sed -nE 's|^[[:space:]]*hash = "(sha256-[A-Za-z0-9+/=]+)";[[:space:]]*$|\1|p' nix/mctrin.nix
           }
           old_hash="$(read_hash)"
           if [ "$(printf '%s' "$old_hash" | grep -c '^sha256-')" -ne 1 ]; then
-            echo "error: expected exactly one pnpm dependency hash in nix/axolotl.nix" >&2
+            echo "error: expected exactly one pnpm dependency hash in nix/mctrin.nix" >&2
             exit 1
           fi
           nix develop . --accept-flake-config --command update-pnpm-deps
@@ -236,13 +236,13 @@ jobs:
             echo "error: unexpected new pnpm dependency hash: $NEW_HASH" >&2
             exit 1
           fi
-          occurrences="$(grep -cF "hash = \"$OLD_HASH\";" nix/axolotl.nix || true)"
+          occurrences="$(grep -cF "hash = \"$OLD_HASH\";" nix/mctrin.nix || true)"
           if [ "$occurrences" -ne 1 ]; then
-            echo "error: expected the pnpm dependency hash once in nix/axolotl.nix, found $occurrences" >&2
+            echo "error: expected the pnpm dependency hash once in nix/mctrin.nix, found $occurrences" >&2
             exit 1
           fi
-          sed -i "s|hash = \"$OLD_HASH\";|hash = \"$NEW_HASH\";|" nix/axolotl.nix
-          grep -qF "hash = \"$NEW_HASH\";" nix/axolotl.nix
+          sed -i "s|hash = \"$OLD_HASH\";|hash = \"$NEW_HASH\";|" nix/mctrin.nix
+          grep -qF "hash = \"$NEW_HASH\";" nix/mctrin.nix
 
       - name: Download the refreshed gradle dependency cache
         if: needs.refresh.outputs.gradle == 'true'
@@ -282,7 +282,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- flake.lock nix/axolotl.nix nix/mitmCache.json
+          git add -- flake.lock nix/mctrin.nix nix/mitmCache.json
           if git diff --cached --quiet; then
             echo "the refreshed nix inputs already match ${TARGET_BRANCH}"
             exit 0

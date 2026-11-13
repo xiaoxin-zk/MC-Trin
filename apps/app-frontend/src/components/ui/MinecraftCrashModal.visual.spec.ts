@@ -214,7 +214,7 @@ it('offers configuration instead of a missing analyze button and keeps source ch
 
 it('keeps crash analysis controls readable in the sidebar', async () => {
     await page.viewport(1200, 900)
-    calls.chinese = !!import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE
+    calls.chinese = !!import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE
     calls.logs.mockResolvedValue([{ filename: 'latest.log', log_type: 'InfoLog', age: 1000 }])
     const router = createRouter({
         history: createMemoryHistory(),
@@ -242,20 +242,20 @@ it('keeps crash analysis controls readable in the sidebar', async () => {
     const controls = wrapper.get('[data-testid="crash-analysis-controls"]')
     expect(controls.element.scrollWidth).toBeLessThanOrEqual(controls.element.clientWidth + 1)
     expect(controls.text()).toContain('codeflow / gpt-6-luna')
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/logagent-crash-desktop.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/logagent-crash-desktop.png`,
         })
     await controls
         .findAll('button')
         .find((button) => button.text() === (calls.chinese ? '更改' : 'Change'))!
         .trigger('click')
     expect(controls.findAll('[role="radio"]')).toHaveLength(2)
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+    if (import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE)
         await page.screenshot({
             element: controls.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/logagent-crash-source.png`,
+            path: `${import.meta.env.VITE_MCTRIN_VISUAL_EVIDENCE}/logagent-crash-source.png`,
         })
 })
 

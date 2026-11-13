@@ -1,11 +1,11 @@
 use dashmap::DashMap;
-use std::sync::{Arc, LazyLock};
-use theseus::resources::favorites::ResourceFavorite;
-use theseus::resources::plans::ResourceOperationProgress;
-use theseus::resources::providers::{
+use mctrin::resources::favorites::ResourceFavorite;
+use mctrin::resources::plans::ResourceOperationProgress;
+use mctrin::resources::providers::{
     ProjectDocument, ProviderQuery, ProviderValue, ReleaseDocument,
 };
-use theseus::resources::{ipc::*, *};
+use mctrin::resources::{ipc::*, *};
+use std::sync::{Arc, LazyLock};
 use tokio_util::sync::CancellationToken;
 
 use super::Result;
@@ -42,11 +42,11 @@ fn request(id: &RequestId) -> Result<(RequestGuard, CancellationToken)> {
 }
 
 async fn service() -> Result<Arc<ResourceService>> {
-    Ok(theseus::State::get().await?.resources().await?.clone())
+    Ok(mctrin::State::get().await?.resources().await?.clone())
 }
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new("axolotl-resources")
+    tauri::plugin::Builder::new("mctrin-resources")
         .invoke_handler(tauri::generate_handler![
             resource_sources,
             resource_search,
@@ -102,7 +102,7 @@ pub async fn resource_export_scan(
 ) -> Result<ResourceExportScan> {
     let (_guard, cancel) = request(&request_id)?;
     let scan =
-        theseus::resources::export::scan::scan(instance_id, &cancel).await?;
+        mctrin::resources::export::scan::scan(instance_id, &cancel).await?;
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled.into());
     }
@@ -124,7 +124,7 @@ pub async fn resource_export_refresh(
     on_progress: tauri::ipc::Channel<ExportRefreshProgress>,
 ) -> Result<ExportResolutionSession> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(theseus::resources::export::refresh::refresh(
+    Ok(mctrin::resources::export::refresh::refresh(
         &service().await?,
         instance_id,
         session_id,
@@ -160,7 +160,7 @@ pub async fn resource_export_refresh_retry(
     let instance_id = draft.scan.instance_id.clone();
     let selected_files = draft.selected.clone();
     drop(draft);
-    Ok(theseus::resources::export::refresh::refresh(
+    Ok(mctrin::resources::export::refresh::refresh(
         &service,
         instance_id,
         session_id,
@@ -187,7 +187,7 @@ pub async fn resource_list_installed(
     request_id: RequestId,
 ) -> Result<Vec<InstalledResource>> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(theseus::resources::installed::list(instance_id, &cancel).await?)
+    Ok(mctrin::resources::installed::list(instance_id, &cancel).await?)
 }
 
 #[tauri::command]
@@ -198,7 +198,7 @@ pub async fn resource_export_plan(
     package_info: ExportPackageInfo,
     embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
 ) -> Result<ResourceExportPlan> {
-    Ok(theseus::resources::export::plan::prepare(
+    Ok(mctrin::resources::export::plan::prepare(
         &service().await?,
         session_id,
         selection_revision,
@@ -214,8 +214,8 @@ pub async fn resource_export_execute(
     plan_id: PlanId,
     revision: u32,
     output_path: String,
-) -> Result<theseus::install::InstallJobSnapshot> {
-    Ok(theseus::resources::export::plan::queue(
+) -> Result<mctrin::install::InstallJobSnapshot> {
+    Ok(mctrin::resources::export::plan::queue(
         &service().await?,
         plan_id,
         revision,
@@ -232,8 +232,8 @@ pub async fn resource_export_queue(
     package_info: ExportPackageInfo,
     embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
     output_path: String,
-) -> Result<theseus::install::InstallJobSnapshot> {
-    Ok(theseus::resources::export::job::queue(
+) -> Result<mctrin::install::InstallJobSnapshot> {
+    Ok(mctrin::resources::export::job::queue(
         &service().await?,
         session_id,
         selected_files
@@ -253,14 +253,14 @@ pub async fn resource_export_cancel(
     request_id_or_job_id: String,
 ) -> Result<()> {
     if let Ok(id) = uuid::Uuid::parse_str(&request_id_or_job_id) {
-        let state = theseus::State::get().await?;
-        if let Some(job) = theseus::install::store::get(id, &state).await?
+        let state = mctrin::State::get().await?;
+        if let Some(job) = mctrin::install::store::get(id, &state).await?
             && matches!(
                 job.state.request,
-                theseus::install::InstallRequest::ExportResource { .. }
+                mctrin::install::InstallRequest::ExportResource { .. }
             )
         {
-            theseus::install::runner::cancel_job(id).await?;
+            mctrin::install::runner::cancel_job(id).await?;
             return Ok(());
         }
     }
@@ -277,14 +277,14 @@ pub async fn resource_check_updates<R: tauri::Runtime>(
     request_id: RequestId,
     entry_ids: Option<Vec<InstalledEntryId>>,
     on_progress: Option<tauri::ipc::JavaScriptChannelId>,
-) -> Result<theseus::resources::updates::ResourceUpdateCheck> {
+) -> Result<mctrin::resources::updates::ResourceUpdateCheck> {
     let (_guard, cancel) = request(&request_id)?;
     let on_progress = on_progress.map(|id| {
-        id.channel_on::<_, theseus::resources::updates::ResourceUpdateProgress>(
+        id.channel_on::<_, mctrin::resources::updates::ResourceUpdateProgress>(
             webview,
         )
     });
-    Ok(theseus::resources::updates::check(
+    Ok(mctrin::resources::updates::check(
         instance_id,
         entry_ids.as_deref(),
         move |progress| {
@@ -317,19 +317,17 @@ pub async fn resource_prepare_entry_operation<R: tauri::Runtime>(
             let _ = channel.send(value);
         }
     };
-    Ok(
-        theseus::resources::installed::prepare_entries_with_progress(
-            instance_id,
-            intent,
-            entry_ids,
-            release,
-            install_dependencies,
-            &cancel,
-            Some(&progress),
-            resolve_dependencies.unwrap_or(true),
-        )
-        .await?,
+    Ok(mctrin::resources::installed::prepare_entries_with_progress(
+        instance_id,
+        intent,
+        entry_ids,
+        release,
+        install_dependencies,
+        &cancel,
+        Some(&progress),
+        resolve_dependencies.unwrap_or(true),
     )
+    .await?)
 }
 
 #[tauri::command]
@@ -384,7 +382,7 @@ pub async fn resource_prepare_operation<R: tauri::Runtime>(
             )
             .into());
         }
-        return Ok(theseus::resources::plans::analysis::update(
+        return Ok(mctrin::resources::plans::analysis::update(
             &id,
             selection_revision.unwrap_or_default(),
             selections,
@@ -396,7 +394,7 @@ pub async fn resource_prepare_operation<R: tauri::Runtime>(
         )
         .await?);
     }
-    let plan = theseus::resources::plans::prepare_with_progress(
+    let plan = mctrin::resources::plans::prepare_with_progress(
         instance_id,
         intent,
         selections,
@@ -408,10 +406,8 @@ pub async fn resource_prepare_operation<R: tauri::Runtime>(
     .await?;
     Ok(
         if let Some(files) = import_files.filter(|files| !files.is_empty()) {
-            theseus::resources::plans::prepare_import_files(
-                plan, files, &cancel,
-            )
-            .await?
+            mctrin::resources::plans::prepare_import_files(plan, files, &cancel)
+                .await?
         } else {
             plan
         },
@@ -420,12 +416,12 @@ pub async fn resource_prepare_operation<R: tauri::Runtime>(
 
 #[tauri::command]
 pub async fn resource_analysis_open(instance_id: String) -> Result<SessionId> {
-    Ok(theseus::resources::plans::analysis::open(instance_id).await?)
+    Ok(mctrin::resources::plans::analysis::open(instance_id).await?)
 }
 
 #[tauri::command]
 pub async fn resource_analysis_close(session_id: SessionId) -> Result<()> {
-    Ok(theseus::resources::plans::analysis::close(&session_id).await?)
+    Ok(mctrin::resources::plans::analysis::close(&session_id).await?)
 }
 
 #[tauri::command]
@@ -446,7 +442,7 @@ pub async fn resource_analysis_update<R: tauri::Runtime>(
             let _ = channel.send(value);
         }
     };
-    Ok(theseus::resources::plans::analysis::update(
+    Ok(mctrin::resources::plans::analysis::update(
         &session_id,
         selection_revision,
         selections,
@@ -476,7 +472,7 @@ pub async fn resource_revise_plan<R: tauri::Runtime>(
             let _ = channel.send(value);
         }
     };
-    Ok(theseus::resources::plans::revise_with_progress(
+    Ok(mctrin::resources::plans::revise_with_progress(
         plan_id,
         revision,
         decisions,
@@ -490,8 +486,8 @@ pub async fn resource_revise_plan<R: tauri::Runtime>(
 pub async fn resource_queue_plan(
     plan_id: PlanId,
     revision: u32,
-) -> Result<theseus::install::InstallJobSnapshot> {
-    Ok(theseus::resources::plans::queue(plan_id, revision).await?)
+) -> Result<mctrin::install::InstallJobSnapshot> {
+    Ok(mctrin::resources::plans::queue(plan_id, revision).await?)
 }
 
 #[tauri::command]
@@ -499,7 +495,7 @@ pub async fn resource_list_history(
     instance_id: String,
     entry_id: Option<InstalledEntryId>,
 ) -> Result<Vec<ResourceHistoryEntry>> {
-    Ok(theseus::resources::history::list(instance_id, entry_id).await?)
+    Ok(mctrin::resources::history::list(instance_id, entry_id).await?)
 }
 
 #[tauri::command]
@@ -507,14 +503,10 @@ pub async fn resource_rollback(
     instance_id: String,
     entry_id: InstalledEntryId,
     history_id: HistoryId,
-) -> Result<theseus::install::InstallJobSnapshot> {
+) -> Result<mctrin::install::InstallJobSnapshot> {
     Ok(
-        theseus::resources::history::rollback(
-            instance_id,
-            entry_id,
-            history_id,
-        )
-        .await?,
+        mctrin::resources::history::rollback(instance_id, entry_id, history_id)
+            .await?,
     )
 }
 
@@ -522,7 +514,7 @@ pub async fn resource_rollback(
 pub async fn resource_scan_backups(
     instance_id: String,
 ) -> Result<Vec<ResourceBackupFile>> {
-    Ok(theseus::resources::history_cleanup::scan(instance_id).await?)
+    Ok(mctrin::resources::history_cleanup::scan(instance_id).await?)
 }
 
 #[tauri::command]
@@ -531,7 +523,7 @@ pub async fn resource_prepare_history_cleanup(
     history_ids: Vec<HistoryId>,
 ) -> Result<ResourceHistoryCleanupPlan> {
     Ok(
-        theseus::resources::history_cleanup::prepare(instance_id, history_ids)
+        mctrin::resources::history_cleanup::prepare(instance_id, history_ids)
             .await?,
     )
 }
@@ -542,14 +534,14 @@ pub async fn resource_execute_history_cleanup(
     revision: u32,
 ) -> Result<ResourceHistoryCleanupResult> {
     Ok(
-        theseus::resources::history_cleanup::execute(cleanup_plan_id, revision)
+        mctrin::resources::history_cleanup::execute(cleanup_plan_id, revision)
             .await?,
     )
 }
 
 #[tauri::command]
 pub async fn resource_favorites() -> Result<Vec<ResourceFavorite>> {
-    Ok(theseus::resources::favorites::list().await?)
+    Ok(mctrin::resources::favorites::list().await?)
 }
 
 #[tauri::command]
@@ -558,13 +550,13 @@ pub async fn resource_favorite_add(
     content_type: ResourceType,
     locator: Option<String>,
 ) -> Result<()> {
-    theseus::resources::favorites::add(project, content_type, locator).await?;
+    mctrin::resources::favorites::add(project, content_type, locator).await?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn resource_favorite_remove(project: SourceProjectRef) -> Result<()> {
-    theseus::resources::favorites::remove(&project).await?;
+    mctrin::resources::favorites::remove(&project).await?;
     Ok(())
 }
 

@@ -185,20 +185,20 @@ pub struct HarnessVerification {
     pub hard_failures: Vec<Value>,
 }
 
-/// 统一的 AI 调用入口：只走 theseus::ai::complete_text，禁止另起炉灶。
+/// 统一的 AI 调用入口：只走 mctrin::ai::complete_text，禁止另起炉灶。
 pub async fn complete_text(
     provider_id: &str,
     model_id: &str,
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String> {
-    theseus::ai::complete_text(theseus::ai::AiTextRequest {
+    mctrin::ai::complete_text(mctrin::ai::AiTextRequest {
         provider_id: provider_id.to_string(),
         model_id: model_id.to_string(),
         system_prompt: system_prompt.to_string(),
         user_prompt: user_prompt.to_string(),
-        mode: theseus::ai::AiTextMode::Translation,
-        response_format: theseus::ai::AiTextResponseFormat::JsonObject,
+        mode: mctrin::ai::AiTextMode::Translation,
+        response_format: mctrin::ai::AiTextResponseFormat::JsonObject,
     })
     .await
     .map_err(TranslateError::from)

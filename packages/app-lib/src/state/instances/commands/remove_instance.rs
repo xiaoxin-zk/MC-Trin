@@ -66,7 +66,7 @@ async fn remove_instance_files_and_state(
         return Ok(());
     };
 
-    // Directly associated instances have no Axolotl profile directory. Their
+    // Directly associated instances have no MC-Trin profile directory. Their
     // version directory is the instance itself, so removal deliberately
     // deletes the externally managed content in place. Keep the shared
     // `.minecraft` root (assets/libraries/other versions) intact.

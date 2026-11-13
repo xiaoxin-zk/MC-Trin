@@ -1,6 +1,6 @@
 {
   "build": {
-    "beforeBuildCommand": "pnpm turbo run build --filter=@modrinth/app-frontend && node ../../scripts/axolotl/build-desktop.mjs --installer-only"
+    "beforeBuildCommand": "pnpm turbo run build --filter=@modrinth/app-frontend && node ../../scripts/mctrin/build-desktop.mjs --installer-only"
   },
   "bundle": {
     "windows": {

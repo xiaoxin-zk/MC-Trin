@@ -411,7 +411,7 @@ async fn cleanup_removes_version_format_markers_and_empty_folders() {
     for (name, bytes) in [
         ("old.jar", 12),
         ("old.json", 8),
-        ("old.json.axolotl-format", 1),
+        ("old.json.mctrin-format", 1),
     ] {
         fs::write(version.join(name), vec![0; bytes]).await.unwrap();
     }

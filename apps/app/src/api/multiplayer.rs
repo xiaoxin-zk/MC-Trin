@@ -26,52 +26,52 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 
 #[tauri::command]
 pub async fn multiplayer_download_hongshi() -> Result<()> {
-    Ok(theseus::hongshi::download()
+    Ok(mctrin::hongshi::download()
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_get_state()
--> Result<theseus::multiplayer::MultiplayerState> {
-    Ok(theseus::multiplayer::get_state().await)
+-> Result<mctrin::multiplayer::MultiplayerState> {
+    Ok(mctrin::multiplayer::get_state().await)
 }
 
 #[tauri::command]
 pub async fn multiplayer_get_nodes(
     force_refresh: Option<bool>,
-) -> Result<Vec<theseus::hongshi::HongshiNode>> {
-    Ok(theseus::hongshi::get_nodes(force_refresh.unwrap_or(false))
+) -> Result<Vec<mctrin::hongshi::HongshiNode>> {
+    Ok(mctrin::hongshi::get_nodes(force_refresh.unwrap_or(false))
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_get_detected_ports()
--> Result<Vec<theseus::hongshi::DetectedLanPort>> {
-    Ok(theseus::hongshi::get_detected_ports().await)
+-> Result<Vec<mctrin::hongshi::DetectedLanPort>> {
+    Ok(mctrin::hongshi::get_detected_ports().await)
 }
 
 #[tauri::command]
 pub async fn multiplayer_switch_provider(
-    provider: theseus::multiplayer::MultiplayerProvider,
+    provider: mctrin::multiplayer::MultiplayerProvider,
 ) -> Result<()> {
-    Ok(theseus::multiplayer::switch_provider(provider)
+    Ok(mctrin::multiplayer::switch_provider(provider)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_prepare_terracotta() -> Result<()> {
-    Ok(theseus::multiplayer::prepare_terracotta()
+    Ok(mctrin::multiplayer::prepare_terracotta()
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_start_mctier<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    request: theseus::mctier::StartRequest,
+    request: mctrin::mctier::StartRequest,
 ) -> Result<()> {
     use tauri::{Emitter, Manager};
 
@@ -82,86 +82,86 @@ pub async fn multiplayer_start_mctier<R: tauri::Runtime>(
             }
         });
     Ok(
-        theseus::multiplayer::start_mctier(request, voice_signal_emitter)
+        mctrin::multiplayer::start_mctier(request, voice_signal_emitter)
             .await
-            .map_err(theseus::Error::from)?,
+            .map_err(mctrin::Error::from)?,
     )
 }
 
 #[tauri::command]
 pub async fn multiplayer_start_direct(
-    request: theseus::mctier::DirectRequest,
+    request: mctrin::mctier::DirectRequest,
 ) -> Result<()> {
-    Ok(theseus::multiplayer::start_direct(request)
+    Ok(mctrin::multiplayer::start_direct(request)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_mctier_send_voice_signal(
     signal: serde_json::Value,
 ) -> Result<()> {
-    Ok(theseus::mctier::send_voice_signal(signal)
+    Ok(mctrin::mctier::send_voice_signal(signal)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_mctier_set_public(is_public: bool) -> Result<()> {
-    Ok(theseus::mctier::set_public(is_public)
+    Ok(mctrin::mctier::set_public(is_public)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_mctier_create_invite() -> Result<String> {
-    Ok(theseus::mctier::create_invite()
+    Ok(mctrin::mctier::create_invite()
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_host(
-    request: theseus::multiplayer::MultiplayerHostRequest,
+    request: mctrin::multiplayer::MultiplayerHostRequest,
 ) -> Result<()> {
-    Ok(theseus::multiplayer::host(request)
+    Ok(mctrin::multiplayer::host(request)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_join(
-    request: theseus::multiplayer::MultiplayerJoinRequest,
+    request: mctrin::multiplayer::MultiplayerJoinRequest,
 ) -> Result<()> {
-    Ok(theseus::multiplayer::join(request)
+    Ok(mctrin::multiplayer::join(request)
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_stop() -> Result<()> {
-    Ok(theseus::multiplayer::stop()
+    Ok(mctrin::multiplayer::stop()
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_reset() -> Result<()> {
-    Ok(theseus::multiplayer::reset()
+    Ok(mctrin::multiplayer::reset()
         .await
-        .map_err(theseus::Error::from)?)
+        .map_err(mctrin::Error::from)?)
 }
 
 #[tauri::command]
 pub async fn multiplayer_get_player_name() -> Result<String> {
-    Ok(theseus::terracotta::get_player_name().await)
+    Ok(mctrin::terracotta::get_player_name().await)
 }
 
 #[tauri::command]
 pub async fn multiplayer_open_hongshi_logs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<()> {
-    tokio::fs::create_dir_all(theseus::hongshi::logs_dir()).await?;
-    crate::api::utils::open_path(app, theseus::hongshi::logs_dir()).await;
+    tokio::fs::create_dir_all(mctrin::hongshi::logs_dir()).await?;
+    crate::api::utils::open_path(app, mctrin::hongshi::logs_dir()).await;
     Ok(())
 }

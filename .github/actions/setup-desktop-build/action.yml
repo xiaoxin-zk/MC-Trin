@@ -82,10 +82,10 @@ runs:
         $env:PATH = "$compilerDirectory;$env:PATH"
         & $compiler --version
         if ($LASTEXITCODE -ne 0) { throw "Seed map compiler could not run: $compiler" }
-        'int axolotl_seed_map_compiler_check(void) { return 0; }' | & $compiler -x c -fsyntax-only -
+        'int mctrin_seed_map_compiler_check(void) { return 0; }' | & $compiler -x c -fsyntax-only -
         if ($LASTEXITCODE -ne 0) { throw "Seed map compiler could not compile C source: $compiler" }
         $compilerDirectory >> $env:GITHUB_PATH
-        "AXOLOTL_CUBIOMES_CC=$compiler" >> $env:GITHUB_ENV
+        "MCTRIN_CUBIOMES_CC=$compiler" >> $env:GITHUB_ENV
     - shell: bash
       run: pnpm install --frozen-lockfile
     - uses: ./.github/actions/download-run-artifact
@@ -98,5 +98,5 @@ runs:
       shell: bash
       run: |
         resources="$(node -p 'require("node:path").resolve("target/build-resources")')"
-        echo "AXOLOTL_BUILD_RESOURCES=$resources" >> "$GITHUB_ENV"
-        node scripts/axolotl/prepare-build-resources.mjs --consume --output "$resources"
+        echo "MCTRIN_BUILD_RESOURCES=$resources" >> "$GITHUB_ENV"
+        node scripts/mctrin/prepare-build-resources.mjs --consume --output "$resources"

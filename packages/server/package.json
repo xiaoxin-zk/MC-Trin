@@ -1,7 +1,7 @@
 {
   "name": "@modrinth/server",
   "version": "0.0.0",
-  "description": "Minecraft dedicated server management core: config file schemas, manifest types, and download resolution shared by the Axolotl app and CLI.",
+  "description": "Minecraft dedicated server management core: config file schemas, manifest types, and download resolution shared by the MC-Trin app and CLI.",
   "license": "LGPL-3.0-only",
   "type": "module",
   "main": "./index.ts",

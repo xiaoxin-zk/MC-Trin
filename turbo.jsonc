@@ -46,7 +46,7 @@
             "cache": false,
             "env": ["CARGO_*", "RUST_*", "RUSTFLAGS", "SQLX_OFFLINE"],
             "passThroughEnv": [
-                "AXOLOTL_BUILD_RESOURCES",
+                "MCTRIN_BUILD_RESOURCES",
                 "TAURI_SIGNING_PRIVATE_KEY",
                 "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
                 "CURSEFORGE_API_KEY"
@@ -86,8 +86,8 @@
                 "__NV_DISABLE_EXPLICIT_SYNC",
                 "JAVA_HOME",
                 "CURSEFORGE_API_KEY",
-                "AXOLOTL_CURSEFORGE_API_KEY",
-                "AXOLOTL_CURSEFORGE_API_BASE_URL",
+                "MCTRIN_CURSEFORGE_API_KEY",
+                "MCTRIN_CURSEFORGE_API_BASE_URL",
                 "MCTRIN_DATA_DIR_SUFFIX",
                 "AXOLOTL_DATA_DIR_SUFFIX",
                 "THESEUS_CONFIG_DIR",

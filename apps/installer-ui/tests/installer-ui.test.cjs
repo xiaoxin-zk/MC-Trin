@@ -18,7 +18,7 @@ async function openPage(browser, mode) {
 	page.on('pageerror', (error) => errors.push(error.message))
 	await page.addInitScript(
 		(boot) => {
-			window.__AXOLOTL_INSTALLER__ = boot
+			window.__MCTRIN_INSTALLER__ = boot
 			window.testCommands = []
 			window.ipc = { postMessage: (value) => window.testCommands.push(JSON.parse(value)) }
 		},
@@ -120,18 +120,18 @@ for (const language of ['en', 'zhCn']) {
 			})
 			assert.equal(await page.locator('#primary-action').isDisabled(), true)
 			assert.equal(await page.locator('#close').isDisabled(), true)
-			await page.evaluate(() => window.axolotlInstaller.receive({ type: 'installStarted' }))
+			await page.evaluate(() => window.mctrinInstaller.receive({ type: 'installStarted' }))
 			assert.equal(await page.locator('#install-summary').textContent(), installDir)
 			assert.equal(await page.locator('#resource-summary-row').isVisible(), false)
 			for (const progress of [4, 26, 66, 82]) {
 				await page.evaluate(
-					(value) => window.axolotlInstaller.receive({ type: 'progress', value }),
+					(value) => window.mctrinInstaller.receive({ type: 'progress', value }),
 					progress,
 				)
 				await checkBounds(page)
 			}
 			await page.evaluate(() =>
-				window.axolotlInstaller.receive({
+				window.mctrinInstaller.receive({
 					type: 'installFailed',
 					exitCode: 2,
 					message: 'Could not remove a locked file',
@@ -160,7 +160,7 @@ for (const language of ['en', 'zhCn']) {
 			assert.equal(await page.locator('#install-error').isVisible(), false)
 			assert.equal(await page.locator('.spinner').isVisible(), true)
 			await page.evaluate(() =>
-				window.axolotlInstaller.receive({ type: 'installFinished', launchAfter: true }),
+				window.mctrinInstaller.receive({ type: 'installFinished', launchAfter: true }),
 			)
 			assert.equal(
 				await page.locator('#primary-label').textContent(),
@@ -213,16 +213,16 @@ for (const language of ['en', 'zhCn']) {
 				assert.equal(request.command, 'install')
 				assert.equal(request.installDir, installDir)
 				assert.equal(request.launchAfter, true)
-				await page.evaluate(() => window.axolotlInstaller.receive({ type: 'installStarted' }))
+				await page.evaluate(() => window.mctrinInstaller.receive({ type: 'installStarted' }))
 				for (const value of [4, 26, 66, 82]) {
 					await page.evaluate(
-						(value) => window.axolotlInstaller.receive({ type: 'progress', value }),
+						(value) => window.mctrinInstaller.receive({ type: 'progress', value }),
 						value,
 					)
 					await checkBounds(page)
 				}
 				await page.evaluate(() =>
-					window.axolotlInstaller.receive({
+					window.mctrinInstaller.receive({
 						type: 'installFailed',
 						exitCode: 2,
 						message: 'Could not write launcher files. Close MC-Trin and retry.',
@@ -232,7 +232,7 @@ for (const language of ['en', 'zhCn']) {
 				await page.locator('#primary-action').click()
 				assert.equal(await page.locator('#install-error').isVisible(), false)
 				await page.evaluate(() =>
-					window.axolotlInstaller.receive({ type: 'installFinished', launchAfter: true }),
+					window.mctrinInstaller.receive({ type: 'installFinished', launchAfter: true }),
 				)
 				await checkBounds(page)
 				await page.locator('#primary-action').click()
@@ -256,7 +256,7 @@ test('cancelled UAC request restores uninstall controls without reporting succes
 		await page.locator('#primary-action').click()
 		assert.equal(await page.locator('#primary-action').isDisabled(), true)
 		await page.evaluate(() =>
-			window.axolotlInstaller.receive({
+			window.mctrinInstaller.receive({
 				type: 'installFailed',
 				exitCode: null,
 				message: 'The operation was canceled by the user. (os error 1223)',
@@ -278,11 +278,11 @@ test('long uninstall failure details scroll vertically while actions remain avai
 	try {
 		for (const language of ['en', 'zhCn']) {
 			const { page, errors } = await openPage(browser, { uninstall: true, language })
-			await page.evaluate(() => window.axolotlInstaller.receive({ type: 'installStarted' }))
+			await page.evaluate(() => window.mctrinInstaller.receive({ type: 'installStarted' }))
 			await checkBounds(page)
 			const footerBefore = await page.locator('.footer').boundingBox()
 			await page.evaluate(() =>
-				window.axolotlInstaller.receive({
+				window.mctrinInstaller.receive({
 					type: 'installFailed',
 					exitCode: 2,
 					message:
@@ -342,7 +342,7 @@ test('the data folder preview follows every choice that changes it', async () =>
 		// so the preview has to be refreshed by the handler itself.
 		await page.evaluate(
 			(dir) =>
-				window.axolotlInstaller.receive({
+				window.mctrinInstaller.receive({
 					type: 'pathSelected',
 					target: 'install',
 					path: dir,

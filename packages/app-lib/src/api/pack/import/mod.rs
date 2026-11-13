@@ -28,7 +28,6 @@ use crate::{
 };
 
 pub mod atlauncher;
-mod axolotl;
 pub mod curseforge;
 pub(crate) mod direct_link;
 pub mod gamedir_resolve;
@@ -37,6 +36,7 @@ pub(crate) mod generic;
 pub mod hmcl;
 pub mod hmcl_config;
 pub(crate) mod instance_json;
+mod mctrin;
 pub mod mmc;
 mod modrinth_app;
 mod pcl;
@@ -62,7 +62,7 @@ pub struct ImportableInstance {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ImportLauncherType {
-    Axolotl,
+    Mctrin,
     MultiMC,
     PrismLauncher,
     ATLauncher,
@@ -80,7 +80,7 @@ pub enum ImportLauncherType {
 impl fmt::Display for ImportLauncherType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ImportLauncherType::Axolotl => write!(f, "MC-Trin"),
+            ImportLauncherType::Mctrin => write!(f, "MC-Trin"),
             ImportLauncherType::MultiMC => write!(f, "MultiMC"),
             ImportLauncherType::PrismLauncher => write!(f, "PrismLauncher"),
             ImportLauncherType::ATLauncher => write!(f, "ATLauncher"),
@@ -105,7 +105,7 @@ pub async fn get_importable_instances(
     base_path: PathBuf,
 ) -> crate::Result<Vec<ImportableInstance>> {
     let instances = match launcher_type {
-        ImportLauncherType::Axolotl => get_axolotl_instances(&base_path).await,
+        ImportLauncherType::Mctrin => get_mctrin_instances(&base_path).await,
         ImportLauncherType::ModrinthApp => {
             get_modrinth_app_instances(&base_path).await
         }
@@ -287,13 +287,21 @@ async fn get_hmcl_instances(
     Ok(collector.instances)
 }
 
-/// Collects Axolotl instances from a base path. A base path holding
-/// `axolotl_config.json` is itself an instance; otherwise direct child
-/// folders with their own config are treated as instances.
-async fn get_axolotl_instances(
+/// Whether the folder holds an MC-Trin instance config file, under either the
+/// current name or the pre-rename one.
+fn has_instance_config(path: &Path) -> bool {
+    path.join("mctrin_config.json").is_file()
+        || path.join("axolotl_config.json").is_file()
+}
+
+/// Collects MC-Trin instances from a base path. A base path holding an
+/// instance config file (current or pre-rename name) is itself an instance;
+/// otherwise direct child folders with their own config are treated as
+/// instances.
+async fn get_mctrin_instances(
     base_path: &Path,
 ) -> crate::Result<Vec<ImportableInstance>> {
-    if base_path.join("axolotl_config.json").is_file() {
+    if has_instance_config(base_path) {
         let name = base_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -311,7 +319,7 @@ async fn get_axolotl_instances(
     while let Some(entry) = dir.next_entry().await? {
         let path = entry.path();
         if path.is_dir()
-            && path.join("axolotl_config.json").is_file()
+            && has_instance_config(&path)
             && let Some(name) = path.file_name()
         {
             instances.push(ImportableInstance {
@@ -829,8 +837,8 @@ async fn import_via_launcher(
             )
             .await
         }
-        ImportLauncherType::Axolotl => {
-            axolotl::import_axolotl(
+        ImportLauncherType::Mctrin => {
+            mctrin::import_mctrin(
                 instance_path.clone(),
                 instance_id,
                 reporter.clone(),
@@ -923,7 +931,7 @@ pub fn get_default_launcher_path(
                 None
             }
         }
-        ImportLauncherType::Axolotl => None,
+        ImportLauncherType::Mctrin => None,
         ImportLauncherType::HMCL => None,
         ImportLauncherType::Generic => None,
         ImportLauncherType::Unknown => None,
@@ -1001,9 +1009,7 @@ pub async fn is_valid_importable_instance(
             curseforge::is_valid_curseforge(instance_path).await
         }
         ImportLauncherType::ModrinthApp => instance_path.is_dir(),
-        ImportLauncherType::Axolotl => {
-            instance_path.join("axolotl_config.json").is_file()
-        }
+        ImportLauncherType::Mctrin => has_instance_config(instance_path),
         ImportLauncherType::PCL2
         | ImportLauncherType::PCL2CE
         | ImportLauncherType::HMCL
@@ -1143,12 +1149,12 @@ async fn copy_import_file_atomically(
     })?;
     io::create_dir_all(parent).await?;
 
-    let temporary = create_import_temp_path(parent, ".axolotl-import-").await?;
+    let temporary = create_import_temp_path(parent, ".mctrin-import-").await?;
     io::copy(src, &temporary).await?;
 
     let backup = if tokio::fs::try_exists(dest).await? {
         let backup =
-            create_import_temp_path(parent, ".axolotl-import-backup-").await?;
+            create_import_temp_path(parent, ".mctrin-import-backup-").await?;
         tokio::fs::remove_file(&backup).await?;
         tokio::fs::rename(dest, &backup).await.map_err(|error| {
             crate::ErrorKind::IOError(IOError::with_path(error, dest))
@@ -1324,7 +1330,7 @@ mod import_copy_tests {
             .unwrap()
             .map(|entry| entry.unwrap().file_name())
             .filter(|name| {
-                name.to_string_lossy().starts_with(".axolotl-import-")
+                name.to_string_lossy().starts_with(".mctrin-import-")
             })
             .collect();
         assert!(leftovers.is_empty(), "staging files remain: {leftovers:?}");

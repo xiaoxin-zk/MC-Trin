@@ -1,5 +1,5 @@
+use mctrin::prelude::UserFriend;
 use tauri::plugin::TauriPlugin;
-use theseus::prelude::UserFriend;
 
 pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
     tauri::plugin::Builder::new("friends")
@@ -13,15 +13,15 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
 
 #[tauri::command]
 pub async fn friends() -> crate::api::Result<Vec<UserFriend>> {
-    Ok(theseus::friends::friends().await?)
+    Ok(mctrin::friends::friends().await?)
 }
 
 #[tauri::command]
 pub async fn add_friend(user_id: &str) -> crate::api::Result<()> {
-    Ok(theseus::friends::add_friend(user_id).await?)
+    Ok(mctrin::friends::add_friend(user_id).await?)
 }
 
 #[tauri::command]
 pub async fn remove_friend(user_id: &str) -> crate::api::Result<()> {
-    Ok(theseus::friends::remove_friend(user_id).await?)
+    Ok(mctrin::friends::remove_friend(user_id).await?)
 }

@@ -19,7 +19,6 @@ pub mod planet_minecraft;
 pub mod process;
 pub mod schematic_preview;
 pub mod seed_map;
-pub mod servers;
 pub mod settings;
 pub mod shortcuts;
 pub mod storage;
@@ -44,21 +43,21 @@ pub mod worlds;
 mod oauth_utils;
 mod search_cancellation;
 
-pub type Result<T> = std::result::Result<T, TheseusSerializableError>;
+pub type Result<T> = std::result::Result<T, MctrinSerializableError>;
 
-// // Main returnable Theseus GUI error
+// // Main returnable MC-Trin GUI error
 // // Needs to be Serializable to be returned to the JavaScript side
 // #[derive(Error, Debug, Serialize)]
-// pub enum TheseusGuiError {
+// pub enum MctrinGuiError {
 //     #[error(transparent)]
 //     Serializable(),
 // }
 
-// Serializable error intermediary, so TheseusGuiError can be Serializable (eg: so that we can return theseus::Errors in Tauri directly)
+// Serializable error intermediary, so MctrinGuiError can be Serializable (eg: so that we can return mctrin::Errors in Tauri directly)
 #[derive(Error, Debug)]
-pub enum TheseusSerializableError {
+pub enum MctrinSerializableError {
     #[error("{0}")]
-    Theseus(#[from] theseus::Error),
+    Mctrin(#[from] mctrin::Error),
 
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
@@ -78,54 +77,54 @@ pub enum TheseusSerializableError {
     SearchCancelled(String),
 
     #[error("{0}")]
-    Resource(#[from] theseus::resources::ResourceError),
+    Resource(#[from] mctrin::resources::ResourceError),
 }
 
 // Generic implementation of From<T> for ErrorTypeA
-// impl<T> From<T> for TheseusGuiError
+// impl<T> From<T> for MctrinGuiError
 // where
-//     TheseusSerializableError: From<T>,
+//     MctrinSerializableError: From<T>,
 // {
 //     fn from(error: T) -> Self {
-//         TheseusGuiError::Serializable(TheseusSerializableError::from(error))
+//         MctrinGuiError::Serializable(MctrinSerializableError::from(error))
 //     }
 // }
 
-// This is a very simple macro that implements a very basic Serializable for each variant of TheseusSerializableError,
+// This is a very simple macro that implements a very basic Serializable for each variant of MctrinSerializableError,
 // where the field is the string. (This allows easy extension to errors without many match arms)
 macro_rules! impl_serialize {
     ($($variant:ident),* $(,)?) => {
-        impl Serialize for TheseusSerializableError {
+        impl Serialize for MctrinSerializableError {
             fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
             where
                 S: Serializer,
             {
                 match self {
-                    // For the Theseus variant, we add a special display for the error,
+                    // For the mctrin variant, we add a special display for the error,
                     // to view the spans if subscribed to them (which is information that is lost when serializing)
-                    TheseusSerializableError::Theseus(theseus_error) => {
-                        $crate::error::display_tracing_error(theseus_error);
+                    MctrinSerializableError::Mctrin(mctrin_error) => {
+                        $crate::error::display_tracing_error(mctrin_error);
 
-                        let mut state = serializer.serialize_struct("Theseus", 2)?;
-                        state.serialize_field("field_name", "Theseus")?;
+                        let mut state = serializer.serialize_struct("Mctrin", 2)?;
+                        state.serialize_field("field_name", "Mctrin")?;
                         state.serialize_field(
                             "message",
-                            &theseus_error.user_facing_message(),
+                            &mctrin_error.user_facing_message(),
                         )?;
                         state.end()
                     }
-                    TheseusSerializableError::Resource(error) => {
-                        if !matches!(error, theseus::resources::ResourceError::Canceled) {
+                    MctrinSerializableError::Resource(error) => {
+                        if !matches!(error, mctrin::resources::ResourceError::Canceled) {
                             tracing::error!(error = %error, "Resource operation failed");
                         }
                         let mut state = serializer.serialize_struct("Resource", 3)?;
                         state.serialize_field("field_name", "Resource")?;
                         state.serialize_field("message", &error.to_string())?;
-                        state.serialize_field("code", if matches!(error, theseus::resources::ResourceError::CursorExpired) { "cursorExpired" } else { "resourceError" })?;
+                        state.serialize_field("code", if matches!(error, mctrin::resources::ResourceError::CursorExpired) { "cursorExpired" } else { "resourceError" })?;
                         state.end()
                     }
                     $(
-                        TheseusSerializableError::$variant(message) => {
+                        MctrinSerializableError::$variant(message) => {
                             let mut state = serializer.serialize_struct(stringify!($variant), 2)?;
                             state.serialize_field("field_name", stringify!($variant))?;
                             state.serialize_field("message", &message.to_string())?;
@@ -138,7 +137,7 @@ macro_rules! impl_serialize {
     };
 }
 
-// Use the macro to implement Serialize for TheseusSerializableError
+// Use the macro to implement Serialize for MctrinSerializableError
 #[cfg(not(feature = "updater"))]
 impl_serialize! {
     IO,

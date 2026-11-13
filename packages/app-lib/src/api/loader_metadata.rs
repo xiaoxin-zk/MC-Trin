@@ -63,8 +63,12 @@ static NEOFORGE_LEGACY_METADATA: LazyLock<MetadataCache<MavenMetadata>> =
     LazyLock::new(MetadataCache::default);
 static LOADER_MANIFESTS: LazyLock<LoaderManifestCache> =
     LazyLock::new(LoaderManifestCache::default);
-const INSTALLER_URL_KEY: &str = "AXOLOTL_INSTALLER_URL";
-const INSTALLER_ENTRY_KEY_PREFIX: &str = "AXOLOTL_INSTALLER_ENTRY_";
+const INSTALLER_URL_KEY: &str = "MCTRIN_INSTALLER_URL";
+const INSTALLER_ENTRY_KEY_PREFIX: &str = "MCTRIN_INSTALLER_ENTRY_";
+/// Data-map keys written by releases before the MC-Trin rename. Old version
+/// metadata on disk still carries them, so reads accept both spellings.
+const LEGACY_INSTALLER_URL_KEY: &str = "AXOLOTL_INSTALLER_URL";
+const LEGACY_INSTALLER_ENTRY_KEY_PREFIX: &str = "AXOLOTL_INSTALLER_ENTRY_";
 
 #[derive(Deserialize)]
 struct MetaGameVersion {
@@ -2068,12 +2072,19 @@ pub(crate) async fn ensure_installer_artifacts(
     let Some(data) = &version.data else {
         return Ok(());
     };
-    let Some(installer_url) = data.get(INSTALLER_URL_KEY) else {
+    let Some(installer_url) = data
+        .get(INSTALLER_URL_KEY)
+        .or_else(|| data.get(LEGACY_INSTALLER_URL_KEY))
+        .map(|value| value.client.clone())
+    else {
         return Ok(());
     };
     let entries = data
         .iter()
-        .filter(|(key, _)| key.starts_with(INSTALLER_ENTRY_KEY_PREFIX))
+        .filter(|(key, _)| {
+            key.starts_with(INSTALLER_ENTRY_KEY_PREFIX)
+                || key.starts_with(LEGACY_INSTALLER_ENTRY_KEY_PREFIX)
+        })
         .filter_map(|(_, entry)| entry.client.split_once('|'))
         .map(|(coordinate, archive_path)| {
             (coordinate.to_string(), archive_path.to_string())
@@ -2091,7 +2102,7 @@ pub(crate) async fn ensure_installer_artifacts(
     }
 
     let bytes = fetch_with_pool(
-        &installer_url.client,
+        &installer_url,
         None,
         None,
         None,
@@ -2228,7 +2239,7 @@ fn parse_installer(
             .and_then(|extension| extension.to_str())
             .unwrap_or("bin");
         let coordinate = format!(
-            "com.axolotl.loader-installer:embedded:{}:{}-{}@{}",
+            "com.mctrin.loader-installer:embedded:{}:{}-{}@{}",
             sanitize_coordinate_part(&partial.id),
             sanitize_coordinate_part(&key),
             side,

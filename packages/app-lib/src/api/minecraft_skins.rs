@@ -88,6 +88,7 @@ mod assets {
 mod offline;
 pub(crate) use offline::{
     OFFLINE_SKIN_PACK_LEGACY_ID, OFFLINE_SKIN_PACK_MODERN_ID,
+    OFFLINE_SKIN_PACK_RETIRED_ID, OFFLINE_SKIN_PACK_RETIRED_MODERN_ID,
     OfflineSkinPackOptions, prepare_offline_skin_resource_pack,
 };
 

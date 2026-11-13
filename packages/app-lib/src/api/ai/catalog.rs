@@ -170,7 +170,7 @@ pub(super) const PROVIDERS: &[AiProviderDefinition] = &[
         ["account_id"]
     ),
     // Sponsored listing; kept out of LobeHub syncs by
-    // scripts/axolotl/sync-lobehub-models.mjs. See SPONSORED_PROVIDERS.
+    // scripts/mctrin/sync-lobehub-models.mjs. See SPONSORED_PROVIDERS.
     provider!(
         "codeflow",
         "CodeFlow",
@@ -694,7 +694,7 @@ pub(super) const PROVIDERS: &[AiProviderDefinition] = &[
 ];
 
 /// Sponsored provider ids. These listings are part of paid partnerships and
-/// must survive LobeHub model syncing; scripts/axolotl/sync-lobehub-models.mjs
+/// must survive LobeHub model syncing; scripts/mctrin/sync-lobehub-models.mjs
 /// refuses to sync the provider catalog when any of them is missing.
 pub(super) const SPONSORED_PROVIDERS: &[&str] = &["codeflow"];
 

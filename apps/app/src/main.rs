@@ -6,6 +6,7 @@
 // Tauri emits this generated construction outside the source tree.
 #![allow(clippy::default_constructed_unit_structs)]
 
+use mctrin::prelude::*;
 use native_dialog::{DialogBuilder, MessageLevel};
 use serde::Serialize;
 use std::sync::atomic::Ordering;
@@ -19,7 +20,6 @@ use tauri::{
     http::{Response, StatusCode, header},
 };
 use tauri_plugin_fs::FsExt;
-use theseus::prelude::*;
 
 mod api;
 mod error;
@@ -123,7 +123,7 @@ fn is_allowed_blockbench_skin_request(
 ) -> bool {
     if !matches!(
         request.uri().host(),
-        Some("localhost" | "axolotl-skin.localhost")
+        Some("localhost" | "mctrin-skin.localhost")
     ) {
         return false;
     }
@@ -133,8 +133,8 @@ fn is_allowed_blockbench_skin_request(
         "http://tauri.localhost",
         "https://tauri.localhost",
         "tauri://localhost",
-        "axolotl-skin://localhost",
-        "http://axolotl-skin.localhost",
+        "mctrin-skin://localhost",
+        "http://mctrin-skin.localhost",
     ];
     let is_allowed_source = |value: &str| {
         ALLOWED_ORIGINS.iter().any(|origin| {
@@ -201,13 +201,13 @@ fn is_skin_editor_referer(
 #[tauri::command]
 async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
     tracing::info!("Initializing app event state...");
-    theseus::EventState::init(app.clone()).await?;
+    mctrin::EventState::init(app.clone()).await?;
 
     tracing::info!("Initializing app state...");
     State::init(app.config().identifier.clone()).await?;
     let anti_piracy_app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let status = theseus::anti_piracy::check_region().await;
+        let status = mctrin::anti_piracy::check_region().await;
         if let Err(error) =
             anti_piracy_app.emit("anti-piracy-status-changed", status)
         {
@@ -218,8 +218,7 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
     // so "Java & performance" is populated without the user pressing Find Java.
     tauri::async_runtime::spawn(async {
         let started = std::time::Instant::now();
-        match theseus::prelude::jre::get_available_jres(false, true, false)
-            .await
+        match mctrin::prelude::jre::get_available_jres(false, true, false).await
         {
             Ok(jres) => tracing::info!(
                 count = jres.len(),
@@ -235,7 +234,7 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
     static BACKUP_STARTUP: tokio::sync::OnceCell<()> =
         tokio::sync::OnceCell::const_new();
     BACKUP_STARTUP.get_or_try_init(|| async {
-        theseus::instance::recover_backup_repository().await?;
+        mctrin::instance::recover_backup_repository().await?;
         tauri::async_runtime::spawn(async {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             if let Some(state) = State::get_if_initialized()
@@ -243,17 +242,17 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
             {
                 tracing::warn!(%error, "Failed to prune old database backups");
             }
-            if let Err(error) = theseus::instance::maintain_backup_repository().await {
+            if let Err(error) = mctrin::instance::maintain_backup_repository().await {
                 tracing::warn!(%error, "Failed to maintain the instance backup repository");
             }
         });
-        Ok::<(), theseus::Error>(())
+        Ok::<(), mctrin::Error>(())
     }).await?;
 
     // The logger starts before the database is available, so the stored level
     // is applied here once settings can be read. Beta keeps enough detail for
     // diagnostics by requiring DEBUG or TRACE.
-    match theseus::settings::get().await {
+    match mctrin::settings::get().await {
         Ok(mut settings) => {
             match resolve_update_channel(&app).await {
                 Ok(channel) => {
@@ -263,7 +262,7 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
                     );
                     if log_level != settings.log_level {
                         settings.log_level = log_level;
-                        if let Err(error) = theseus::settings::patch(
+                        if let Err(error) = mctrin::settings::patch(
                                 serde_json::json!({ "log_level": settings.log_level }),
                         )
                         .await
@@ -282,7 +281,7 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
             }
 
             if std::env::var_os("RUST_LOG").is_none()
-                && let Err(error) = theseus::set_log_level(&settings.log_level)
+                && let Err(error) = mctrin::set_log_level(&settings.log_level)
             {
                 tracing::warn!("Keeping the default log level: {error}");
             }
@@ -297,7 +296,7 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
     // The JSON store becomes authoritative after the first write; swallowing
     // this error would let a fallback Favorites-only store overwrite groups
     // that still exist in SQLite.
-    theseus::state::instance_groups::ensure_imported(&state).await?;
+    mctrin::state::instance_groups::ensure_imported(&state).await?;
 
     app.asset_protocol_scope()
         .allow_directory(state.directories.caches_dir(), true)?;
@@ -326,14 +325,14 @@ async fn resolve_update_channel<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> api::Result<String> {
     let settings_dir = update_channel_settings_dir(app)?;
-    let state = theseus::read_update_channel_state(&settings_dir).await?;
+    let state = mctrin::read_update_channel_state(&settings_dir).await?;
     let channel = state
         .active_channel
-        .unwrap_or_else(|| theseus::default_update_channel().to_string());
+        .unwrap_or_else(|| mctrin::default_update_channel().to_string());
 
     match channel.as_str() {
         "release" | "beta" => Ok(channel),
-        _ => Err(theseus::Error::from(theseus::ErrorKind::FSError(
+        _ => Err(mctrin::Error::from(mctrin::ErrorKind::FSError(
             "Update channel settings are invalid".to_string(),
         ))
         .into()),
@@ -344,7 +343,7 @@ async fn resolve_update_channel<R: tauri::Runtime>(
 async fn get_current_app_database_path(
     app: tauri::AppHandle,
 ) -> api::Result<String> {
-    Ok(theseus::current_app_database_path(&app.config().identifier)
+    Ok(mctrin::current_app_database_path(&app.config().identifier)
         .await?
         .to_string_lossy()
         .into_owned())
@@ -356,14 +355,14 @@ async fn set_update_channel(
     channel: String,
 ) -> api::Result<()> {
     if !matches!(channel.as_str(), "release" | "beta") {
-        return Err(theseus::Error::from(theseus::ErrorKind::FSError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::FSError(
             "Invalid update channel".to_string(),
         ))
         .into());
     }
 
     let settings_dir = update_channel_settings_dir(&app)?;
-    let mut state = theseus::read_update_channel_state(&settings_dir).await?;
+    let mut state = mctrin::read_update_channel_state(&settings_dir).await?;
     state.active_channel = Some(channel);
     write_update_channel_state(&app, &state)
 }
@@ -373,11 +372,11 @@ async fn get_update_preferences(
     app: tauri::AppHandle,
 ) -> api::Result<UpdatePreferences> {
     let settings_dir = update_channel_settings_dir(&app)?;
-    let state = theseus::read_update_channel_state(&settings_dir).await?;
+    let state = mctrin::read_update_channel_state(&settings_dir).await?;
     let is_beta = match state.active_channel.as_deref() {
         Some("beta") => true,
         Some("release") => false,
-        _ => theseus::default_update_channel() == "beta",
+        _ => mctrin::default_update_channel() == "beta",
     };
     Ok(UpdatePreferences {
         immediate_update_fetch: is_beta
@@ -393,7 +392,7 @@ async fn set_update_preferences(
     updates_paused: bool,
 ) -> api::Result<()> {
     let settings_dir = update_channel_settings_dir(&app)?;
-    let mut state = theseus::read_update_channel_state(&settings_dir).await?;
+    let mut state = mctrin::read_update_channel_state(&settings_dir).await?;
     state.immediate_update_fetch = Some(immediate_update_fetch);
     state.updates_paused = Some(updates_paused);
     write_update_channel_state(&app, &state)
@@ -402,9 +401,9 @@ async fn set_update_preferences(
 fn update_channel_settings_dir<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> api::Result<PathBuf> {
-    theseus::DirectoryInfo::initial_settings_dir_path(&app.config().identifier)
+    mctrin::DirectoryInfo::initial_settings_dir_path(&app.config().identifier)
         .ok_or_else(|| {
-            theseus::Error::from(theseus::ErrorKind::FSError(
+            mctrin::Error::from(mctrin::ErrorKind::FSError(
                 "Could not find update channel settings directory".to_string(),
             ))
             .into()
@@ -413,14 +412,14 @@ fn update_channel_settings_dir<R: tauri::Runtime>(
 
 fn write_update_channel_state(
     app: &tauri::AppHandle,
-    state: &theseus::UpdateChannelState,
+    state: &mctrin::UpdateChannelState,
 ) -> api::Result<()> {
     let settings_dir = update_channel_settings_dir(app)?;
-    let path = theseus::update_channel_state_file_path(&settings_dir);
+    let path = mctrin::update_channel_state_file_path(&settings_dir);
     std::fs::create_dir_all(&settings_dir)?;
     let temporary_path = settings_dir.join("update-channel.json.tmp");
     let contents = serde_json::to_vec(state).map_err(|error| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(error.to_string()))
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(error.to_string()))
     })?;
     std::fs::write(&temporary_path, contents)?;
     std::fs::rename(temporary_path, path)?;
@@ -431,7 +430,7 @@ fn write_update_channel_state(
 async fn copy_release_database_to_beta(
     app: tauri::AppHandle,
 ) -> api::Result<()> {
-    theseus::copy_release_database_to_beta(&app.config().identifier).await?;
+    mctrin::copy_release_database_to_beta(&app.config().identifier).await?;
     Ok(())
 }
 
@@ -441,7 +440,7 @@ async fn copy_database_between_channels(
     source_channel: String,
     target_channel: String,
 ) -> api::Result<()> {
-    theseus::copy_database_between_channels(
+    mctrin::copy_database_between_channels(
         &app.config().identifier,
         &source_channel,
         &target_channel,
@@ -452,7 +451,7 @@ async fn copy_database_between_channels(
 
 #[tauri::command]
 async fn beta_database_exists(app: tauri::AppHandle) -> api::Result<bool> {
-    Ok(theseus::beta_database_exists(&app.config().identifier).await?)
+    Ok(mctrin::beta_database_exists(&app.config().identifier).await?)
 }
 
 #[tauri::command]
@@ -460,7 +459,7 @@ async fn backup_app_db_for_update(
     app: tauri::AppHandle,
     version: String,
 ) -> api::Result<()> {
-    theseus::backup_current_app_db_for_update(
+    mctrin::backup_current_app_db_for_update(
         &app.config().identifier,
         &version,
     )
@@ -514,7 +513,7 @@ fn is_dev() -> bool {
 
 #[tauri::command]
 fn are_updates_enabled() -> bool {
-    // The upstream Axolotl update service is not an MC-Trin distribution source.
+    // The upstream launcher update service is not an MC-Trin distribution source.
     false
 }
 
@@ -528,7 +527,7 @@ pub use updater_impl_noop::*;
 #[tauri::command]
 async fn toggle_decorations(b: bool, window: tauri::Window) -> api::Result<()> {
     window.set_decorations(b).map_err(|e| {
-        theseus::Error::from(theseus::ErrorKind::OtherError(format!(
+        mctrin::Error::from(mctrin::ErrorKind::OtherError(format!(
             "Failed to toggle decorations: {e}"
         )))
     })?;
@@ -537,10 +536,10 @@ async fn toggle_decorations(b: bool, window: tauri::Window) -> api::Result<()> {
 
 #[tauri::command]
 async fn restart_app(app: tauri::AppHandle) -> api::Result<()> {
-    if theseus::State::initialized()
-        && theseus::instance::has_active_backup_operations().await?
+    if mctrin::State::initialized()
+        && mctrin::instance::has_active_backup_operations().await?
     {
-        return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+        return Err(mctrin::Error::from(mctrin::ErrorKind::InputError(
             "Backup operations are still running".to_string(),
         ))
         .into());
@@ -550,23 +549,23 @@ async fn restart_app(app: tauri::AppHandle) -> api::Result<()> {
 
 #[tauri::command]
 async fn exit_app(app: tauri::AppHandle, force: bool) -> api::Result<()> {
-    if theseus::State::initialized()
-        && theseus::instance::has_active_backup_operations().await?
+    if mctrin::State::initialized()
+        && mctrin::instance::has_active_backup_operations().await?
     {
         if !force {
-            return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+            return Err(mctrin::Error::from(mctrin::ErrorKind::InputError(
                 "Backup operations are still running".to_string(),
             ))
             .into());
         }
-        if theseus::instance::has_active_backup_repository_move().await? {
-            return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+        if mctrin::instance::has_active_backup_repository_move().await? {
+            return Err(mctrin::Error::from(mctrin::ErrorKind::InputError(
                 "The launcher cannot force exit while the backup repository is being moved"
                     .to_string(),
             ))
             .into());
         }
-        theseus::instance::interrupt_active_backup_operations().await?;
+        mctrin::instance::interrupt_active_backup_operations().await?;
     }
     app.exit(0);
     Ok(())
@@ -574,18 +573,18 @@ async fn exit_app(app: tauri::AppHandle, force: bool) -> api::Result<()> {
 
 #[tauri::command]
 async fn check_symlink_capability() -> api::Result<String> {
-    let capability = theseus::symlink::check_symlink_capability().await?;
+    let capability = mctrin::symlink::check_symlink_capability().await?;
     Ok(match capability {
-        theseus::SymlinkCapability::Supported => "supported",
-        theseus::SymlinkCapability::RequiresAdmin => "requires_admin",
-        theseus::SymlinkCapability::Unsupported => "unsupported",
+        mctrin::SymlinkCapability::Supported => "supported",
+        mctrin::SymlinkCapability::RequiresAdmin => "requires_admin",
+        mctrin::SymlinkCapability::Unsupported => "unsupported",
     }
     .to_string())
 }
 
 #[tauri::command]
 fn is_elevated() -> bool {
-    theseus::is_process_elevated()
+    mctrin::is_process_elevated()
 }
 
 #[tauri::command]
@@ -653,7 +652,7 @@ fn raise_file_descriptor_limit() {
 #[allow(clippy::default_constructed_unit_structs)]
 fn main() {
     // Initialize portable mode first (checks the .MC-Trin folder, falling back
-    // to the legacy .Axolotl marker, and sets THESEUS_CONFIG_DIR)
+    // to the legacy .Axolotl marker, and sets MCTRIN_CONFIG_DIR)
     // SAFETY: Called at the start of main() before any threads or tokio runtime are spawned
     let _portable = unsafe { portable::init_portable_mode() };
 
@@ -664,7 +663,7 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     if std::env::args_os().any(|argument| argument == "--memory-optimize") {
-        std::process::exit(theseus::memory::optimize_current_process_context());
+        std::process::exit(mctrin::memory::optimize_current_process_context());
     }
 
     // Short-lived elevated helper entry: create a directory/file link with
@@ -683,7 +682,7 @@ fn main() {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            std::process::exit(theseus::symlink::create_link_elevated_helper(
+            std::process::exit(mctrin::symlink::create_link_elevated_helper(
                 &payload,
             ));
         }
@@ -702,14 +701,14 @@ fn main() {
         tracing is set basd on the environment variable RUST_LOG=xxx, depending on the amount of logs to show
             ERROR > WARN > INFO > DEBUG > TRACE
         eg. RUST_LOG=info will show info, warn, and error logs
-            RUST_LOG="theseus=trace" will show *all* messages but from theseus only (and not dependencies using similar crates)
-            RUST_LOG="theseus=trace" will show *all* messages but from theseus only (and not dependencies using similar crates)
+            RUST_LOG="mctrin=trace" will show *all* messages but from mctrin only (and not dependencies using similar crates)
+            RUST_LOG="mctrin=trace" will show *all* messages but from mctrin only (and not dependencies using similar crates)
 
         Error messages returned to Tauri will display as traced error logs if they return an error.
         This will also include an attached span trace if the error is from a tracing error, and the level is set to info, debug, or trace
 
         on unix:
-            RUST_LOG="theseus=trace" {run command}
+            RUST_LOG="mctrin=trace" {run command}
 
     */
 
@@ -736,12 +735,12 @@ fn main() {
     #[allow(clippy::default_constructed_unit_structs)]
     let tauri_context = tauri::tauri_build_context!();
 
-    let _log_guard = theseus::start_logger(&tauri_context.config().identifier);
+    let _log_guard = mctrin::start_logger(&tauri_context.config().identifier);
 
     tracing::info!("Initialized tracing subscriber. Loading MC-Trin!");
 
     let mut builder = tauri::Builder::default().register_uri_scheme_protocol(
-        "axolotl-skin",
+        "mctrin-skin",
         move |context, request| {
             if !is_allowed_blockbench_skin_request(&request) {
                 return Response::builder()
@@ -763,8 +762,8 @@ fn main() {
 
     #[cfg(feature = "updater")]
     {
+        use mctrin::launcher_user_agent;
         use tauri_plugin_http::reqwest::header::{HeaderValue, USER_AGENT};
-        use theseus::launcher_user_agent;
         builder = builder.plugin(
             tauri_plugin_updater::Builder::new()
                 .header(
@@ -812,8 +811,8 @@ fn main() {
                             | tauri_plugin_window_state::StateFlags::MAXIMIZED,
                     );
 
-            // Use THESEUS_CONFIG_DIR for window state if set (portable mode)
-            if let Some(config_dir) = std::env::var_os("THESEUS_CONFIG_DIR") {
+            // Use MCTRIN_CONFIG_DIR for window state if set (portable mode)
+            if let Some(config_dir) = std::env::var_os("MCTRIN_CONFIG_DIR") {
                 window_state_builder =
                     window_state_builder.with_state_dir(config_dir);
             }
@@ -923,7 +922,6 @@ fn main() {
         .plugin(api::terracotta::init())
         .plugin(api::multiplayer::init())
         .manage(api::files::StudioWatchers::default())
-        .plugin(api::servers::init())
         .manage(PendingUpdateData::default())
         .invoke_handler(tauri::generate_handler![
             initialize_state,
@@ -972,7 +970,7 @@ fn main() {
 
                 if matches!(&event, tauri::RunEvent::ExitRequested { .. })
                     && let Err(error) = tauri::async_runtime::block_on(
-                        theseus::minecraft_skins::flush_pending_skin_change(),
+                        mctrin::minecraft_skins::flush_pending_skin_change(),
                     )
                 {
                     tracing::warn!(
@@ -982,7 +980,7 @@ fn main() {
 
                 if matches!(&event, tauri::RunEvent::ExitRequested { .. })
                     && let Err(error) = tauri::async_runtime::block_on(
-                        theseus::multiplayer::shutdown(),
+                        mctrin::multiplayer::shutdown(),
                     )
                 {
                     tracing::warn!(
@@ -992,12 +990,6 @@ fn main() {
 
                 if matches!(&event, tauri::RunEvent::ExitRequested { .. }) {
                     tauri::async_runtime::block_on(async {
-                        let killed = theseus::servers::shutdown_all().await;
-                        if killed > 0 {
-                            tracing::info!(
-                                "Killed {killed} dedicated server process(es) after the shutdown budget"
-                            );
-                        }
                         if let Some(state) = State::get_if_initialized() {
                             state.shutdown().await;
                         }
@@ -1015,7 +1007,7 @@ fn main() {
                     if let Some((update, data)) = &*update_data.0.lock().unwrap()
                     {
                         fn set_changelog_toast(version: Option<String>) {
-                            let toast_result: theseus::Result<()> = tauri::async_runtime::block_on(async move {
+                            let toast_result: mctrin::Result<()> = tauri::async_runtime::block_on(async move {
                                 settings::patch(serde_json::json!({ "pending_update_toast_for_version": version })).await?;
                                 Ok(())
                             });

@@ -6,7 +6,7 @@ import {
     LATEST_JAVA_VERSION,
 } from './versions.ts'
 
-export const RECIPE_PROJECT_STORAGE_KEY = 'axolotl.lab.recipe-generator.v1'
+export const RECIPE_PROJECT_STORAGE_KEY = 'mctrin.lab.recipe-generator.v1'
 
 export function createBrewingState(): BrewingState {
     return {

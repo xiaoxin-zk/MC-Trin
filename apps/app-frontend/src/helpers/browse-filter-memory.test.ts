@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { getBrowseFilterMemory, setBrowseFilterMemory } from './browse-filter-memory.ts'
 
-const storageKey = 'axolotl-browse-filter-memory-v1'
+const storageKey = 'mctrin-browse-filter-memory-v1'
 const originalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
 
 function installMemoryStorage() {
