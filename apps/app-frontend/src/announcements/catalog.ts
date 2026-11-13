@@ -30,6 +30,87 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-0.0.5-beta',
+        version: '0.0.5-beta',
+        publishedAt: '2026-11-13',
+        title: {
+            'en-US': 'MC-Trin 0.0.5-beta',
+            'zh-CN': 'MC-Trin 0.0.5-beta',
+        },
+        changes: {
+            added: [
+                {
+                    'en-US':
+                        'Installing content now downloads up to 16 files at once on every install path, not just some of them, so large modpacks no longer stall on per-file latency while the machine sits idle.',
+                    'zh-CN':
+                        '内容安装的所有路径现在都最多同时下载 16 个文件（此前只有部分路径生效），大型整合包不再因逐文件延迟而空等。',
+                },
+            ],
+            changed: [
+                {
+                    'en-US':
+                        'Modpack installs now reject override paths that Windows cannot create — reserved device names such as CON and NUL, or names ending in a dot or a space — and say so up front instead of failing partway through extraction.',
+                    'zh-CN':
+                        '安装整合包时会提前拒绝 Windows 无法创建的覆盖文件路径（例如 CON、NUL 等保留设备名，或以点、空格结尾的名称），不再解压到一半才失败。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed installs cancelling themselves after 30 minutes. Any install that ran longer was silently aborted and everything it had already downloaded was deleted. The limit is now a stall timeout: a job is only abandoned after 45 minutes without progress, and progress is measured in bytes, so a large file downloading steadily is never mistaken for a hang.',
+                    'zh-CN':
+                        '修复安装在 30 分钟后自我取消的问题。此前任何超过 30 分钟的任务都会被静默中止，并删除已下载的全部内容。现在改为「停滞超时」：只有连续 45 分钟毫无进度才会放弃，且以字节级进度判定，大文件持续下载时不会被误判为卡死。',
+                },
+                {
+                    'en-US':
+                        'A modpack install now checks the free space on the target drive before it starts, and tells you clearly when there is not enough room, instead of downloading for a while and then failing with a system error and rolling back.',
+                    'zh-CN':
+                        '安装整合包前会先检查目标磁盘的可用空间，空间不足时直接给出清晰提示，而不是下载一段时间后报系统错误再回滚。',
+                },
+                {
+                    'en-US':
+                        'A modpack whose override files unpack to more than 8 GiB is now refused before extraction, so it can no longer fill the disk.',
+                    'zh-CN':
+                        '覆盖文件解压后超过 8 GiB 的整合包会在解压前被拒绝，不再有填满磁盘的风险。',
+                },
+                {
+                    'en-US':
+                        'AI noise reduction can be switched off and on repeatedly again. Turning it back on used to fail silently — the switch stayed on while your microphone was actually unfiltered — because the audio module was registered twice. It is now registered once per audio session, and toggling quickly while it is still loading no longer makes the switch disappear.',
+                    'zh-CN':
+                        'AI 降噪可以反复关闭再开启了。此前再次开启会静默失效——开关仍显示已开启，实际却是未降噪的裸麦克风——原因是音频模块被重复注册。现在每个音频会话只注册一次；在资源仍在加载时快速开关也不会再让开关消失。',
+                },
+                {
+                    'en-US':
+                        'Room voice now recovers by itself after a network switch or waking from sleep. A teammate whose connection dropped into a failed state used to require leaving and rejoining voice; the launcher now retries the connection automatically, up to twice.',
+                    'zh-CN':
+                        '联机语音在切换网络或休眠唤醒后可以自动恢复。此前队友的连接进入失败状态后只能退出语音重进，现在会自动重试连接，最多两次。',
+                },
+                {
+                    'en-US':
+                        'Fixed voice activation leaving you inaudible for a whole call: the level monitor\'s audio session could stay suspended, so the launcher believed you were silent and never opened the microphone. One teammate failing to connect also no longer cancels voice for everyone else.',
+                    'zh-CN':
+                        '修复语音激活导致整场通话别人听不到你的问题：电平监测的音频会话可能一直处于停摆状态，启动器因此认为你没有说话，麦克风始终不打开。另外，单个队友连接失败也不会再让整场语音被取消。',
+                },
+                {
+                    'en-US':
+                        'The Lab skin editor loads again. It used to spin indefinitely and then report that it could not be loaded; the theme never applied and the export button did nothing.',
+                    'zh-CN':
+                        'Lab 皮肤编辑器恢复正常加载。此前会一直转圈然后提示无法加载，主题不生效，导出按钮也没有反应。',
+                },
+                {
+                    'en-US':
+                        'Fixed a build problem in the native installer package that stopped the whole release from being published.',
+                    'zh-CN': '修复 native 安装包的一个构建问题，该问题会导致整个发布中止。',
+                },
+                {
+                    'en-US':
+                        'The database downgrade tool now looks for the launcher database in the correct folder.',
+                    'zh-CN': '数据库降级工具现在会在正确的目录中查找启动器数据库。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-0.0.4-beta',
         version: '0.0.4-beta',
         publishedAt: '2026-11-12',
