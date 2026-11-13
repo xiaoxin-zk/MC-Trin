@@ -679,41 +679,6 @@ pub(crate) async fn extract_archive_entry_to_file(
     .await?
 }
 
-/// Reads a single archive entry into a string, tolerating GB18030-encoded
-/// file contents produced by Chinese packaging tools.
-///
-/// Unbounded and uncancellable: kept for callers outside the pack-resolution
-/// phase (server/fabric helpers). Pack identification must use
-/// [`read_archive_entry_to_string_bounded`] instead, which carries a deadline.
-pub(crate) async fn read_archive_entry_to_string(
-    archive_path: PathBuf,
-    entry_name: String,
-) -> crate::Result<String> {
-    tokio::task::spawn_blocking(move || {
-        let file = std::fs::File::open(&archive_path)
-            .map_err(|error| io::IOError::with_path(error, &archive_path))?;
-        let mut archive = zip::ZipArchive::new(file).map_err(archive_error)?;
-        let index = super::detect::find_entry_index(&mut archive, &entry_name)?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(format!(
-                    "Modpack archive is missing {entry_name}"
-                ))
-            })?;
-        let mut entry = archive.by_index(index).map_err(archive_error)?;
-        let mut contents = Vec::new();
-        std::io::Read::read_to_end(&mut entry, &mut contents)?;
-        Ok(match String::from_utf8(contents) {
-            Ok(value) => value,
-            Err(error) => {
-                let (decoded, _, _) =
-                    encoding_rs::GB18030.decode(error.as_bytes());
-                decoded.into_owned()
-            }
-        })
-    })
-    .await?
-}
-
 /// Largest manifest this helper will materialise.
 ///
 /// The manifests read through it (`modpack.json`, `mcbbs.packmeta`,

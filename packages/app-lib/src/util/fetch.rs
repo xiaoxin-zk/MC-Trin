@@ -345,6 +345,11 @@ impl DownloadRequest {
         }
     }
 
+    /// Test-only: production code sets both segmented flags through
+    /// `with_http1_segmented_download` and the request defaults, so the only
+    /// callers that need to turn segmentation off wholesale are fixtures and
+    /// regression tests.
+    #[cfg(test)]
     pub fn with_segmented_download(mut self, allow: bool) -> Self {
         self.allow_segmented_download = allow;
         self.allow_http1_segmented_download = allow;

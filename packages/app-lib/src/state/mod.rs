@@ -1174,7 +1174,7 @@ impl State {
     }
 
     fn trim_idle_caches(&self) {
-        let mut active_log_ids: Vec<String> = self
+        let active_log_ids: Vec<String> = self
             .process_manager
             .get_all()
             .into_iter()

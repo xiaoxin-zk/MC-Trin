@@ -2,13 +2,12 @@ use super::LoadingBarId;
 use crate::event::{
     CommandPayload, EventError, InstanceBackupProgressPayload,
     InstancePayloadType, LoadingBar, LoadingBarType, ProcessPayloadType,
-    ServerPayloadType,
 };
 #[cfg(feature = "tauri")]
 use crate::event::{
     InstanceGroupsChangedPayload, InstancePayload, JavaDiscoveryPayload,
     JavaDownloadConfirmationPayload, LoadingPayload, ProcessPayload,
-    ServerPayload, WarningPayload,
+    WarningPayload,
 };
 use futures::prelude::*;
 #[cfg(feature = "tauri")]
@@ -341,29 +340,6 @@ pub async fn emit_instance(
                 "instance",
                 InstancePayload {
                     instance_id: instance_id.to_string(),
-                    event,
-                },
-            )
-            .map_err(EventError::from)?;
-    }
-    Ok(())
-}
-
-// emit_server(server_id, event)
-#[allow(unused_variables)]
-pub async fn emit_server(
-    server_id: &str,
-    event: ServerPayloadType,
-) -> crate::Result<()> {
-    #[cfg(feature = "tauri")]
-    {
-        let event_state = crate::EventState::get()?;
-        event_state
-            .app
-            .emit(
-                "server",
-                ServerPayload {
-                    server_id: server_id.to_string(),
                     event,
                 },
             )
