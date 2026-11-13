@@ -3194,14 +3194,14 @@ async fn verifies_streaming_integrity_algorithms() {
     let file = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(file.path(), b"mctrin download").unwrap();
     let integrity = Integrity {
-			size: Some(16),
-			sha1: Some("90e438ead880c77ea2d7e726b5aa74e6d21a805f".to_string()),
-			sha512: Some("2dcd3e0a9f198e9ef892a28ed6534dd154be2bd13531c961c0852aa6f1e24f633d2cd8288d3cf13c6a482a87c822b74a4901a2aa64292f4a371c5ebfea392c1b".to_string()),
-			sha256: Some("120561bc60d59ebe2a08fc229ff2b1eb06b20c4211d21a17c15dd80790f48672".to_string()),
-			md5: Some("30018bb52add8c6dbc5d4149c1325df0".to_string()),
+			size: Some(15),
+			sha1: Some("4a405d4b15c660434266c02b01dd0a5902ad63d3".to_string()),
+			sha512: Some("a24b71942a4ef7a95e0fc18ad2c06771a7b34fc3ab16fcdd10df9a2d21141ad3451d2059850461ffa5ff3c10496634e5b8b771c00eca3616e02bd938a48e667f".to_string()),
+			sha256: Some("75e6c5e3f3aa9cb1a9672cea460d4201818355e473c80b0278a18fac0f8d1bb0".to_string()),
+			md5: Some("0d57376ea118fa4e74d4d6a1fd6300e0".to_string()),
 			content: ContentValidation::None,
 		};
-    assert_eq!(verify_file(file.path(), &integrity).await.unwrap(), 16);
+    assert_eq!(verify_file(file.path(), &integrity).await.unwrap(), 15);
 }
 
 #[tokio::test]
