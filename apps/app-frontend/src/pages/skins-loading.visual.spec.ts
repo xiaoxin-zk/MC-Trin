@@ -29,6 +29,11 @@ vi.mock('@modrinth/ui', async () => {
         },
         createDefaultArmorPreviewConfig: () => ({}),
         cloneArmorPreviewConfig: (config: object) => ({ ...config }),
+        // `skin-preview-renderer` imports this statically, so the module graph
+        // needs the export even though the renderer itself is mocked below and
+        // never calls it. Resolving to an empty module keeps the WebGL path out
+        // of the browser test.
+        loadSkinRendering: async () => ({}),
         useVIntl: () => ({
             formatMessage: (message: { defaultMessage: string }) => message.defaultMessage,
         }),
