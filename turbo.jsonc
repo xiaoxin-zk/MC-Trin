@@ -33,8 +33,8 @@
                 "CURSEFORGE_API_KEY",
                 "MCTRIN_DATA_DIR_SUFFIX",
                 "AXOLOTL_DATA_DIR_SUFFIX",
-                "THESEUS_CONFIG_DIR",
-                "THESEUS_DB_BACKUP_DIR"
+                "MCTRIN_CONFIG_DIR",
+                "MCTRIN_DB_BACKUP_DIR"
             ]
         },
         "@modrinth/app#dev": {
@@ -90,8 +90,8 @@
                 "MCTRIN_CURSEFORGE_API_BASE_URL",
                 "MCTRIN_DATA_DIR_SUFFIX",
                 "AXOLOTL_DATA_DIR_SUFFIX",
-                "THESEUS_CONFIG_DIR",
-                "THESEUS_DB_BACKUP_DIR"
+                "MCTRIN_CONFIG_DIR",
+                "MCTRIN_DB_BACKUP_DIR"
             ]
         },
         "test": {

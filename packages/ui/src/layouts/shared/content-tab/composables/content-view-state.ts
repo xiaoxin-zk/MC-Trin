@@ -21,7 +21,7 @@ export interface PinnedContentViewPreferencesV1 extends ContentViewFilters {
     sortMode: ContentSortMode
 }
 
-const STORAGE_PREFIX = 'axolotl-content-view-preferences-v1:'
+const STORAGE_PREFIX = 'mctrin-content-view-preferences-v1:'
 
 const sortModes = new Set<ContentSortMode>([
     'project-name-asc',

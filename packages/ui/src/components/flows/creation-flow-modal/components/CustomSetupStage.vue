@@ -757,7 +757,7 @@ function removeIcon() {
 }
 
 const BUILTIN_GAME_DIR = 'builtin'
-const MINECRAFT_DIRECTORIES_STORAGE_KEY = 'axolotl-minecraft-directories'
+const MINECRAFT_DIRECTORIES_STORAGE_KEY = 'mctrin-minecraft-directories'
 
 type ConfiguredMinecraftDirectory = {
     path: string

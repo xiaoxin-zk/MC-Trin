@@ -173,7 +173,7 @@ Var MctrinPortableLen
 ; Installs made before the rename stored them under the old key, so every
 ; reader falls back to ${MCTRIN_LEGACY_SETTINGSKEY} when the new key is empty,
 ; and the uninstaller removes both.
-!define MCTRIN_SETTINGSKEY "Software\MCTrin"
+!define MCTRIN_SETTINGSKEY "Software\mctrin\MC-Trin"
 !define MCTRIN_LEGACY_SETTINGSKEY "Software\ghs\Axolotl Launcher"
 !define MCTRIN_LEGACY_MANUKEY "Software\ghs"
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"

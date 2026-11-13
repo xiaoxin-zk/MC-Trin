@@ -1,7 +1,7 @@
 package com.mctrin.launcher;
 
-import com.mctrin.launcher.rpc.RpcHandlers;
 import com.mctrin.launcher.rpc.MctrinRpc;
+import com.mctrin.launcher.rpc.RpcHandlers;
 import java.io.IOException;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Method;

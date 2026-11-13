@@ -70,11 +70,11 @@ test('ignores malformed or unsupported pinned preferences', () => {
     const values = installMemoryStorage()
 
     try {
-        values.set('axolotl-content-view-preferences-v1:broken', '{invalid json')
+        values.set('mctrin-content-view-preferences-v1:broken', '{invalid json')
         assert.equal(getPinnedContentViewPreferences('broken'), null)
 
         values.set(
-            'axolotl-content-view-preferences-v1:unsupported',
+            'mctrin-content-view-preferences-v1:unsupported',
             JSON.stringify({
                 version: 2,
                 sortMode: 'file-name-asc',

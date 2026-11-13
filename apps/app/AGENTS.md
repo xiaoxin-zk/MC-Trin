@@ -5,7 +5,7 @@ This Tauri / Rust application owns native command registration, platform integra
 - Read [CONTRIBUTING.md](../../CONTRIBUTING.md) before starting desktop development; initialize required submodules and isolate application data.
 - Read [app-lib instructions](../../packages/app-lib/AGENTS.md) when changing persistence, migrations or downgrade behavior.
 - When changing update announcements, updater triggers or startup dialog priority, read [announcement instructions](../app-frontend/src/announcements/AGENTS.md).
-- Use existing Cargo/package scripts for affected checks. Run `cargo fmt --all --check` for Rust formatting and `cargo check --package theseus_gui` when shell compilation is affected.
+- Use existing Cargo/package scripts for affected checks. Run `cargo fmt --all --check` for Rust formatting and `cargo check --package mctrin-gui` when shell compilation is affected.
 - Assess build, packaging and runtime dependencies before classifying a commit as safe for `[skip ci]`.
 
 ## Tauri Command Completion
