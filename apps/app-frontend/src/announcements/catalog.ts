@@ -87,7 +87,7 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Fixed voice activation leaving you inaudible for a whole call: the level monitor\'s audio session could stay suspended, so the launcher believed you were silent and never opened the microphone. One teammate failing to connect also no longer cancels voice for everyone else.',
+                        "Fixed voice activation leaving you inaudible for a whole call: the level monitor's audio session could stay suspended, so the launcher believed you were silent and never opened the microphone. One teammate failing to connect also no longer cancels voice for everyone else.",
                     'zh-CN':
                         '修复语音激活导致整场通话别人听不到你的问题：电平监测的音频会话可能一直处于停摆状态，启动器因此认为你没有说话，麦克风始终不打开。另外，单个队友连接失败也不会再让整场语音被取消。',
                 },
