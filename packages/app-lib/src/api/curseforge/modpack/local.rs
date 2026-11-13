@@ -523,6 +523,14 @@ pub(crate) async fn install_local_manifest_files(
     // Fail before the first byte is written when the volume cannot hold the
     // pack; otherwise a large pack dies halfway with a raw OS error and the
     // new instance is rolled back after minutes of downloading.
+    //
+    // This resolves the directory here because this function is a separate
+    // entry point: `install_modpack_from_local_archive_with_reporter` calls it
+    // (and the MCBBS installer calls it too) before its own `instance_path`
+    // exists, so the path cannot be passed in without restructuring both
+    // callers. `instance_id` is `&str` and therefore still usable here.
+    let instance_path =
+        crate::api::instance::get_full_path(instance_id).await?;
     crate::api::pack::archive_util::ensure_install_disk_space(
         &instance_path,
         content_total_bytes,
