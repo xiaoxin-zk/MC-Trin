@@ -60,7 +60,8 @@ pub async fn check_cached(
     on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceUpdateCheck> {
-    check_with_verification(instance_id, entry_ids, on_progress, cancel, false).await
+    check_with_verification(instance_id, entry_ids, on_progress, cancel, false)
+        .await
 }
 
 async fn check_with_verification(
