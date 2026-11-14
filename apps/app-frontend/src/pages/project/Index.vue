@@ -347,9 +347,11 @@
                 </div>
                 <div v-if="snapshotFailed" role="alert" class="flex items-center gap-3">
                     <span>{{ formatMessage(messages.snapshotFailed) }}</span>
-                    <Button @click="retrySupplementalData('snapshot')">{{
-                        formatMessage(commonMessages.retryButton)
-                    }}</Button>
+                    <Button
+                        :disabled="snapshotLoading"
+                        @click="retrySupplementalData('snapshot')"
+                        >{{ formatMessage(commonMessages.retryButton) }}</Button
+                    >
                 </div>
                 <div v-if="instanceFailed" role="alert" class="flex items-center gap-3">
                     <span>{{ formatMessage(messages.instanceFailed) }}</span>
@@ -741,6 +743,7 @@ const organization = shallowRef(null)
 const instance = ref(null)
 const versionsLoading = ref(false)
 const instanceContextLoading = ref(false)
+const snapshotLoading = ref(false)
 
 const favoriteSupported = computed(() => isFavoriteContentType(data.value?.project_type ?? ''))
 const favoritePending = computed(() =>
@@ -1266,6 +1269,7 @@ function applySnapshot(project, snapshot) {
 }
 
 async function loadContentSnapshot(project, instanceId, isCurrent) {
+    snapshotLoading.value = true
     snapshotFailed.value = false
     try {
         const snapshot = await get_content_snapshot(instanceId, true)
@@ -1278,6 +1282,8 @@ async function loadContentSnapshot(project, instanceId, isCurrent) {
         installed.value = false
         installedVersion.value = null
         handleError(error)
+    } finally {
+        if (isCurrent()) snapshotLoading.value = false
     }
 }
 
@@ -1557,6 +1563,7 @@ async function loadProjectPage() {
     instance.value = null
     versionsLoading.value = true
     instanceContextLoading.value = !!route.query.i
+    snapshotLoading.value = false
     installed.value = false
     installedVersion.value = null
 
@@ -1572,6 +1579,7 @@ async function loadProjectPage() {
             if (!data.value) {
                 versionsLoading.value = false
                 instanceContextLoading.value = false
+                snapshotLoading.value = false
             }
         }
     }

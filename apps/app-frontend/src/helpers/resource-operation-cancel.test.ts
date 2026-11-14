@@ -20,7 +20,10 @@ test('both backend cancellation spellings are recognised', () => {
         }),
         true,
     )
-    assert.equal(isCanceledResourceError(new Error('Invalid input: resource operation canceled')), true)
+    assert.equal(
+        isCanceledResourceError(new Error('Invalid input: resource operation canceled')),
+        true,
+    )
 })
 
 test('abort errors and unrelated failures are classified correctly', () => {
