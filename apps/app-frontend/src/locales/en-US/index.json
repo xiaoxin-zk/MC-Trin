@@ -1163,6 +1163,9 @@
   "app.browse.source.curseforge": {
     "message": "CurseForge"
   },
+  "app.browse.source.curseforge-unavailable": {
+    "message": "CurseForge is hidden because this build has no API key. Add one in Settings → Resource management to search it here."
+  },
   "app.browse.source.mcarchive": {
     "message": "MCArchive"
   },
@@ -8336,6 +8339,9 @@
   "app.multiplayer.mctier.private-password-hint": {
     "message": "Private rooms stay out of the public lobby and require the room password to join."
   },
+  "app.multiplayer.mctier.public-no-password": {
+    "message": "A listed room cannot have a password. To keep a password, choose a private room and share an invite code."
+  },
   "app.multiplayer.mctier.public-open-hint": {
     "message": "Listed publicly with no password: anyone browsing the lobby list can join directly."
   },
@@ -8344,6 +8350,9 @@
   },
   "app.multiplayer.mctier.public-with-password-hint": {
     "message": "Joining players must enter the room password or an invite code."
+  },
+  "app.multiplayer.mctier.publish-not-listed": {
+    "message": "The lobby service accepted the request but does not list this room. Check that the password is empty and try again."
   },
   "app.multiplayer.mctier.publish-private": {
     "message": "Private, not listed"
@@ -13315,15 +13324,6 @@
   },
   "app.translation-settings.unavailable-option": {
     "message": "Unavailable"
-  },
-  "app.translation-settings.ai-unavailable": {
-    "message": "AI translation is currently unavailable: AI features are off, or no provider has an enabled model. Your saved AI choice is kept."
-  },
-  "app.translation-settings.ai-provider-unavailable": {
-    "message": "The saved AI provider is currently unavailable. It stays selected until you choose another provider."
-  },
-  "app.translation-settings.ai-model-unavailable": {
-    "message": "The saved text model is currently unavailable. It stays selected until you choose another model."
   },
   "app.translation.auto-translate-hint.text": {
     "message": "You can turn this on in Settings → Language & translation so browse results and project pages translate for you."

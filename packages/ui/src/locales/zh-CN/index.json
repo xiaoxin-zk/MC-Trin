@@ -2348,6 +2348,9 @@
   "label.yes": {
     "defaultMessage": "是"
   },
+  "loader.vanilla": {
+    "defaultMessage": "无"
+  },
   "locale.cs-CZ": {
     "defaultMessage": "捷克语"
   },

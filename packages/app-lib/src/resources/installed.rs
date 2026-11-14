@@ -469,7 +469,26 @@ pub(crate) async fn hydrate_with_failures(
     instance_id: &str,
     cancel: &CancellationToken,
 ) -> ResourceResult<HydratedInstalled> {
-    refresh_snapshot(state, instance_id, cancel).await?;
+    hydrate_with_failures_verifying(state, instance_id, cancel, true).await
+}
+
+/// Same as [`hydrate_with_failures`], with the snapshot refresh mode spelled
+/// out.
+///
+/// `verify_all` re-hashes every tracked file from disk. That is the right
+/// contract before an install writes to the instance, but it makes a read-only
+/// caller pay a full instance scan: a 400-file modpack is tens of seconds of
+/// SHA-1 for bytes the database already recorded. Read-only callers pass
+/// `false` so the refresh reuses unchanged rows and only hashes new or
+/// size-changed files.
+pub(crate) async fn hydrate_with_failures_verifying(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+    verify_all: bool,
+) -> ResourceResult<HydratedInstalled> {
+    refresh_snapshot_with_verification(state, instance_id, cancel, verify_all)
+        .await?;
     hydrate_selected(state, instance_id, cancel, None).await
 }
 

@@ -21,6 +21,7 @@ import {
     upsertMcpServerConfig,
 } from '@/assistant/mcp-server-config'
 import LogAgentActivity from '@/components/ui/LogAgentActivity.vue'
+import { settingsTargetRoute } from '@/components/ui/settings/settings-target'
 import { useLogAgent } from '@/composables/useLogAgent'
 import {
     type AIProviderDefinition,
@@ -922,13 +923,17 @@ const hasConfiguredModel = computed(() => {
 
 /**
  * Where "Configure AI" sends the user. Log diagnosis has its own provider and
- * model, so it belongs in the log settings; a launcher with no usable model at
- * all has to enable one in the AI settings first.
+ * model, and those live in the log-analysis section of the launch defaults;
+ * a launcher with no usable model at all has to enable one in the AI settings
+ * first.
  */
 const aiHasUsableModel = computed(() => assistantModelOptions.value.length > 0)
 
+/** The log-analysis provider and model sit in the launch-defaults category. */
+const LOG_MODEL_SETTINGS = settingsTargetRoute('launch-defaults', 'log-share')
+
 const settingsTarget = computed(() =>
-    mode.value === 'logs' && aiHasUsableModel.value ? '#logs' : '#ai',
+    mode.value === 'logs' && aiHasUsableModel.value ? LOG_MODEL_SETTINGS : settingsTargetRoute('ai'),
 )
 
 const configurationMessage = computed(() =>
@@ -1054,13 +1059,13 @@ function openAssistantModelSettings() {
     void router.push({ path: '/settings', hash: '#ai' })
 }
 
-/** Opens the log-diagnosis model settings, which stay independent. */
+/** Opens the log-diagnosis provider and model pickers, which stay independent. */
 function openLogModelSettings() {
-    void router.push({ path: '/settings', hash: '#logs' })
+    void router.push(LOG_MODEL_SETTINGS)
 }
 
 function openRequiredSettings() {
-    void router.push({ path: '/settings', hash: settingsTarget.value })
+    void router.push(settingsTarget.value)
 }
 
 function selectMode(next: 'general' | 'logs') {

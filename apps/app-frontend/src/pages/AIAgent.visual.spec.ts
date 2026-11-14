@@ -248,7 +248,7 @@ it('routes missing provider configuration to AI settings', async () => {
     expect(mocks.push).toHaveBeenCalledWith({ path: '/settings', hash: '#ai' })
 })
 
-it('routes disabled local analysis to its settings', async () => {
+it('routes disabled local analysis to the page that actually holds its model controls', async () => {
     mocks.analysisSettings.mockResolvedValue(configuredAnalysis(false))
     const wrapper = mountPage()
     await flushPromises()
@@ -263,7 +263,25 @@ it('routes disabled local analysis to its settings', async () => {
     expect(configure).toBeDefined()
     expect(wrapper.text()).toContain('Enable local log analysis')
     await configure!.trigger('click')
-    expect(mocks.push).toHaveBeenCalledWith({ path: '/settings', hash: '#logs' })
+    // `#logs` renders only the log level and retention note: sending the user
+    // there left "Configure AI" pointing at a page with no AI controls. The
+    // crash-analysis provider and model live in the launch-defaults category,
+    // so the button must name that category and the section inside it.
+    expect(mocks.push).toHaveBeenCalledWith({
+        path: '/settings',
+        hash: '#launch-defaults',
+        query: { target: 'log-share' },
+    })
+    // The interactive model link next to the resolved model must agree with the
+    // empty-state button; two different destinations would keep one broken path
+    // alive.
+    const logModel = wrapper.get('[data-onboarding-id="assistant-log-model"]')
+    await logModel.get('button').trigger('click')
+    expect(mocks.push).toHaveBeenLastCalledWith({
+        path: '/settings',
+        hash: '#launch-defaults',
+        query: { target: 'log-share' },
+    })
 })
 
 it('starts a local analysis for the selected instance and question', async () => {

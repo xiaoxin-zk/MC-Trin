@@ -143,6 +143,23 @@ pub(crate) async fn get_local_content_snapshot(
     get_content_snapshot_inner(instance_id, false, true, false, state).await
 }
 
+/// The recorded snapshot, enriched, without a refresh that re-reads files.
+///
+/// [`get_cached_content_snapshot`] never scans, so a directly associated
+/// instance whose rows have not been seeded yet would come back empty.
+/// [`get_local_content_snapshot`] avoids that but does not enrich the entries,
+/// and a reader that only describes the instance — the log-analysis assistant,
+/// for example — turns every question into a scan of the whole instance when it
+/// is forced through a refreshing path. This keeps the one-time scan for an
+/// empty directly associated instance and otherwise answers from what the
+/// install pipeline already recorded.
+pub(crate) async fn get_recorded_content_snapshot(
+    instance_id: &str,
+    state: &State,
+) -> crate::Result<InstanceContentSnapshot> {
+    get_content_snapshot_inner(instance_id, false, true, true, state).await
+}
+
 async fn get_content_snapshot_inner(
     instance_id: &str,
     refresh_remote: bool,

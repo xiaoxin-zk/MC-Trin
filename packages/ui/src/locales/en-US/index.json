@@ -2825,6 +2825,9 @@
   "label.yes": {
     "defaultMessage": "Yes"
   },
+  "loader.vanilla": {
+    "defaultMessage": "None"
+  },
   "locale.cs-CZ": {
     "defaultMessage": "Czech"
   },

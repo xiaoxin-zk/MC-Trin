@@ -1733,6 +1733,9 @@
   "app.browse.source.curseforge": {
     "message": "CurseForge"
   },
+  "app.browse.source.curseforge-unavailable": {
+    "message": "此版本未配置 CurseForge API 密钥，因此已隐藏 CurseForge。请在「设置 → 资源管理」中添加密钥后在此搜索。"
+  },
   "app.browse.source.mcarchive": {
     "message": "MCArchive 来源"
   },
@@ -8864,9 +8867,6 @@
   "app.lab.mod-translation.selection-unavailable": {
     "message": "已保存的 AI 供应商或模型当前不可用。请另选一个后再翻译。"
   },
-  "app.lab.mod-translation.unavailable-option": {
-    "message": "不可用"
-  },
   "app.lab.mod-translation.signed-mod": {
     "message": "该模组带有数字签名，无法修改。"
   },
@@ -8887,6 +8887,9 @@
   },
   "app.lab.mod-translation.title": {
     "message": "模组翻译"
+  },
+  "app.lab.mod-translation.unavailable-option": {
+    "message": "不可用"
   },
   "app.lab.no-favorites": {
     "message": "还没有收藏任何工具。"
@@ -12242,6 +12245,9 @@
   "app.multiplayer.mctier.private-password-hint": {
     "message": "私密房间不会出现在公开大厅，加入需要填写房间密码。"
   },
+  "app.multiplayer.mctier.public-no-password": {
+    "message": "公开列出的房间不能设置密码。如需保留密码，请选择私密房间并分享邀请码。"
+  },
   "app.multiplayer.mctier.public-open-hint": {
     "message": "公开列出且无密码：任何浏览大厅列表的人都能直接加入。"
   },
@@ -12250,6 +12256,9 @@
   },
   "app.multiplayer.mctier.public-with-password-hint": {
     "message": "加入的玩家需要填写房间密码或邀请码。"
+  },
+  "app.multiplayer.mctier.publish-not-listed": {
+    "message": "大厅服务已接受请求，但没有列出此房间。请确认密码为空后重试。"
   },
   "app.multiplayer.mctier.publish-private": {
     "message": "私密，未列出"

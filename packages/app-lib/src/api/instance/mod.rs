@@ -58,7 +58,8 @@ pub use self::content::{
     get_content_snapshot, get_content_snapshot_for_display,
     get_dependencies_as_content_items, get_install_candidates,
     get_installed_project_ids, get_linked_modpack_content,
-    get_linked_modpack_info, get_projects, list_content_sets,
+    get_linked_modpack_info, get_projects,
+    get_recorded_content_snapshot_for_display, list_content_sets,
     plan_content_updates, refresh_content, sync_content_files,
 };
 pub(crate) use self::core_components::assemble_for_launch;

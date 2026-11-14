@@ -116,6 +116,26 @@ pub async fn get_content_snapshot_for_display(
     .await
 }
 
+/// The content snapshot as already recorded, without re-reading the files.
+///
+/// [`get_content_snapshot_for_display`] refreshes first, which re-hashes every
+/// file whose recorded size no longer matches. That is what the content page
+/// wants, since the user is about to act on those rows. A reader that only
+/// describes the instance — the log-analysis assistant, for example — should
+/// not turn every question into a disk scan; it gets the recorded snapshot
+/// instead, with a one-time scan when a directly associated instance has never
+/// been recorded.
+pub async fn get_recorded_content_snapshot_for_display(
+    instance_id: &str,
+) -> crate::Result<InstanceContentSnapshot> {
+    let state = State::get().await?;
+    crate::state::instances::commands::get_recorded_content_snapshot(
+        instance_id,
+        &state,
+    )
+    .await
+}
+
 #[tracing::instrument]
 pub async fn refresh_content(
     instance_id: &str,

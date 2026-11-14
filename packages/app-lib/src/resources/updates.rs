@@ -41,6 +41,34 @@ pub async fn check(
     on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceUpdateCheck> {
+    check_with_verification(instance_id, entry_ids, on_progress, cancel, true).await
+}
+
+/// The same check, for a caller that only reads the result.
+///
+/// `check` re-hashes every tracked file first, which is what an install needs
+/// before it plans a write. A reader — the assistant asking whether content is
+/// up to date, or a caller that just wants to display the list — pays a full
+/// instance scan for an answer that comes from the recorded snapshot anyway:
+/// on a 425-jar instance that is tens of seconds of SHA-1 per call. This
+/// variant keeps the incremental refresh, so files the snapshot already
+/// records are reused and only new or size-changed files are read.
+pub async fn check_cached(
+    instance_id: String,
+    entry_ids: Option<&[InstalledEntryId]>,
+    on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
+    cancel: &CancellationToken,
+) -> ResourceResult<ResourceUpdateCheck> {
+    check_with_verification(instance_id, entry_ids, on_progress, cancel, false)
+}
+
+async fn check_with_verification(
+    instance_id: String,
+    entry_ids: Option<&[InstalledEntryId]>,
+    on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
+    cancel: &CancellationToken,
+    verify_all: bool,
+) -> ResourceResult<ResourceUpdateCheck> {
     let state = crate::State::get().await?;
     let service = state.resources().await?;
     let hydrated = match entry_ids {
@@ -55,8 +83,13 @@ pub async fn check(
             .await?
         }
         None => {
-            installed::hydrate_with_failures(&state, &instance_id, cancel)
-                .await?
+            installed::hydrate_with_failures_verifying(
+                &state,
+                &instance_id,
+                cancel,
+                verify_all,
+            )
+            .await?
         }
     };
     let instance = crate::state::get_instance(&instance_id, &state.pool)

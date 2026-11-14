@@ -27,6 +27,7 @@ import {
     getSettingsSearchTargetId,
     type SettingsSearchEntry,
 } from '@/components/ui/settings/settings-search-index'
+import { resolveSettingsTarget } from '@/components/ui/settings/settings-target'
 import { MCTrinBrandConfig } from '@/config'
 import { update } from '@/helpers/settings'
 import { injectAppUpdateDownloadProgress } from '@/providers/download-progress'
@@ -225,11 +226,14 @@ watch(visibleCategories, (categories) => {
 })
 
 watch(
-    () => route.hash,
-    (hash) => {
+    () => [route.hash, route.query.target] as const,
+    ([hash]) => {
         const categoryId = hash.slice(1)
         if (categoryId) selectedCategoryId.value = categoryId
+        const target = resolveSettingsTarget(hash, route.query)
+        if (target) pendingSearchTarget.value = { ...target, query: searchQuery.value }
     },
+    { immediate: true },
 )
 
 function selectCategory(categoryId: string) {
@@ -239,8 +243,8 @@ function selectCategory(categoryId: string) {
     contentContainer.value?.scrollTo({ top: 0 })
     // Keep the URL hash in sync so a remount (error recovery, HMR) restores
     // this tab instead of falling back to the default category.
-    if (route.hash !== `#${categoryId}` || route.query.page) {
-        const { page: _page, ...query } = route.query
+    if (route.hash !== `#${categoryId}` || route.query.page || route.query.target) {
+        const { page: _page, target: _target, ...query } = route.query
         void router.replace({ query, hash: `#${categoryId}` })
     }
 }

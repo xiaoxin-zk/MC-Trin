@@ -124,8 +124,9 @@ async fn sync_instance_content_files_with_verification(
         instance.path.clone()
     };
     let scan_root = content_root.clone();
+    let scan_cache_key_path = cache_key_path.clone();
     let scanned = tokio::task::spawn_blocking(move || {
-        filesystem::scan_content_files_from(&scan_root, &cache_key_path)
+        filesystem::scan_content_files_from(&scan_root, &scan_cache_key_path)
     })
     .await??;
     let scanned_paths = scanned
@@ -208,6 +209,11 @@ async fn sync_instance_content_files_with_verification(
     let mut claimed_reclaim_ids = HashSet::new();
     let mut externally_changed_file_ids = HashSet::new();
     let mut refreshed_metadata_file_ids = HashSet::new();
+    // Hashes this scan had to read from disk, so the next scan of the same
+    // unchanged file does not read it again. Only misses are recorded: a row
+    // reused above is already in the database, and re-writing it would defeat
+    // the point of the cache.
+    let mut computed_hashes = Vec::new();
 
     for file in scanned {
         let hash_key = file.hash_cache_key.trim_end_matches(".disabled");
@@ -224,6 +230,14 @@ async fn sync_instance_content_files_with_verification(
             let path =
                 join_content_path(&instance_files_root, &file.relative_path);
             let (_, sha1) = fetch::sha1_file_async(&path).await?;
+            computed_hashes.push((
+                file.relative_path.clone(),
+                file.size,
+                sha1.clone(),
+                filesystem::project_type_from_relative_path(
+                    &file.relative_path,
+                ),
+            ));
             (sha1, file.size)
         } else {
             match hashes_by_key.get(hash_key).filter(|_| !verify_all) {
@@ -234,6 +248,14 @@ async fn sync_instance_content_files_with_verification(
                         &file.relative_path,
                     );
                     let (_, sha1) = fetch::sha1_file_async(&path).await?;
+                    computed_hashes.push((
+                        file.relative_path.clone(),
+                        file.size,
+                        sha1.clone(),
+                        filesystem::project_type_from_relative_path(
+                            &file.relative_path,
+                        ),
+                    ));
                     (sha1, file.size)
                 }
             }
@@ -474,6 +496,34 @@ async fn sync_instance_content_files_with_verification(
                 upsert_scanned_file(&instance.id, file, &mut tx).await?
             };
         synced_files.push(synced);
+    }
+
+    // Persist the hashes this scan had to read so the next scan of the same
+    // unchanged file finds them in the cache instead of reading the file again.
+    // The key must match `ScannedContentFile::hash_cache_key`
+    // (`{size}-{instance.path}/{relative}`, where a directly associated
+    // instance stores its absolute linked root), and `.disabled` files must
+    // stay keyed without the suffix — the cache layer aliases the two.
+    for (relative_path, size, hash, project_type) in computed_hashes {
+        if let Err(error) = crate::state::cache_file_hash_metadata(
+            &cache_key_path,
+            &relative_path,
+            size,
+            hash,
+            project_type,
+            None,
+            &mut *tx,
+        )
+        .await
+        {
+            // A cache write is an optimization; the scan result is already
+            // correct without it, so a cache failure must not fail the scan.
+            tracing::warn!(
+                path = %relative_path,
+                error = %error,
+                "Content hash cache write failed"
+            );
+        }
     }
 
     if invalidated_provider_identity

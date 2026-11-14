@@ -9,8 +9,20 @@ use content_management::resources::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+/// How long a read-only content question may spend building its snapshot
+/// before the assistant is told the scan is still running.
+///
+/// The scan itself is incremental and cached, but the first call after a large
+/// modpack changed (or on a cold cache) still has to read those files. Waiting
+/// for it inside one tool call looks like a hang — the reported symptom was
+/// 35-42 s per question on a 425-jar instance — so the call returns a distinct
+/// "still scanning" answer instead, and the retry is cheap because the
+/// abandoned scan keeps filling the snapshot and the hash cache.
+const CONTENT_SCAN_BUDGET: Duration = Duration::from_secs(8);
 
 #[derive(Clone, Serialize)]
 pub struct LogFile {
@@ -309,12 +321,26 @@ pub async fn execute_assistant(
                 request.instance_id.as_deref(),
                 "inspect_instance_content requires an instance_id",
             )?;
-            let snapshot =
-                crate::api::instance::get_content_snapshot_for_display(
-                    &instance_id,
+            let scan_instance = instance_id.clone();
+            let mut scan = tokio::spawn(async move {
+                crate::api::instance::get_recorded_content_snapshot_for_display(
+                    &scan_instance,
                 )
-                .await?;
-            Ok(instance_content_summary(snapshot))
+                .await
+            });
+            match tokio::time::timeout(CONTENT_SCAN_BUDGET, &mut scan).await {
+                Ok(snapshot) => {
+                    let snapshot =
+                        snapshot.map_err(|error| input_error(&error.to_string()))??;
+                    Ok(instance_content_summary(snapshot))
+                }
+                // Dropping the handle keeps the scan running: it fills the
+                // snapshot and the hash cache, so the retry is cheap.
+                Err(_) => Ok(scan_in_progress(
+                    &instance_id,
+                    "inspect_instance_content",
+                )),
+            }
         }
         "search_resources" => {
             let query = resource_search_query(request)?;
@@ -572,14 +598,29 @@ pub async fn execute_assistant(
                 request.instance_id.as_deref(),
                 "check_content_updates requires an instance_id",
             )?;
-            let updates = crate::resources::updates::check(
-                instance_id,
-                None,
-                |_| {},
-                cancel,
-            )
-            .await
-            .map_err(|error| input_error(&error.to_string()))?;
+            let check_instance = instance_id.clone();
+            let check_cancel = cancel.clone();
+            let mut check = tokio::spawn(async move {
+                crate::resources::updates::check_cached(
+                    check_instance,
+                    None,
+                    |_| {},
+                    &check_cancel,
+                )
+                .await
+            });
+            let updates =
+                match tokio::time::timeout(CONTENT_SCAN_BUDGET, &mut check).await
+                {
+                    Ok(updates) => updates
+                        .map_err(|error| input_error(&error.to_string()))??,
+                    Err(_) => {
+                        return Ok(scan_in_progress(
+                            &instance_id,
+                            "check_content_updates",
+                        ));
+                    }
+                };
             Ok(json!({
                 "update_count": updates.entries.len(),
                 "entries": updates.entries,
@@ -799,6 +840,21 @@ fn instance_content_summary(
         "pending_manual_downloads": snapshot.pending_manual_downloads.len(),
         "warnings": snapshot.warnings,
         "truncated": item_count > 200,
+    })
+}
+
+/// A distinct outcome for a snapshot that did not finish in time.
+///
+/// It must not look like an error and must not look like "no content": the
+/// model has to retry rather than report an empty instance. `retryable` and
+/// the explicit `status` give it that instruction in the payload itself.
+fn scan_in_progress(instance_id: &str, tool: &str) -> Value {
+    json!({
+        "status": "still_scanning",
+        "instance_id": instance_id,
+        "tool": tool,
+        "retryable": true,
+        "message": "The instance is still being scanned; ask again instead of reporting an empty instance.",
     })
 }
 
