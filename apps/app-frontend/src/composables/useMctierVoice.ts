@@ -161,6 +161,13 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
                 (state) => state === 'connected' || state === 'completed',
             ).length,
     )
+    /** Peers whose ICE negotiation failed and stayed failed after every
+     * restart. `connectedPeers === 0` alone cannot distinguish "nobody has
+     * joined voice" from "a peer is in the room but the network blocks a
+     * direct connection", and the panel used to show the former for both. */
+    const unreachablePeers = ref<Set<string>>(new Set())
+    /** A failed call: someone is in the room, we tried, and ICE gave up. */
+    const iceFailed = computed(() => unreachablePeers.value.size > 0)
     let session: MctierVoiceSession | null = null
     let sessionReady = false
     let roomLocalPlayerId: string | null = null
@@ -394,12 +401,20 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
             startingSession = new MctierVoiceSession({
                 localPlayerId,
                 stream,
-                iceServer: state.voice_ice_server,
                 send,
                 onPeerState: (playerId, nextState) => {
                     // A session that has already been replaced must not edit the
                     // state of the one now serving the call.
                     if (session !== startingSession) return
+                    // A peer that reconnected is reachable again, so a stale
+                    // failure notice must not outlive the problem.
+                    if (nextState === 'connected' || nextState === 'completed') {
+                        if (unreachablePeers.value.has(playerId)) {
+                            const next = new Set(unreachablePeers.value)
+                            next.delete(playerId)
+                            unreachablePeers.value = next
+                        }
+                    }
                     // A torn-down peer has to leave the map entirely, otherwise
                     // its last state keeps it counted as connected.
                     peerStates.value =
@@ -410,6 +425,12 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
                                   ),
                               )
                             : { ...peerStates.value, [playerId]: nextState }
+                },
+                onPeerUnreachable: (playerId) => {
+                    if (session !== startingSession) return
+                    const next = new Set(unreachablePeers.value)
+                    next.add(playerId)
+                    unreachablePeers.value = next
                 },
                 onRemoteStream: (playerId, remoteStream) => {
                     monitor?.watch(playerId, remoteStream)
@@ -543,10 +564,21 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         starting.value = false
         active.value = false
         peerStates.value = {}
+        unreachablePeers.value = new Set()
         error.value = null
         stopMonitoring()
         clearPendingSignals()
         signalDelivery = Promise.resolve()
+    }
+
+    /** Rebuilds the call after a failed negotiation. A fresh peer connection
+     * re-runs candidate gathering, which is the only remedy available without
+     * a relay: the previous attempt exhausted its ICE restarts. */
+    async function retry() {
+        const state = lastState
+        if (!state) return
+        stop()
+        await startSession(state)
     }
 
     function setVoiceActivation(enabled: boolean) {
@@ -614,6 +646,13 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         )
         if (Object.keys(states).length !== Object.keys(peerStates.value).length) {
             peerStates.value = states
+        }
+        // A player who left cannot be the reason the current call is broken.
+        const unreachable = new Set(
+            [...unreachablePeers.value].filter((playerId) => present.has(playerId)),
+        )
+        if (unreachable.size !== unreachablePeers.value.size) {
+            unreachablePeers.value = unreachable
         }
     }
 
@@ -779,6 +818,8 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         peerMuted,
         voiceActivation,
         voiceActivationSupported,
+        iceFailed,
+        retry,
         noiseReduction,
         noiseSuppressionMode,
         noiseReductionForcedNative,

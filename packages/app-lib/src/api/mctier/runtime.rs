@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, TcpStream},
     process::Child,
     sync::oneshot,
     task::JoinHandle,
@@ -52,112 +52,6 @@ const DIRECTORY_CONFIRMATION_PAUSE: Duration = if cfg!(test) {
 } else {
     Duration::from_millis(750)
 };
-
-fn stun_binding_response(
-    request: &[u8],
-    source: std::net::SocketAddr,
-    local_ip: Ipv4Addr,
-) -> Option<[u8; 32]> {
-    let std::net::SocketAddr::V4(source) = source else {
-        return None;
-    };
-    if *source.ip() != local_ip
-        || request.len() < 20
-        || request.len() > 2048
-        || request[..2] != [0, 1]
-        || request[4..8] != [0x21, 0x12, 0xa4, 0x42]
-    {
-        return None;
-    }
-    let message_length = u16::from_be_bytes([request[2], request[3]]) as usize;
-    if !message_length.is_multiple_of(4) || message_length + 20 != request.len()
-    {
-        return None;
-    }
-    let mut response = [0u8; 32];
-    response[..4].copy_from_slice(&[1, 1, 0, 12]);
-    response[4..20].copy_from_slice(&request[4..20]);
-    response[20..26].copy_from_slice(&[0, 0x20, 0, 8, 0, 1]);
-    response[26..28].copy_from_slice(&(source.port() ^ 0x2112).to_be_bytes());
-    for (index, byte) in source.ip().octets().iter().enumerate() {
-        response[28 + index] = byte ^ request[4 + index];
-    }
-    Some(response)
-}
-
-struct VoiceDiscovery(Option<JoinHandle<()>>);
-
-impl VoiceDiscovery {
-    async fn stop(mut self) {
-        if let Some(worker) = self.0.take() {
-            worker.abort();
-            let _ = worker.await;
-        }
-    }
-}
-
-impl Drop for VoiceDiscovery {
-    fn drop(&mut self) {
-        if let Some(worker) = self.0.as_ref() {
-            worker.abort();
-        }
-    }
-}
-
-fn spawn_voice_discovery(
-    generation: u64,
-    local_ip: Ipv4Addr,
-    cancellation: CancellationToken,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-        let socket = loop {
-            if cancellation.is_cancelled() {
-                return;
-            }
-            match UdpSocket::bind((local_ip, 0)).await {
-                Ok(socket) => break socket,
-                Err(error)
-                    if (error.kind()
-                        == std::io::ErrorKind::AddrNotAvailable
-                        || error.raw_os_error() == Some(10049))
-                        && tokio::time::Instant::now() < deadline =>
-                {
-                    tokio::select! {
-                        _ = cancellation.cancelled() => return,
-                        _ = tokio::time::sleep(Duration::from_millis(200)) => {}
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(%local_ip, %error, "MCTier voice STUN socket could not bind");
-                    return;
-                }
-            }
-        };
-        let address = match socket.local_addr() {
-            Ok(address) => address,
-            Err(error) => {
-                tracing::warn!(%error, "MCTier voice STUN socket has no local address");
-                return;
-            }
-        };
-        let url = format!("stun:{address}");
-        update(generation, |state| state.voice_ice_server = Some(url)).await;
-        let mut buffer = [0u8; 2049];
-        loop {
-            tokio::select! {
-                biased;
-                _ = cancellation.cancelled() => return,
-                received = socket.recv_from(&mut buffer) => {
-                    let Ok((length, source)) = received else { return };
-                    if let Some(response) = stun_binding_response(&buffer[..length], source, local_ip) {
-                        let _ = socket.send_to(&response, source).await;
-                    }
-                }
-            }
-        }
-    })
-}
 
 /// Build the renamed lobby used after a name collision.
 ///
@@ -482,7 +376,6 @@ pub async fn run(
         .env("ET_NETWORK_SECRET", &request.password)
         .spawn()
         .wrap_err("could not start EasyTier")?;
-    let mut voice_discovery: Option<VoiceDiscovery> = None;
     // Frames read while a visibility change waits for its echo. The main loop
     // replays them so no roster or voice frame is lost to that window.
     let mut deferred = std::collections::VecDeque::new();
@@ -516,11 +409,6 @@ pub async fn run(
                 PublishOutcome::Private
             }
         };
-        voice_discovery = Some(VoiceDiscovery(Some(spawn_voice_discovery(
-            generation,
-            identity.ip,
-            cancellation.clone(),
-        ))));
         update(generation, |state| {
             state.status = if request.mode == EntryMode::Create {
                 Status::Hosting
@@ -800,9 +688,6 @@ pub async fn run(
         _ = cancellation.cancelled() => Ok(()),
         result = operation => result,
     };
-    if let Some(discovery) = voice_discovery.take() {
-        discovery.stop().await;
-    }
     if let Some(watcher) = host_hint_watcher.take() {
         watcher.stop().await;
     }
@@ -984,56 +869,6 @@ mod tests {
     use futures::StreamExt;
     use serde_json::Value;
     use tokio::{net::TcpListener, sync::oneshot};
-
-    #[test]
-    fn stun_binding_response_is_bounded_and_only_answers_the_overlay_source() {
-        let ip = Ipv4Addr::new(10, 126, 126, 7);
-        let source = std::net::SocketAddr::from((ip, 52341));
-        let mut request = [0u8; 20];
-        request[1] = 1;
-        request[4..8].copy_from_slice(&[0x21, 0x12, 0xa4, 0x42]);
-        request[8..20].fill(9);
-
-        let response = stun_binding_response(&request, source, ip).unwrap();
-        assert_eq!(&response[..4], &[1, 1, 0, 12]);
-        assert_eq!(&response[4..20], &request[4..20]);
-        assert_eq!(
-            u16::from_be_bytes([response[26], response[27]]) ^ 0x2112,
-            source.port()
-        );
-        let decoded_ip: Vec<_> = (0..4)
-            .map(|index| response[28 + index] ^ request[4 + index])
-            .collect();
-        assert_eq!(decoded_ip, ip.octets());
-
-        assert!(
-            stun_binding_response(
-                &request,
-                std::net::SocketAddr::from((
-                    Ipv4Addr::new(10, 126, 126, 8),
-                    5000
-                )),
-                ip,
-            )
-            .is_none()
-        );
-        assert!(
-            stun_binding_response(
-                &request,
-                std::net::SocketAddr::from((
-                    std::net::Ipv6Addr::LOCALHOST,
-                    5000
-                )),
-                ip,
-            )
-            .is_none()
-        );
-        assert!(stun_binding_response(&request[..19], source, ip).is_none());
-        assert!(stun_binding_response(&[0; 2049], source, ip).is_none());
-
-        request[3] = 4;
-        assert!(stun_binding_response(&request, source, ip).is_none());
-    }
 
     #[tokio::test]
     async fn visibility_change_uses_mctier_host_message_and_requires_echo() {

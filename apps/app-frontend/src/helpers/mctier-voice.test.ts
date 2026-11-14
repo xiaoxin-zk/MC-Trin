@@ -317,6 +317,77 @@ test('negotiates an offer, buffers early candidates and applies them in order', 
     }
 })
 
+test('reports a peer unreachable once its ICE restarts are exhausted', async () => {
+    const environment = installVoiceEnvironment()
+    try {
+        const { stream } = createStream()
+        const unreachable: string[] = []
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+            onPeerUnreachable: (playerId) => {
+                unreachable.push(playerId)
+            },
+        })
+        // FROM sorts before TO, so this side owns the restart budget.
+        await session.syncPeers([{ playerId: TO }])
+        const [connection] = environment.connections
+        connection.connectionState = 'failed'
+        for (let attempt = 0; attempt <= 2; attempt += 1) {
+            connection.onconnectionstatechange?.()
+            await Promise.resolve()
+        }
+        assert.deepEqual(unreachable, [TO])
+        session.close()
+    } finally {
+        environment.restore()
+    }
+})
+
+test('a peer that reconnects starts a fresh ICE restart budget', async () => {
+    const environment = installVoiceEnvironment()
+    try {
+        const { stream } = createStream()
+        const unreachable: string[] = []
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async () => {},
+            onPeerUnreachable: (playerId) => {
+                unreachable.push(playerId)
+            },
+        })
+        await session.syncPeers([{ playerId: TO }])
+        const [connection] = environment.connections
+        connection.connectionState = 'failed'
+        for (let attempt = 0; attempt <= 2; attempt += 1) {
+            connection.onconnectionstatechange?.()
+            await Promise.resolve()
+        }
+        assert.deepEqual(unreachable, [TO])
+
+        // A working restart resets the budget, so the next failure streak must
+        // again use up both restarts before the peer is declared unreachable.
+        connection.connectionState = 'connected'
+        connection.onconnectionstatechange?.()
+        connection.connectionState = 'failed'
+        connection.onconnectionstatechange?.()
+        await Promise.resolve()
+        connection.connectionState = 'failed'
+        connection.onconnectionstatechange?.()
+        await Promise.resolve()
+        assert.deepEqual(
+            unreachable,
+            [TO],
+            'the reset budget must not be consumed by a single failure',
+        )
+        session.close()
+    } finally {
+        environment.restore()
+    }
+})
+
 test('reports every torn-down peer so the owner can prune its state', async () => {
     const environment = installVoiceEnvironment()
     try {

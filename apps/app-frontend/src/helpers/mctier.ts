@@ -51,7 +51,6 @@ export interface MctierState {
     connect_address: string | null
     players: MctierPlayer[]
     local_player_id: string | null
-    voice_ice_server: string | null
     error_message: string | null
     is_public: boolean
     publish_outcome: MctierPublishOutcome

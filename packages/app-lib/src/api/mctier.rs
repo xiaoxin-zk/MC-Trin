@@ -253,7 +253,6 @@ pub struct MctierState {
     pub connect_address: Option<String>,
     pub players: Vec<Player>,
     pub local_player_id: Option<String>,
-    pub voice_ice_server: Option<String>,
     pub error_message: Option<String>,
     pub is_public: bool,
     /// How the current public listing resolved, for host-facing status.
@@ -340,13 +339,12 @@ fn reset_preparation() {
 /// Fields that describe a live room and must not outlive it.
 ///
 /// Both cleanup paths share this so a failed direct room cannot keep the
-/// previous run's address, roster, or voice endpoint on screen.
+/// previous run's address or roster on screen.
 fn clear_room_state(state: &mut MctierState) {
     state.connect_address = None;
     state.virtual_ip = None;
     state.players.clear();
     state.local_player_id = None;
-    state.voice_ice_server = None;
     state.host_hint = None;
     state.download_stage = None;
     state.download_progress = None;

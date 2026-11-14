@@ -12362,6 +12362,12 @@
   "app.multiplayer.mctier.voice.waiting": {
     "message": "等待其他玩家接入语音。"
   },
+  "app.multiplayer.mctier.voice.ice-failed": {
+    "message": "语音连接失败——当前网络可能阻止了直连。"
+  },
+  "app.multiplayer.mctier.voice.ice-retry": {
+    "message": "重试语音"
+  },
   "app.multiplayer.no-players": {
     "message": "暂无玩家"
   },
@@ -15708,7 +15714,7 @@
     "message": "CurseForge 服务"
   },
   "app.settings.resources.curseforge-mirror-description": {
-    "message": "CurseForge 公共 API 请求和文件下载。"
+    "message": "CurseForge 文件下载。当前版本未内置 CurseForge 镜像，镜像选项仅在下方添加 CurseForge 镜像后生效。"
   },
   "app.settings.resources.curseforge-restriction-bypass": {
     "message": "自动下载受限的 CurseForge 文件"
@@ -15849,7 +15855,7 @@
     "message": "Modrinth"
   },
   "app.settings.resources.modrinth-mirror-description": {
-    "message": "Modrinth 文件下载。"
+    "message": "Modrinth 文件下载。当前版本未内置 Modrinth 镜像，镜像选项仅在下方添加 Modrinth 镜像后生效。"
   },
   "app.settings.resources.mojang-auth-service": {
     "message": "Mojang 认证服务"

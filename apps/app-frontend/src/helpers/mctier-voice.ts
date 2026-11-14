@@ -177,6 +177,10 @@ type PeerConnectionState = {
     /** ICE restarts already attempted for this peer. Bounded so a network that
      * genuinely cannot reach the peer does not spin forever. */
     iceRestarts: number
+    /** Pending "this peer never came back" report. Only the answering side
+     * needs it: it cannot restart ICE itself, so it has to wait for the
+     * offerer's restart and then conclude the call is dead if none arrives. */
+    unreachableTimer: ReturnType<typeof setTimeout> | null
 }
 
 /** How many ICE restarts a peer gets before it is left failed.
@@ -186,15 +190,23 @@ type PeerConnectionState = {
  * always means the peer is unreachable, so further offers only burn bandwidth. */
 const MAX_ICE_RESTARTS = 2
 
+/** How long the answering side waits for the offerer's ICE restart before it
+ * reports the peer unreachable. The offerer's last restart plus candidate
+ * gathering comfortably fits in this window on a working network. */
+const ANSWERING_SIDE_UNREACHABLE_GRACE_MS = 15_000
+
 export type VoicePeer = { playerId: string }
 export type VoiceConnectionState = RTCPeerConnectionState | RTCIceConnectionState
 
 export type MctierVoiceSessionOptions = {
     localPlayerId: string
     stream: MediaStream
-    iceServer?: string | null
     send: (signal: MctierVoiceSignal) => Promise<void>
     onPeerState?: (playerId: string, state: VoiceConnectionState) => void
+    /** Fires when a peer exhausted its ICE restarts and stayed failed. The
+     * owner needs this to tell "nobody has joined voice yet" apart from "the
+     * network will never connect this call". */
+    onPeerUnreachable?: (playerId: string) => void
     /** Hands each remote playback stream to the caller (and null on detach)
      * so speaking detection can attach analysers outside the session. */
     onRemoteStream?: (playerId: string, stream: MediaStream | null) => void
@@ -342,8 +354,13 @@ export class MctierVoiceSession {
         this.supportsVoiceActivation = Boolean(globalThis.AudioContext)
         this.supportsOutputDevice =
             typeof HTMLAudioElement !== 'undefined' && 'setSinkId' in HTMLAudioElement.prototype
+        // Public STUN servers are the only ICE servers. The launcher used to
+        // prepend a "stun:" server bound to EasyTier's 10.126.126.x overlay
+        // address, but EasyTier runs with `--no-tun` / `--use-smoltcp` and no
+        // virtual adapter exists, so that address can never be bound and the
+        // server never answered anyone. A public STUN server at least performs
+        // the reflexive-candidate discovery a direct P2P call needs.
         const iceServers = [
-            ...(options.iceServer ? [{ urls: options.iceServer }] : []),
             { urls: 'stun:stun.qq.com:3478' },
             { urls: 'stun:stun.miwifi.com:3478' },
         ]
@@ -535,6 +552,10 @@ export class MctierVoiceSession {
         if (!signal || !this.activePlayerIds.has(signal.from!)) return
         const peer = this.ensurePeer(signal.from!)
         if (signal.type === 'offer') {
+            // A restart offer from the offering side is exactly what the
+            // answering side's grace timer is waiting for, so the peer is not
+            // unreachable after all.
+            this.clearUnreachableTimer(peer)
             await peer.connection.setRemoteDescription(signal.offer!)
             peer.remoteDescriptionSet = true
             await this.flushCandidates(peer)
@@ -701,6 +722,7 @@ export class MctierVoiceSession {
             makingOffer: false,
             audio: null,
             iceRestarts: 0,
+            unreachableTimer: null,
         }
         this.peers.set(playerId, peer)
         for (const track of this.outgoingStream.getAudioTracks())
@@ -737,7 +759,10 @@ export class MctierVoiceSession {
             this.options.onPeerState?.(playerId, connection.connectionState)
             // A recovery that worked must not keep the peer one failure away
             // from being abandoned: reset the budget once media flows again.
-            if (connection.connectionState === 'connected') peer.iceRestarts = 0
+            if (connection.connectionState === 'connected') {
+                peer.iceRestarts = 0
+                this.clearUnreachableTimer(peer)
+            }
             if (connection.connectionState === 'failed') void this.recoverPeer(playerId, peer)
         }
         connection.oniceconnectionstatechange = () => {
@@ -760,14 +785,26 @@ export class MctierVoiceSession {
      *
      * Only the offering side restarts, mirroring the initial negotiation. The
      * answering side just waits: its connection recovers when the new offer
-     * arrives, so both peers cannot start competing offers.
+     * arrives, so both peers cannot start competing offers. Because it never
+     * restarts, it also cannot know from a restart budget when the call is
+     * dead, so it arms a one-shot grace timer instead; a restart that does
+     * arrive clears it.
      *
      * Bounded by `MAX_ICE_RESTARTS`; past that the peer is left failed and the
-     * owner keeps showing it as disconnected rather than retrying forever. */
+     * owner is told, so the panel can stop claiming the call merely waits for
+     * somebody to join. */
     private async recoverPeer(playerId: string, peer: PeerConnectionState) {
         if (this.closed || this.peers.get(playerId) !== peer) return
-        if (this.options.localPlayerId.localeCompare(playerId) >= 0) return
-        if (peer.iceRestarts >= MAX_ICE_RESTARTS) return
+        if (this.options.localPlayerId.localeCompare(playerId) >= 0) {
+            this.armUnreachableTimer(playerId, peer)
+            return
+        }
+        if (peer.iceRestarts >= MAX_ICE_RESTARTS) {
+            // The peer stayed failed through every restart: report it so the
+            // panel can stop claiming the call is merely waiting for someone.
+            this.options.onPeerUnreachable?.(playerId)
+            return
+        }
         if (peer.makingOffer) return
         peer.iceRestarts += 1
         try {
@@ -775,6 +812,26 @@ export class MctierVoiceSession {
         } catch (failure) {
             console.warn('MCTier voice could not restart ICE for a peer', failure)
         }
+    }
+
+    /** Reports the peer unreachable unless its offerer's restart arrives first.
+     * The timer belongs to the peer entry and is cancelled on a successful
+     * connection or when the peer is torn down, so a late timer can never
+     * revive a failure for a peer that has already left. */
+    private armUnreachableTimer(playerId: string, peer: PeerConnectionState) {
+        if (peer.unreachableTimer !== null) return
+        peer.unreachableTimer = setTimeout(() => {
+            peer.unreachableTimer = null
+            if (this.closed || this.peers.get(playerId) !== peer) return
+            if (peer.connection.connectionState === 'connected') return
+            this.options.onPeerUnreachable?.(playerId)
+        }, ANSWERING_SIDE_UNREACHABLE_GRACE_MS)
+    }
+
+    private clearUnreachableTimer(peer: PeerConnectionState) {
+        if (peer.unreachableTimer === null) return
+        clearTimeout(peer.unreachableTimer)
+        peer.unreachableTimer = null
     }
 
     private async createOffer(playerId: string, peer: PeerConnectionState, iceRestart = false) {
@@ -804,6 +861,7 @@ export class MctierVoiceSession {
 
     private closePeer(playerId: string, peer: PeerConnectionState) {
         const wasTracked = this.peers.delete(playerId)
+        this.clearUnreachableTimer(peer)
         this.options.onRemoteStream?.(playerId, null)
         peer.connection.onicecandidate = null
         peer.connection.ontrack = null

@@ -479,7 +479,8 @@ const messages = defineMessages({
     },
     modrinthMirrorDescription: {
         id: 'app.settings.resources.modrinth-mirror-description',
-        defaultMessage: 'Modrinth file downloads.',
+        defaultMessage:
+            'Modrinth file downloads. This build ships no built-in Modrinth mirror, so the mirror options only take effect after you add a Modrinth mirror below.',
     },
     curseforgeMirror: {
         id: 'app.settings.resources.curseforge-mirror',
@@ -487,7 +488,8 @@ const messages = defineMessages({
     },
     curseforgeMirrorDescription: {
         id: 'app.settings.resources.curseforge-mirror-description',
-        defaultMessage: 'CurseForge file downloads.',
+        defaultMessage:
+            'CurseForge file downloads. This build ships no built-in CurseForge mirror, so the mirror options only take effect after you add a CurseForge mirror below.',
     },
     curseforgeRestrictionBypass: {
         id: 'app.settings.resources.curseforge-restriction-bypass',

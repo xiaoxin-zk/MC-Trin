@@ -8441,6 +8441,12 @@
   "app.multiplayer.mctier.voice.waiting": {
     "message": "Waiting for another player to connect voice."
   },
+  "app.multiplayer.mctier.voice.ice-failed": {
+    "message": "The voice connection failed — the network may block direct connections."
+  },
+  "app.multiplayer.mctier.voice.ice-retry": {
+    "message": "Retry voice"
+  },
   "app.multiplayer.no-players": {
     "message": "No players in room"
   },
@@ -11709,7 +11715,7 @@
     "message": "CurseForge"
   },
   "app.settings.resources.curseforge-mirror-description": {
-    "message": "CurseForge file downloads."
+    "message": "CurseForge file downloads. This build ships no built-in CurseForge mirror, so the mirror options only take effect after you add a CurseForge mirror below."
   },
   "app.settings.resources.curseforge-restriction-bypass": {
     "message": "Automatically download restricted CurseForge files"
@@ -11850,7 +11856,7 @@
     "message": "Modrinth"
   },
   "app.settings.resources.modrinth-mirror-description": {
-    "message": "Modrinth file downloads."
+    "message": "Modrinth file downloads. This build ships no built-in Modrinth mirror, so the mirror options only take effect after you add a Modrinth mirror below."
   },
   "app.settings.resources.mojang-auth-service": {
     "message": "Mojang authentication service"

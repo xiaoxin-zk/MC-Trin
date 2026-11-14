@@ -246,6 +246,14 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.waiting',
         defaultMessage: 'Waiting for another player to connect voice.',
     },
+    voiceIceFailed: {
+        id: 'app.multiplayer.mctier.voice.ice-failed',
+        defaultMessage: 'The voice connection failed — the network may block direct connections.',
+    },
+    voiceIceRetry: {
+        id: 'app.multiplayer.mctier.voice.ice-retry',
+        defaultMessage: 'Retry voice',
+    },
     voiceConnected: {
         id: 'app.multiplayer.mctier.voice.connected',
         defaultMessage:
@@ -482,6 +490,11 @@ async function startVoice() {
     if (!props.state) return
     await voice.start(props.state)
     // Device labels are only readable after microphone permission is granted.
+    if (voice.active.value) await voice.refreshDevices()
+}
+
+async function retryVoice() {
+    await voice.retry()
     if (voice.active.value) await voice.refreshDevices()
 }
 
@@ -747,19 +760,33 @@ function prefillInviteFromDeepLink() {
                     </template>
                 </div>
             </div>
-            <p
+            <div
                 v-if="voice.active.value"
-                class="m-0 border-b border-surface-4 px-4 py-3 text-sm"
+                class="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-surface-4 px-4 py-3"
                 role="status"
             >
-                {{
-                    voice.connectedPeers.value
-                        ? formatMessage(messages.voiceConnected, {
-                              count: voice.connectedPeers.value,
-                          })
-                        : formatMessage(messages.voiceWaiting)
-                }}
-            </p>
+                <p class="m-0 text-sm">
+                    {{
+                        voice.connectedPeers.value
+                            ? formatMessage(messages.voiceConnected, {
+                                  count: voice.connectedPeers.value,
+                              })
+                            : voice.iceFailed.value
+                              ? formatMessage(messages.voiceIceFailed)
+                              : formatMessage(messages.voiceWaiting)
+                    }}
+                </p>
+                <!-- A failed negotiation stays failed until a new peer
+                     connection is built; the previous one already exhausted its
+                     ICE restarts, so the only useful action is a retry. -->
+                <Button
+                    v-if="voice.iceFailed.value && !voice.starting.value"
+                    type="outlined"
+                    @click="retryVoice"
+                >
+                    {{ formatMessage(messages.voiceIceRetry) }}
+                </Button>
+            </div>
             <SettingsRow>
                 <template #label>{{ formatMessage(messages.voiceMicrophone) }}</template>
                 <template #control>

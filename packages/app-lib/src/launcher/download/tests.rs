@@ -468,6 +468,62 @@ fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
     );
 }
 
+#[test]
+fn a_refused_batch_route_is_skipped_instead_of_failing_every_asset() {
+    // Under a system proxy (or an HTTP/1-only authority, a configured proxy or
+    // a retired source) the H2 batch refuses its route before requesting
+    // anything. The old selection took the leading route unconditionally, so
+    // one policy refusal produced `completed=0 failed=<every asset>` and pushed
+    // all of them into the per-file path. The batch must instead pick a route
+    // the policy permits, and only give up on batching when none exists.
+    // A retired source is refused on every machine, so the fixture does not
+    // depend on this host having a proxy configured.
+    let refused = DownloadRoute {
+        url: "https://mod.tianpao.top/data/project/file.jar".to_string(),
+        source: DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::System,
+    };
+    let permitted = DownloadRoute {
+        url: "https://bmclapi2.bangbang93.com/assets/85/object".to_string(),
+        source: DownloadRouteSource::Bmclapi,
+        is_mirror: true,
+        allow_sensitive_headers: false,
+        supports_range: true,
+        proxy: ProxyPolicy::Direct,
+    };
+    assert_eq!(
+        crate::util::download::native::h2_ineligible_reason(&refused),
+        Some(
+            crate::util::download::native::NativeH2IneligibleReason::RetiredSource
+        ),
+        "the fixture needs a route the native policy always refuses"
+    );
+    assert!(
+        !batch_route_is_permitted(&refused),
+        "a refused route must never carry the whole batch"
+    );
+    assert!(batch_route_is_permitted(&permitted));
+
+    // The selection the batch performs: first permitted route wins, no matter
+    // that the refused one leads the resolved order.
+    let mut routes = vec![refused, permitted];
+    let selected = routes
+        .drain(..)
+        .find(|route| batch_route_is_permitted(route));
+    assert_eq!(
+        selected.map(|route| route.proxy),
+        Some(ProxyPolicy::Direct),
+        "the batch must select a route the native policy permits"
+    );
+    assert!(
+        routes.is_empty(),
+        "the refused leading route must have been consumed, not retried"
+    );
+}
+
 fn batch_item(name: &str, url: &str, official_url: &str) -> H2BatchAsset {
     H2BatchAsset {
         url: url.into(),

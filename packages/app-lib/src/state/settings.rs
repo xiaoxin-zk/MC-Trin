@@ -1048,16 +1048,29 @@ impl Settings {
         }
     }
 
+    /// Whether automatic mode should lead with mirrors.
+    ///
+    /// The stored UI locale wins: the user already told the launcher which
+    /// language they read, and a Chinese language choice is a much stronger
+    /// signal of a Chinese network than a timezone guess. The previous version
+    /// consulted only `TZ` / `/etc/localtime`; neither exists on Windows, so the
+    /// heuristic silently defaulted to mirrors and any unrelated system
+    /// timezone could flip the order of a zh-CN user's downloads.
     pub(crate) fn auto_prefers_mirror(&self) -> bool {
+        let locale = self.locale.trim();
+        if !locale.is_empty() {
+            return locale_prefers_mirror(locale);
+        }
+
         let timezone = std::env::var("TZ").ok().or_else(|| {
             std::fs::read_link("/etc/localtime")
                 .ok()
                 .map(|path| path.to_string_lossy().into_owned())
         });
 
-        // `auto` now prefers mirrors unless the timezone is recognisably not
-        // Chinese-speaking: each download keeps an official fallback route, so
-        // a mirror that is unhealthy or blocked never breaks an install.
+        // With no stored locale, fall back to the timezone: each download keeps
+        // an official fallback route, so a mirror that is unhealthy or blocked
+        // never breaks an install.
         match timezone {
             Some(timezone) => locale_prefers_mirror(&timezone),
             None => true,
@@ -1814,6 +1827,39 @@ mod tests {
         assert!(locale_prefers_mirror("Asia/Shanghai"));
         assert!(!locale_prefers_mirror("zh-TW"));
         assert!(!locale_prefers_mirror("en-US"));
+    }
+
+    #[tokio::test]
+    async fn automatic_mode_consults_the_stored_locale_before_the_timezone() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+
+        let mut settings = Settings::get(&pool).await.unwrap();
+        settings.locale = "zh-CN".to_string();
+        // A Windows host has neither TZ nor /etc/localtime. Before the fix the
+        // heuristic returned `None => true` on every Windows machine and never
+        // looked at the locale at all, so a zh-CN user could be flipped to
+        // official-first by an unrelated TZ variable.
+        assert!(settings.auto_prefers_mirror());
+
+        settings.locale = "en-US".to_string();
+        assert!(
+            !settings.auto_prefers_mirror(),
+            "a non-Chinese UI locale must not prefer mirrors just because TZ is unset"
+        );
+
+        settings.locale = "zh-TW".to_string();
+        assert!(!settings.auto_prefers_mirror());
+
+        settings.locale = String::new();
+        assert!(
+            settings.auto_prefers_mirror(),
+            "an empty locale keeps the documented mirror-preferring fallback"
+        );
     }
 
     #[tokio::test]

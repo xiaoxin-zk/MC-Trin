@@ -215,11 +215,6 @@ pub(crate) const MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 pub(crate) const MODRINTH_CDN_ATTEMPTS: usize = 3;
 pub(crate) const MODRINTH_CDN_ATTEMPT_TIMEOUT: Duration =
     Duration::from_secs(120);
-pub(crate) const REASSIGNABLE_FIRST_BYTE_TIMEOUT: Duration = if cfg!(test) {
-    Duration::from_millis(500)
-} else {
-    Duration::from_secs(5)
-};
 pub(crate) const RESOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
 pub(crate) const RETRY_AFTER_CAP: Duration = Duration::from_secs(60);
 pub(crate) const STALE_PARTIAL_DOWNLOAD_MAX_AGE: Duration =
@@ -273,6 +268,15 @@ pub(crate) const NATIVE_SWITCH_SPEED_PERCENT: u64 = 125;
 pub(crate) const RECONNECT_OVERHEAD_MAX: Duration = Duration::from_secs(5);
 pub(crate) const RECONNECT_OVERHEAD_MIN: Duration = Duration::from_millis(100);
 pub(crate) const ROUTE_HEALTH_EWMA_ALPHA: f64 = 0.25;
+/// Consecutive failures a mirror may accumulate before automatic mode stops
+/// leading with it.
+///
+/// A locale preference is a user's statement about which origin should serve
+/// their downloads; one 404 is a property of a single object, not of the route.
+/// Only a streak this long is evidence that the mirror itself is unreachable,
+/// at which point the official route must lead until the next success resets
+/// the counter.
+pub(crate) const ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD: u32 = 3;
 pub(crate) const ROUTE_PROBE_BYTES: u64 = 256 * 1024;
 pub(crate) const ROUTE_PROBE_CONCURRENCY: usize = 2;
 pub(crate) const ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT: u64 = 25;

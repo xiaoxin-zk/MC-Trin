@@ -138,7 +138,6 @@ const idle = {
     connect_address: null,
     players: [],
     local_player_id: null,
-    voice_ice_server: null,
     error_message: null,
     is_public: false,
     publish_outcome: 'private' as const,

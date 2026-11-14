@@ -1959,6 +1959,17 @@ fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
     coalesced
 }
 
+/// Whether the native policy allows this route to carry an HTTP/2 asset batch.
+///
+/// The batch refuses a route the policy rejects (a system proxy, a configured
+/// proxy, an HTTP/1 fallback, a retired source, a certificate policy) before it
+/// requests anything. Selecting such a route for the whole set therefore
+/// produces no downloads at all and pushes every asset into the per-file path.
+/// The batch must skip those routes and use one it can actually run on.
+fn batch_route_is_permitted(route: &DownloadRoute) -> bool {
+    crate::util::download::native::h2_ineligible_reason(route).is_none()
+}
+
 /// Coalesce index aliases that refer to one physical object. The key includes
 /// the destination and full integrity contract so unrelated artifacts can
 /// never share a writer. Legacy paths remain separate outputs of that single
@@ -2184,7 +2195,17 @@ pub async fn download_assets(
             )
             .await;
         }
-        let route = routes.into_iter().next();
+        // A route the native policy refuses describes the transport, not the
+        // files: under a system proxy, an HTTP/1-only authority or a retired
+        // source every H2 batch attempt is refused before a single object is
+        // requested. Picking the leading route blindly turned one policy
+        // refusal into `completed=0 failed=<every asset>`, and every asset was
+        // then retried per file against the same refused transport. Pick the
+        // first route the batch may actually use instead; only when no route
+        // can host a batch at all is the set handed to the per-file path.
+        let route = routes.into_iter().find(|route| {
+            !apply_native_policy || batch_route_is_permitted(route)
+        });
         match route {
             Some(route) => {
                 // Resolve each item's URL onto the chosen route (official or
@@ -2280,12 +2301,14 @@ pub async fn download_assets(
                 }
             }
             None => {
-                // No route could be resolved up front, but the per-file client
-                // builds its own route list and may still reach the official
-                // host. Nothing here is fatal until a download actually fails.
+                // Either no route resolved up front, or every resolved route is
+                // one the HTTP/2 batch is not allowed to use (a system proxy,
+                // a configured proxy, an HTTP/1 fallback, a retired source).
+                // The per-file client builds its own route list and applies its
+                // own transport choice, so this is a fallback, not a failure.
                 tracing::warn!(
                     items = batch_items.len(),
-                    "No download route could be resolved for the Minecraft asset batch; downloading per file"
+                    "No usable route for the Minecraft asset HTTP/2 batch; downloading per file"
                 );
                 fallback_assets.extend(
                     batch_items

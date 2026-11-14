@@ -1166,7 +1166,6 @@ fn a_stale_lobby_attempt_does_not_keep_the_previous_room_fields() {
         virtual_ip: Some(Ipv4Addr::new(10, 126, 126, 7)),
         connect_address: Some("127.0.0.1:25566".into()),
         local_player_id: Some("a".repeat(64)),
-        voice_ice_server: Some("stun:10.126.126.7:5000".into()),
         host_hint: Some(HostHint::GamePortClosed),
         download_stage: Some(PreparationStage::Verifying),
         download_progress: Some(42),
@@ -1188,7 +1187,6 @@ fn a_stale_lobby_attempt_does_not_keep_the_previous_room_fields() {
     assert!(state.virtual_ip.is_none());
     assert!(state.players.is_empty());
     assert!(state.local_player_id.is_none());
-    assert!(state.voice_ice_server.is_none());
     assert!(state.host_hint.is_none());
     assert!(state.download_stage.is_none());
     assert_eq!(state.download_progress, None);

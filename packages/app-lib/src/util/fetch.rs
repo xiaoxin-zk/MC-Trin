@@ -74,9 +74,8 @@ use crate::util::download::constants::{
     MAX_TASK_PROBE_STATES, METADATA_ATTEMPT_BUDGET, METADATA_HEDGE_DELAY,
     METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MODRINTH_API_HOST,
     MODRINTH_DATA_PREFIX, NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED,
-    PARTIAL_FILE_SUFFIX, RANGE_IDLE_RECONNECT_TIMEOUT,
-    REASSIGNABLE_FIRST_BYTE_TIMEOUT, RESOURCE_WAIT_TIMEOUT, RETRY_AFTER_CAP,
-    ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
+    PARTIAL_FILE_SUFFIX, RANGE_IDLE_RECONNECT_TIMEOUT, RESOURCE_WAIT_TIMEOUT,
+    RETRY_AFTER_CAP, ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
     ROUTE_PROBE_TIMEOUT, SEGMENT_EXPANSION_INTERVAL,
     SEGMENT_EXPANSION_SAMPLE_COUNT, SEGMENT_RETRY_ATTEMPTS,
     SEGMENTED_DOWNLOAD_THRESHOLD, TAIL_HEDGE_IDLE_TIMEOUT,
@@ -3679,25 +3678,20 @@ fn should_downgrade_slow_http2(
     http_version == reqwest::Version::HTTP_2 && !retry_with_single_thread
 }
 
-fn native_first_byte_timeout(
-    route: &DownloadRoute,
-    has_alternate_route: bool,
-) -> time::Duration {
+/// First-byte budget for a file transfer.
+///
+/// Every route gets the same budget. The previous policy gave a mirror with an
+/// alternate source only 5 s while the official host got 20 s, so a mirror that
+/// legitimately needed 4–7 s for its first byte was recorded as failing, and
+/// each recorded failure fed back into the ordering that demoted it further.
+/// The budget describes how long a connect plus a server's think time may take,
+/// not which host is asking.
+fn native_first_byte_timeout() -> time::Duration {
     #[cfg(test)]
     if BENCHMARK_TIMING.try_with(|_| ()).is_ok() {
-        return time::Duration::from_secs(
-            if route.is_mirror && has_alternate_route {
-                5
-            } else {
-                20
-            },
-        );
+        return time::Duration::from_secs(20);
     }
-    if route.is_mirror && has_alternate_route {
-        REASSIGNABLE_FIRST_BYTE_TIMEOUT
-    } else {
-        FILE_TRANSFER_FIRST_BYTE_TIMEOUT
-    }
+    FILE_TRANSFER_FIRST_BYTE_TIMEOUT
 }
 
 fn should_use_segmented_download(size: u64, resumable_part_bytes: u64) -> bool {
@@ -6998,8 +6992,7 @@ async fn run_native_route_attempts(
         record_install_download_stage(request, DownloadItemStatus::Downloading)
             .await;
         let request_started = Instant::now();
-        let first_byte_timeout =
-            native_first_byte_timeout(route, can_switch_route);
+        let first_byte_timeout = native_first_byte_timeout();
         // A truncated or invalid body may be a corrupt edge-cache
         // object; the retry then uses a cache-busted URL that forces a
         // fresh origin fetch instead of the same broken copy.

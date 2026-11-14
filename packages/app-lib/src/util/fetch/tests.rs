@@ -1713,6 +1713,132 @@ fn a_cooling_mirror_is_demoted_behind_official_even_with_the_locale() {
 }
 
 #[test]
+fn a_single_mirror_failure_does_not_outrank_the_locale_preference() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The production failure this guards: one 404 on a mirror object set the
+    // mirror's counter to 1 while official stayed at 0, and the old
+    // consecutive-failure key then pinned official ahead for every remaining
+    // download of the session — 3771 official requests, 0 mirror requests.
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            consecutive_failures: 1,
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "one failed object must not demote the mirror, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes[1].source, DownloadRouteSource::Official);
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_dead_mirror_falls_back_after_repeated_failures() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The failure signal must survive: a mirror that keeps failing is evidence
+    // the host is unreachable, so automatic mode has to start officially again
+    // instead of retrying a dead prefix on every file.
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            consecutive_failures: ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD,
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a mirror at the failure threshold must fall behind official, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes[1].source, DownloadRouteSource::Bmclapi);
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_failing_official_route_yields_to_the_mirror_without_a_locale_preference() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // Without the locale preference, any failure still promotes the other
+    // reachable origin; the demotion threshold must not make a broken official
+    // route sticky either.
+    let mut routes = auto_order_test_routes();
+    let official = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Official)
+        .unwrap()
+        .clone();
+    let key =
+        route_health_key(&official, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            consecutive_failures: 1,
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, false);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "a failing official route must not lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
 fn the_version_manifest_still_prefers_the_official_host() {
     let _guard = AUTO_SOURCE_TEST_LOCK
         .lock()
@@ -1757,6 +1883,80 @@ fn explicit_source_modes_override_the_automatic_order() {
     assert!(mirror_preferred[0].is_mirror);
 
     *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn modrinth_and_curseforge_have_no_built_in_mirror_to_prefer() {
+    // RC4: the Modrinth / CurseForge source selectors are real settings, but
+    // this build ships no built-in mirror for either CDN. With an empty
+    // `custom_download_sources` list, "prefer mirrors" must resolve to exactly
+    // the same single official route as "official only" — the setting is
+    // documented as conditional on a user-added mirror instead of pretending
+    // to redirect to a host that does not exist.
+    for (url, resource) in [
+        (
+            "https://cdn.modrinth.com/data/project/versions/version/file.jar",
+            ResourceClass::Modrinth,
+        ),
+        (
+            "https://edge.forgecdn.net/files/12/34/mod.jar",
+            ResourceClass::CurseForge,
+        ),
+        (
+            "https://mediafilez.forgecdn.net/files/12/34/mod.jar",
+            ResourceClass::CurseForge,
+        ),
+    ] {
+        let mirror_preferred = resolve_download_routes_for(
+            url,
+            resource,
+            crate::state::DownloadSourceMode::MirrorPreferred,
+        );
+        let official_only = resolve_download_routes_for(
+            url,
+            resource,
+            crate::state::DownloadSourceMode::OfficialOnly,
+        );
+        assert_eq!(
+            mirror_preferred, official_only,
+            "no built-in mirror exists for {url}, so the modes must agree"
+        );
+        assert!(
+            mirror_preferred.iter().all(|route| !route.is_mirror),
+            "{url} must not gain a mirror route from a setting alone"
+        );
+        assert_eq!(mirror_preferred.len(), 1);
+        assert_eq!(mirror_preferred[0].url, url);
+    }
+}
+
+#[test]
+fn mcim_is_never_built_in_and_only_restores_saved_pack_urls() {
+    // RC4: nothing emits an MCIM builder. A route only becomes MCIM when the
+    // input URL already points at the mirror, which is the one case the
+    // "pin MCIM last" rule exists for. Any other URL must not gain an MCIM
+    // route from a preference.
+    for url in [
+        "https://cdn.modrinth.com/data/project/versions/version/file.jar",
+        "https://edge.forgecdn.net/files/12/34/mod.jar",
+        "https://resources.download.minecraft.net/ab/cd",
+    ] {
+        for mode in [
+            crate::state::DownloadSourceMode::Auto,
+            crate::state::DownloadSourceMode::OfficialOnly,
+            crate::state::DownloadSourceMode::OfficialPreferred,
+            crate::state::DownloadSourceMode::MirrorPreferred,
+        ] {
+            let routes =
+                resolve_download_routes_for(url, ResourceClass::Other, mode);
+            assert!(
+                routes
+                    .iter()
+                    .all(|route| route.source != DownloadRouteSource::Mcim),
+                "no builder may invent an MCIM route for {url} in {mode:?}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -2087,6 +2287,82 @@ fn global_download_dns_override_can_be_registered_and_cleared() {
             .host_override("request-host.test")
             .is_none()
     );
+}
+
+#[test]
+fn a_log_config_object_never_produces_a_bmclapi_route() {
+    // The single 404 that started the production incident: BMCLAPI stores
+    // version jars, mappings, asset objects and runtime objects by content
+    // hash, but it has no copy of the log4j config from `logging.client.file`,
+    // so a verbatim `/v1/objects/...` mirror URL is a guaranteed 404.
+    let url = "https://piston-data.mojang.com/v1/objects/bd65e7d2e3c237be76cfbef4c2405033d7f91521/client-1.12.xml";
+    let mut routes =
+        explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
+    routes.push(official_route(url, ResourceClass::MinecraftLibrary));
+
+    assert!(
+        routes.iter().all(|route| !route.is_mirror),
+        "a log config must not have a mirror route, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    let resolved = resolve_download_routes_for(
+        url,
+        ResourceClass::MinecraftLibrary,
+        crate::state::DownloadSourceMode::MirrorPreferred,
+    );
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].url, url);
+    assert!(!resolved[0].is_mirror);
+}
+
+#[test]
+fn version_objects_still_mirror_to_bmclapi() {
+    // The guarded fix must not disable the object endpoint wholesale: version
+    // jars, their mappings and the Java runtime objects are mirrored (verified
+    // 302 on the real service) and must keep their mirror route.
+    for url in [
+        "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/client.jar",
+        "https://launcher.mojang.com/v1/objects/e80d9b3bf5085002218d4be59e668bac718abbc6/client.jar",
+        "https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt",
+        "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/java.dll",
+    ] {
+        let routes =
+            explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
+        assert_eq!(
+            routes.len(),
+            1,
+            "expected one BMCLAPI object route for {url}"
+        );
+        assert!(routes[0].is_mirror);
+        assert_eq!(
+            routes[0].url,
+            url.replace("piston-data.mojang.com", "bmclapi2.bangbang93.com")
+                .replace("launcher.mojang.com", "bmclapi2.bangbang93.com")
+        );
+    }
+}
+
+#[test]
+fn malformed_object_paths_do_not_get_a_mirror_route() {
+    // Only the endpoint's real shape is mirrored: a hash directory plus one
+    // flat file name. Anything else is a mapping this build cannot prove, and
+    // an unprovable mapping is the guaranteed 404 this fix exists to remove.
+    for url in [
+        "https://piston-data.mojang.com/v1/objects/not-a-hash/client.jar",
+        "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/",
+        "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/nested/client.jar",
+        "https://piston-data.mojang.com/v1/packages/9f67e10ed013deeaad20ac3c800652765d493408/26.3.json",
+    ] {
+        let routes =
+            explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
+        assert!(
+            routes.is_empty(),
+            "{url} must not produce a mirror route, got {routes:?}"
+        );
+    }
 }
 
 #[test]
@@ -2544,19 +2820,14 @@ fn slow_http2_downgrades_only_on_the_first_attempt_round() {
 }
 
 #[test]
-fn reassignable_mirror_uses_shorter_first_byte_timeout() {
-    let mirror = route(
-        "https://mirror.example/file".to_string(),
-        DownloadRouteSource::Bmclapi,
-        true,
-        true,
-    );
+fn every_route_gets_the_same_first_byte_budget() {
+    // The old policy gave a reassignable mirror 5 s and the official host 20 s.
+    // Observed mirror TTFBs of 3.9–4.4 s then landed as failures while an
+    // official request at 6.7 s was tolerated, and those failures fed the
+    // ordering that demoted the mirror for the rest of the session. The budget
+    // is now independent of the route and of whether a fallback exists.
     assert_eq!(
-        native_first_byte_timeout(&mirror, true),
-        REASSIGNABLE_FIRST_BYTE_TIMEOUT
-    );
-    assert_eq!(
-        native_first_byte_timeout(&mirror, false),
+        native_first_byte_timeout(),
         FILE_TRANSFER_FIRST_BYTE_TIMEOUT
     );
 }

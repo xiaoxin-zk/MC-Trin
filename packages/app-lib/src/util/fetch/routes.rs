@@ -9,6 +9,7 @@ use crate::util::download::constants::{
     FETCH_PISTON_DATA_MOJANG_COM, FETCH_RELEASES, FETCH_REPO_MAVEN_APACHE_ORG,
     FETCH_REPO1_MAVEN_ORG, FETCH_RESOURCES_DOWNLOAD_MINECRAFT_NET,
     MODRINTH_CDN_HOST, RETIRED_SOURCES_MEDIA_FORGECDN_NET,
+    ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD,
     ROUTE_POLICY_LAUNCHERMETA_MOJANG_COM, ROUTE_POLICY_MAVEN_FABRICMC_NET,
     ROUTE_POLICY_MAVEN_MINECRAFTFORGE_NET, ROUTE_POLICY_MAVEN_NEOFORGED_NET,
     ROUTE_POLICY_PISTON_META_MOJANG_COM,
@@ -212,21 +213,87 @@ pub(super) fn explicit_mirror_routes(
                 DownloadRouteSource::Bmclapi,
             );
         }
+        // BMCLAPI preserves the path of launcher metadata (version manifests,
+        // version JSON, Java runtime manifests) and of `piston-meta` packages.
         ROUTE_POLICY_PISTON_META_MOJANG_COM
-        | ROUTE_POLICY_LAUNCHERMETA_MOJANG_COM
-        | FETCH_LAUNCHER_MOJANG_COM
-        | FETCH_PISTON_DATA_MOJANG_COM => push_mirror(
+        | ROUTE_POLICY_LAUNCHERMETA_MOJANG_COM => push_mirror(
             &mut routes,
             BMCLAPI_BASE_URL,
             path.to_string(),
             DownloadRouteSource::Bmclapi,
         ),
+        // Only the object names BMCLAPI actually stores may be mapped onto its
+        // `/v1/objects/<sha>/<name>` endpoint. The endpoint is content
+        // addressed, but the mirror only knows the objects it synchronised from
+        // the version manifest (client/server jars and their mappings); every
+        // other object name — including the log4j `client-1.12.xml` config — is
+        // a guaranteed 404 there and must not produce a mirror route.
+        FETCH_PISTON_DATA_MOJANG_COM | FETCH_LAUNCHER_MOJANG_COM
+            if bmclapi_serves_mojang_object(path) =>
+        {
+            push_mirror(
+                &mut routes,
+                BMCLAPI_BASE_URL,
+                path.to_string(),
+                DownloadRouteSource::Bmclapi,
+            );
+        }
         _ => {}
     }
 
     routes
 }
 
+/// Object paths under `piston-data`/`launcher.mojang.com` that BMCLAPI mirrors.
+///
+/// BMCLAPI's object endpoint is content addressed, but it only holds the
+/// objects it indexed from the version and Java-runtime manifests: client and
+/// server jars, their ProGuard mappings, and the runtime's own files (all
+/// verified serving `302` on the real service). It does *not* hold the log4j
+/// configuration from `logging.client.file`: `GET
+/// /v1/objects/<sha1>/client-1.12.xml` answers `404` there while the very same
+/// object exists on Mojang's host. Emitting a route for it therefore only
+/// manufactures a mirror failure, and that failure used to be recorded against
+/// the whole mirror authority, demoting it for every later download in the
+/// session.
+///
+/// The rule is deliberately narrow: only the endpoint's real shape is accepted
+/// (a flat file name under a 40-hex-digit hash), and the `.xml` log-config
+/// family — the one object shape proven missing — is refused. Anything not
+/// recognised simply keeps its official URL, which is the same behaviour as any
+/// other host without a mirror.
+fn bmclapi_serves_mojang_object(path: &str) -> bool {
+    const V1_OBJECTS_PREFIX: &str = "/v1/objects/";
+    const SHA1_HEX_LEN: usize = 40;
+    const LOG_CONFIG_SUFFIX: &str = ".xml";
+    let Some((hash, name)) = path
+        .strip_prefix(V1_OBJECTS_PREFIX)
+        .and_then(|rest| rest.split_once('/'))
+    else {
+        return false;
+    };
+    hash.len() == SHA1_HEX_LEN
+        && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && !name.is_empty()
+        && !name.contains('/')
+        && !name.ends_with(LOG_CONFIG_SUFFIX)
+}
+
+/// Mirrors supplied by the user for one resource class.
+///
+/// Only Minecraft ships a built-in mirror set in this build (BMCLAPI for
+/// assets, libraries and loaders; Aliyun for Maven Central). There is **no**
+/// built-in mirror for `cdn.modrinth.com`, `edge.forgecdn.net` or
+/// `mediafilez.forgecdn.net`: the `modrinth_source` / `curseforge_source`
+/// preferences can only order a mirror the user added to
+/// `custom_download_sources`, and with an empty list `mirror_preferred` and
+/// `official_only` produce exactly the same routes. The settings UI says so
+/// next to those selectors instead of implying a mirror that does not exist.
+///
+/// MCIM is not emitted by any builder either: a route only becomes
+/// [`DownloadRouteSource::Mcim`] when the supplied URL is already an MCIM URL
+/// (for example a saved pack that pins one), which is why the MCIM pin exists
+/// but no built-in mirror claims to serve those CDNs.
 fn custom_mirror_routes(
     url: &str,
     resource: ResourceClass,
@@ -361,6 +428,12 @@ fn is_official_version_manifest_url(url: &str) -> bool {
 /// Every caller that can produce a mixed route list runs this last, so no
 /// mode-specific sort can hand MCIM the lead: a source preference is not a
 /// reason to send MCIM a request it explicitly refuses to serve first.
+///
+/// Note that no builder emits an MCIM route: it is only ever produced by
+/// [`official_route`] when the supplied URL already points at MCIM (a saved pack
+/// that pins `mod.mcimirror.top`). `pin_mcim_last` therefore only protects such
+/// restored URLs, and the absence of a builder is why the setting cannot be
+/// presented as a built-in mirror.
 fn pin_mcim_last(routes: &mut [DownloadRoute]) {
     routes.sort_by_key(|route| route.source == DownloadRouteSource::Mcim);
 }
@@ -388,22 +461,39 @@ pub(super) fn order_auto_routes(
             left_health.cooldown_until.is_some_and(|until| until > now);
         let right_cooling =
             right_health.cooldown_until.is_some_and(|until| until > now);
+        // Without a mirror preference any failure is enough to try the other
+        // origin first. With one, a lone failure must not outrank the user's
+        // choice: a single 404 describes one object, not an unreachable
+        // mirror, and letting it pin the official host for the whole session is
+        // exactly the failure mode this ordering has to avoid. Only a streak
+        // that reaches the demotion threshold is evidence that the mirror
+        // itself is down; it then falls behind an official route, while a
+        // genuinely dead official route still loses to a healthier mirror.
+        let failure_rank = |health: &RouteHealth| {
+            let failures = health.consecutive_failures;
+            if prefer_mirrors {
+                let demoted =
+                    failures >= ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD;
+                (demoted, if demoted { failures } else { 0 })
+            } else {
+                (failures > 0, failures)
+            }
+        };
+        let left_failures = failure_rank(&left_health);
+        let right_failures = failure_rank(&right_health);
         (left.source == DownloadRouteSource::Mcim)
             .cmp(&(right.source == DownloadRouteSource::Mcim))
             .then_with(|| left_cooling.cmp(&right_cooling))
-            .then_with(|| {
-                left_health
-                    .consecutive_failures
-                    .cmp(&right_health.consecutive_failures)
-            })
+            .then_with(|| left_failures.cmp(&right_failures))
             .then_with(|| {
                 // Healthy routes are already resolved by the keys above: the
-                // MCIM pin, cooldown and consecutive-failure comparisons run
-                // first, so this tie-break only orders routes that are equally
-                // reachable. A Chinese-locale preference leads with the mirror
-                // and keeps the official route as the next fallback; every
-                // other locale starts from the supplied official URL. MCIM is
-                // pinned by the first key, so `is_mirror` cannot promote it.
+                // MCIM pin, cooldown, mirror demotion and consecutive-failure
+                // comparisons run first, so this tie-break only orders routes
+                // that are equally reachable. A Chinese-locale preference leads
+                // with the mirror and keeps the official route as the next
+                // fallback; every other locale starts from the supplied
+                // official URL. MCIM is pinned by the first key, so `is_mirror`
+                // cannot promote it.
                 if prefer_mirrors {
                     right.is_mirror.cmp(&left.is_mirror)
                 } else {
@@ -458,6 +548,14 @@ pub fn resolve_download_routes_for(
 ///
 /// `prefer_mirrors` is the stored locale preference and only affects `Auto`:
 /// every explicit mode states its own source order and must ignore it.
+///
+/// The explicit modes are honest about what exists in this build: for
+/// Minecraft there are built-in mirrors (BMCLAPI, Aliyun) so
+/// `MirrorPreferred` really leads with one; for Modrinth and CurseForge there
+/// are none, so `MirrorPreferred` only reorders user-supplied
+/// `custom_download_sources` and otherwise resolves to the same single official
+/// route as `OfficialOnly`. That equivalence is documented in the settings copy
+/// rather than hidden behind a switch that appears to do more than it can.
 pub(super) fn order_routes_for_mode(
     routes: &mut Vec<DownloadRoute>,
     resource: ResourceClass,

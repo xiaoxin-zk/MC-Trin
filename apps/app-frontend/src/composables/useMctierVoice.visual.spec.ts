@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 
@@ -8,6 +9,7 @@ import { useMctierVoice } from './useMctierVoice'
 
 const rtcOperations: string[] = []
 const connections: FakeRTCPeerConnection[] = []
+const rtcConfigurations: RTCConfiguration[] = []
 
 class FakeRTCPeerConnection {
     signalingState = 'stable'
@@ -20,7 +22,8 @@ class FakeRTCPeerConnection {
     oniceconnectionstatechange: (() => void) | null = null
     closed = false
 
-    constructor() {
+    constructor(configuration?: RTCConfiguration) {
+        rtcConfigurations.push(configuration ?? {})
         connections.push(this)
     }
 
@@ -28,6 +31,10 @@ class FakeRTCPeerConnection {
 
     async setRemoteDescription(description: RTCSessionDescriptionInit) {
         rtcOperations.push(`remote:${description.type}`)
+    }
+
+    async createOffer(): Promise<RTCSessionDescriptionInit> {
+        return { type: 'offer', sdp: 'offer-sdp' }
     }
 
     async createAnswer(): Promise<RTCSessionDescriptionInit> {
@@ -122,7 +129,6 @@ function roomState(localPlayerId = 'z', playerIds = ['a']): MctierState {
             virtualIp: null,
             sessionGeneration: 1,
         })),
-        voice_ice_server: null,
     } as MctierState
 }
 
@@ -181,6 +187,7 @@ afterEach(() => {
     vi.unstubAllGlobals()
     rtcOperations.length = 0
     connections.length = 0
+    rtcConfigurations.length = 0
 })
 
 it('replays offer and ICE signals received before the user enables voice', async () => {
@@ -378,6 +385,92 @@ it('drops a peer from the connected count and closes its connection when it leav
 
     expect(voice.connectedPeers.value).toBe(1)
     expect(connections.filter((connection) => connection.closed)).toHaveLength(1)
+})
+
+it('uses only the public STUN servers for ICE', async () => {
+    // The launcher used to prepend a "stun:" server on EasyTier's 10.126.126.x
+    // overlay address. EasyTier runs with --no-tun/--use-smoltcp, so no adapter
+    // owns that address and the bind failed on every machine; the only honest
+    // configuration is the two public servers.
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    const state = roomState('a', ['z'])
+    voice.syncRoom(state)
+    await voice.start(state)
+
+    expect(rtcConfigurations).toHaveLength(1)
+    expect(rtcConfigurations[0].iceServers).toEqual([
+        { urls: 'stun:stun.qq.com:3478' },
+        { urls: 'stun:stun.miwifi.com:3478' },
+    ])
+    expect(JSON.stringify(rtcConfigurations[0])).not.toContain('10.126.126')
+})
+
+it('reports a failed call instead of waiting forever when ICE gives up', async () => {
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    // 'a' sorts before 'z', so this side is the offering side and owns the ICE
+    // restart budget. The answering side never restarts and never abandons.
+    const state = roomState('a', ['z'])
+    voice.syncRoom(state)
+    await voice.start(state)
+    expect(voice.iceFailed.value).toBe(false)
+
+    const peer = connections.find((candidate) => !candidate.closed)!
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+        peer.setConnectionState('failed')
+        await flushPromises()
+    }
+
+    expect(voice.iceFailed.value).toBe(true)
+    // The state is a failed call, not a call waiting for somebody to join.
+    expect(voice.connectedPeers.value).toBe(0)
+})
+
+it('clears the failed state when the retried call reaches a peer', async () => {
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    const state = roomState('a', ['z'])
+    voice.syncRoom(state)
+    await voice.start(state)
+    const peer = connections.find((candidate) => !candidate.closed)!
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+        peer.setConnectionState('failed')
+        await flushPromises()
+    }
+    expect(voice.iceFailed.value).toBe(true)
+
+    await voice.retry()
+
+    expect(voice.iceFailed.value).toBe(false)
+    expect(voice.active.value).toBe(true)
+})
+
+it('drops a peer from the failed set once it connects', async () => {
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    const state = roomState('a', ['z'])
+    voice.syncRoom(state)
+    await voice.start(state)
+    const peer = connections.find((candidate) => !candidate.closed)!
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+        peer.setConnectionState('failed')
+        await flushPromises()
+    }
+    expect(voice.iceFailed.value).toBe(true)
+
+    peer.setConnectionState('connected')
+
+    expect(voice.iceFailed.value).toBe(false)
+    expect(voice.connectedPeers.value).toBe(1)
 })
 
 it('closes every peer connection and stops the capture track when voice stops', async () => {
