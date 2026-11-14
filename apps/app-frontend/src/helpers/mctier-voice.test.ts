@@ -427,6 +427,53 @@ test('a peer that reconnects starts a fresh ICE restart budget', async () => {
     }
 })
 
+test('a failure reported on both state channels spends only one restart', async () => {
+    // A browser reports one ICE failure on both `connectionState` and
+    // `iceConnectionState`, so the two handlers below describe the same event.
+    // The second must not be read as "the restart that just started failed":
+    // that would abandon a peer whose recovery attempt had not even been sent.
+    const environment = installVoiceEnvironment()
+    try {
+        const { stream } = createStream()
+        const unreachable: string[] = []
+        const sent: string[] = []
+        const session = new MctierVoiceSession({
+            localPlayerId: FROM,
+            stream,
+            send: async (signal) => {
+                sent.push(signal.type)
+            },
+            onPeerUnreachable: (playerId) => {
+                unreachable.push(playerId)
+            },
+        })
+        await session.syncPeers([{ playerId: TO }])
+        const [connection] = environment.connections
+        connection.connectionState = 'failed'
+        connection.onconnectionstatechange?.()
+        await settleRestart()
+
+        // One real failure, both channels, a single restart in flight.
+        connection.connectionState = 'failed'
+        connection.iceConnectionState = 'failed'
+        connection.onconnectionstatechange?.()
+        connection.oniceconnectionstatechange?.()
+        await settleRestart()
+        assert.deepEqual(sent, ['offer', 'offer', 'offer'])
+        assert.deepEqual(unreachable, [])
+
+        // Only a further failure once that restart settled can exhaust the
+        // budget, which proves the suppression above was not a swallowed report.
+        connection.connectionState = 'failed'
+        connection.onconnectionstatechange?.()
+        await settleRestart()
+        assert.deepEqual(unreachable, [TO])
+        session.close()
+    } finally {
+        environment.restore()
+    }
+})
+
 test('reports every torn-down peer so the owner can prune its state', async () => {
     const environment = installVoiceEnvironment()
     try {

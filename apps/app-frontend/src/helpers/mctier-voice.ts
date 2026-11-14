@@ -799,13 +799,18 @@ export class MctierVoiceSession {
             this.armUnreachableTimer(playerId, peer)
             return
         }
+        // Before the budget check: one real failure is reported on both state
+        // channels, so the second report would otherwise find the budget spent
+        // by the restart the first one just started and call the peer dead while
+        // that restart is still in flight. A restart that has not been sent yet
+        // cannot have failed, so nothing can be concluded from this event.
+        if (peer.makingOffer) return
         if (peer.iceRestarts >= MAX_ICE_RESTARTS) {
             // The peer stayed failed through every restart: report it so the
             // panel can stop claiming the call is merely waiting for someone.
             this.options.onPeerUnreachable?.(playerId)
             return
         }
-        if (peer.makingOffer) return
         peer.iceRestarts += 1
         try {
             await this.createOffer(playerId, peer, true)
