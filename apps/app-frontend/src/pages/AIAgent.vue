@@ -852,7 +852,11 @@ const selectedLogModel = computed(() => {
  * on everyone.
  */
 const assistantModelOptions = computed(() =>
-    collectAssistantModelOptions(aiState.value?.providers ?? [], providerCatalog.value),
+    // AI features can be switched off globally; a picker that cannot be used
+    // must not be offered.
+    aiState.value?.settings.enabled
+        ? collectAssistantModelOptions(aiState.value.providers, providerCatalog.value)
+        : [],
 )
 
 const assistantModelGroups = computed(() => groupAssistantModels(assistantModelOptions.value))
@@ -868,12 +872,9 @@ const assistantSelection = computed(() =>
  * The fallback is deliberately never persisted, so an explicit pick is the only
  * thing that outlives this page.
  */
-const assistantModel = computed(() => {
-    const chosen = assistantSelection.value
-    if (chosen) return chosen
-    if (!aiState.value?.settings.enabled) return null
-    return assistantModelOptions.value[0] ?? null
-})
+const assistantModel = computed(
+    () => assistantSelection.value ?? assistantModelOptions.value[0] ?? null,
+)
 
 const assistantModelValue = computed({
     get: () => {

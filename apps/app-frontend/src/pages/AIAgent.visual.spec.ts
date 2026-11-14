@@ -331,9 +331,7 @@ it('lists every enabled model and sends the selected one to the assistant', asyn
         'gpt-4o-mini-name-only',
     ])
     // display_name when present, else model_id — the third option proves it.
-    expect(
-        options.map((option) => (option.element as HTMLOptionElement).value),
-    ).toEqual([
+    expect(options.map((option) => (option.element as HTMLOptionElement).value)).toEqual([
         'deepseek\u001fdeepseek-chat',
         'deepseek\u001fdeepseek-reasoner',
         'openai\u001fgpt-4o-mini-name-only',
