@@ -13,15 +13,15 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-/// How long a read-only content question may spend building its snapshot
-/// before the assistant is told the scan is still running.
+/// How long a read-only content question may spend before the assistant is
+/// told the work is still running.
 ///
-/// The scan itself is incremental and cached, but the first call after a large
-/// modpack changed (or on a cold cache) still has to read those files. Waiting
-/// for it inside one tool call looks like a hang — the reported symptom was
-/// 35-42 s per question on a 425-jar instance — so the call returns a distinct
-/// "still scanning" answer instead, and the retry is cheap because the
-/// abandoned scan keeps filling the snapshot and the hash cache.
+/// The scan is incremental and records the hashes it computes, so a steady
+/// state costs nothing, but the first call after content changed still has to
+/// read those files. Waiting for it inside one tool call looks like a hang —
+/// the reported symptom was 35-42 s per question on a 425-jar instance — so
+/// the call returns a distinct "still scanning" answer instead of blocking,
+/// and the retry is cheap.
 const CONTENT_SCAN_BUDGET: Duration = Duration::from_secs(8);
 
 #[derive(Clone, Serialize)]
@@ -323,19 +323,21 @@ pub async fn execute_assistant(
             )?;
             let scan_instance = instance_id.clone();
             let mut scan = tokio::spawn(async move {
-                crate::api::instance::get_recorded_content_snapshot_for_display(
+                crate::api::instance::get_content_snapshot_for_display(
                     &scan_instance,
                 )
                 .await
             });
             match tokio::time::timeout(CONTENT_SCAN_BUDGET, &mut scan).await {
                 Ok(snapshot) => {
-                    let snapshot =
-                        snapshot.map_err(|error| input_error(&error.to_string()))??;
+                    let snapshot = snapshot
+                        .map_err(|error| input_error(&error.to_string()))??;
                     Ok(instance_content_summary(snapshot))
                 }
-                // Dropping the handle keeps the scan running: it fills the
-                // snapshot and the hash cache, so the retry is cheap.
+                // A directly associated instance scans its external game
+                // directory the first time because nothing has recorded its
+                // rows yet. Dropping the handle leaves that scan running, so
+                // the retry is cheap.
                 Err(_) => Ok(scan_in_progress(
                     &instance_id,
                     "inspect_instance_content",
@@ -610,7 +612,8 @@ pub async fn execute_assistant(
                 .await
             });
             let updates =
-                match tokio::time::timeout(CONTENT_SCAN_BUDGET, &mut check).await
+                match tokio::time::timeout(CONTENT_SCAN_BUDGET, &mut check)
+                    .await
                 {
                     Ok(updates) => updates
                         .map_err(|error| input_error(&error.to_string()))??,

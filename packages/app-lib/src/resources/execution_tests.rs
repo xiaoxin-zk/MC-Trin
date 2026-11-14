@@ -257,6 +257,86 @@ async fn legacy_pack_path_collisions_keep_all_members_and_stable_revisions() {
 }
 
 #[tokio::test]
+async fn read_only_hydration_does_not_rescan_recorded_files() {
+    use crate::util::download::verified_file::track_scans;
+    let (_temp, state, _original, _, _root) = fixture().await;
+    let cancel = CancellationToken::new();
+
+    // The update check the assistant runs is read-only: it asks whether the
+    // recorded content is current. Answering that must not re-read the
+    // instance. `track_scans` counts the `sha1_file_async` calls the snapshot
+    // refresh makes, which is the per-file disk read that made a 425-jar
+    // instance take 35-42 s per question.
+    let (result, scans) =
+        track_scans(super::installed::hydrate_with_failures_verifying(
+            &state, "instance", &cancel, false,
+        ))
+        .await;
+    result.unwrap();
+    assert_eq!(
+        scans, 0,
+        "a read-only hydration must answer from the recorded snapshot instead of rescanning the instance"
+    );
+}
+
+#[tokio::test]
+async fn installer_hydration_still_verifies_every_file() {
+    use crate::util::download::verified_file::track_scans;
+    let (_temp, state, _original, _, _root) = fixture().await;
+    let cancel = CancellationToken::new();
+
+    // The writing path keeps its contract: an install plans against bytes it
+    // read itself, so an unchanged tracked file is still re-read here. This
+    // pins that the read-only shortcut above did not weaken the installer.
+    let (result, scans) = track_scans(super::installed::hydrate_with_failures(
+        &state, "instance", &cancel,
+    ))
+    .await;
+    result.unwrap();
+    assert_eq!(
+        scans, 1,
+        "the installer path must keep verifying unchanged files"
+    );
+}
+
+#[tokio::test]
+async fn content_scan_populates_the_hash_cache_it_reads() {
+    let (_temp, state, _original, _, root) = fixture().await;
+    let cancel = CancellationToken::new();
+    std::fs::write(root.join("resourcepacks/fresh.zip"), b"fresh bytes")
+        .unwrap();
+
+    // The scan reads the size-keyed hash cache for every file it has no row
+    // for, but it used to hash the miss and never record it, so the cache could
+    // only ever be filled by an install. A file added outside the launcher then
+    // paid a full read on every single scan.
+    super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+        .await
+        .unwrap();
+
+    let key = format!("{}-example/resourcepacks/fresh.zip", 11);
+    let cached = crate::state::CachedEntry::get_file_hash_many(
+        &[key.as_str()],
+        Some(crate::state::CacheBehaviour::CacheOnly),
+        &state.pool,
+        &state.api_semaphore,
+    )
+    .await
+    .unwrap();
+    let cached = cached
+        .into_iter()
+        .next()
+        .expect("the scan must record the hash it just computed");
+    assert_eq!(cached.hash, "8450e134ce52c0cb2a358ce3fd242c90d3f33696");
+    assert_eq!(cached.size, 11);
+    assert_eq!(
+        cached.project_type,
+        Some(crate::state::ProjectType::ResourcePack)
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
 async fn install_snapshot_reuses_hashes_and_only_rehashes_changed_files() {
     use crate::util::download::verified_file::track_scans;
     let (_temp, state, original, _, root) = fixture().await;

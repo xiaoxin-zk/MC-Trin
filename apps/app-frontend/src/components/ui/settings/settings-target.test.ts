@@ -4,8 +4,7 @@ import test from 'node:test'
 
 import { resolveSettingsTarget, settingsTargetRoute } from './settings-target.ts'
 
-const read = (file: string) =>
-    readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
+const read = (file: string) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
 
 test('builds and reads back a scroll target inside one settings category', () => {
     const route = settingsTargetRoute('launch-defaults', 'log-share')

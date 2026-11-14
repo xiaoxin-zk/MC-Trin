@@ -41,7 +41,8 @@ pub async fn check(
     on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceUpdateCheck> {
-    check_with_verification(instance_id, entry_ids, on_progress, cancel, true).await
+    check_with_verification(instance_id, entry_ids, on_progress, cancel, true)
+        .await
 }
 
 /// The same check, for a caller that only reads the result.

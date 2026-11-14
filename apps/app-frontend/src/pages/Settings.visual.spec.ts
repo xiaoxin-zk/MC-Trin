@@ -7,6 +7,10 @@ import Settings from './Settings.vue'
 const fixture = vi.hoisted(() => ({
     finish: {} as Record<string, () => void>,
     replace: vi.fn().mockResolvedValue(undefined),
+    route: { hash: '#interface', query: {} } as {
+        hash: string
+        query: Record<string, unknown>
+    },
 }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '1.0' }))
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'windows', version: () => '11' }))
@@ -17,7 +21,7 @@ vi.mock('@/providers/download-progress', async () => {
     return { injectAppUpdateDownloadProgress: () => ({ progress: ref(null), version: ref(null) }) }
 })
 vi.mock('vue-router', () => ({
-    useRoute: () => ({ hash: '#interface', query: {} }),
+    useRoute: () => fixture.route,
     useRouter: () => ({ replace: fixture.replace }),
 }))
 vi.mock('@modrinth/ui', () => ({
@@ -30,7 +34,7 @@ vi.mock('@modrinth/ui', () => ({
     }),
 }))
 vi.mock('@/components/ui/settings/settings-search-index', () => ({
-    getSettingsSearchTargetId: (entry: { id: string }) => entry.id,
+    getSettingsSearchTargetId: (entry: { id: string }) => `settings-target-${entry.id}`,
 }))
 vi.mock('@/components/ui/settings/settings-registry', async () => {
     const { defineAsyncComponent, h, markRaw } = await import('vue')
@@ -53,7 +57,9 @@ vi.mock('@/components/ui/settings/settings-registry', async () => {
                 () =>
                     new Promise((resolve) => {
                         fixture.finish[id] = () =>
-                            resolve({ render: () => h('input', { id: `${id}-target` }) })
+                            resolve({
+                                render: () => h('input', { id: `settings-target-${id}-target` }),
+                            })
                     }),
             ),
         })),
@@ -66,6 +72,8 @@ vi.mock('@/components/ui/settings/settings-registry', async () => {
 })
 
 it('waits for async settings to resolve and only locates the latest selected result', async () => {
+    fixture.route.hash = '#interface'
+    fixture.route.query = {}
     const wrapper = mount(
         defineComponent({ render: () => h(Suspense, null, { default: () => h(Settings) }) }),
         { attachTo: document.body },
@@ -86,12 +94,59 @@ it('waits for async settings to resolve and only locates the latest selected res
         expect(input.element.value).toBe('setting')
         fixture.finish.latest()
         await vi.waitFor(() =>
-            expect(wrapper.get('#latest-target').classes()).toContain(
+            expect(wrapper.get('#settings-target-latest-target').classes()).toContain(
                 'settings-search-result-highlight',
             ),
         )
         expect(input.element.value).toBe('')
-        expect(wrapper.find('#slow-target').exists()).toBe(false)
+        expect(wrapper.find('#settings-target-slow-target').exists()).toBe(false)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('opens and highlights the control a ?target= deep link names', async () => {
+    // "Configure AI" in log diagnosis opens launch defaults with
+    // `?target=log-share`. Without the route-driven reveal the user landed on
+    // the right tab but nowhere near the provider and model pickers, which is
+    // the defect this pins.
+    fixture.route.hash = '#latest'
+    fixture.route.query = { target: 'latest-target' }
+    const wrapper = mount(
+        defineComponent({ render: () => h(Suspense, null, { default: () => h(Settings) }) }),
+        { attachTo: document.body },
+    )
+    try {
+        await flushPromises()
+        fixture.finish.latest()
+        await vi.waitFor(() =>
+            expect(wrapper.get('#settings-target-latest-target').classes()).toContain(
+                'settings-search-result-highlight',
+            ),
+        )
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('leaves a deep link alone when its target id is not an anchor id', async () => {
+    // A hand-written link must not be able to address an arbitrary element:
+    // the resolver only accepts the plain ids the settings index uses.
+    fixture.route.hash = '#latest'
+    fixture.route.query = { target: '../etc' }
+    const wrapper = mount(
+        defineComponent({ render: () => h(Suspense, null, { default: () => h(Settings) }) }),
+        { attachTo: document.body },
+    )
+    try {
+        await flushPromises()
+        fixture.finish.latest()
+        await vi.waitFor(() =>
+            expect(wrapper.find('#settings-target-latest-target').exists()).toBe(true),
+        )
+        expect(wrapper.get('#settings-target-latest-target').classes()).not.toContain(
+            'settings-search-result-highlight',
+        )
     } finally {
         wrapper.unmount()
     }

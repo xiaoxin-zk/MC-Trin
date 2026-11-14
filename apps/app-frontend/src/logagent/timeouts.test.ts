@@ -3,8 +3,8 @@ import { test } from 'node:test'
 
 import {
     APPROVAL_TIMEOUT_MS,
-    TURN_DEADLINE_MS,
     TURN_DEADLINE_MESSAGE,
+    TURN_DEADLINE_MS,
     TurnDeadlineError,
     withTurnDeadline,
 } from './timeouts.ts'

@@ -933,7 +933,9 @@ const aiHasUsableModel = computed(() => assistantModelOptions.value.length > 0)
 const LOG_MODEL_SETTINGS = settingsTargetRoute('launch-defaults', 'log-share')
 
 const settingsTarget = computed(() =>
-    mode.value === 'logs' && aiHasUsableModel.value ? LOG_MODEL_SETTINGS : settingsTargetRoute('ai'),
+    mode.value === 'logs' && aiHasUsableModel.value
+        ? LOG_MODEL_SETTINGS
+        : settingsTargetRoute('ai'),
 )
 
 const configurationMessage = computed(() =>

@@ -216,7 +216,7 @@ for (const [sourcePath, translationPath] of localePairs) {
         const inSource = id in source
         const inTranslation = id in translation
         if (inSource && inTranslation) continue
-        if (legacyMissing.has(id)) continue
+        if (!inSource && legacyMissing.has(id)) continue
         if (!inSource) {
             failures.push(`${sourcePath}: missing ${id} that a component declares`)
         }

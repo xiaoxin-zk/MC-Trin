@@ -272,16 +272,6 @@ it('routes disabled local analysis to the page that actually holds its model con
         hash: '#launch-defaults',
         query: { target: 'log-share' },
     })
-    // The interactive model link next to the resolved model must agree with the
-    // empty-state button; two different destinations would keep one broken path
-    // alive.
-    const logModel = wrapper.get('[data-onboarding-id="assistant-log-model"]')
-    await logModel.get('button').trigger('click')
-    expect(mocks.push).toHaveBeenLastCalledWith({
-        path: '/settings',
-        hash: '#launch-defaults',
-        query: { target: 'log-share' },
-    })
 })
 
 it('starts a local analysis for the selected instance and question', async () => {
@@ -464,6 +454,16 @@ it('shows which model log diagnosis will use instead of the assistant picker', a
     expect(logModel.text()).toContain('openai')
     expect(logModel.text()).toContain('gpt-4o-mini-name-only')
     expect(logModel.text()).not.toContain('deepseek-reasoner')
+
+    // The link next to the resolved model must reach the same place as the
+    // empty state: the provider and model pickers in launch defaults, not the
+    // log-level page.
+    await logModel.get('button').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({
+        path: '/settings',
+        hash: '#launch-defaults',
+        query: { target: 'log-share' },
+    })
 })
 
 it('keeps a single enabled model selectable so its identity stays explicit', async () => {

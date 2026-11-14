@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import type { AIProviderConfig, AIProviderDefinition } from '../helpers/ai.ts'
 import {
     assistantModelKey,
     assistantModelOptions,
@@ -8,7 +9,6 @@ import {
     groupAssistantModels,
     parseAssistantModelValue,
 } from './assistant-model.ts'
-import type { AIProviderConfig, AIProviderDefinition } from '../helpers/ai.ts'
 
 function provider(
     providerId: string,
