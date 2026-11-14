@@ -13,6 +13,7 @@ import {
     sha256,
     version,
 } from './desktop-build-utils.mjs'
+import { verifyFrontendBuild } from './verify-frontend-build.mjs'
 
 const { values } = parseArgs({
     options: {
@@ -27,8 +28,7 @@ if (values['installer-only']) {
     run('cargo', ['build', '--locked', '--profile', profile, '--package', 'mctrin-installer-ui'])
 } else {
     const resources = process.env.MCTRIN_BUILD_RESOURCES
-    if (!resources)
-        throw new Error('MCTRIN_BUILD_RESOURCES must point to prepared build resources')
+    if (!resources) throw new Error('MCTRIN_BUILD_RESOURCES must point to prepared build resources')
     run(process.execPath, [
         'scripts/mctrin/prepare-build-resources.mjs',
         '--consume',
@@ -37,6 +37,7 @@ if (values['installer-only']) {
     ])
     const target = values.target
     if (target && !/^[a-z0-9_-]+$/.test(target)) throw new Error('Invalid target triple')
+    const commit = output('git', ['rev-parse', 'HEAD'])
     const targetDirectory = path.join(root, 'target', ...(target ? [target] : []), profile)
     const binary = path.join(
         targetDirectory,
@@ -47,12 +48,17 @@ if (values['installer-only']) {
     args.push('--', '--locked', '--profile', profile)
     run(pnpmCommand(), args, { cwd: app })
     requireFile(binary)
+    // `beforeBuildCommand` rebuilt the frontend during this command, so the
+    // binary must now embed exactly the assets that `dist` holds. This is the
+    // check that would have caught the release whose executable carried an
+    // older `AIAgent-*.js` than the frontend it was packaged with.
+    verifyFrontendBuild({ head: commit, binary })
     fs.writeFileSync(
         path.join(targetDirectory, 'mctrin-build.json'),
         `${JSON.stringify(
             {
                 schema: 1,
-                commit: output('git', ['rev-parse', 'HEAD']),
+                commit,
                 version: version(),
                 profile,
                 target: target || output('rustc', ['-vV']).match(/^host: (.+)$/m)[1],

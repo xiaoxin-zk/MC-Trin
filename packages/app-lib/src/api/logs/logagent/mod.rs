@@ -706,21 +706,28 @@ fn assistant_tool_name(name: &str) -> bool {
     )
 }
 
+/// Every launcher write the assistant may request.
+///
+/// This is the single Rust source of the write list. The renderer mirrors it in
+/// `apps/app-frontend/src/logagent/tool-settings.ts` and the parity test in
+/// `apps/app/tests/logagent_write_tool_parity.rs` fails the build when the two
+/// drift apart, so a new write cannot be added on one side only.
+pub(crate) const ASSISTANT_WRITE_TOOLS: &[&str] = &[
+    "update_launcher_settings",
+    "create_instance",
+    "rename_instance",
+    "delete_instance",
+    "install_java_runtime",
+    "set_java_default_runtime",
+    "queue_resource_install",
+    "cancel_install_job",
+    "disable_content",
+    "enable_content",
+    "remove_content",
+];
+
 fn assistant_write_tool(name: &str) -> bool {
-    matches!(
-        name,
-        "update_launcher_settings"
-            | "create_instance"
-            | "rename_instance"
-            | "delete_instance"
-            | "install_java_runtime"
-            | "set_java_default_runtime"
-            | "queue_resource_install"
-            | "cancel_install_job"
-            | "disable_content"
-            | "enable_content"
-            | "remove_content"
-    )
+    ASSISTANT_WRITE_TOOLS.contains(&name)
 }
 
 fn assistant_request_shape_valid(request: &ToolCall) -> bool {

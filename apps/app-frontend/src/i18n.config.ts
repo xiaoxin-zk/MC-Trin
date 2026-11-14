@@ -2,21 +2,36 @@ import {
     buildLocaleMessages,
     createMessageCompiler,
     type CrowdinMessages,
+    LOCALES,
     uiEnglishMessages,
     uiLocaleModules,
 } from '@modrinth/ui'
 import { createI18n } from 'vue-i18n'
 
 import { createLocaleLoader } from '@/helpers/locale-loader'
+import { DEFAULT_LOCALE, matchLocale, resolveLocale } from '@/helpers/locale-resolution'
 import englishAppMessages from '@/locales/en-US/index.json'
 
 const localeModules = import.meta.glob<{ default: CrowdinMessages }>('./locales/*/index.json')
-const availableLocales = Object.keys(localeModules).map((path) => path.split('/').at(-2)!)
+
+/**
+ * Catalogues that can actually be activated. A locale directory alone is not
+ * enough: `buildLocaleMessages` drops codes that are missing from `LOCALES`, so a
+ * directory without a `LOCALES` entry (currently `ar-SA`) loads an empty bundle
+ * while `locale.value` still points at it. Every string then falls back per
+ * message tree, which renders two languages at once. Intersecting both sources
+ * keeps the selectable list and the loadable list identical.
+ */
+const availableLocales = Object.keys(localeModules)
+    .map((path) => path.split('/').at(-2)!)
+    .filter((locale) => LOCALES.some((definition) => definition.code === locale))
+
+const STARTUP_LOCALE_KEY = 'mctrin.startup-locale'
 
 const i18n = createI18n({
     legacy: false,
-    locale: 'en-US',
-    fallbackLocale: 'en-US',
+    locale: DEFAULT_LOCALE,
+    fallbackLocale: DEFAULT_LOCALE,
     messageCompiler: createMessageCompiler(),
     missingWarn: false,
     fallbackWarn: false,
@@ -33,22 +48,65 @@ const localeLoader = createLocaleLoader(
             localeModules[appPath](),
             uiLocaleModules[appPath](),
         ])
-        i18n.global.setLocaleMessage(
-            locale,
-            buildLocaleMessages({ [appPath]: appMessages }, { [appPath]: uiMessages })[locale],
-        )
+        const messages = buildLocaleMessages({ [appPath]: appMessages }, { [appPath]: uiMessages })[
+            locale
+        ]
+        if (!messages || Object.keys(messages).length === 0) {
+            // Activating an empty bundle makes vue-i18n fall back per message tree
+            // and the UI renders in two languages at once.
+            throw new Error(`Locale bundle for ${locale} is empty`)
+        }
+        i18n.global.setLocaleMessage(locale, messages)
     },
     (locale) => {
         i18n.global.locale.value = locale
     },
-    ['en-US'],
+    [DEFAULT_LOCALE],
 )
 
-export async function setAppLocale(locale: string): Promise<void> {
-    await localeLoader.select(availableLocales.includes(locale) ? locale : 'en-US')
+/**
+ * Activates `requested` through the shared resolution chain and returns the
+ * locale that ends up active.
+ *
+ * Every caller goes through here, so a tag can only ever become an exact
+ * catalogue, one of the two Chinese script mappings, a language-only match, or
+ * `en-US`. No caller picks a catalogue on its own, which is what previously let
+ * the language picker, the stored preference and the OS-language path disagree.
+ *
+ * The loader drops an activation that a newer selection overtook. Reporting the
+ * *requested* code in that case made a caller believe the switch happened while
+ * the UI still rendered the previous language, so the picker and the database
+ * showed the new language next to stale chrome. The active locale is therefore
+ * read back instead of assumed.
+ */
+async function activateLocale(requested: string | null | undefined): Promise<string> {
+    const target = resolveLocale(requested, availableLocales)
+    await localeLoader.select(target)
+    return getActiveLocale()
 }
 
-const STARTUP_LOCALE_KEY = 'mctrin.startup-locale'
+/**
+ * Activates a locale selected by the user. Returns the locale that is actually
+ * active afterwards so callers store the truth instead of the requested tag.
+ */
+export async function setAppLocale(locale: string): Promise<string> {
+    return await activateLocale(locale)
+}
+
+/** Resolves and activates a stored or system preference, returning the concrete locale. */
+export async function applyLocalePreference(
+    storedLocale: string | null | undefined,
+): Promise<string> {
+    const locale = await activateLocale(
+        isFollowingSystemLocale(storedLocale) ? getSystemResolvedLocale() : storedLocale,
+    )
+    try {
+        localStorage.setItem(STARTUP_LOCALE_KEY, storedLocale ?? SYSTEM_LOCALE_VALUE)
+    } catch {
+        // Caching the preference only avoids loading an unused system dictionary next time.
+    }
+    return locale
+}
 
 export async function initializeLocale(): Promise<void> {
     let storedLocale: string | null = null
@@ -60,24 +118,18 @@ export async function initializeLocale(): Promise<void> {
     await applyLocalePreference(storedLocale)
 }
 
+/**
+ * Resolves an ordered preference list (for example `navigator.languages`) to a
+ * shipped catalogue. Every entry goes through the same chain as every other
+ * locale request, so `zh-Hant`/`zh-Hans` map onto `zh-TW`/`zh-CN` and no tag ever
+ * resolves to an arbitrary catalogue.
+ */
 export function resolveInitialLocale(preferredLocales: readonly string[]): string {
     for (const preferredLocale of preferredLocales) {
-        const normalizedLocale = preferredLocale.replace('_', '-')
-        if (availableLocales.includes(normalizedLocale)) return normalizedLocale
-
-        const language = normalizedLocale.split('-')[0].toLowerCase()
-        if (language === 'zh') {
-            const traditionalChinese = /-(tw|hk|mo)|-hant/i.test(normalizedLocale)
-            return traditionalChinese ? 'zh-TW' : 'zh-CN'
-        }
-
-        const languageMatch = availableLocales.find((locale) =>
-            locale.toLowerCase().startsWith(`${language}-`),
-        )
-        if (languageMatch) return languageMatch
+        const match = matchLocale(preferredLocale, availableLocales)
+        if (match) return match
     }
-
-    return 'en-US'
+    return DEFAULT_LOCALE
 }
 
 export const SYSTEM_LOCALE_VALUE = 'system'
@@ -109,22 +161,9 @@ export function setFollowSystemLocale(follow: boolean) {
     }
 }
 
-/** Applies the stored locale preference and returns the concrete locale used. */
-export async function applyLocalePreference(
-    storedLocale: string | null | undefined,
-): Promise<string> {
-    const locale = isFollowingSystemLocale(storedLocale)
-        ? getSystemResolvedLocale()
-        : availableLocales.includes(storedLocale ?? '')
-          ? storedLocale!
-          : 'en-US'
-    try {
-        localStorage.setItem(STARTUP_LOCALE_KEY, storedLocale ?? SYSTEM_LOCALE_VALUE)
-    } catch {
-        // Caching the preference only avoids loading an unused system dictionary next time.
-    }
-    await setAppLocale(locale)
-    return locale
+/** The locale whose bundle is loaded and active right now. */
+export function getActiveLocale(): string {
+    return i18n.global.locale.value
 }
 
 // English is available for the first synchronous render. Other dictionaries load

@@ -157,6 +157,34 @@ export function isResourceOperationError(error: unknown): boolean {
     )
 }
 
+/**
+ * Recognises a cancelled content operation in every encoding that reaches the UI.
+ *
+ * The backend produces two spellings for the same cancellation:
+ * - `packages/app-lib/src/resources/mod.rs` maps `ResourceError::Canceled` to
+ *   "resource request canceled";
+ * - `packages/app-lib/src/resources/execution.rs` returns
+ *   `ErrorKind::InputError("resource operation canceled")`, which the Tauri shell
+ *   serialises as `code: "resourceError"` with an "Invalid input: " prefix.
+ *
+ * Abort-triggered navigation also surfaces as a DOMException named `AbortError`, so
+ * that is treated as cancellation as well.
+ */
+export function isCanceledResourceError(error: unknown): boolean {
+    if (typeof error === 'object' && error !== null) {
+        if ('code' in error && String(error.code) === 'resourceError') {
+            return /resource (?:operation|request) cancel+ed/i.test(rawMessage(error))
+        }
+        if (
+            ('name' in error && String(error.name) === 'AbortError') ||
+            ('name' in error && String(error.name) === 'CanceledError')
+        ) {
+            return true
+        }
+    }
+    return /resource (?:operation|request) cancel+ed/i.test(rawMessage(error))
+}
+
 export function resourceOperationError(error: unknown, formatMessage?: FormatMessage): string {
     const message = rawMessage(error)
     if (!formatMessage) return message
@@ -184,7 +212,7 @@ export function resourceOperationError(error: unknown, formatMessage?: FormatMes
         return formatMessage(errorMessages.stale)
     if (/verified rollback backup not available|rollback backup unavailable/i.test(message))
         return formatMessage(errorMessages.backup)
-    if (/resource request canceled/i.test(message)) return formatMessage(errorMessages.canceled)
+    if (isCanceledResourceError(error)) return formatMessage(errorMessages.canceled)
     if (/resource source is unavailable|Source presentation is unavailable/i.test(message))
         return formatMessage(errorMessages.unavailable)
     const status = message.match(/HTTP status Some\((\d+)\)/)?.[1]

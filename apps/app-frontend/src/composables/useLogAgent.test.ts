@@ -407,3 +407,76 @@ test('reuses an in-flight summary upload and cancellation prevents the cloud req
     assert.equal(clouds, 1)
     scope.stop()
 })
+
+test('a turn that never settles is cancelled by the deadline and reports it', async () => {
+    let aborted = false
+    const scope = effectScope()
+    const agent = scope.run(() =>
+        useLogAgent({
+            prepare: async (_instance, id) => ({
+                run_id: id,
+                provider_id: '',
+                model_id: '',
+                locale: '',
+                context: '',
+            }),
+            cancel: async () => {},
+            cloud: async () => ({ content: '', ticket: null }),
+            gateway: () => ({
+                modelTurn: async () => {
+                    throw new Error('unused')
+                },
+                tool: async () => null,
+            }),
+            // Stands in for a tool call or provider request the backend never
+            // answers: without a deadline the run stays "processing" forever.
+            local: (_session, _gateway, signal) => {
+                signal.addEventListener('abort', () => (aborted = true))
+                return new Promise<string>(() => {})
+            },
+            turnDeadlineMs: 20,
+        }),
+    )!
+
+    const pending = agent.start('instance', 'custom', null, () => {})
+    await pending
+
+    assert.equal(aborted, true, 'the deadline must abort the backend run, not only the wait')
+    assert.equal(agent.status.value, 'error')
+    assert.match(agent.error.value, /stopped responding/)
+    assert.ok(
+        agent.activity.value.every((entry) => entry.state !== 'processing'),
+        'no activity may stay stuck in progress',
+    )
+    scope.stop()
+})
+
+test('a normal turn is not affected by the deadline', async () => {
+    const scope = effectScope()
+    const agent = scope.run(() =>
+        useLogAgent({
+            prepare: async (_instance, id) => ({
+                run_id: id,
+                provider_id: 'p',
+                model_id: 'm',
+                locale: '',
+                context: '',
+            }),
+            cancel: async () => {},
+            cloud: async () => ({ content: '', ticket: null }),
+            gateway: () => ({
+                modelTurn: async () => {
+                    throw new Error('unused')
+                },
+                tool: async () => null,
+            }),
+            local: async () => 'Diagnosis.',
+            turnDeadlineMs: 5_000,
+        }),
+    )!
+
+    await agent.start('instance', 'custom', null, () => {})
+    assert.equal(agent.status.value, 'ready')
+    assert.equal(agent.output.value, 'Diagnosis.')
+    scope.stop()
+})

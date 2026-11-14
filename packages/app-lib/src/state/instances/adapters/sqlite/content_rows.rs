@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::state::instances::adapters::filesystem;
 use crate::state::instances::{
     ContentDependencyEdge, ContentDependencyKind, ContentEntry,
     ContentOwnershipKind, ContentRequirement, ContentSet, ContentSetRemoteRef,
@@ -491,27 +492,61 @@ where
     rows.into_iter().map(TryInto::try_into).collect()
 }
 
+/// Marks tracked files missing ahead of a content scan.
+///
+/// Only rows inside the roots the scanner actually walks
+/// (`filesystem::SCANNED_CONTENT_ROOTS`) are touched: every other path — a
+/// Paxi pack under `config/`, a world under `saves/`, a file a user dropped in
+/// a custom folder — can never be rediscovered by `scan_content_files_from`, so
+/// marking it missing would be permanent. `upsert_instance_file` clears the flag
+/// again for each path this scan sees.
 pub(crate) async fn mark_instance_files_missing(
     instance_id: &str,
     tx: &mut Transaction<'_, Sqlite>,
 ) -> crate::Result<()> {
     let modified_at = Utc::now().timestamp();
 
-    sqlx::query!(
-        "
-		UPDATE instance_files
-		SET
-			missing = 1,
-			modified_at = ?
-		WHERE instance_id = ?
-		",
-        modified_at,
-        instance_id,
-    )
-    .execute(&mut **tx)
-    .await?;
+    // `relative_path` is stored with `/` separators (`scan_content_folder`
+    // builds it from `relative_dir` + `file_name`), so plain prefix matching is
+    // correct on every platform. Roots are bound as parameters; `%`, `_` and
+    // `\` inside a root are escaped and `ESCAPE '\'` keeps the comparison
+    // literal, so a future root containing those characters stays exact.
+    let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+        "UPDATE instance_files SET missing = 1, modified_at = ",
+    );
+    query
+        .push_bind(modified_at)
+        .push(" WHERE instance_id = ")
+        .push_bind(instance_id)
+        .push(" AND (");
+    {
+        let mut roots = query.separated(" OR ");
+        for root in filesystem::SCANNED_CONTENT_ROOTS {
+            roots.push("relative_path LIKE ");
+            roots.push_bind_unseparated(format!(
+                "{}/%",
+                escape_like_pattern(root)
+            ));
+            roots.push_unseparated(" ESCAPE '\\'");
+        }
+    }
+    query.push(")");
+    query.build().execute(&mut **tx).await?;
 
     Ok(())
+}
+
+/// Escapes `LIKE` metacharacters so a literal path prefix cannot widen the
+/// match. Pairs with `ESCAPE '\'` in the query.
+fn escape_like_pattern(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 pub(crate) async fn upsert_instance_file(
@@ -2503,6 +2538,123 @@ mod tests {
             .await
             .expect("instance_content_sets table");
         pool
+    }
+
+    #[tokio::test]
+    async fn marking_missing_skips_paths_the_content_scanner_never_walks() {
+        let pool = test_pool().await;
+        sqlx::raw_sql(
+            "
+            CREATE TABLE instance_files (
+                id TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                sha1 TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                missing INTEGER NOT NULL DEFAULT 0,
+                added_at INTEGER NOT NULL,
+                modified_at INTEGER NOT NULL,
+                local_mod_data TEXT NULL,
+                icon_path TEXT NULL,
+                UNIQUE (instance_id, relative_path)
+            );
+            ",
+        )
+        .execute(&pool)
+        .await
+        .expect("instance_files table");
+
+        // Paths exactly as the launcher stores them (`/` separators, verified
+        // against a live `instance_files` table).
+        let rows: [(&str, i64); 6] = [
+            // Inside the scanner roots: the scan re-discovers these, so they
+            // may be marked missing here and are cleared by the upsert for
+            // every path the scan actually sees.
+            ("mods/gone.jar", 1),
+            ("config/paxi/resourcepacks/x.zip", 1),
+            ("schematics/y.nbt", 1),
+            // Outside every scan root: marking these would be permanent.
+            ("saves/world/datapacks/z.zip", 0),
+            ("config/other/custom.zip", 0),
+            ("resourcepacks_extra/pack.zip", 0),
+        ];
+        for (index, (path, _)) in rows.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO instance_files (
+                    id, instance_id, relative_path, file_name, enabled, sha1,
+                    size, missing, added_at, modified_at
+                 ) VALUES (?, 'instance', ?, ?, 1, 'hash', 1, 0, 0, 0)",
+            )
+            .bind(format!("file-{index}"))
+            .bind(*path)
+            .bind(path.rsplit('/').next().unwrap())
+            .execute(&pool)
+            .await
+            .expect("insert file");
+        }
+
+        let mut tx = pool.begin().await.expect("begin transaction");
+        mark_instance_files_missing("instance", &mut tx)
+            .await
+            .expect("mark missing");
+        tx.commit().await.expect("commit");
+
+        for (path, expected) in rows {
+            let missing: i64 = sqlx::query_scalar(
+                "SELECT missing FROM instance_files WHERE relative_path = ?",
+            )
+            .bind(path)
+            .fetch_one(&pool)
+            .await
+            .expect("read missing");
+            assert_eq!(missing, expected, "unexpected missing flag for {path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn marking_missing_does_not_touch_other_instances() {
+        let pool = test_pool().await;
+        sqlx::raw_sql(
+            "
+            CREATE TABLE instance_files (
+                id TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                relative_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                sha1 TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                missing INTEGER NOT NULL DEFAULT 0,
+                added_at INTEGER NOT NULL,
+                modified_at INTEGER NOT NULL
+            );
+            INSERT INTO instance_files VALUES
+                ('a', 'target', 'mods/a.jar', 'a.jar', 1, 'hash', 1, 0, 0, 0),
+                ('b', 'other', 'mods/b.jar', 'b.jar', 1, 'hash', 1, 0, 0, 0);
+            ",
+        )
+        .execute(&pool)
+        .await
+        .expect("fixture");
+
+        let mut tx = pool.begin().await.expect("begin transaction");
+        mark_instance_files_missing("target", &mut tx)
+            .await
+            .expect("mark missing");
+        tx.commit().await.expect("commit");
+
+        let missing: Vec<(String, i64)> = sqlx::query_as::<_, (String, i64)>(
+            "SELECT instance_id, missing FROM instance_files ORDER BY id",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("read rows");
+        assert_eq!(
+            missing,
+            vec![("target".to_string(), 1), ("other".to_string(), 0)]
+        );
     }
 
     #[tokio::test]

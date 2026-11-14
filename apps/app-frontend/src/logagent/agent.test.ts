@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { AIMessage, ToolMessage } from '@langchain/core/messages'
 
-import { diagnosticText, runLocalAgent } from './agent.ts'
+import { diagnosticText, runLocalAgent, WriteApprovalUnavailableError } from './agent.ts'
 import { LogAgentModel, readableMessageContent } from './model.ts'
 import type { AgentGateway, LocalProgress, ModelTurn } from './types.ts'
 
@@ -144,6 +144,10 @@ test('assistant mode exposes bounded troubleshooting tools', async () => {
         'How much memory is configured?',
         undefined,
         'assistant',
+        '',
+        async () => {
+            throw new Error('read-only tool asked for approval')
+        },
     )
 
     assert.equal(output, 'The launcher is configured for 4096 MB.')
@@ -594,45 +598,60 @@ test('does not treat tool output or unfinished tool calls as a final diagnosis',
 // so the write path (create / rename / delete / settings / content) is covered
 // here rather than only the read-only diagnostics path.
 
-test('write tools refuse to run without an approval handler', async () => {
+test('a surface that enables write tools without an approval handler fails before the first turn', async () => {
     let turns = 0
     let toolCalls = 0
-    let refusal = ''
+    await assert.rejects(
+        runLocalAgent(
+            { ...session, context: 'Launcher assistant session.' },
+            {
+                modelTurn: async () => {
+                    turns += 1
+                    return { role: 'assistant', content: 'I cannot run without approval.' }
+                },
+                tool: async () => {
+                    toolCalls += 1
+                    return {}
+                },
+            },
+            new AbortController().signal,
+            () => {},
+            undefined,
+            undefined,
+            undefined,
+            'assistant',
+        ),
+        (error: unknown) =>
+            error instanceof WriteApprovalUnavailableError &&
+            /cannot ask for the write approval/.test(error.message),
+    )
+
+    // A missing handler is a wiring bug. Reporting it as a tool result would let
+    // the model rephrase the refusal and finish the turn as if the write had been
+    // considered and denied, so the run must fail instead.
+    assert.equal(turns, 0, 'the model must not be asked to act on tools it cannot approve')
+    assert.equal(toolCalls, 0, 'the launcher must not be touched without an approval handler')
+})
+
+test('log-only surfaces keep working without an approval handler', async () => {
+    let turns = 0
     const output = await runLocalAgent(
-        { ...session, context: 'Launcher assistant session.' },
+        session,
         {
-            modelTurn: async (turn) => {
-                if (++turns === 1)
-                    return {
-                        role: 'assistant',
-                        content: '',
-                        tool_calls: [
-                            {
-                                id: 'delete-1',
-                                name: 'delete_instance',
-                                args: { instance_id: 'inst-1' },
-                            },
-                        ],
-                    }
-                refusal = turn.messages.find((message) => message.role === 'tool')?.content ?? ''
-                return { role: 'assistant', content: 'I need your approval before deleting it.' }
+            modelTurn: async () => {
+                turns += 1
+                return { role: 'assistant', content: 'The log shows a missing dependency.' }
             },
-            tool: async () => {
-                toolCalls += 1
-                return {}
-            },
+            tool: async () => ({}),
         },
         new AbortController().signal,
         () => {},
-        undefined,
-        undefined,
-        undefined,
-        'assistant',
     )
 
-    assert.equal(toolCalls, 0, 'the launcher must not be touched without an approval handler')
-    assert.match(refusal, /require an explicit user approval/)
-    assert.equal(output, 'I need your approval before deleting it.')
+    // `MinecraftCrashModal` analyses logs and passes no approval handler; that is
+    // legitimate only because its tool set contains no write tool.
+    assert.equal(turns, 1)
+    assert.match(output, /missing dependency/)
 })
 
 test('a declined write keeps the instance untouched and tells the model', async () => {
@@ -780,7 +799,7 @@ test('write approval shows the tool name, its description and the write permissi
     assert.deepEqual(approvalArgs, { patch: { maximum_megabytes: 8192 } })
 })
 
-test('read-only tools run without an approval handler', async () => {
+test('read-only tools run without prompting for approval', async () => {
     let turns = 0
     const forwarded: string[] = []
     await runLocalAgent(
@@ -806,6 +825,10 @@ test('read-only tools run without an approval handler', async () => {
         undefined,
         undefined,
         'assistant',
+        '',
+        async () => {
+            throw new Error('a read-only tool must not ask for approval')
+        },
     )
 
     assert.deepEqual(forwarded, ['get_instance_overview'])

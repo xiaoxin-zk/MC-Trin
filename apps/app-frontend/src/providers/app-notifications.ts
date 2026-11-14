@@ -10,6 +10,8 @@ import { webNotificationKey } from './notification-keys.ts'
 
 export class AppNotificationManager extends AbstractWebNotificationManager {
     public errorTextFormatter?: (error: unknown) => string | null
+    /** Errors that should not produce any visible notification (e.g. cancelled operations). */
+    public shouldSuppressError?: (error: unknown) => boolean
     private static readonly STORAGE_KEY = 'mctrin:active-web-notifications-v1'
     private static readonly DISMISSED_STORAGE_KEY = 'mctrin:dismissed-web-notifications-v2'
     private static readonly LEGACY_DISMISSED_STORAGE_KEY = 'mctrin:dismissed-web-notifications'
@@ -99,6 +101,11 @@ export class AppNotificationManager extends AbstractWebNotificationManager {
     }
 
     public override handleError(error: unknown): void {
+        // A cancelled operation is expected (navigation, refreshed request) and must not
+        // toast. Returning null from the formatter is not enough: the base implementation
+        // falls back to the raw message, which is exactly what users saw as
+        // "Invalid input: resource request canceled".
+        if (this.shouldSuppressError?.(error)) return
         const text = this.errorTextFormatter?.(error)
         if (text === null || text === undefined) {
             super.handleError(error)

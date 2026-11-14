@@ -351,7 +351,6 @@ app.assistant.result.steps
 app.assistant.settings
 app.assistant.stop
 app.assistant.title
-app.assistant.tools.approval-title
 app.assistant.tools.cancel-job.description
 app.assistant.tools.cancel-job.name
 app.assistant.tools.check-updates.description

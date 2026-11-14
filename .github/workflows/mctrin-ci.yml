@@ -72,6 +72,7 @@ jobs:
           node --test scripts/mctrin/ci-changes.test.mjs
           node --test scripts/mctrin/ci-targeted-tests.test.mjs
           node --test scripts/mctrin/desktop-build-utils.test.mjs
+          node --test scripts/mctrin/verify-frontend-build.test.mjs
           node --test scripts/mctrin/release-policy.test.mjs
           node --test scripts/mctrin/aliyunoss-release.test.mjs
           node --test scripts/mctrin/set-version.test.mjs

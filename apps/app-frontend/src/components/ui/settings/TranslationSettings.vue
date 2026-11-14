@@ -3,6 +3,7 @@ import { PlugIcon, SpinnerIcon, TrashIcon } from '@modrinth/assets'
 import {
     Button,
     Combobox,
+    type ComboboxOption,
     defineMessages,
     injectNotificationManager,
     LOCALES,
@@ -226,6 +227,25 @@ const messages = defineMessages({
         defaultMessage:
             'The translation service could not be reached. Check your network or proxy.',
     },
+    unavailableOption: {
+        id: 'app.translation-settings.unavailable-option',
+        defaultMessage: 'Unavailable',
+    },
+    aiUnavailable: {
+        id: 'app.translation-settings.ai-unavailable',
+        defaultMessage:
+            'AI translation is unavailable right now because the AI feature is off or no provider has an enabled model. Your saved AI choice is kept.',
+    },
+    aiProviderUnavailable: {
+        id: 'app.translation-settings.ai-provider-unavailable',
+        defaultMessage:
+            'The saved AI provider is unavailable right now. It is kept until you choose another provider.',
+    },
+    aiModelUnavailable: {
+        id: 'app.translation-settings.ai-model-unavailable',
+        defaultMessage:
+            'The saved text model is unavailable right now. It is kept until you choose another model.',
+    },
 })
 
 const configuredAIProviders = computed(() =>
@@ -295,12 +315,25 @@ const translationProviders = computed<TranslationProvider[]>(() => [
     ...(aiAvailable.value ? (['ai'] as const) : []),
     'deepl',
 ])
-const providerOptions = computed(() =>
-    translationProviders.value.map((provider) => ({
-        value: provider,
-        label: providerName(provider),
-    })),
-)
+const providerOptions = computed<ComboboxOption<TranslationProvider>[]>(() => {
+    const options: ComboboxOption<TranslationProvider>[] = translationProviders.value.map(
+        (provider) => ({
+            value: provider,
+            label: providerName(provider),
+        }),
+    )
+    // Keep the saved service visible while it is temporarily unavailable
+    // instead of silently selecting a different one.
+    if (settings.value.provider === 'ai' && !aiAvailable.value) {
+        options.push({
+            value: 'ai',
+            label: providerName('ai'),
+            subLabel: formatMessage(messages.unavailableOption),
+            disabled: true,
+        })
+    }
+    return options
+})
 const languageOptions = computed(() =>
     languages.map((language) => ({ value: language, label: languageName(language) })),
 )
@@ -313,18 +346,68 @@ const modeOptions = computed(() =>
 const styleOptions = computed(() =>
     styles.map((style) => ({ value: style, label: styleName(style) })),
 )
-const aiProviderOptions = computed(() =>
-    configuredAIProviders.value.map((provider) => ({
-        value: provider.provider_id,
-        label:
-            provider.custom_name ||
-            aiCatalog.value.find((definition) => definition.id === provider.provider_id)?.name ||
-            provider.provider_id,
-    })),
+/**
+ * The AI pair that was read from disk. It is replaced only by an explicit
+ * pick in one of the AI comboboxes, never by a provider list refresh.
+ * `null` means the settings could not be read, so there is no pair to protect.
+ */
+const storedAIPair = ref<{ providerId: string; modelId: string } | null>(null)
+const aiPairUserSelected = ref(false)
+
+function aiProviderLabel(providerId: string) {
+    const provider = (sharedAIState.value?.providers ?? []).find(
+        (item) => item.provider_id === providerId,
+    )
+    return (
+        provider?.custom_name ||
+        aiCatalog.value.find((definition) => definition.id === providerId)?.name ||
+        providerId
+    )
+}
+
+/** The stored provider, even while it is not selectable. */
+const storedAIProvider = computed(() =>
+    (sharedAIState.value?.providers ?? []).find(
+        (provider) => provider.provider_id === settings.value.ai_provider_id,
+    ),
 )
+const storedAIProviderSelectable = computed(() =>
+    configuredAIProviders.value.some(
+        (provider) => provider.provider_id === settings.value.ai_provider_id,
+    ),
+)
+const storedAIModelSelectable = computed(
+    () =>
+        configuredAIProviders.value
+            .find((provider) => provider.provider_id === settings.value.ai_provider_id)
+            ?.models.some((model) => model.enabled && model.id === settings.value.ai_model_id) ??
+        false,
+)
+
+const aiProviderOptions = computed<ComboboxOption<string>[]>(() => {
+    const options: ComboboxOption<string>[] = configuredAIProviders.value.map((provider) => ({
+        value: provider.provider_id,
+        label: aiProviderLabel(provider.provider_id),
+    }))
+    // Show the saved provider as a disabled entry instead of quietly swapping
+    // it for the first available one: the stored choice stays visible.
+    if (settings.value.ai_provider_id && !storedAIProviderSelectable.value) {
+        options.unshift({
+            value: settings.value.ai_provider_id,
+            label: aiProviderLabel(settings.value.ai_provider_id),
+            subLabel: formatMessage(messages.unavailableOption),
+            disabled: true,
+        })
+    }
+    return options
+})
+
 const selectedAIProvider = computed({
     get: () => settings.value.ai_provider_id,
     set: (providerId: string) => {
+        // Only a click in the combobox reaches this setter. It is the one place
+        // allowed to replace the saved provider/model pair.
+        aiPairUserSelected.value = true
         settings.value.ai_provider_id = providerId
         settings.value.ai_model_id =
             configuredAIProviders.value
@@ -332,37 +415,105 @@ const selectedAIProvider = computed({
                 ?.models.find((model) => model.enabled)?.id ?? ''
     },
 })
-const aiModelOptions = computed(() =>
-    (
-        configuredAIProviders.value.find(
-            (provider) => provider.provider_id === settings.value.ai_provider_id,
-        )?.models ?? []
-    )
+
+const aiModelOptions = computed<ComboboxOption<string>[]>(() => {
+    const provider = storedAIProvider.value
+    const providerSelectable = storedAIProviderSelectable.value
+    const options: ComboboxOption<string>[] = (provider?.models ?? [])
         .filter((model) => model.enabled)
-        .map((model) => ({ value: model.id, label: model.name || model.id })),
-)
+        .map((model) => ({
+            value: model.id,
+            label: model.name || model.id,
+            subLabel: providerSelectable ? undefined : formatMessage(messages.unavailableOption),
+            disabled: !providerSelectable,
+        }))
+    // Keep a saved model visible even when it is disabled or no longer listed,
+    // so it never looks like the first enabled model is the saved one.
+    if (
+        settings.value.ai_model_id &&
+        !options.some((option) => option.value === settings.value.ai_model_id)
+    ) {
+        options.unshift({
+            value: settings.value.ai_model_id,
+            label:
+                (provider?.models ?? []).find((model) => model.id === settings.value.ai_model_id)
+                    ?.name || settings.value.ai_model_id,
+            subLabel: formatMessage(messages.unavailableOption),
+            disabled: true,
+        })
+    }
+    return options
+})
+
+const selectedAIModel = computed({
+    get: () => settings.value.ai_model_id,
+    set: (modelId: string) => {
+        aiPairUserSelected.value = true
+        settings.value.ai_model_id = modelId
+    },
+})
+
+/**
+ * The service combobox is the only writer of `settings.provider`. Choosing AI
+ * is an explicit action, so only then may an empty pair receive a usable
+ * default; an existing pair is never replaced from here.
+ */
+function selectTranslationProvider(provider: TranslationProvider) {
+    settings.value.provider = provider
+    if (provider !== 'ai' || !aiAvailable.value) return
+    if (settings.value.ai_provider_id && settings.value.ai_model_id) return
+    const first = configuredAIProviders.value[0]
+    if (!first) return
+    aiPairUserSelected.value = true
+    settings.value.ai_provider_id = first.provider_id
+    settings.value.ai_model_id = first.models.find((model) => model.enabled)?.id ?? ''
+}
+
+const aiProviderWarning = computed(() => {
+    if (settings.value.provider !== 'ai') return undefined
+    if (settings.value.ai_provider_id && !storedAIProviderSelectable.value) {
+        return formatMessage(messages.aiProviderUnavailable)
+    }
+    return undefined
+})
+const aiModelWarning = computed(() => {
+    if (settings.value.provider !== 'ai') return undefined
+    if (!settings.value.ai_model_id) return undefined
+    // The provider warning already explains the pair; only report the model
+    // itself when the provider is fine but this model is not.
+    if (!storedAIProviderSelectable.value) return undefined
+    if (!storedAIModelSelectable.value) return formatMessage(messages.aiModelUnavailable)
+    return undefined
+})
+
 const stylePreviewClass = computed(() => `translation-style-preview-${settings.value.style}`)
 
-watch(
-    [aiAvailable, configuredAIProviders],
-    () => {
-        if (!aiAvailable.value) {
-            if (settings.value.provider === 'ai') settings.value.provider = 'google'
-            return
-        }
-        if (
-            !configuredAIProviders.value.some(
-                (provider) => provider.provider_id === settings.value.ai_provider_id,
-            )
-        ) {
-            selectedAIProvider.value = configuredAIProviders.value[0]?.provider_id ?? ''
-        }
-        if (!aiModelOptions.value.some((model) => model.value === settings.value.ai_model_id)) {
-            settings.value.ai_model_id = aiModelOptions.value[0]?.value ?? ''
-        }
-    },
-    { immediate: true, deep: true },
-)
+/**
+ * Settings to persist. Until the user picks a provider or model, the AI pair
+ * always comes from disk: a transient filter change must never erase the
+ * stored choice through the autosave path. When the settings could not be
+ * read at all, there is nothing to protect and the loaded object is written.
+ */
+function settingsForPersistence(): TranslationSettingsState {
+    if (aiPairUserSelected.value || !storedAIPair.value) return { ...settings.value }
+    return {
+        ...settings.value,
+        ai_provider_id: storedAIPair.value.providerId,
+        ai_model_id: storedAIPair.value.modelId,
+    }
+}
+
+/**
+ * The backend rejects AI translation without a pair. That only happens when
+ * nothing was ever saved, so there is nothing to protect and no valid payload
+ * to send; the UI keeps asking for an explicit pick instead of inventing one.
+ */
+function hasPersistableAIPair(settingsToSave: TranslationSettingsState) {
+    return (
+        settingsToSave.provider !== 'ai' ||
+        (!!settingsToSave.ai_provider_id && !!settingsToSave.ai_model_id)
+    )
+}
 
 function reportOperationError(error?: unknown, context?: string) {
     const errorKind = error ? getTranslationErrorKind(error) : 'provider'
@@ -430,17 +581,24 @@ watch(
         clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
             saveTimer = undefined
+            const persistable = settingsForPersistence()
+            // Never let a half-made selection reach the backend: it rejects an
+            // empty AI pair and the user has not picked one yet.
+            if (!hasPersistableAIPair(persistable)) {
+                debugLog('Save', 'Skipping save - AI provider/model not chosen yet')
+                return
+            }
             debugLog('Save', 'Saving settings to backend', {
-                provider: newSettings.provider,
-                deeplApiKeySet: !!newSettings.deepl_api_key?.trim(),
-                deeplEndpoint: newSettings.deepl_api_endpoint,
-                aiProviderId: newSettings.ai_provider_id,
-                aiModelId: newSettings.ai_model_id,
+                provider: persistable.provider,
+                deeplApiKeySet: !!persistable.deepl_api_key?.trim(),
+                deeplEndpoint: persistable.deepl_api_endpoint,
+                aiProviderId: persistable.ai_provider_id,
+                aiModelId: persistable.ai_model_id,
             })
 
             // Only save settings, don't show error notifications
             // Errors during save should be silent - only test button shows errors
-            void updateTranslationSettings({ ...settings.value })
+            void updateTranslationSettings(persistable)
                 .then(() => {
                     debugLog('Save', 'Settings saved successfully')
                 })
@@ -450,7 +608,7 @@ watch(
                     const errorMessage = error instanceof Error ? error.message : String(error)
                     debugLog('Save', 'Settings save failed (silent)', {
                         error: errorMessage,
-                        provider: newSettings.provider,
+                        provider: persistable.provider,
                     })
                 })
         }, 300)
@@ -482,7 +640,12 @@ onUnmounted(() => {
     if (loading.value || !saveTimer) return
     clearTimeout(saveTimer)
     saveTimer = undefined
-    void updateTranslationSettings({ ...settings.value }).catch(reportOperationError)
+    // The unmount flush persists the same protected pair as the autosave; it is
+    // not a second chance to "repair" an unavailable selection, and it must not
+    // send a pair the user never chose.
+    const persistable = settingsForPersistence()
+    if (!hasPersistableAIPair(persistable)) return
+    void updateTranslationSettings(persistable).catch(reportOperationError)
 })
 
 onMounted(async () => {
@@ -504,6 +667,12 @@ onMounted(async () => {
             autoTranslate: loadedSettings.auto_translate,
         })
         settings.value = loadedSettings
+        // The pair on disk is authoritative until the user picks a new one.
+        storedAIPair.value = {
+            providerId: loadedSettings.ai_provider_id,
+            modelId: loadedSettings.ai_model_id,
+        }
+        aiPairUserSelected.value = false
         aiCatalog.value = loadedCatalog
     } catch (error) {
         debugLog('Init', 'Failed to load settings', error)
@@ -545,7 +714,7 @@ async function testProvider() {
 
     try {
         debugLog('Test', 'Saving settings before test...')
-        await updateTranslationSettings({ ...settings.value })
+        await updateTranslationSettings(settingsForPersistence())
         debugLog('Test', 'Settings saved, now testing provider...')
 
         const result = await testTranslationProvider(settings.value.provider)
@@ -607,10 +776,17 @@ async function clearCache() {
                     <span v-else-if="settings.provider === 'bilibili'">
                         {{ formatMessage(messages.bilibiliHint) }}
                     </span>
+                    <span v-else-if="settings.provider === 'ai' && !aiAvailable">
+                        {{ formatMessage(messages.aiUnavailable) }}
+                    </span>
                 </template>
                 <template #control>
                     <div class="w-full">
-                        <Combobox v-model="settings.provider" :options="providerOptions" />
+                        <Combobox
+                            :model-value="settings.provider"
+                            :options="providerOptions"
+                            @update:model-value="selectTranslationProvider"
+                        />
                     </div>
                 </template>
             </SettingsRow>
@@ -638,6 +814,9 @@ async function clearCache() {
             </SettingsRow>
             <SettingsRow v-if="settings.provider === 'ai' && aiAvailable">
                 <template #label>{{ formatMessage(messages.aiProvider) }}</template>
+                <template #description>
+                    <span v-if="aiProviderWarning">{{ aiProviderWarning }}</span>
+                </template>
                 <template #control>
                     <div class="w-full">
                         <Combobox v-model="selectedAIProvider" :options="aiProviderOptions">
@@ -658,16 +837,24 @@ async function clearCache() {
                                         :value="String(item.value)"
                                         :size="22"
                                     />
-                                    <span
-                                        class="truncate font-semibold leading-tight"
-                                        :class="
-                                            isSelected
-                                                ? 'text-brand'
-                                                : 'text-[var(--color-text-default)]'
-                                        "
-                                    >
-                                        {{ item.label }}
-                                    </span>
+                                    <div class="flex min-w-0 flex-col gap-1.5">
+                                        <span
+                                            class="truncate font-semibold leading-tight"
+                                            :class="
+                                                isSelected
+                                                    ? 'text-brand'
+                                                    : 'text-[var(--color-text-default)]'
+                                            "
+                                        >
+                                            {{ item.label }}
+                                        </span>
+                                        <span
+                                            v-if="item.subLabel"
+                                            class="truncate text-sm text-[var(--color-text-tertiary)]"
+                                        >
+                                            {{ item.subLabel }}
+                                        </span>
+                                    </div>
                                 </div>
                             </template>
                         </Combobox>
@@ -676,6 +863,9 @@ async function clearCache() {
             </SettingsRow>
             <SettingsRow v-if="settings.provider === 'ai' && aiAvailable">
                 <template #label>{{ formatMessage(messages.aiModel) }}</template>
+                <template #description>
+                    <span v-if="aiModelWarning">{{ aiModelWarning }}</span>
+                </template>
                 <template #control>
                     <div
                         class="translation-model-combobox relative w-full"
@@ -688,24 +878,28 @@ async function clearCache() {
                             :value="settings.ai_model_id"
                             :size="20"
                         />
-                        <Combobox
-                            v-model="settings.ai_model_id"
-                            :options="aiModelOptions"
-                            searchable
-                        >
+                        <Combobox v-model="selectedAIModel" :options="aiModelOptions" searchable>
                             <template #option="{ item, isSelected }">
                                 <div class="flex min-w-0 items-center gap-2.5">
                                     <AIIcon kind="model" :value="String(item.value)" :size="22" />
-                                    <span
-                                        class="truncate font-semibold leading-tight"
-                                        :class="
-                                            isSelected
-                                                ? 'text-brand'
-                                                : 'text-[var(--color-text-default)]'
-                                        "
-                                    >
-                                        {{ item.label }}
-                                    </span>
+                                    <div class="flex min-w-0 flex-col gap-1.5">
+                                        <span
+                                            class="truncate font-semibold leading-tight"
+                                            :class="
+                                                isSelected
+                                                    ? 'text-brand'
+                                                    : 'text-[var(--color-text-default)]'
+                                            "
+                                        >
+                                            {{ item.label }}
+                                        </span>
+                                        <span
+                                            v-if="item.subLabel"
+                                            class="truncate text-sm text-[var(--color-text-tertiary)]"
+                                        >
+                                            {{ item.subLabel }}
+                                        </span>
+                                    </div>
                                 </div>
                             </template>
                         </Combobox>

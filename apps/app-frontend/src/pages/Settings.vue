@@ -42,7 +42,7 @@ interface SettingsSearchResult {
 const themeStore = useTheming()
 const route = useRoute()
 const router = useRouter()
-const { formatMessage } = useVIntl()
+const { formatMessage, locale: activeLocale } = useVIntl()
 const { handleError } = injectNotificationManager()
 const { progress, version: downloadingVersion } = injectAppUpdateDownloadProgress()
 
@@ -551,7 +551,15 @@ const pageTitle: MessageDescriptor = settingsPageTitle
                         </h1>
                     </header>
                 </Transition>
+                <!--
+                    Category bodies and their async chunks resolve their copy once
+                    per mount. Keying the scroll container on the active locale
+                    remounts them when the language changes, so a switch made on
+                    this very page repaints the page instead of leaving the old
+                    language on screen until the user navigates away.
+                -->
                 <div
+                    :key="activeLocale"
                     ref="contentContainer"
                     class="settings-content-scroll min-h-0 flex-1"
                     :class="activeCategory?.flushContent ? 'overflow-hidden' : 'overflow-y-auto'"

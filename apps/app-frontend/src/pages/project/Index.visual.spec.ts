@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
     cfFiles: vi.fn(),
     params: { id: 'one' },
     push: vi.fn(),
+    replace: vi.fn(),
     query: { b: '/browse/mod?q=kept', i: 'target-instance' },
 }))
 vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
@@ -38,7 +39,7 @@ vi.mock('vue-router', () => ({
         path: '/project/one',
         fullPath: '/project/one',
     }),
-    useRouter: () => ({ push: api.push, replace: vi.fn() }),
+    useRouter: () => ({ push: api.push, replace: api.replace, unshift: vi.fn() }),
 }))
 vi.mock('@/helpers/cache.js', () => ({
     get_project: api.project,
@@ -246,10 +247,11 @@ vi.mock('@modrinth/ui', async () => {
                     h('section', [props.heading, slots.actions?.()]),
         }),
         Button: defineComponent({
+            props: { disabled: { type: Boolean, default: false } },
             setup:
-                (_, { slots }) =>
+                (props, { slots }) =>
                 () =>
-                    h('button', slots.default?.()),
+                    h('button', { disabled: props.disabled }, slots.default?.()),
         }),
         injectNotificationManager: () => ({ handleError: vi.fn(), addNotification: vi.fn() }),
         injectPopupNotificationManager: () => ({ addPopupNotification: vi.fn() }),
@@ -599,5 +601,149 @@ it('shows the navigation title before the main project request completes', async
     } finally {
         wrapper.unmount()
         window.history.replaceState({}, '')
+    }
+})
+
+function projectWithVersions() {
+    return {
+        id: 'one',
+        slug: 'one',
+        title: 'Target project',
+        project_type: 'mod',
+        versions: ['release'],
+        team: 'team',
+        categories: [],
+        game_versions: [],
+        loaders: [],
+        gallery: [],
+    }
+}
+
+function mountInstallPage() {
+    return mount(Project, {
+        global: {
+            stubs: {
+                Teleport: true,
+                RouterView: defineComponent({
+                    name: 'TargetProjectDetails',
+                    props: ['project', 'installing'],
+                    setup: () => () => null,
+                }),
+            },
+            directives: { tooltip: {} },
+        },
+    })
+}
+
+function installButton(wrapper: ReturnType<typeof mountInstallPage>) {
+    return wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Install') && !button.text().includes('Installed'))
+}
+
+it('keeps Install enabled when only the installed-content snapshot fails', async () => {
+    api.project.mockReset().mockResolvedValue(projectWithVersions())
+    api.projectV3.mockReset().mockResolvedValue({ minecraft_server: null })
+    api.versions.mockReset().mockResolvedValue([{ id: 'release', date_published: '2026-01-01' }])
+    api.instance.mockReset().mockResolvedValue({
+        id: 'target-instance',
+        name: 'Target instance',
+        loader: 'fabric',
+        game_version: '1.21.8',
+    })
+    api.snapshot.mockReset().mockRejectedValue(new Error('snapshot unavailable'))
+    api.refreshInstances.mockReset().mockResolvedValue(undefined)
+    const wrapper = mountInstallPage()
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.text()).toContain(
+                'Could not check which version is installed in this instance. The installed badge may be inaccurate.',
+            ),
+        )
+        const button = installButton(wrapper)
+        expect(button).toBeDefined()
+        expect(button!.attributes('disabled')).toBeUndefined()
+    } finally {
+        wrapper.unmount()
+        api.snapshot.mockReset().mockResolvedValue({ items: [] })
+    }
+})
+
+it('falls back to stale cached versions instead of disabling Install on a network blip', async () => {
+    api.project.mockReset().mockResolvedValue(projectWithVersions())
+    api.projectV3.mockReset().mockResolvedValue({ minecraft_server: null })
+    api.versions
+        .mockReset()
+        .mockRejectedValueOnce(new Error('resource request failed (HTTP status None)'))
+        .mockResolvedValueOnce([{ id: 'cached', date_published: '2025-01-01' }])
+    api.instance.mockReset().mockResolvedValue({
+        id: 'target-instance',
+        name: 'Target instance',
+        loader: 'fabric',
+        game_version: '1.21.8',
+    })
+    const wrapper = mountInstallPage()
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.text()).toContain(
+                'The version list may be stale because the project source could not be reached.',
+            ),
+        )
+        expect(api.versions).toHaveBeenLastCalledWith(['release'], 'cache_only')
+        const button = installButton(wrapper)
+        expect(button).toBeDefined()
+        expect(button!.attributes('disabled')).toBeUndefined()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('disables Install only when a failed version load has no cache at all', async () => {
+    api.project.mockReset().mockResolvedValue(projectWithVersions())
+    api.projectV3.mockReset().mockResolvedValue({ minecraft_server: null })
+    api.versions
+        .mockReset()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('resource cache unavailable'))
+    const wrapper = mountInstallPage()
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.text()).toContain(
+                'The version list could not be loaded. Install is unavailable until it is available again.',
+            ),
+        )
+        expect(api.versions).toHaveBeenLastCalledWith(['release'], 'cache_only')
+        const button = installButton(wrapper)
+        expect(button).toBeDefined()
+        expect(button!.attributes('disabled')).toBeDefined()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('drops a deleted ?i= instance, tells the user, and keeps Install usable', async () => {
+    api.project.mockReset().mockResolvedValue(projectWithVersions())
+    api.projectV3.mockReset().mockResolvedValue({ minecraft_server: null })
+    api.versions.mockReset().mockResolvedValue([{ id: 'release', date_published: '2026-01-01' }])
+    api.instance.mockReset().mockResolvedValue(null)
+    api.replace.mockClear()
+    api.query.i = 'deleted-instance'
+    const wrapper = mountInstallPage()
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.text()).toContain(
+                'The target instance no longer exists. Choose another instance to install into.',
+            ),
+        )
+        expect(api.replace).toHaveBeenCalledWith({
+            path: '/project/one',
+            query: { b: '/browse/mod?q=kept' },
+        })
+        const button = installButton(wrapper)
+        expect(button).toBeDefined()
+        expect(button!.attributes('disabled')).toBeUndefined()
+    } finally {
+        wrapper.unmount()
+        api.query.i = 'target-instance'
     }
 })

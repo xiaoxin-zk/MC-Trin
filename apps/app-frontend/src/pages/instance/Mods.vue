@@ -410,6 +410,7 @@ import {
     refreshInstanceContentUpdates,
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
+import { isCanceledResourceError, resourceOperationError } from '@/helpers/resource-operation-logic'
 import {
     confirmedContentGroupKey,
     duplicateGroupUpdateEntries,
@@ -2749,7 +2750,11 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
     const instanceId = props.instance.id
     contentEnrichmentController?.abort()
     contentEnrichmentController = new AbortController()
+    const requestController = contentEnrichmentController
     const generation = ++contentRequestGeneration
+    // Stale error cards must not survive a navigation or a retry: clear at the start of
+    // every load and only set it again if this load really failed.
+    contentLoadError.value = null
     visibleMetadataLoadingPaths.value.clear()
     contentUpdateLoadingPaths.value.clear()
     visibleMetadataRequestedPaths.clear()
@@ -2769,6 +2774,9 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
             return applyContentData(local)
         })
     } catch (error) {
+        // A request aborted because the user left (or because this load replaced the
+        // previous one) is not a load failure; it must not toast or leave an error card.
+        if (requestController.signal.aborted || isCanceledResourceError(error)) return
         if (isCurrentContentRequest(instanceId, generation)) {
             handleError(error as Error)
             if (!projects.value.length && !linkedModpackContentItems.value.length)
@@ -2824,6 +2832,7 @@ function enrichContentData(data: InstanceContentData, generation: number) {
             linkedModpackContentItems.value = merge(linkedModpackContentItems.value)
         })
         .catch((error) => {
+            if (controller.signal.aborted || isCanceledResourceError(error)) return
             if (isCurrent()) handleError(error as Error)
         })
 }
@@ -2986,6 +2995,7 @@ provideContentManager({
     updateDuplicateGroup,
     loading,
     error: contentLoadError,
+    formatError: (error) => resourceOperationError(error, formatMessage),
     filterOptionsReady: computed(
         () =>
             !loading.value &&
@@ -3265,6 +3275,8 @@ async function loadInitialContent(): Promise<void> {
         invalidateContentRequests(true)
         return
     }
+    // A stale error card from a previous instance/visit must not survive this load.
+    contentLoadError.value = null
     const installRevision = getInstallRevision()
     const cached = readInstanceCache(props.instance.id)
 

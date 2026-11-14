@@ -80,6 +80,56 @@ test('breadcrumb component resolves Upgrade through formatMessage on each render
     assert.match(source, /resolveBreadcrumbLabel\([\s\S]*?\(message\) => formatMessage\(message\)/)
 })
 
+test('every static route breadcrumb resolves through a localized message', () => {
+    // The default zh-CN chrome previously showed English breadcrumbs because
+    // these route names fell through to the raw English route label.
+    const labels: Record<string, string> = {
+        'AI assistant': 'app.navigation.ai-assistant',
+        Plugins: 'app.plugins.title',
+        'Command generator': 'app.lab.command-generator.title',
+        Versions: 'project.versions.title',
+        Gallery: 'project.gallery.title',
+    }
+    for (const name of Object.keys(labels)) {
+        const resolve = (locale: 'en-US' | 'zh-CN') =>
+            resolveBreadcrumbLabel(
+                name,
+                () => '',
+                labels,
+                (messageId) => localeMessages[locale][messageId].message,
+            )
+        assert.notEqual(resolve('zh-CN'), name, `${name} must not stay English in zh-CN`)
+        assert.notEqual(resolve('zh-CN'), resolve('en-US'), `${name} must differ from English`)
+    }
+    assert.equal(
+        resolveBreadcrumbLabel(
+            'AI assistant',
+            () => '',
+            labels,
+            (id) => localeMessages['zh-CN'][id].message,
+        ),
+        'AI 助手',
+    )
+
+    // The runtime map above only proves the catalogue has the strings. These
+    // assertions prove the component actually consults them, which is what was
+    // missing: the route names fell through to the raw English label.
+    const source = readFileSync(new URL('./Breadcrumbs.vue', import.meta.url), 'utf8')
+    for (const [name, messageKey] of [
+        ['AI assistant', 'aiAssistant'],
+        ['Plugins', 'plugins'],
+        ['Command generator', 'commandGenerator'],
+        ['Versions', 'versions'],
+        ['Gallery', 'gallery'],
+    ] as const) {
+        assert.match(
+            source,
+            new RegExp(`'?${name}'?: messages\\.${messageKey},`),
+            `${name} must be mapped to a message descriptor`,
+        )
+    }
+})
+
 test('breadcrumb separators render only between visible breadcrumb items', () => {
     const source = readFileSync(new URL('./Breadcrumbs.vue', import.meta.url), 'utf8')
     assert.match(source, /v-for="\(breadcrumb, index\) in breadcrumbs"/)

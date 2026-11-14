@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import { LogAgentModel, readableMessageContent } from './model.ts'
 import { LAUNCHER_ASSISTANT_PROMPT, LOGAGENT_PROMPT } from './prompts.ts'
-import { enabledAgentTools } from './tool-settings.ts'
+import { ASSISTANT_WRITE_TOOLS, enabledAgentTools } from './tool-settings.ts'
 import type {
     AgentGateway,
     AgentToolApproval,
@@ -98,6 +98,22 @@ function mcpModelToolName(index: number, name: string): string {
     return `mcp_${index}_${safeName}`
 }
 
+/** Message shown when a write tool is reachable but cannot be approved. */
+export const WRITE_APPROVAL_UNAVAILABLE =
+    'This launcher cannot ask for the write approval this tool requires; nothing was changed.'
+
+/**
+ * Raised when a write tool was offered to the model but the surface passed no
+ * approval handler. This is a wiring bug, so it aborts the run instead of
+ * becoming a tool result the model can explain away.
+ */
+export class WriteApprovalUnavailableError extends Error {
+    constructor() {
+        super(WRITE_APPROVAL_UNAVAILABLE)
+        this.name = 'WriteApprovalUnavailableError'
+    }
+}
+
 export async function runLocalAgent(
     session: PreparedSession,
     gateway: AgentGateway,
@@ -111,6 +127,17 @@ export async function runLocalAgent(
     approveLocalTool?: (tool: AgentToolApproval, args: Record<string, unknown>) => Promise<boolean>,
 ): Promise<string> {
     const resourcePlans = new Map<string, Record<string, unknown>>()
+    const enabledBuiltInTools = enabledAgentTools(mode)
+    // A surface that enables a write tool but passes no approval handler cannot
+    // show the approval the gate requires, so every write it attempts would be
+    // refused after the model already spent a turn. Fail before the first turn
+    // instead; the throw inside `invokeWriteTool` stays as the last defence for
+    // a tool reached some other way.
+    if (
+        !approveLocalTool &&
+        [...enabledBuiltInTools].some((name) => ASSISTANT_WRITE_TOOLS.has(name))
+    )
+        throw new WriteApprovalUnavailableError()
     const invokeTool = async (name: string, request: Record<string, unknown>) => {
         signal.throwIfAborted()
         onTool(name)
@@ -156,8 +183,11 @@ export async function runLocalAgent(
         approvalRequest: Record<string, unknown> = request,
     ) => {
         signal.throwIfAborted()
-        if (!approveLocalTool)
-            return JSON.stringify({ error: 'Write tools require an explicit user approval.' })
+        // A missing handler is a wiring bug, not a user decision: the surface
+        // offered a write tool but cannot show the approval dialog. Returning a
+        // tool result here let the model rephrase the refusal and waste the
+        // turn, so this throws and aborts the run.
+        if (!approveLocalTool) throw new WriteApprovalUnavailableError()
         const approved = await approveLocalTool(
             { name, description, permission: 'write' },
             approvalRequest,
@@ -166,7 +196,6 @@ export async function runLocalAgent(
         if (!approved) return JSON.stringify({ error: 'The user did not approve this write.' })
         return invokeTool(name, request)
     }
-    const enabledBuiltInTools = enabledAgentTools(mode)
     const builtInTools = (
         mode === 'assistant'
             ? [

@@ -576,6 +576,10 @@ import { listPendingCurseForgeManualDownloads } from '@/helpers/curseforge'
 import type { CurseForgeManualDownloadItem } from '@/helpers/curseforge-manual'
 import { resolveDownloadUrl } from '@/helpers/download-url'
 import { retiredDownloadMessage } from '@/helpers/download-url-messages'
+import {
+    downloadFallbackLabelKind,
+    downloadJobPhaseLabel,
+} from '@/helpers/download-job-labels'
 import { selectDownloadEmptyState } from '@/helpers/downloads-empty-state'
 import {
     download_job_support_details,
@@ -842,6 +846,10 @@ const messages = defineMessages({
     downloadFallbacks: {
         id: 'app.downloads.download-fallbacks',
         defaultMessage: '{count} fallbacks',
+    },
+    downloadFallbacksSummary: {
+        id: 'app.downloads.download-fallbacks-summary',
+        defaultMessage: '{count} fallbacks during this download',
     },
     unknownPhase: { id: 'app.downloads.phase.unknown', defaultMessage: 'Working' },
 })
@@ -1119,15 +1127,27 @@ function isLocalRecoveryValidation(job: InstallJobSnapshot) {
 }
 
 function jobPhaseLabel(job: InstallJobSnapshot) {
-    if (job.rollback_error) return formatMessage(messages.cleanupIncomplete)
-    // Older queued content jobs were initialized with the generic instance phase.
-    // Keep their label meaningful while they are resumed or waiting for the worker.
-    if (job.kind === 'install_content' && job.phase === 'preparing_instance') {
-        return formatMessage(phaseMessages.downloading_content)
+    const label = downloadJobPhaseLabel(job)
+    switch (label.kind) {
+        case 'status':
+            return formatMessage(
+                label.status === 'succeeded'
+                    ? phaseMessages.completed
+                    : label.status === 'failed'
+                      ? statusMessages.failed
+                      : label.status === 'canceled'
+                        ? statusMessages.canceled
+                        : statusMessages.interrupted,
+            )
+        case 'cleanupIncomplete':
+            return formatMessage(messages.cleanupIncomplete)
+        case 'legacyContentPhase':
+            return formatMessage(phaseMessages.downloading_content)
+        case 'verifyingFiles':
+            return formatMessage(messages.verifyingDownloadedFiles)
+        default:
+            return phaseLabel(label.phase)
     }
-    return isLocalRecoveryValidation(job)
-        ? formatMessage(messages.verifyingDownloadedFiles)
-        : phaseLabel(job.phase)
 }
 
 function itemStatusLabel(job: InstallJobSnapshot, status: DownloadItem['status']) {
@@ -1318,8 +1338,14 @@ function downloadTelemetry(job: InstallJobSnapshot) {
     if (telemetry?.eta_seconds != null) {
         metrics.push(formatDownloadEta(telemetry.eta_seconds))
     }
-    if (summary.fallback_count > 0 && !isRecoveryValidation(job)) {
+    const fallbackLabelKind = downloadFallbackLabelKind(job)
+    if (fallbackLabelKind === 'active') {
         metrics.push(formatMessage(messages.downloadFallbacks, { count: summary.fallback_count }))
+    } else if (fallbackLabelKind === 'historical') {
+        // A finished job must not claim it is still falling back; report the historical count.
+        metrics.push(
+            formatMessage(messages.downloadFallbacksSummary, { count: summary.fallback_count }),
+        )
     }
     return metrics
 }

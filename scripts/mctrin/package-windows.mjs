@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import {
     app,
     files,
+    output,
     pnpmCommand,
     requireFile,
     requireProfile,
@@ -13,6 +14,7 @@ import {
     sha256,
     version,
 } from './desktop-build-utils.mjs'
+import { verifyFrontendBuild } from './verify-frontend-build.mjs'
 
 const { values } = parseArgs({
     options: {
@@ -25,6 +27,18 @@ const profile = values.profile
 requireProfile(profile)
 const source = path.join(root, 'target', profile)
 const binary = requireFile(path.join(source, 'MC-Trin.exe'))
+// The installer bundles the executable, and the executable embeds whatever
+// `apps/app-frontend/dist` held when it was compiled. Comparing asset names
+// here catches a binary built against another frontend before the installer is
+// shipped - the failure that put an old `AIAgent-*.js` into a release.
+verifyFrontendBuild({ head: output('git', ['rev-parse', 'HEAD']), binary })
+const manifest = JSON.parse(fs.readFileSync(path.join(source, 'mctrin-build.json'), 'utf8'))
+if (
+    manifest.commit !== output('git', ['rev-parse', 'HEAD']) ||
+    manifest.binarySha256 !== sha256(binary)
+) {
+    throw new Error('The packaged binary does not match its build manifest')
+}
 const initialHash = sha256(binary)
 process.env.MCTRIN_INSTALLER_UI_PATH = requireFile(path.join(source, 'mctrin-installer-ui.exe'))
 const destination = path.resolve(values.output)

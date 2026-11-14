@@ -25,6 +25,7 @@ pub enum TranslateErrorCode {
     AiDisabled,
     AiProviderDisabled,
     AiModelNotSelected,
+    AiModelDisabled,
     AiRequestFailed,
 }
 
@@ -52,6 +53,7 @@ impl TranslateErrorCode {
             Self::AiDisabled => "AI_DISABLED",
             Self::AiProviderDisabled => "AI_PROVIDER_DISABLED",
             Self::AiModelNotSelected => "AI_MODEL_NOT_SELECTED",
+            Self::AiModelDisabled => "AI_MODEL_DISABLED",
             Self::AiRequestFailed => "AI_REQUEST_FAILED",
         }
     }
@@ -130,6 +132,15 @@ impl From<mctrin::Error> for TranslateError {
                 if text.contains("AI features are disabled") =>
             {
                 TranslateErrorCode::AiDisabled
+            }
+            // Checked before the generic provider check so a disabled model is
+            // reported as its own condition rather than "provider disabled".
+            // Matches both the GUI-side guard and the app-lib gate, so the
+            // background task keeps the specific code when the model is off.
+            ErrorKind::InputError(text)
+                if text.contains("AI_MODEL_DISABLED") =>
+            {
+                TranslateErrorCode::AiModelDisabled
             }
             ErrorKind::InputError(text) if text.contains("is disabled") => {
                 TranslateErrorCode::AiProviderDisabled

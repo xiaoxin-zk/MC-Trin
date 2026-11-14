@@ -18,7 +18,7 @@ mod toml_mod;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-const LOCAL_METADATA_VERSION: u32 = 2;
+const LOCAL_METADATA_VERSION: u32 = 3;
 
 /// Unified local mod metadata extracted from inside a JAR.
 ///
@@ -122,20 +122,22 @@ pub fn extract_mod_metadata(bytes: &Bytes) -> Option<LocalModMetadata> {
 fn try_fabric(
     archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
 ) -> Option<LocalModMetadata> {
-    let mut file = archive.by_name("fabric.mod.json").ok()?;
-    let parsed: fabric::FabricModJson =
-        serde_json::from_reader(&mut file).ok()?;
+    let parsed: fabric::FabricModJson = {
+        let mut file = archive.by_name("fabric.mod.json").ok()?;
+        serde_json::from_reader(&mut file).ok()?
+    };
 
     let authors = merge_authors(&parsed.authors, &parsed.contributors);
     // A mod without an id cannot be identified; skip it rather than
     // fabricating a shared placeholder that would make mods collide.
     let mod_id = parsed.id.clone()?;
+    let version = resolve_placeholder_version(parsed.version, archive);
 
     Some(LocalModMetadata {
         metadata_version: LOCAL_METADATA_VERSION,
         mod_id,
         name: parsed.name,
-        version: parsed.version,
+        version,
         authors,
         description: parsed.description,
         url: extract_contact_url(&parsed._contact),
@@ -156,19 +158,21 @@ fn try_fabric(
 fn try_quilt(
     archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
 ) -> Option<LocalModMetadata> {
-    let mut file = archive.by_name("quilt.mod.json").ok()?;
-    let parsed: fabric::QuiltModJson =
-        serde_json::from_reader(&mut file).ok()?;
+    let parsed: fabric::QuiltModJson = {
+        let mut file = archive.by_name("quilt.mod.json").ok()?;
+        serde_json::from_reader(&mut file).ok()?
+    };
 
     let inner = parsed.quilt_loader;
     let authors = merge_authors(&inner.authors, &inner.contributors);
     let mod_id = inner.id.clone()?;
+    let version = resolve_placeholder_version(inner.version, archive);
 
     Some(LocalModMetadata {
         metadata_version: LOCAL_METADATA_VERSION,
         mod_id,
         name: inner.name,
-        version: inner.version,
+        version,
         authors,
         description: inner.description,
         url: extract_contact_url(&inner._contact),
@@ -266,7 +270,7 @@ fn try_toml_path(
     // (e.g. `${file.jarVersion}`) that the loader resolves at runtime from the
     // JAR manifest's `Implementation-Version`. Resolve it here so the
     // placeholder never surfaces as a version in the UI.
-    let version = resolve_toml_version(entry.version.clone(), archive);
+    let version = resolve_placeholder_version(entry.version.clone(), archive);
 
     Some(LocalModMetadata {
         metadata_version: LOCAL_METADATA_VERSION,
@@ -287,18 +291,20 @@ fn try_toml_path(
 fn try_mcmod_info(
     archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
 ) -> Option<LocalModMetadata> {
-    let mut file = archive.by_name("mcmod.info").ok()?;
-    let entries: Vec<mcmod_info::McmodInfoEntry> =
-        serde_json::from_reader(&mut file).ok()?;
+    let entries: Vec<mcmod_info::McmodInfoEntry> = {
+        let mut file = archive.by_name("mcmod.info").ok()?;
+        serde_json::from_reader(&mut file).ok()?
+    };
 
     let entry = entries.into_iter().next()?;
     let mod_id = entry.modid.clone()?;
+    let version = resolve_placeholder_version(entry.version, archive);
 
     Some(LocalModMetadata {
         metadata_version: LOCAL_METADATA_VERSION,
         mod_id,
         name: entry.name,
-        version: entry.version,
+        version,
         authors: entry.authors.unwrap_or_default(),
         description: entry.description,
         url: entry.url,
@@ -340,27 +346,31 @@ fn extract_contact_url(contact: &Option<serde_json::Value>) -> Option<String> {
     obj.values().find_map(|v| v.as_str().map(String::from))
 }
 
-/// Resolve a Forge `mods.toml` version string.
+/// Resolve a version string that may still carry a Gradle placeholder.
 ///
-/// Gradle builds often write an unresolved placeholder (e.g.
-/// `${file.jarVersion}`) which the loader substitutes from the JAR manifest at
-/// runtime; surface the real `Implementation-Version` from the manifest when
-/// present, falling back to the original value otherwise.
-fn resolve_toml_version(
+/// Gradle's `processResources` expands placeholders such as `${version}` (Fabric
+/// `fabric.mod.json`) and `${file.jarVersion}` (Forge `mods.toml`) at build time.
+/// A JAR built without that expansion ships the placeholder verbatim — upstream
+/// `MCRcortex/nvidium` is one such mod — and the loaders substitute the JAR
+/// manifest's `Implementation-Version` at runtime. Surface that value instead.
+///
+/// Every parser funnels its version through this function so no placeholder can
+/// reach `ContentItemVersion.version_number`. When the manifest carries no
+/// usable version the version is genuinely unknown: return `None` so the
+/// frontend renders its "unknown" label instead of a literal `${version}`.
+fn resolve_placeholder_version(
     version: Option<String>,
     archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
 ) -> Option<String> {
-    let placeholder = version?;
-    if !placeholder.starts_with("${") {
-        return Some(placeholder);
+    let version = version?;
+    if !version.contains("${") {
+        return Some(version);
     }
 
-    Some(
-        manifest::archive_manifest(archive)
-            .and_then(|manifest| manifest.implementation_version)
-            .filter(|resolved| !resolved.trim().is_empty())
-            .unwrap_or(placeholder),
-    )
+    manifest::archive_manifest(archive)
+        .and_then(|manifest| manifest.implementation_version)
+        .map(|resolved| resolved.trim().to_string())
+        .filter(|resolved| !resolved.is_empty() && !resolved.contains("${"))
 }
 
 #[cfg(test)]
@@ -520,13 +530,82 @@ type = "incompatible"
     }
 
     #[test]
-    fn placeholder_version_without_manifest_attribute_is_kept() {
+    fn placeholder_version_without_manifest_attribute_is_unknown() {
         let jar = build_jar(&[(
             "META-INF/mods.toml",
             "[[mods]]\nmodId = \"example\"\nversion = \"${file.jarVersion}\"\n",
         )]);
 
         let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
-        assert_eq!(meta.version.as_deref(), Some("${file.jarVersion}"));
+        assert_eq!(meta.version, None);
+    }
+
+    #[test]
+    fn fabric_placeholder_version_without_manifest_is_unknown() {
+        let jar = build_jar(&[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"nvidium","name":"Nvidium","version":"${version}"}"#,
+        )]);
+
+        let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
+        assert_eq!(meta.mod_id, "nvidium");
+        assert_eq!(meta.version, None);
+    }
+
+    #[test]
+    fn fabric_placeholder_version_resolves_from_manifest() {
+        let jar = build_jar(&[
+            (
+                "META-INF/MANIFEST.MF",
+                "Manifest-Version: 1.0\nImplementation-Version: 0.3.4\n",
+            ),
+            (
+                "fabric.mod.json",
+                r#"{"schemaVersion":1,"id":"nvidium","name":"Nvidium","version":"${version}"}"#,
+            ),
+        ]);
+
+        let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
+        assert_eq!(meta.version.as_deref(), Some("0.3.4"));
+    }
+
+    #[test]
+    fn quilt_placeholder_version_without_manifest_is_unknown() {
+        let jar = build_jar(&[(
+            "quilt.mod.json",
+            r#"{"quilt_loader":{"schema_version":1,"id":"example","version":"${version}"}}"#,
+        )]);
+
+        let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
+        assert_eq!(meta.version, None);
+    }
+
+    #[test]
+    fn mcmod_placeholder_version_without_manifest_is_unknown() {
+        let jar = build_jar(&[(
+            "mcmod.info",
+            r#"[{"modid":"example","name":"Example","version":"${version}"}]"#,
+        )]);
+
+        let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
+        assert_eq!(meta.version, None);
+    }
+
+    #[test]
+    fn placeholder_metadata_forces_a_refresh_of_cached_rows() {
+        let jar = build_jar(&[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"nvidium","version":"${version}"}"#,
+        )]);
+
+        let meta = super::extract_mod_metadata(&jar).expect("mod metadata");
+        let mut cached = serde_json::to_value(&meta).unwrap();
+        // Metadata stored before the placeholder sanitiser existed.
+        cached["metadata_version"] = serde_json::json!(2);
+        assert!(
+            serde_json::from_value::<super::LocalModMetadata>(cached)
+                .unwrap()
+                .needs_refresh()
+        );
     }
 }

@@ -214,14 +214,9 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
             job_state.record_event(InstallJobEventKind::JobSucceeded {
                 instance_id: current_instance_id(&job_state),
             });
-            job_state.progress.phase = if matches!(
-                job_state.request,
-                InstallRequest::UpgradeUnmanagedInstance { .. }
-            ) {
-                InstallPhaseId::Completed
-            } else {
-                InstallPhaseId::Finalizing
-            };
+            // The finalize step has genuinely finished here, for every request kind. Leaving
+            // `Finalizing` behind made a succeeded job contradict its own status badge.
+            job_state.progress.phase = InstallPhaseId::Completed;
             job_state.progress.progress = None;
             job_state.progress.details = InstallPhaseDetails::Empty;
             job_state.progress.parallel = None;

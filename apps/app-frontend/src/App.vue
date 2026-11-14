@@ -152,6 +152,7 @@ import { runWhenIdle } from '@/helpers/page-transition'
 import { get_by_instance_id, kill as killProcess } from '@/helpers/process.js'
 import { getExternalLinkUrl, mergeUrlQuery, parseModrinthLink } from '@/helpers/project-links.ts'
 import {
+    isCanceledResourceError,
     isResourceOperationError,
     resourceOperationError,
 } from '@/helpers/resource-operation-logic'
@@ -789,9 +790,17 @@ async function onImportFileReceived({
 }
 
 notificationManager.errorTitleProvider = () => formatMessage(messages.errorOccurred)
-notificationManager.errorTextFormatter = (error) =>
-    fileOperationError(error, getOsType(), formatMessage) ??
-    (isResourceOperationError(error) ? resourceOperationError(error, formatMessage) : null)
+notificationManager.errorTextFormatter = (error) => {
+    // Leaving the instance content tab aborts in-flight content requests. That is expected
+    // user navigation, not a failure, so it must not surface a toast (or a raw message via
+    // the manager's fallback).
+    if (isCanceledResourceError(error)) return null
+    return (
+        fileOperationError(error, getOsType(), formatMessage) ??
+        (isResourceOperationError(error) ? resourceOperationError(error, formatMessage) : null)
+    )
+}
+notificationManager.shouldSuppressError = (error) => isCanceledResourceError(error)
 
 function getErrorNotificationDetails(notification: WebNotification | PopupNotification): string {
     const details = [

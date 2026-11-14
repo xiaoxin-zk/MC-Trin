@@ -97,9 +97,9 @@ async function persistLocale(follow: boolean, concreteLocale: string) {
     try {
         setFollowSystemLocale(follow)
         followSystem.value = follow
-        await setAppLocale(concreteLocale)
-        await update({ locale: concreteLocale })
-        settingsLocale.value = concreteLocale
+        const appliedLocale = await setAppLocale(concreteLocale)
+        await update({ locale: appliedLocale })
+        settingsLocale.value = appliedLocale
     } catch (error) {
         console.warn('Failed to apply onboarding language', error)
         setFollowSystemLocale(previousFollow)

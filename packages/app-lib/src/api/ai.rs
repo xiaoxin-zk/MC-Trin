@@ -684,15 +684,17 @@ async fn discard_legacy_openai_secret() -> crate::Result<()> {
     Ok(())
 }
 
+/// Loads a provider's model list: the bundled catalog in catalog order, then
+/// any extra rows discovered or added locally, sorted by display name.
 async fn load_provider_models(
+    pool: &sqlx::SqlitePool,
     provider_id: &str,
 ) -> crate::Result<Vec<AiProviderModel>> {
-    let state = State::get().await?;
     let rows = sqlx::query(
 		"SELECT model_id, display_name, enabled, source FROM ai_provider_models WHERE provider_id = ? ORDER BY display_name, model_id",
 	)
 	.bind(provider_id)
-	.fetch_all(&state.pool)
+	.fetch_all(pool)
 	.await?;
     let mut stored = rows
         .into_iter()
@@ -734,15 +736,224 @@ async fn load_provider_models(
     Ok(models)
 }
 
+/// Resolves a stored protocol against the catalog. A row written by a newer
+/// build (or edited by hand) can name a protocol this build does not know; the
+/// catalog protocol is the only value the rest of the loader can interpret, so
+/// the bad value is logged and ignored instead of failing the provider.
+fn stored_protocol_or_default(
+    definition: &AiProviderDefinition,
+    stored: &str,
+) -> AiProtocol {
+    match AiProtocol::from_str(stored) {
+        Ok(protocol) => protocol,
+        Err(error) => {
+            tracing::warn!(
+                provider_id = definition.id,
+                protocol = stored,
+                error = %error,
+                "Stored AI provider protocol is not recognised; using the catalog protocol"
+            );
+            definition.protocol
+        }
+    }
+}
+
+/// Guarantees at least one selectable model for a provider that has none.
+///
+/// The bundled catalog can list many models while enabling none of them (that
+/// is the case for `ollama`, `huggingface`, `modelscope`, `nebius` and
+/// `nvidia`), which would leave a fresh provider with a full list of greyed
+/// toggles and nothing usable out of the box.
+///
+/// The default is `definition.check_model`, applied only when *no* model of the
+/// provider is enabled. That predicate is what keeps this from becoming an
+/// always-inject rule:
+///
+/// - Enabling any model — the user's own choice — short-circuits the function,
+///   so nothing is injected or promoted alongside it.
+/// - Providers without a `check_model` (`azure`, `azureai`, `lmstudio`,
+///   `vllm`, `xinference`) never receive a phantom row.
+/// - If the catalog already lists `check_model`, that existing row is enabled
+///   instead of adding a duplicate.
+/// - [`check_model_is_disabled_by_user`] suppresses the default when the user
+///   has explicitly stored `check_model` as off. Without it, turning that one
+///   model off would enable it again on the next load, and the disabled-model
+///   guard in [`resolve_text_request`] could never reject it. Rows created by a
+///   model fetch do not count: they describe the endpoint, not an authorisation
+///   choice, so a freshly refreshed provider still gets a usable default.
+///
+/// The promotion is applied to the returned snapshot only and never written
+/// back, so it cannot accumulate rows or mutate stored authorisation state.
+async fn ensure_selectable_model(
+    pool: &sqlx::SqlitePool,
+    models: &mut Vec<AiProviderModel>,
+    definition: &AiProviderDefinition,
+) -> crate::Result<()> {
+    if definition.check_model.is_empty()
+        || models.iter().any(|model| model.enabled)
+    {
+        return Ok(());
+    }
+    if check_model_is_disabled_by_user(pool, definition).await? {
+        return Ok(());
+    }
+    if let Some(model) = models
+        .iter_mut()
+        .find(|model| model.id == definition.check_model)
+    {
+        model.enabled = true;
+        return Ok(());
+    }
+    models.push(AiProviderModel {
+        id: definition.check_model.to_string(),
+        name: definition.check_model.to_string(),
+        enabled: true,
+        source: "builtin".to_string(),
+    });
+    Ok(())
+}
+
+/// Whether the user has explicitly stored the catalog's `check_model` as off.
+///
+/// Rows written by model discovery (`source = 'remote'`) are deliberately
+/// excluded: a fetch records what the endpoint offers, not an authorisation
+/// choice, and a refresh must not silently remove the fresh-install default.
+/// Only a row the user created by toggling the model in the UI (`builtin` or
+/// `custom`) counts as a decision.
+async fn check_model_is_disabled_by_user(
+    pool: &sqlx::SqlitePool,
+    definition: &AiProviderDefinition,
+) -> crate::Result<bool> {
+    if definition.check_model.is_empty() {
+        return Ok(false);
+    }
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM ai_provider_models WHERE provider_id = ? AND model_id = ? AND enabled = FALSE AND source != 'remote')",
+    )
+    .bind(definition.id)
+    .bind(definition.check_model)
+    .fetch_one(pool)
+    .await?
+        != 0)
+}
+
+/// Catalog defaults for a provider whose stored configuration could not be
+/// read. The entry is still returned so one damaged row cannot hide the rest of
+/// the provider list from the settings page.
+///
+/// No default model is selected here: this path runs precisely when the stored
+/// state is unknown, so picking a model would be guessing at authorisation. The
+/// provider is reported disabled, which is the actionable state.
+fn fallback_provider_config(
+    definition: &AiProviderDefinition,
+) -> AiProviderConfig {
+    let models = builtin_models(definition.id)
+        .iter()
+        .map(|builtin| AiProviderModel {
+            id: builtin.id.clone(),
+            name: builtin.name.clone(),
+            enabled: builtin.enabled,
+            source: "builtin".to_string(),
+        })
+        .collect::<Vec<_>>();
+    AiProviderConfig {
+        provider_id: definition.id.to_string(),
+        custom_name: None,
+        protocol: definition.protocol,
+        enabled: false,
+        endpoint: definition.default_endpoint.to_string(),
+        settings: HashMap::new(),
+        has_api_key: false,
+        configured_credentials: Vec::new(),
+        oauth_connected: false,
+        models,
+    }
+}
+
+/// The UI-facing credential summary of one provider.
+///
+/// Kept apart from [`load_provider_record`] so database loading never touches
+/// the OS credential store: a caller that only needs protocol, endpoint and
+/// models (text completion, model discovery, tests) must not pay for it.
+#[derive(Default)]
+struct ProviderCredentials {
+    configured: Vec<String>,
+    has_api_key: bool,
+    oauth_connected: bool,
+}
+
+/// Each credential is read exactly once per provider. A transient keyring
+/// failure must not hide the whole provider list, so an unreadable entry is
+/// logged and reported as "not configured" instead of failing the state.
+fn read_provider_credentials(
+    definition: &AiProviderDefinition,
+) -> ProviderCredentials {
+    let mut credentials = ProviderCredentials::default();
+    for credential in credential_names(definition.id) {
+        match read_credential(definition.id, credential) {
+            Ok(Some(_)) => {
+                credentials.configured.push((*credential).to_string())
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    provider_id = definition.id,
+                    credential,
+                    error = %error,
+                    "Could not read an AI credential"
+                );
+            }
+        }
+    }
+    credentials.has_api_key = credentials
+        .configured
+        .iter()
+        .any(|credential| credential == API_KEY_CREDENTIAL);
+    credentials.oauth_connected = read_oauth_credentials(definition.id)
+        .inspect_err(|error| {
+            tracing::warn!(
+                provider_id = definition.id,
+                error = %error,
+                "Could not read stored AI OAuth credentials"
+            );
+        })
+        .unwrap_or(None)
+        .is_some();
+    credentials
+}
+
+fn attach_credentials(
+    config: &mut AiProviderConfig,
+    definition: &AiProviderDefinition,
+) {
+    let credentials = read_provider_credentials(definition);
+    config.has_api_key = credentials.has_api_key;
+    config.configured_credentials = credentials.configured;
+    config.oauth_connected = credentials.oauth_connected;
+}
+
 async fn load_provider_config(
+    pool: &sqlx::SqlitePool,
     definition: &AiProviderDefinition,
 ) -> crate::Result<AiProviderConfig> {
-    let state = State::get().await?;
+    let mut config = load_provider_record(pool, definition).await?;
+    attach_credentials(&mut config, definition);
+    Ok(config)
+}
+
+/// Reads one provider's stored configuration and model list.
+///
+/// The credential fields stay at their defaults; [`attach_credentials`] fills
+/// them for the settings UI.
+async fn load_provider_record(
+    pool: &sqlx::SqlitePool,
+    definition: &AiProviderDefinition,
+) -> crate::Result<AiProviderConfig> {
     let row = sqlx::query(
 		"SELECT custom_name, protocol, enabled, endpoint, settings FROM ai_provider_configs WHERE provider_id = ?",
 	)
 	.bind(definition.id)
-	.fetch_optional(&state.pool)
+	.fetch_optional(pool)
 	.await?;
     let (custom_name, protocol, enabled, endpoint, settings) = match row {
         Some(row) => {
@@ -752,7 +963,10 @@ async fn load_provider_config(
             .unwrap_or_default();
             (
                 row.get("custom_name"),
-                AiProtocol::from_str(&row.get::<String, _>("protocol"))?,
+                stored_protocol_or_default(
+                    definition,
+                    &row.get::<String, _>("protocol"),
+                ),
                 row.get::<i64, _>("enabled") != 0,
                 normalize_endpoint(
                     &row.get::<String, _>("endpoint"),
@@ -769,38 +983,8 @@ async fn load_provider_config(
             HashMap::new(),
         ),
     };
-    let mut models = load_provider_models(definition.id).await?;
-    if models.is_empty() && !definition.check_model.is_empty() {
-        models.push(AiProviderModel {
-            id: definition.check_model.to_string(),
-            name: definition.check_model.to_string(),
-            enabled: true,
-            source: "builtin".to_string(),
-        });
-    }
-    // Each credential is read exactly once per provider. A transient keyring
-    // failure must not hide the whole provider list, so an unreadable entry is
-    // logged and reported as "not configured" instead of failing the state.
-    let mut configured_credentials = Vec::new();
-    for credential in credential_names(definition.id) {
-        match read_credential(definition.id, credential) {
-            Ok(Some(_)) => {
-                configured_credentials.push((*credential).to_string())
-            }
-            Ok(None) => {}
-            Err(error) => {
-                tracing::warn!(
-                    provider_id = definition.id,
-                    credential,
-                    error = %error,
-                    "Could not read an AI credential"
-                );
-            }
-        }
-    }
-    let has_api_key = configured_credentials
-        .iter()
-        .any(|credential| credential == API_KEY_CREDENTIAL);
+    let mut models = load_provider_models(pool, definition.id).await?;
+    ensure_selectable_model(pool, &mut models, definition).await?;
     Ok(AiProviderConfig {
         provider_id: definition.id.to_string(),
         custom_name,
@@ -808,18 +992,9 @@ async fn load_provider_config(
         enabled,
         endpoint,
         settings,
-        has_api_key,
-        configured_credentials,
-        oauth_connected: read_oauth_credentials(definition.id)
-            .inspect_err(|error| {
-                tracing::warn!(
-                    provider_id = definition.id,
-                    error = %error,
-                    "Could not read stored AI OAuth credentials"
-                );
-            })
-            .unwrap_or(None)
-            .is_some(),
+        has_api_key: false,
+        configured_credentials: Vec::new(),
+        oauth_connected: false,
         models,
     })
 }
@@ -828,15 +1003,46 @@ async fn load_provider_config(
 pub async fn get_state() -> crate::Result<AiState> {
     discard_legacy_openai_secret().await?;
     let state = State::get().await?;
+    get_state_with_pool(&state.pool, true).await
+}
+
+/// The provider list behind [`get_state`], reading only from `pool`.
+///
+/// Each provider is loaded independently: an unreadable or malformed row is
+/// logged and replaced with catalog defaults, because the AI settings page and
+/// every AI feature read this list and one damaged row must not take them down.
+///
+/// `with_credentials` is false only for callers (and tests) that do not need
+/// the settings-page credential summary; those must not touch the OS credential
+/// store. Production always passes `true`.
+async fn get_state_with_pool(
+    pool: &sqlx::SqlitePool,
+    with_credentials: bool,
+) -> crate::Result<AiState> {
     let enabled = sqlx::query_scalar::<_, i64>(
         "SELECT enabled FROM ai_settings WHERE id = 0",
     )
-    .fetch_one(&state.pool)
+    .fetch_one(pool)
     .await?
         != 0;
     let mut providers = Vec::with_capacity(PROVIDERS.len());
     for definition in PROVIDERS {
-        providers.push(load_provider_config(definition).await?);
+        let loaded = if with_credentials {
+            load_provider_config(pool, definition).await
+        } else {
+            load_provider_record(pool, definition).await
+        };
+        match loaded {
+            Ok(config) => providers.push(config),
+            Err(error) => {
+                tracing::warn!(
+                    provider_id = definition.id,
+                    error = %error,
+                    "Could not load an AI provider; using catalog defaults"
+                );
+                providers.push(fallback_provider_config(definition));
+            }
+        }
     }
     Ok(AiState {
         settings: AiSettings { enabled },
@@ -2017,28 +2223,50 @@ async fn complete_cloudflare(
         })
 }
 
+/// Stable marker for "the chosen model exists but the user turned it off".
+///
+/// The text-completion paths check this explicitly: unlike `chat.rs` they do
+/// not otherwise prove that the model is part of the provider's selection, so
+/// a disabled model would silently go out to the provider. The marker keeps the
+/// failure distinguishable from a generic provider error for the UI.
+pub const AI_MODEL_DISABLED_ERROR: &str = "AI_MODEL_DISABLED";
+
+fn find_model<'a>(
+    config: &'a AiProviderConfig,
+    model_id: &str,
+) -> Option<&'a AiProviderModel> {
+    config.models.iter().find(|model| model.id == model_id)
+}
+
+/// Whether `model_id` names one of the provider's models and is enabled.
+///
+/// This is the same test `chat.rs` applies before using a model, exposed so a
+/// caller holding only a provider snapshot (mod translation, the provider test
+/// UI) agrees with it on what "usable" means.
+pub fn model_is_enabled(config: &AiProviderConfig, model_id: &str) -> bool {
+    find_model(config, model_id).is_some_and(|model| model.enabled)
+}
+
+/// True when the provider lists `model_id` and the user turned that row off.
+///
+/// An id the provider does not list at all is left alone: endpoint-style
+/// providers (Azure deployments, local servers) may accept ids that were never
+/// discovered or catalogued, and rejecting those is a separate decision.
+fn is_model_disabled(config: &AiProviderConfig, model_id: &str) -> bool {
+    find_model(config, model_id).is_some_and(|model| !model.enabled)
+}
+
+fn disabled_model_error(model_id: &str) -> crate::Error {
+    input_error(format!(
+        "{AI_MODEL_DISABLED_ERROR}: The selected AI model {model_id} is turned off; enable it in AI settings"
+    ))
+}
+
 #[tracing::instrument(skip(request), fields(provider_id = %request.provider_id, model_id = %request.model_id))]
 pub async fn complete_text(request: AiTextRequest) -> crate::Result<String> {
     let state = State::get().await?;
-    let enabled = sqlx::query_scalar::<_, i64>(
-        "SELECT enabled FROM ai_settings WHERE id = 0",
-    )
-    .fetch_one(&state.pool)
-    .await?
-        != 0;
-    if !enabled {
-        return Err(input_error("AI features are disabled".to_string()));
-    }
-    let definition = provider_definition(&request.provider_id)?;
-    let config = load_provider_config(definition).await?;
-    if !config.enabled {
-        return Err(input_error(format!("{} is disabled", definition.name)));
-    }
-    if request.model_id.trim().is_empty() {
-        return Err(input_error(
-            "Select an AI model before using it".to_string(),
-        ));
-    }
+    let (definition, config) =
+        resolve_text_request(&state.pool, &request).await?;
     match config.protocol {
         AiProtocol::Anthropic => {
             complete_anthropic(definition, &config, &request).await
@@ -2066,6 +2294,42 @@ pub async fn complete_text(request: AiTextRequest) -> crate::Result<String> {
             complete_openai(definition, &config, &request).await
         }
     }
+}
+
+/// Everything a text request must satisfy before any provider is contacted.
+///
+/// This is the single gate shared by mod translation, the provider test and
+/// playlist/translation features, so it enforces the same definition of a
+/// usable model that `chat.rs` uses: AI features on, provider on, a model
+/// selected and that model enabled.
+async fn resolve_text_request(
+    pool: &sqlx::SqlitePool,
+    request: &AiTextRequest,
+) -> crate::Result<(&'static AiProviderDefinition, AiProviderConfig)> {
+    let enabled = sqlx::query_scalar::<_, i64>(
+        "SELECT enabled FROM ai_settings WHERE id = 0",
+    )
+    .fetch_one(pool)
+    .await?
+        != 0;
+    if !enabled {
+        return Err(input_error("AI features are disabled".to_string()));
+    }
+    let definition = provider_definition(&request.provider_id)?;
+    let config = load_provider_record(pool, definition).await?;
+    if !config.enabled {
+        return Err(input_error(format!("{} is disabled", definition.name)));
+    }
+    let model_id = request.model_id.trim();
+    if model_id.is_empty() {
+        return Err(input_error(
+            "Select an AI model before using it".to_string(),
+        ));
+    }
+    if is_model_disabled(&config, model_id) {
+        return Err(disabled_model_error(model_id));
+    }
+    Ok((definition, config))
 }
 
 #[tracing::instrument]
@@ -2210,7 +2474,8 @@ pub async fn fetch_models(
             definition.name
         )));
     }
-    let config = load_provider_config(definition).await?;
+    let state = State::get().await?;
+    let config = load_provider_record(&state.pool, definition).await?;
     let key = if definition.auth_type == AiAuthType::OAuthDeviceFlow {
         fresh_oauth_credentials(definition.id).await?.access_token
     } else {
@@ -2295,17 +2560,35 @@ pub async fn fetch_models(
         .into());
     }
     let state = State::get().await?;
-    for (id, name) in &models {
+    store_discovered_models(&state.pool, &provider_id, &models).await?;
+    // Discovery never promotes a model: the returned list reflects exactly what
+    // is stored, so the fetcher UI shows the new rows as toggles the user must
+    // enable deliberately.
+    load_provider_models(&state.pool, &provider_id).await
+}
+
+/// Persists discovered models without touching the user's authorisation state.
+///
+/// Refreshing the provider's model list must not re-enable a model the user
+/// turned off, so a new row is inserted disabled and a conflicting row keeps
+/// whatever `enabled` value it already has. Only the display name of a remotely
+/// discovered (non-custom) row is refreshed.
+async fn store_discovered_models(
+    pool: &sqlx::SqlitePool,
+    provider_id: &str,
+    models: &[(String, String)],
+) -> crate::Result<()> {
+    for (id, name) in models {
         sqlx::query(
-			"INSERT INTO ai_provider_models (provider_id, model_id, display_name, enabled, source) VALUES (?, ?, ?, TRUE, 'remote') ON CONFLICT(provider_id, model_id) DO UPDATE SET display_name = CASE WHEN ai_provider_models.source = 'custom' THEN ai_provider_models.display_name ELSE excluded.display_name END",
+			"INSERT INTO ai_provider_models (provider_id, model_id, display_name, enabled, source) VALUES (?, ?, ?, FALSE, 'remote') ON CONFLICT(provider_id, model_id) DO UPDATE SET enabled = ai_provider_models.enabled, display_name = CASE WHEN ai_provider_models.source = 'custom' THEN ai_provider_models.display_name ELSE excluded.display_name END",
 		)
-		.bind(&provider_id)
+		.bind(provider_id)
 		.bind(id)
 		.bind(name)
-		.execute(&state.pool)
+		.execute(pool)
 		.await?;
     }
-    load_provider_models(&provider_id).await
+    Ok(())
 }
 
 #[tracing::instrument]

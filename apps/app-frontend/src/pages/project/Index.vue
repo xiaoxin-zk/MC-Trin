@@ -323,20 +323,44 @@
                         </OverflowMenu>
                     </template>
                 </ProjectHeader>
-                <div
-                    v-if="classificationFailed || supplementalFailed"
-                    role="alert"
-                    class="flex items-center gap-3"
-                >
+                <div v-if="classificationFailed" role="alert" class="flex items-center gap-3">
                     <span>{{ formatMessage(messages.additionalDetailsFailed) }}</span>
+                    <Button @click="retryProjectClassification()">{{
+                        formatMessage(commonMessages.retryButton)
+                    }}</Button>
+                </div>
+                <div v-if="versionsFailed" role="alert" class="flex items-center gap-3">
+                    <span>{{ formatMessage(messages.versionsFailed) }}</span>
                     <Button
-                        @click="
-                            classificationFailed
-                                ? retryProjectClassification()
-                                : retrySupplementalData()
-                        "
+                        :disabled="versionsLoading"
+                        @click="retrySupplementalData('versions')"
                         >{{ formatMessage(commonMessages.retryButton) }}</Button
                     >
+                </div>
+                <div v-else-if="versionsStale" role="status" class="flex items-center gap-3">
+                    <span>{{ formatMessage(messages.versionsStale) }}</span>
+                    <Button
+                        :disabled="versionsLoading"
+                        @click="retrySupplementalData('versions')"
+                        >{{ formatMessage(commonMessages.retryButton) }}</Button
+                    >
+                </div>
+                <div v-if="snapshotFailed" role="alert" class="flex items-center gap-3">
+                    <span>{{ formatMessage(messages.snapshotFailed) }}</span>
+                    <Button @click="retrySupplementalData('snapshot')">{{
+                        formatMessage(commonMessages.retryButton)
+                    }}</Button>
+                </div>
+                <div v-if="instanceFailed" role="alert" class="flex items-center gap-3">
+                    <span>{{ formatMessage(messages.instanceFailed) }}</span>
+                    <Button
+                        :disabled="instanceContextLoading"
+                        @click="retrySupplementalData('instance')"
+                        >{{ formatMessage(commonMessages.retryButton) }}</Button
+                    >
+                </div>
+                <div v-if="missingInstanceId" role="status" class="flex items-center gap-3">
+                    <span>{{ formatMessage(messages.instanceGone) }}</span>
                 </div>
                 <NavTabs
                     :links="[
@@ -574,6 +598,29 @@ const messages = defineMessages({
         id: 'app.project.additional-details-failed',
         defaultMessage: 'Some project details could not be loaded.',
     },
+    versionsFailed: {
+        id: 'app.project.versions-failed',
+        defaultMessage:
+            'The version list could not be loaded. Install is unavailable until it is available again.',
+    },
+    versionsStale: {
+        id: 'app.project.versions-stale',
+        defaultMessage:
+            'The version list may be stale because the project source could not be reached.',
+    },
+    snapshotFailed: {
+        id: 'app.project.snapshot-failed',
+        defaultMessage:
+            'Could not check which version is installed in this instance. The installed badge may be inaccurate.',
+    },
+    instanceFailed: {
+        id: 'app.project.instance-failed',
+        defaultMessage: 'Could not load the target instance. Install will use the default target.',
+    },
+    instanceGone: {
+        id: 'app.project.instance-gone',
+        defaultMessage: 'The target instance no longer exists. Choose another instance to install into.',
+    },
     comingSoon: { id: 'app.project.coming-soon', defaultMessage: 'Coming soon' },
     loadFailed: {
         id: 'app.project.load-failed',
@@ -682,9 +729,12 @@ const mcmodUrl = ref(null)
 const versions = shallowRef([])
 const projectClassificationReady = ref(false)
 const classificationFailed = ref(false)
-const supplementalFailed = ref(false)
+const versionsFailed = ref(false)
+const versionsStale = ref(false)
+const snapshotFailed = ref(false)
+const instanceFailed = ref(false)
+const missingInstanceId = ref(null)
 const versionsReady = ref(false)
-const instanceReady = ref(false)
 const members = shallowRef([])
 const organization = shallowRef(null)
 const instance = ref(null)
@@ -941,11 +991,17 @@ const installButtonInstalled = computed(() =>
               (!route.query.i || cartTarget.value?.id === route.query.i) &&
               contentSelection.isInstalledIdentity('modrinth', data.value.id, data.value.slug)),
 )
+/**
+ * Install needs a project classification and a usable version catalog. The catalog is
+ * fresh, cached (stale) or already resolved; only an empty catalog after a hard failure
+ * blocks the button. Snapshot and instance context never gate it — they only decorate
+ * the page (installed badge, target name) and failures there must stay recoverable.
+ */
+const versionsKnown = computed(() => versionsReady.value || versions.value.length > 0)
 const installButtonDisabled = computed(
     () =>
         !projectClassificationReady.value ||
-        !versionsReady.value ||
-        !instanceReady.value ||
+        !versionsKnown.value ||
         installButtonInstalled.value ||
         installButtonLoading.value,
 )
@@ -1109,35 +1165,167 @@ async function loadProjectClassification(projectId, loadVersion) {
 function retryProjectClassification() {
     void loadProjectClassification(String(route.params.id), projectLoadVersion)
 }
-function retrySupplementalData() {
+
+const supplementalRetryHandlers = {
+    versions: () => {
+        if (!data.value) return
+        versionsFailed.value = false
+        versionsStale.value = false
+        void loadVersions(data.value, currentSupplementalCheck()).catch(handleError)
+    },
+    snapshot: () => {
+        if (!data.value) return
+        const instanceId = instance.value?.id ?? queryInstanceId()
+        if (!instanceId) return
+        void loadContentSnapshot(data.value, instanceId, currentSupplementalCheck()).catch(
+            handleError,
+        )
+    },
+    instance: () => {
+        if (!data.value) return
+        const instanceId = queryInstanceId()
+        if (!instanceId) return
+        void loadInstanceContext(data.value, instanceId, currentSupplementalCheck()).catch(
+            handleError,
+        )
+    },
+}
+
+/** Retries only the supplemental request that failed, never the healthy ones. */
+function retrySupplementalData(part) {
+    supplementalRetryHandlers[part]?.()
+}
+
+function currentSupplementalCheck() {
     const version = projectLoadVersion
-    supplementalFailed.value = false
-    void loadSupplementalProjectData(
-        data.value,
-        route.query.i,
-        () => version === projectLoadVersion,
-    ).catch(handleError)
+    return () => version === projectLoadVersion
+}
+
+function queryInstanceId() {
+    return typeof route.query.i === 'string' && route.query.i ? route.query.i : null
+}
+
+function sortVersions(result) {
+    return [...(result ?? [])].sort((a, b) => dayjs(b.date_published) - dayjs(a.date_published))
+}
+
+async function loadVersions(project, isCurrent) {
+    versionsLoading.value = true
+    versionsFailed.value = false
+    versionsStale.value = false
+    try {
+        const result = await get_version_many(project.versions, 'must_revalidate')
+        if (!isCurrent()) return
+        versionsReady.value = true
+        versions.value = sortVersions(result)
+    } catch (error) {
+        // A transient network failure must never disable Install. Re-read the cached
+        // catalog first; only an empty catalog after a cold-cache failure is fatal.
+        const cached = await get_version_many(project.versions, 'cache_only').catch(() => null)
+        if (!isCurrent()) return
+        if (cached?.length) {
+            versionsReady.value = true
+            versionsStale.value = true
+            versions.value = sortVersions(cached)
+            return
+        }
+        if (versions.value.length) {
+            versionsReady.value = true
+            versionsStale.value = true
+            return
+        }
+        versionsReady.value = false
+        versionsFailed.value = true
+        handleError(error)
+    } finally {
+        if (isCurrent()) versionsLoading.value = false
+    }
+}
+
+function applySnapshot(project, snapshot) {
+    const installedFile = snapshot?.items.find(
+        (item) =>
+            item.materializationState === 'present' &&
+            ((item.provider === 'modrinth' && item.providerProjectId === project.id) ||
+                item.content?.provider_refs.some(
+                    (reference) =>
+                        reference.provider === 'modrinth' &&
+                        String(reference.project_id) === project.id,
+                )),
+    )
+    installed.value = !!installedFile
+    installedVersion.value =
+        (installedFile?.provider === 'modrinth'
+            ? installedFile.providerReleaseId
+            : installedFile?.content?.provider_refs.find(
+                  (reference) =>
+                      reference.provider === 'modrinth' &&
+                      String(reference.project_id) === project.id,
+              )?.version_id) ?? null
+}
+
+async function loadContentSnapshot(project, instanceId, isCurrent) {
+    snapshotFailed.value = false
+    try {
+        const snapshot = await get_content_snapshot(instanceId, true)
+        if (!isCurrent()) return
+        applySnapshot(project, snapshot)
+    } catch (error) {
+        if (!isCurrent()) return
+        // The snapshot only drives the "already installed" badge; it must not block Install.
+        snapshotFailed.value = true
+        installed.value = false
+        installedVersion.value = null
+        handleError(error)
+    }
+}
+
+function forgetMissingInstance(instanceId) {
+    if (route.query.i !== instanceId) return
+    const query = { ...route.query }
+    delete query.i
+    void router.replace({ path: route.path, query }).catch(handleError)
+}
+
+async function loadInstanceContext(project, instanceId, isCurrent) {
+    instanceContextLoading.value = true
+    instanceFailed.value = false
+    missingInstanceId.value = null
+    try {
+        let target = null
+        try {
+            target = await getInstance(instanceId)
+        } catch (error) {
+            if (!isCurrent()) return
+            instanceFailed.value = true
+            handleError(error)
+            return
+        }
+        if (!isCurrent()) return
+        if (!target) {
+            // A3: the requested instance was deleted while the page was open. Drop the
+            // stale ?i= so the page falls back to the normal install target instead of
+            // silently disabling Install forever.
+            instance.value = null
+            missingInstanceId.value = instanceId
+            installed.value = false
+            installedVersion.value = null
+            forgetMissingInstance(instanceId)
+            await syncContentSelectionTarget(isCurrent)
+            return
+        }
+        instance.value = target
+        await loadContentSnapshot(project, instanceId, isCurrent)
+        if (!isCurrent()) return
+        await syncContentSelectionTarget(isCurrent)
+    } finally {
+        if (isCurrent()) instanceContextLoading.value = false
+    }
 }
 
 async function loadSupplementalProjectData(project, requestedInstanceId, isCurrent) {
     const updates = [
-        get_version_many(project.versions, 'must_revalidate')
-            .then((result) => {
-                if (!isCurrent()) return
-                versionsReady.value = true
-                versions.value = (result ?? []).sort(
-                    (a, b) => dayjs(b.date_published) - dayjs(a.date_published),
-                )
-            })
-            .catch((error) => {
-                if (isCurrent()) {
-                    supplementalFailed.value = true
-                    handleError(error)
-                }
-            })
-            .finally(() => {
-                if (isCurrent()) versionsLoading.value = false
-            }),
+        loadVersions(project, isCurrent),
         get_team(project.team)
             .catch(handleError)
             .then((result) => {
@@ -1146,56 +1334,8 @@ async function loadSupplementalProjectData(project, requestedInstanceId, isCurre
     ]
 
     if (requestedInstanceId) {
-        updates.push(
-            Promise.all([
-                getInstance(requestedInstanceId),
-                get_content_snapshot(requestedInstanceId, true).catch((error) => {
-                    if (isCurrent()) {
-                        supplementalFailed.value = true
-                        handleError(error)
-                    }
-                    return null
-                }),
-            ])
-                .then(async ([target, snapshot]) => {
-                    if (!isCurrent()) return
-                    instance.value = target
-                    instanceReady.value = !!target
-                    if (!target) supplementalFailed.value = true
-                    const installedFile = snapshot?.items.find(
-                        (item) =>
-                            item.materializationState === 'present' &&
-                            ((item.provider === 'modrinth' &&
-                                item.providerProjectId === project.id) ||
-                                item.content?.provider_refs.some(
-                                    (reference) =>
-                                        reference.provider === 'modrinth' &&
-                                        String(reference.project_id) === project.id,
-                                )),
-                    )
-                    installed.value = !!installedFile
-                    installedVersion.value =
-                        (installedFile?.provider === 'modrinth'
-                            ? installedFile.providerReleaseId
-                            : installedFile?.content?.provider_refs.find(
-                                  (reference) =>
-                                      reference.provider === 'modrinth' &&
-                                      String(reference.project_id) === project.id,
-                              )?.version_id) ?? null
-                    await syncContentSelectionTarget(isCurrent)
-                })
-                .catch((error) => {
-                    if (isCurrent()) {
-                        supplementalFailed.value = true
-                        handleError(error)
-                    }
-                })
-                .finally(() => {
-                    if (isCurrent()) instanceContextLoading.value = false
-                }),
-        )
+        updates.push(loadInstanceContext(project, requestedInstanceId, isCurrent))
     } else {
-        instanceReady.value = true
         void syncContentSelectionTarget(isCurrent).catch(handleError)
     }
     if (project.organization) {
@@ -1399,9 +1539,12 @@ async function loadProjectPage() {
     isServerProject.value = false
     projectClassificationReady.value = false
     classificationFailed.value = false
-    supplementalFailed.value = false
+    versionsFailed.value = false
+    versionsStale.value = false
+    snapshotFailed.value = false
+    instanceFailed.value = false
+    missingInstanceId.value = null
     versionsReady.value = false
-    instanceReady.value = !route.query.i
     serverPing.value = undefined
     serverRequiredContent.value = null
     serverRecommendedVersion.value = null
@@ -1455,14 +1598,24 @@ onUnmounted(() => {
     unlistenProcesses?.()
 })
 
-watch([() => route.params.id, () => route.query.i], () => {
-    if (route.params.id && route.path.startsWith('/project')) {
+watch(
+    [() => route.params.id, () => route.query.i],
+    ([id, instanceId], [, previousInstanceId]) => {
+        if (!id || !route.path.startsWith('/project')) return
+        // Clearing a stale ?i= after its instance disappeared is not a new page load: the
+        // page has already fallen back to the default install target.
+        if (!instanceId && previousInstanceId && missingInstanceId.value === previousInstanceId)
+            return
         void loadProjectPage()
-    }
-})
+    },
+)
 
 async function install(version) {
-    if (!projectClassificationReady.value || !versionsReady.value || !instanceReady.value) return
+    // Mirrors the readiness half of installButtonDisabled: the optional instance and
+    // snapshot context must not turn a transient failure into a permanently dead Install
+    // button. An explicit release id (versions/version pages) already carries the
+    // selection it needs, and an installed project may still switch versions.
+    if (!projectClassificationReady.value || (!version && !versionsKnown.value)) return
     if (serverProjectInstallContext.value && data.value) {
         if (serverProjectSelected.value) {
             serverInstallContent.removeQueuedServerInstall(data.value.id)

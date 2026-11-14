@@ -53,6 +53,7 @@ pub fn is_config_failure(error: &TranslateError) -> bool {
             | TranslateErrorCode::AiDisabled
             | TranslateErrorCode::AiProviderDisabled
             | TranslateErrorCode::AiModelNotSelected
+            | TranslateErrorCode::AiModelDisabled
             | TranslateErrorCode::MissingApiKey
             | TranslateErrorCode::ModelNotFound
     )

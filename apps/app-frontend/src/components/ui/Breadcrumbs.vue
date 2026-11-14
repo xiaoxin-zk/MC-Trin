@@ -149,6 +149,14 @@ const messages = defineMessages({
     screenshots: { id: 'app.navigation.screenshots', defaultMessage: 'Screenshots' },
     editWorld: { id: 'app.navigation.edit-world', defaultMessage: 'Edit world' },
     upgradeInstance: { id: 'app.instance.upgrade-instance', defaultMessage: 'Upgrade instance' },
+    aiAssistant: { id: 'app.navigation.ai-assistant', defaultMessage: 'AI assistant' },
+    commandGenerator: {
+        id: 'app.lab.command-generator.title',
+        defaultMessage: 'Command generator',
+    },
+    plugins: { id: 'app.plugins.title', defaultMessage: 'Plugins' },
+    versions: { id: 'project.versions.title', defaultMessage: 'Versions' },
+    gallery: { id: 'project.gallery.title', defaultMessage: 'Gallery' },
 })
 
 const staticLabels = {
@@ -173,6 +181,11 @@ const staticLabels = {
     Screenshots: messages.screenshots,
     'Edit world': messages.editWorld,
     Upgrade: messages.upgradeInstance,
+    'AI assistant': messages.aiAssistant,
+    'Command generator': messages.commandGenerator,
+    Plugins: messages.plugins,
+    Versions: messages.versions,
+    Gallery: messages.gallery,
 }
 
 const staticIcons: Record<string, Component> = {

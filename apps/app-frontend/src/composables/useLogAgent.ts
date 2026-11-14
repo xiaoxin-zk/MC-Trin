@@ -3,6 +3,13 @@ import { computed, onScopeDispose, ref } from 'vue'
 import { sanitizeAiErrorText } from '../helpers/ai-error.ts'
 import * as backend from '../logagent/backend.ts'
 import { type ActivityEntry, applyProgress } from '../logagent/progress.ts'
+import {
+    TURN_DEADLINE_MESSAGE,
+    TURN_DEADLINE_MS,
+    TurnDeadlineError,
+    withTurnDeadline,
+} from '../logagent/timeouts.ts'
+import { ASSISTANT_WRITE_TOOLS } from '../logagent/tool-settings.ts'
 import type {
     AgentGateway,
     AgentToolApproval,
@@ -35,6 +42,8 @@ interface Dependencies {
         ) => Promise<boolean>,
     ) => Promise<string>
     gateway: (runId: string) => AgentGateway
+    /** Hard ceiling for one turn; overridable so tests need not wait minutes. */
+    turnDeadlineMs?: number
 }
 
 function readableError(cause: unknown): string {
@@ -60,24 +69,12 @@ function rawErrorText(cause: unknown): string {
 }
 
 /**
- * Mirrors `assistant_write_tool` in
- * `packages/app-lib/src/api/logs/logagent/mod.rs`. Keep the two lists identical:
- * a name missing here would be sent without a grant and refused by the backend,
- * so every write added there must also be added here.
+ * Mirror of `assistant_write_tool` in
+ * `packages/app-lib/src/api/logs/logagent/mod.rs`. The shared set in
+ * `tool-settings.ts` is the one place the list exists on this side; the parity
+ * test in `tool-settings.test.ts` compares it with the Rust function.
  */
-const WRITE_TOOLS: ReadonlySet<string> = new Set([
-    'update_launcher_settings',
-    'create_instance',
-    'rename_instance',
-    'delete_instance',
-    'install_java_runtime',
-    'set_java_default_runtime',
-    'queue_resource_install',
-    'cancel_install_job',
-    'disable_content',
-    'enable_content',
-    'remove_content',
-])
+const WRITE_TOOLS: ReadonlySet<string> = ASSISTANT_WRITE_TOOLS
 
 type GrantRequest = ToolRequest & { approval_request?: boolean; approval?: string }
 
@@ -198,40 +195,56 @@ export function useLogAgent(deps: Dependencies = dependencies) {
                 onUpload(next.data as unknown as UploadTicket)
         }
         try {
-            const session = modelSelection
-                ? await deps.prepare(
-                      instanceId,
-                      run.id,
-                      source,
-                      modelSelection.providerId,
-                      modelSelection.modelId,
-                      source === 'assistant' && includeLogs,
-                  )
-                : await deps.prepare(instanceId, run.id, source, undefined, undefined, includeLogs)
-            if (!current()) return
-            model.value =
-                source === 'logshare' ? '' : `${session.provider_id} / ${session.model_id}`
-            status.value = 'processing'
-            let text: string
-            if (source === 'custom' || source === 'assistant') {
-                text = await deps.local(
-                    session,
-                    deps.gateway(run.id),
-                    run.abort.signal,
-                    () => {},
-                    (progress) => receive({ run_id: run.id, ...progress }),
-                    question,
-                    remoteMcp,
-                    source === 'assistant' ? 'assistant' : 'logs',
-                    source === 'assistant' ? agentInstructions : '',
-                    approveLocalTool,
-                )
-            } else {
+            const runWork = async (): Promise<string> => {
+                const session = modelSelection
+                    ? await deps.prepare(
+                          instanceId,
+                          run.id,
+                          source,
+                          modelSelection.providerId,
+                          modelSelection.modelId,
+                          source === 'assistant' && includeLogs,
+                      )
+                    : await deps.prepare(
+                          instanceId,
+                          run.id,
+                          source,
+                          undefined,
+                          undefined,
+                          includeLogs,
+                      )
+                if (!current()) return ''
+                model.value =
+                    source === 'logshare' ? '' : `${session.provider_id} / ${session.model_id}`
+                status.value = 'processing'
+                if (source === 'custom' || source === 'assistant') {
+                    return await deps.local(
+                        session,
+                        deps.gateway(run.id),
+                        run.abort.signal,
+                        () => {},
+                        (progress) => receive({ run_id: run.id, ...progress }),
+                        question,
+                        remoteMcp,
+                        source === 'assistant' ? 'assistant' : 'logs',
+                        source === 'assistant' ? agentInstructions : '',
+                        approveLocalTool,
+                    )
+                }
                 const preparedTicket = await Promise.resolve(ticket).catch(() => null)
-                if (!current()) return
+                if (!current()) return ''
                 const result = await deps.cloud(run.id, preparedTicket, receive)
-                text = result.content
+                return result.content
             }
+            // No model call, approval dialog or tool execution may leave this
+            // promise pending forever. The deadline aborts the run so a hung
+            // backend request is released too, not just the renderer's wait.
+            const text = await withTurnDeadline(
+                runWork(),
+                deps.turnDeadlineMs ?? TURN_DEADLINE_MS,
+                TURN_DEADLINE_MESSAGE,
+                () => run.abort.abort(),
+            )
             if (!current()) return
             output.value = text
             activity.value = activity.value.map((entry) =>
@@ -240,6 +253,18 @@ export function useLogAgent(deps: Dependencies = dependencies) {
             event.value = null
             status.value = 'ready'
         } catch (cause) {
+            if (cause instanceof TurnDeadlineError && active === run) {
+                // The deadline aborts the run while settling, so `current()` is
+                // already false here; report the timeout instead of returning
+                // silently with the page stuck on "processing".
+                error.value = readableError(cause)
+                event.value = null
+                status.value = 'error'
+                activity.value = activity.value.map((entry) =>
+                    entry.state === 'processing' ? { ...entry, state: 'error' } : entry,
+                )
+                return
+            }
             if (!current()) return
             error.value = readableError(cause)
             event.value = null

@@ -957,6 +957,115 @@ mod tests {
         );
     }
 
+    /// Regression probe for the rows that used to be stuck at `missing = 1`
+    /// forever: a Paxi resource pack under `config/paxi/resourcepacks` and a
+    /// `.nbt` structure under `schematics` were tracked but never scanned, so
+    /// every sync re-marked them missing. A tracked path outside every scan
+    /// root must not be flipped to missing at all.
+    #[tokio::test]
+    async fn content_sync_keeps_paxi_packs_and_nbt_schematics_present() {
+        let state = global_state().await;
+        let metadata = crate::api::instance::create(
+            format!("sync-paxi {}", uuid::Uuid::new_v4()),
+            "1.20.1".to_string(),
+            crate::state::ModLoader::Vanilla,
+            None,
+            None,
+            crate::state::InstanceLink::Unmanaged,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let instance = metadata.instance.clone();
+        let instance_dir =
+            state.directories.instances_dir().join(&instance.path);
+        fs::create_dir_all(instance_dir.join("config/paxi/resourcepacks"))
+            .unwrap();
+        fs::create_dir_all(instance_dir.join("schematics")).unwrap();
+        fs::create_dir_all(instance_dir.join("config/other")).unwrap();
+        fs::write(
+            instance_dir.join("config/paxi/resourcepacks/x.zip"),
+            b"paxi pack",
+        )
+        .unwrap();
+        fs::write(instance_dir.join("schematics/y.nbt"), b"nbt").unwrap();
+        fs::write(instance_dir.join("config/other/custom.zip"), b"custom")
+            .unwrap();
+
+        let tracked = [
+            ("config/paxi/resourcepacks/x.zip", 1),
+            ("schematics/y.nbt", 1),
+            // Never scanned, so it must simply keep its state.
+            ("config/other/custom.zip", 0),
+        ];
+        for (path, missing) in tracked {
+            sqlite::content_rows::upsert_instance_file_from_parts(
+                sqlite::content_rows::UpsertInstanceFile {
+                    instance_id: &instance.id,
+                    relative_path: path,
+                    file_name: path.rsplit('/').next().unwrap(),
+                    enabled: true,
+                    sha1: "stale",
+                    size: 1,
+                    missing: missing == 1,
+                    local_mod_data: None,
+                    icon_path: None,
+                },
+                &state.pool,
+            )
+            .await
+            .unwrap();
+        }
+
+        let files = sync_instance_content_files(&instance, &state)
+            .await
+            .unwrap();
+        let mut connection = state.pool.acquire().await.unwrap();
+        let missing_by_path = sqlite::content_rows::get_instance_files(
+            &instance.id,
+            &mut *connection,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|file| (file.relative_path, file.missing))
+        .collect::<HashMap<_, _>>();
+
+        for path in [
+            "config/paxi/resourcepacks/x.zip",
+            "schematics/y.nbt",
+            "config/other/custom.zip",
+        ] {
+            assert_eq!(
+                missing_by_path.get(path),
+                Some(&false),
+                "{path} must stay present; tracked rows: {missing_by_path:?}"
+            );
+        }
+        assert!(
+            files
+                .iter()
+                .any(|file| file.relative_path
+                    == "config/paxi/resourcepacks/x.zip"),
+            "the Paxi pack root must be scanned, got: {:?}",
+            files
+                .iter()
+                .map(|file| &file.relative_path)
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            files
+                .iter()
+                .any(|file| file.relative_path == "schematics/y.nbt"),
+            "`.nbt` structures must be scanned, got: {:?}",
+            files
+                .iter()
+                .map(|file| &file.relative_path)
+                .collect::<Vec<_>>(),
+        );
+    }
+
     #[tokio::test]
     async fn ordinary_instance_refresh_still_scans_its_profile_directory() {
         let state = global_state().await;

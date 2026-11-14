@@ -8,6 +8,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import svgLoader from 'vite-svg-loader'
 
 import tauriConf from '../app/tauri.conf.json' with { type: 'json' }
+import { frontendBuildStamp } from './vite-plugin-build-stamp.ts'
 
 const projectRootDir = resolve(fileURLToPath(new URL('.', import.meta.url)))
 const appLibEnvDir = resolve(projectRootDir, '../../packages/app-lib')
@@ -103,6 +104,7 @@ export default defineConfig(({ command }) => ({
         // Vue DevTools injects transform/runtime work; keep it for `vite`/`tauri
         // dev` only so production `vite build` stays lean.
         ...(command === 'serve' ? [vueDevTools()] : []),
+        frontendBuildStamp(),
         vue(),
         svgLoader({
             svgoConfig: {

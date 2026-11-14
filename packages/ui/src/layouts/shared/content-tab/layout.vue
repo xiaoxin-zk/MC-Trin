@@ -187,6 +187,17 @@ const messages = defineMessages({
 const ctx = injectContentManager()
 const skipNonEssentialWarnings = computed(() => ctx.skipNonEssentialWarnings?.value ?? false)
 
+/**
+ * Localised failure copy for the card. The raw backend message is diagnostic only and is
+ * exposed through the `title` attribute, so users never read strings like
+ * "Invalid input: resource request canceled".
+ */
+const errorMessage = computed(() => {
+    const error = ctx.error.value
+    if (!error) return ''
+    return ctx.formatError?.(error) ?? formatMessage(messages.failedToLoad)
+})
+
 function getItemId(item: ContentItem) {
     return ctx.getItemId?.(item) ?? item.file_path ?? item.file_name ?? item.id
 }
@@ -1111,6 +1122,31 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 <template>
     <div class="flex flex-col gap-4" :class="{ 'pb-6': props.bottomPadding }">
         <template v-if="!ctx.loading.value">
+            <ContentToolbar
+                v-model:search-query="searchQuery"
+                :searchable-item-count="searchableItemCount"
+                :content-type-label="ctx.contentTypeLabel.value"
+                :busy="ctx.isBusy.value"
+                :busy-tooltip="ctx.busyMessage?.value"
+                :disable-add-content="ctx.disableAddContent?.value"
+                :disable-add-content-tooltip="ctx.disableAddContentTooltip"
+                :refreshing="refreshing"
+                :view-dependencies="!!ctx.viewDependencies"
+                @browse="ctx.browse"
+                @refresh="handleRefresh"
+                @view-dependencies="ctx.viewDependencies?.()"
+            >
+                <template #actions><slot name="toolbar-actions" /></template>
+            </ContentToolbar>
+
+            <ContentTypeFilter
+                v-model:selected="selectedTypeFilter"
+                :options="row1FilterOptions"
+                :total-count="totalCount"
+                :filter-counts="filterCounts"
+                @toggle="toggleTypeFilter"
+            />
+
             <div
                 v-if="ctx.error.value"
                 class="flex w-full flex-col items-center justify-center gap-4 p-4"
@@ -1119,7 +1155,12 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
                     <h2 class="m-0 text-xl font-bold">
                         {{ formatMessage(messages.failedToLoad) }}
                     </h2>
-                    <p class="text-[var(--color-text-tertiary)]">{{ ctx.error.value.message }}</p>
+                    <p
+                        class="m-0 text-center text-[var(--color-text-tertiary)]"
+                        :title="ctx.error.value.message"
+                    >
+                        {{ errorMessage }}
+                    </p>
                     <Button type="colored" color="brand" @click="handleRefresh">{{
                         formatMessage(commonMessages.retryButton)
                     }}</Button>
@@ -1129,31 +1170,6 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
             <template
                 v-else-if="ctx.items.value.length > 0 || (ctx.modpackItems?.value?.length ?? 0) > 0"
             >
-                <ContentToolbar
-                    v-model:search-query="searchQuery"
-                    :searchable-item-count="searchableItemCount"
-                    :content-type-label="ctx.contentTypeLabel.value"
-                    :busy="ctx.isBusy.value"
-                    :busy-tooltip="ctx.busyMessage?.value"
-                    :disable-add-content="ctx.disableAddContent?.value"
-                    :disable-add-content-tooltip="ctx.disableAddContentTooltip"
-                    :refreshing="refreshing"
-                    :view-dependencies="!!ctx.viewDependencies"
-                    @browse="ctx.browse"
-                    @refresh="handleRefresh"
-                    @view-dependencies="ctx.viewDependencies?.()"
-                >
-                    <template #actions><slot name="toolbar-actions" /></template>
-                </ContentToolbar>
-
-                <ContentTypeFilter
-                    v-model:selected="selectedTypeFilter"
-                    :options="row1FilterOptions"
-                    :total-count="totalCount"
-                    :filter-counts="filterCounts"
-                    @toggle="toggleTypeFilter"
-                />
-
                 <ContentCardTable
                     v-model:selected-ids="selectedIds"
                     :items="tableItems"

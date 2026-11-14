@@ -41,6 +41,11 @@ export interface ContentManagerContext {
     updateDuplicateGroup?: (item: ContentItem) => void | Promise<void>
     loading: Ref<boolean>
     error: Ref<Error | null>
+    /**
+     * Localizes a content failure for the error card. The raw `.message` stays available as
+     * diagnostic text (rendered in the card's `title`), never as the visible copy.
+     */
+    formatError?: (error: unknown) => string
     filterOptionsReady?: Ref<boolean> | ComputedRef<boolean>
 
     // Modpack

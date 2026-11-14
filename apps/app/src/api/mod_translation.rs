@@ -245,6 +245,16 @@ async fn validate_ai_config(
     let state = mctrin::ai::get_state()
         .await
         .map_err(|error| error.to_string())?;
+    validate_ai_config_in(&state, provider_id, model_id)
+}
+
+/// The pure half of [`validate_ai_config`], so the model rules can be tested
+/// without a launcher state.
+fn validate_ai_config_in(
+    state: &mctrin::ai::AiState,
+    provider_id: &str,
+    model_id: &str,
+) -> Result<(), String> {
     if !state.settings.enabled {
         return Err(format!(
             "{}: 请在 AI 设置中启用 AI 功能后再试",
@@ -267,12 +277,24 @@ async fn validate_ai_config(
             TranslateErrorCode::AiProviderDisabled.as_str()
         ));
     }
-    if model_id.trim().is_empty()
-        || !provider.models.iter().any(|model| model.id == model_id)
+    if !provider
+        .models
+        .iter()
+        .any(|model| model.id == model_id.trim())
     {
         return Err(format!(
             "{}: 请先在翻译设置或 AI 设置中选择模型",
             TranslateErrorCode::AiModelNotSelected.as_str()
+        ));
+    }
+    // A model the user switched off is not an authorisation change: refuse it
+    // with its own code instead of sending the mod's text to that model anyway.
+    // `model_is_enabled` is the same predicate `chat.rs` and the app-lib text
+    // gate use, so all three agree on what "usable" means.
+    if !mctrin::ai::model_is_enabled(provider, model_id.trim()) {
+        return Err(format!(
+            "{}: AI 模型 {model_id} 已被禁用，请在 AI 设置中启用",
+            TranslateErrorCode::AiModelDisabled.as_str()
         ));
     }
     Ok(())
@@ -750,5 +772,80 @@ mod tests {
             parse_failure("UNSUPPORTED_RESOURCE: assets/demo/data.txt");
         assert_eq!(failure.code, "UNSUPPORTED_RESOURCE");
         assert_eq!(failure.message, "assets/demo/data.txt");
+    }
+
+    fn ai_state(
+        provider_enabled: bool,
+        model_enabled: bool,
+    ) -> mctrin::ai::AiState {
+        mctrin::ai::AiState {
+            settings: mctrin::ai::AiSettings { enabled: true },
+            catalog_source: "test",
+            providers: vec![mctrin::ai::AiProviderConfig {
+                provider_id: "ollama".to_string(),
+                custom_name: None,
+                protocol: mctrin::ai::AiProtocol::Ollama,
+                enabled: provider_enabled,
+                endpoint: "http://127.0.0.1:11434".to_string(),
+                settings: HashMap::new(),
+                has_api_key: false,
+                configured_credentials: Vec::new(),
+                oauth_connected: false,
+                models: vec![mctrin::ai::AiProviderModel {
+                    id: "deepseek-r1".to_string(),
+                    name: "DeepSeek R1".to_string(),
+                    enabled: model_enabled,
+                    source: "builtin".to_string(),
+                }],
+            }],
+        }
+    }
+
+    /// The disabled-model check must exist and must be distinguishable: if it
+    /// were removed this would fall through to `Ok(())` and the mod's text
+    /// would be sent to a model the user turned off.
+    #[test]
+    fn a_disabled_model_is_refused_with_its_own_error_code() {
+        let error = validate_ai_config_in(
+            &ai_state(true, false),
+            "ollama",
+            "deepseek-r1",
+        )
+        .unwrap_err();
+        assert!(
+            error.starts_with(TranslateErrorCode::AiModelDisabled.as_str()),
+            "{error}"
+        );
+        assert!(
+            !error.contains(TranslateErrorCode::AiModelNotSelected.as_str())
+        );
+        assert!(
+            !error.contains(TranslateErrorCode::AiProviderDisabled.as_str())
+        );
+    }
+
+    #[test]
+    fn an_enabled_model_still_passes_validation() {
+        assert!(
+            validate_ai_config_in(
+                &ai_state(true, true),
+                "ollama",
+                "deepseek-r1"
+            )
+            .is_ok()
+        );
+    }
+
+    /// Unknown ids stay "not selected" rather than "disabled": the two codes
+    /// explain different user actions.
+    #[test]
+    fn an_unlisted_model_is_reported_as_not_selected() {
+        let error =
+            validate_ai_config_in(&ai_state(true, true), "ollama", "missing")
+                .unwrap_err();
+        assert!(
+            error.starts_with(TranslateErrorCode::AiModelNotSelected.as_str()),
+            "{error}"
+        );
     }
 }

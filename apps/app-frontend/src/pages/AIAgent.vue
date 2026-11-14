@@ -42,7 +42,9 @@ import {
 import { list } from '@/helpers/instance'
 import { get_crash_analysis_ai_settings } from '@/helpers/logs'
 import type { GameInstance } from '@/helpers/types'
+import { createApprovalQueue } from '@/logagent/approval-queue'
 import { parseLogAgentInsight } from '@/logagent/result'
+import { APPROVAL_TIMEOUT_MS } from '@/logagent/timeouts'
 import {
     agentToolEnabled,
     type AssistantPermissionMode,
@@ -51,6 +53,7 @@ import {
     enabledAgentTools,
     resetAgentTools,
     setAgentToolEnabled,
+    toolNeedsApproval,
 } from '@/logagent/tool-settings'
 import type {
     AgentToolApproval,
@@ -60,7 +63,7 @@ import type {
 } from '@/logagent/types'
 
 const { formatMessage } = useVIntl()
-const { handleError } = injectNotificationManager()
+const { addNotification, handleError } = injectNotificationManager()
 
 /** Reports a page error after stripping Rust internals from it. */
 function reportAiError(error: unknown): void {
@@ -211,7 +214,7 @@ const messages = defineMessages({
     permissionModeFreeHint: {
         id: 'app.assistant.permission-mode.free-hint',
         defaultMessage:
-            'Routine actions run without asking. Destructive actions (deleting instances, removing content files, changing launcher settings, installing runtimes) and every MCP tool still ask first.',
+            'Reading launcher data runs without asking. Every write tool and every MCP tool call still asks first.',
     },
     permissionModeFull: {
         id: 'app.assistant.permission-mode.full',
@@ -260,10 +263,6 @@ const messages = defineMessages({
         id: 'app.assistant.permission-mode.matrix.write',
         defaultMessage: 'Changing launcher data',
     },
-    permissionMatrixDangerousTitle: {
-        id: 'app.assistant.permission-mode.matrix.dangerous',
-        defaultMessage: 'High-risk actions',
-    },
     permissionMatrixRemoteTitle: {
         id: 'app.assistant.permission-mode.matrix.remote',
         defaultMessage: 'Tools on MCP servers',
@@ -278,12 +277,12 @@ const messages = defineMessages({
     },
     permissionDangerousTitle: {
         id: 'app.assistant.permission-mode.dangerous-title',
-        defaultMessage: 'Tools free mode still asks about',
+        defaultMessage: 'Write tools that always ask for approval',
     },
     permissionDangerousHint: {
         id: 'app.assistant.permission-mode.dangerous-hint',
         defaultMessage:
-            'Everything on an MCP server you add also asks, because this launcher does not control what those tools do.',
+            'These run only after you approve the exact call. Everything on an MCP server you add also asks, because this launcher does not control what those tools do.',
     },
     usageGuideTitle: {
         id: 'app.assistant.usage-guide.title',
@@ -557,6 +556,15 @@ const messages = defineMessages({
         id: 'app.assistant.tools.approval-title',
         defaultMessage: 'Review local write request',
     },
+    approvalTimedOut: {
+        id: 'app.assistant.approval.timed-out',
+        defaultMessage: 'Approval timed out',
+    },
+    approvalTimedOutHint: {
+        id: 'app.assistant.approval.timed-out-hint',
+        defaultMessage:
+            'The request was denied because no decision arrived in time. Ask again if you still want it.',
+    },
     mcpServer: { id: 'app.assistant.mcp.server', defaultMessage: 'Server' },
     mcpTool: { id: 'app.assistant.mcp.tool', defaultMessage: 'Tool' },
     mcpArguments: { id: 'app.assistant.mcp.arguments', defaultMessage: 'Arguments' },
@@ -718,15 +726,16 @@ const profileName = ref('')
 const profileInstructions = ref('')
 const profileError = ref('')
 
-type ToolApproval = {
-    endpoint: string
-    tool: RemoteMcpTool
-    args: Record<string, unknown>
-    resolve: (approved: boolean) => void
-}
-
-const pendingApprovals = ref<ToolApproval[]>([])
-const currentApproval = computed(() => pendingApprovals.value[0] ?? null)
+const approvals = createApprovalQueue(APPROVAL_TIMEOUT_MS, (tool) => {
+    // The dialog disappears without an answer; say so instead of letting the
+    // turn look like a silent denial by the user.
+    addNotification({
+        type: 'warning',
+        title: formatMessage(messages.approvalTimedOut),
+        text: `${tool.name}: ${formatMessage(messages.approvalTimedOutHint)}`,
+    })
+})
+const currentApproval = approvals.current
 const PERMISSION_MODE_STORAGE_KEY = 'mctrin.assistant.permission-mode.v1'
 const permissionMode = ref<AssistantPermissionMode>('default')
 const fullAccessWarningOpen = ref(false)
@@ -792,13 +801,6 @@ const permissionMatrix = computed(() => [
     {
         key: 'write',
         label: messages.permissionMatrixWriteTitle,
-        defaultMode: messages.permissionMatrixAsk,
-        freeMode: messages.permissionMatrixAllowed,
-        fullMode: messages.permissionMatrixAllowed,
-    },
-    {
-        key: 'dangerous',
-        label: messages.permissionMatrixDangerousTitle,
         defaultMode: messages.permissionMatrixAsk,
         freeMode: messages.permissionMatrixAsk,
         fullMode: messages.permissionMatrixAllowed,
@@ -1199,19 +1201,10 @@ function requestToolApproval(
 ) {
     const endpoint = endpointOverride ?? mcpClient.value?.endpoint
     if (!endpoint) return Promise.resolve(false)
-    if (permissionMode.value === 'full') return Promise.resolve(true)
-    if (permissionMode.value === 'free' && !isDangerousTool(tool.name, endpoint === 'MC-Trin')) {
+    if (!toolNeedsApproval(permissionMode.value, tool.name, endpoint === 'MC-Trin')) {
         return Promise.resolve(true)
     }
-    return new Promise<boolean>((resolve) => {
-        pendingApprovals.value = [...pendingApprovals.value, { endpoint, tool, args, resolve }]
-    })
-}
-
-function isDangerousTool(toolName: string, local: boolean) {
-    // Remote MCP tools run on servers this launcher does not control, so
-    // every mode below full access keeps asking before calling them.
-    return !local || DANGEROUS_AGENT_TOOLS.has(toolName)
+    return approvals.request(endpoint, tool, args)
 }
 
 function requestLocalToolApproval(tool: AgentToolApproval, args: Record<string, unknown>) {
@@ -1219,15 +1212,11 @@ function requestLocalToolApproval(tool: AgentToolApproval, args: Record<string, 
 }
 
 function resolveToolApproval(approved: boolean) {
-    const [request, ...remaining] = pendingApprovals.value
-    pendingApprovals.value = remaining
-    request?.resolve(approved)
+    approvals.resolve(approved)
 }
 
 function denyPendingApprovals() {
-    const requests = pendingApprovals.value
-    pendingApprovals.value = []
-    requests.forEach((request) => request.resolve(false))
+    approvals.denyAll()
 }
 
 function cancelAgent() {

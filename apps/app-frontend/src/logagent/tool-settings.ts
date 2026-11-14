@@ -11,18 +11,42 @@ export type BuiltInToolDefinition = {
 }
 
 /**
+ * Local tools that change launcher data.
+ *
+ * Mirrors `assistant_write_tool` in
+ * `packages/app-lib/src/api/logs/logagent/mod.rs`. The Rust gate refuses an
+ * unapproved write, so a name that exists there but not here would fail after
+ * the model already decided to act; the parity test
+ * `apps/app/tests/logagent_write_tool_parity.rs` fails the build instead.
+ */
+export const ASSISTANT_WRITE_TOOLS: ReadonlySet<string> = new Set([
+    'update_launcher_settings',
+    'create_instance',
+    'rename_instance',
+    'delete_instance',
+    'install_java_runtime',
+    'set_java_default_runtime',
+    'queue_resource_install',
+    'cancel_install_job',
+    'disable_content',
+    'enable_content',
+    'remove_content',
+])
+
+/**
+ * The local tools the narrower permission modes keep asking about. Every write
+ * tool always asks, so this is exactly the write list: the model is told that
+ * every write needs explicit approval, and free mode must not bypass that.
+ */
+export const DANGEROUS_AGENT_TOOLS: ReadonlySet<string> = ASSISTANT_WRITE_TOOLS
+
+/**
  * The local tools are deliberately narrow. Read tools expose sanitized launcher
  * context; write tools are limited to launcher settings, Java installation,
- * resource jobs, and instance content lifecycle actions. Write tools require
- * an explicit approval before the call unless the permission mode relaxes it.
+ * resource jobs, and instance content lifecycle actions. Every write tool
+ * requires an explicit approval before the call in the default and free modes;
+ * only full access, which carries its own warning, runs them without asking.
  */
-export const DANGEROUS_AGENT_TOOLS: ReadonlySet<string> = new Set([
-    'delete_instance',
-    'remove_content',
-    'update_launcher_settings',
-    'install_java_runtime',
-    'queue_resource_install',
-])
 export const BUILT_IN_AGENT_TOOLS: BuiltInToolDefinition[] = [
     { id: 'get_instance_overview', mode: 'assistant', permission: 'read' },
     { id: 'get_launcher_settings', mode: 'assistant', permission: 'read' },
@@ -121,4 +145,22 @@ export function enabledAgentTools(mode: AgentMode): Set<string> {
 
 export function agentToolPermission(id: string): AgentToolPermission {
     return BUILT_IN_AGENT_TOOLS.find((tool) => tool.id === id)?.permission ?? 'read'
+}
+
+/**
+ * Whether a tool call must go through the approval dialog.
+ *
+ * `full` runs everything directly. Every other mode asks for remote tools,
+ * because this launcher does not control what those servers do, and for every
+ * local write: the assistant prompt tells the model each write needs explicit
+ * approval, so no mode below full may silently grant one.
+ */
+export function toolNeedsApproval(
+    mode: AssistantPermissionMode,
+    toolName: string,
+    local: boolean,
+): boolean {
+    if (mode === 'full') return false
+    if (mode === 'default') return true
+    return !local || DANGEROUS_AGENT_TOOLS.has(toolName)
 }

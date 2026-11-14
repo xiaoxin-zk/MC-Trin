@@ -1,5 +1,375 @@
 use super::*;
 
+/// A migrated in-memory database with the AI tables the loader reads.
+///
+/// `get_state_with_pool` touches `ai_settings`, `ai_provider_configs`,
+/// `ai_provider_models` and `translation_settings`, so the real migrations are
+/// used rather than hand-written DDL that could drift from production schema.
+async fn ai_test_pool() -> sqlx::SqlitePool {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    pool
+}
+
+fn ai_test_request(provider_id: &str, model_id: &str) -> AiTextRequest {
+    AiTextRequest {
+        provider_id: provider_id.to_string(),
+        model_id: model_id.to_string(),
+        system_prompt: "system".to_string(),
+        user_prompt: "user".to_string(),
+        mode: AiTextMode::Default,
+        response_format: AiTextResponseFormat::Text,
+    }
+}
+
+#[tokio::test]
+async fn a_stored_protocol_this_build_does_not_know_falls_back_to_the_catalog()
+{
+    let pool = ai_test_pool().await;
+    sqlx::query(
+        "INSERT INTO ai_provider_configs
+             (provider_id, custom_name, protocol, enabled, endpoint)
+             VALUES ('openai', 'Renamed', 'openai-next', TRUE,
+                     'https://api.openai.com/v1')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let config =
+        load_provider_record(&pool, provider_definition("openai").unwrap())
+            .await
+            .unwrap();
+
+    // The catalog protocol is what every downstream match arm understands.
+    assert_eq!(config.protocol, AiProtocol::Openai);
+    assert_eq!(config.custom_name.as_deref(), Some("Renamed"));
+    assert_eq!(config.endpoint, "https://api.openai.com/v1");
+    // Failing would have been the old behaviour; this asserts the row is used,
+    // not merely that no panic happened.
+    assert!(config.enabled);
+}
+
+#[tokio::test]
+async fn one_garbage_protocol_row_does_not_abort_the_provider_list() {
+    let pool = ai_test_pool().await;
+    sqlx::query(
+        "INSERT INTO ai_provider_configs
+             (provider_id, custom_name, protocol, enabled, endpoint)
+             VALUES ('ollama', NULL, 'not-a-protocol', TRUE,
+                     'http://127.0.0.1:11434')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let state = get_state_with_pool(&pool, false).await.unwrap();
+
+    // Every catalog provider is still present, and the damaged one is returned
+    // with its catalog protocol rather than dropped or turned into an error.
+    assert_eq!(state.providers.len(), PROVIDERS.len());
+    let ollama = state
+        .providers
+        .iter()
+        .find(|provider| provider.provider_id == "ollama")
+        .expect("the damaged provider must still be listed");
+    assert_eq!(ollama.protocol, AiProtocol::Ollama);
+    assert!(ollama.enabled);
+    assert!(
+        state
+            .providers
+            .iter()
+            .any(|provider| provider.provider_id == "openai")
+    );
+}
+
+#[tokio::test]
+async fn a_provider_that_fails_to_load_does_not_abort_the_provider_list() {
+    let pool = ai_test_pool().await;
+    // An invalid endpoint is a provider-scoped failure that survives the
+    // protocol fallback, so it exercises the per-provider resilience directly.
+    sqlx::query(
+        "INSERT INTO ai_provider_configs
+             (provider_id, custom_name, protocol, enabled, endpoint)
+             VALUES ('ollama', 'Broken', 'ollama', TRUE, 'not a url')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let state = get_state_with_pool(&pool, false).await.unwrap();
+
+    assert_eq!(state.providers.len(), PROVIDERS.len());
+    let ollama = state
+        .providers
+        .iter()
+        .find(|provider| provider.provider_id == "ollama")
+        .expect("the failing provider must still be listed");
+    // Catalog defaults, not the unusable row.
+    assert_eq!(ollama.custom_name, None);
+    assert_eq!(ollama.endpoint, "http://127.0.0.1:11434");
+    assert!(!ollama.enabled);
+    assert!(
+        state
+            .providers
+            .iter()
+            .any(|provider| provider.provider_id == "openai")
+    );
+}
+
+#[tokio::test]
+async fn a_fresh_ollama_provider_offers_a_selectable_model() {
+    let pool = ai_test_pool().await;
+
+    let config =
+        load_provider_record(&pool, provider_definition("ollama").unwrap())
+            .await
+            .unwrap();
+
+    // The bundled catalog lists 52 Ollama models with none enabled; without the
+    // fallback every toggle would be off and the provider unusable.
+    assert!(
+        config.models.len() > 1,
+        "the catalog list must be non-empty"
+    );
+    let selectable = config
+        .models
+        .iter()
+        .filter(|model| model.enabled)
+        .collect::<Vec<_>>();
+    assert_eq!(selectable.len(), 1, "{selectable:#?}");
+    assert_eq!(selectable[0].id, "deepseek-r1");
+}
+
+#[tokio::test]
+async fn the_catalog_default_never_overrules_a_deliberate_choice() {
+    let pool = ai_test_pool().await;
+    sqlx::query(
+        "INSERT INTO ai_provider_models
+             (provider_id, model_id, display_name, enabled, source)
+             VALUES ('ollama', 'gpt-oss:20b', 'GPT-OSS 20B', TRUE, 'builtin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let config =
+        load_provider_record(&pool, provider_definition("ollama").unwrap())
+            .await
+            .unwrap();
+
+    let enabled = config
+        .models
+        .iter()
+        .filter(|model| model.enabled)
+        .map(|model| model.id.as_str())
+        .collect::<Vec<_>>();
+    // The user's pick stays the only enabled row: the default is not injected
+    // alongside it, and the check-model row is not promoted behind their back.
+    assert_eq!(enabled, vec!["gpt-oss:20b"]);
+}
+
+#[tokio::test]
+async fn a_provider_without_a_check_model_is_not_given_a_phantom_row() {
+    // azure/azureai/lmstudio/vllm/xinference have no `check_model`, so nothing
+    // may be invented for them; this is what keeps the predicate from becoming
+    // "always inject one".
+    let pool = ai_test_pool().await;
+    for provider in ["azure", "azureai", "lmstudio", "vllm", "xinference"] {
+        let definition = provider_definition(provider).unwrap();
+        assert!(definition.check_model.is_empty(), "{provider}");
+        let mut models = Vec::new();
+        ensure_selectable_model(&pool, &mut models, definition)
+            .await
+            .unwrap();
+        assert!(models.is_empty(), "{provider}");
+    }
+}
+
+#[tokio::test]
+async fn a_model_the_user_turned_off_stays_off_across_reloads() {
+    let pool = ai_test_pool().await;
+    sqlx::query(
+        "INSERT INTO ai_provider_models
+             (provider_id, model_id, display_name, enabled, source)
+             VALUES ('ollama', 'deepseek-r1', 'DeepSeek R1', FALSE, 'builtin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let config =
+        load_provider_record(&pool, provider_definition("ollama").unwrap())
+            .await
+            .unwrap();
+
+    // Without the stored-decision check the fresh-install default would switch
+    // this back on every load, and A-5 could never reject it.
+    assert!(
+        config
+            .models
+            .iter()
+            .all(|model| !(model.id == "deepseek-r1" && model.enabled))
+    );
+}
+
+#[tokio::test]
+async fn discovered_models_are_stored_disabled_and_a_refresh_keeps_the_choice()
+{
+    let pool = ai_test_pool().await;
+    let discovered = vec![
+        ("fresh-model".to_string(), "Fresh Model".to_string()),
+        ("premium-preview".to_string(), "Premium Preview".to_string()),
+    ];
+
+    store_discovered_models(&pool, "openai", &discovered)
+        .await
+        .unwrap();
+
+    let stored = sqlx::query_as::<_, (String, i64)>(
+        "SELECT model_id, enabled FROM ai_provider_models
+             WHERE provider_id = 'openai' ORDER BY model_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        stored,
+        vec![
+            ("fresh-model".to_string(), 0),
+            ("premium-preview".to_string(), 0),
+        ]
+    );
+
+    // The user enables exactly one of them, then refreshes again.
+    sqlx::query(
+        "UPDATE ai_provider_models SET enabled = TRUE
+             WHERE provider_id = 'openai' AND model_id = 'fresh-model'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    store_discovered_models(
+        &pool,
+        "openai",
+        &[
+            ("fresh-model".to_string(), "Fresh Model v2".to_string()),
+            ("premium-preview".to_string(), "Premium Preview".to_string()),
+            ("new-model".to_string(), "New Model".to_string()),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let stored = sqlx::query_as::<_, (String, i64, String)>(
+        "SELECT model_id, enabled, display_name FROM ai_provider_models
+             WHERE provider_id = 'openai' ORDER BY model_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        stored,
+        vec![
+            ("fresh-model".to_string(), 1, "Fresh Model v2".to_string()),
+            ("new-model".to_string(), 0, "New Model".to_string()),
+            (
+                "premium-preview".to_string(),
+                0,
+                "Premium Preview".to_string()
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_disabled_model_is_rejected_with_its_own_error_before_dispatch() {
+    let pool = ai_test_pool().await;
+    sqlx::query("UPDATE ai_settings SET enabled = TRUE WHERE id = 0")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_provider_configs
+             (provider_id, custom_name, protocol, enabled, endpoint)
+             VALUES ('ollama', NULL, 'ollama', TRUE,
+                     'http://127.0.0.1:11434')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_provider_models
+             (provider_id, model_id, display_name, enabled, source)
+             VALUES ('ollama', 'deepseek-r1', 'DeepSeek R1', FALSE, 'builtin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Enabling any other model suppresses the catalog default, so `deepseek-r1`
+    // stays exactly the row the user turned off.
+    sqlx::query(
+        "INSERT INTO ai_provider_models
+             (provider_id, model_id, display_name, enabled, source)
+             VALUES ('ollama', 'qwen3-coder:480b', 'Qwen3 Coder 480B', TRUE,
+                     'builtin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error =
+        resolve_text_request(&pool, &ai_test_request("ollama", "deepseek-r1"))
+            .await
+            .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains(AI_MODEL_DISABLED_ERROR), "{message}");
+    assert!(!message.contains("is disabled"), "{message}");
+    assert!(!message.contains("Select an AI model"), "{message}");
+}
+
+#[tokio::test]
+async fn an_enabled_model_passes_the_gate_and_unknown_ids_are_left_alone() {
+    let pool = ai_test_pool().await;
+    sqlx::query("UPDATE ai_settings SET enabled = TRUE WHERE id = 0")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_provider_configs
+             (provider_id, custom_name, protocol, enabled, endpoint)
+             VALUES ('ollama', NULL, 'ollama', TRUE,
+                     'http://127.0.0.1:11434')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // The catalog default injected for a fresh provider is usable.
+    let (definition, config) =
+        resolve_text_request(&pool, &ai_test_request("ollama", "deepseek-r1"))
+            .await
+            .unwrap();
+    assert_eq!(definition.id, "ollama");
+    assert!(model_is_enabled(&config, "deepseek-r1"));
+
+    // An id that is not part of the provider at all keeps going: Azure
+    // deployments and local servers legitimately use undiscovered ids.
+    assert!(
+        resolve_text_request(
+            &pool,
+            &ai_test_request("ollama", "some-local-tag")
+        )
+        .await
+        .is_ok()
+    );
+}
+
 #[test]
 fn opencode_session_headers_are_stable_and_provider_scoped() {
     let client = reqwest::Client::builder()

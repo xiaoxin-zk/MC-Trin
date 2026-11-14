@@ -824,6 +824,12 @@
   "app.assistant.analyze": {
     "message": "Analyze logs"
   },
+  "app.assistant.approval.timed-out": {
+    "message": "Approval timed out"
+  },
+  "app.assistant.approval.timed-out-hint": {
+    "message": "The request was denied because no decision arrived in time. Ask again if you still want it."
+  },
   "app.assistant.ask": {
     "message": "Ask assistant"
   },
@@ -946,6 +952,9 @@
   },
   "app.assistant.title": {
     "message": "AI assistant"
+  },
+  "app.assistant.tools.approval-title": {
+    "message": "Review local write request"
   },
   "app.auth-servers.unreachable.body": {
     "message": "Minecraft authentication servers may be down right now. Check your internet connection and try again later."
@@ -1972,6 +1981,9 @@
   },
   "app.downloads.view-upgrade-result": {
     "message": "View upgrade result"
+  },
+  "app.downloads.download-fallbacks-summary": {
+    "message": "{count} fallbacks during this download"
   },
   "app.drop.batch.completed-text": {
     "message": "Imported {succeeded} of {total} ({failed} failed, {skipped} skipped)."
@@ -4943,6 +4955,9 @@
   "app.lab.mod-translation.select-file": {
     "message": "Choose a mod JAR"
   },
+  "app.lab.mod-translation.selection-unavailable": {
+    "message": "The saved AI provider or model is unavailable right now. Pick another one to translate."
+  },
   "app.lab.mod-translation.signed-mod": {
     "message": "This mod is signed and cannot be modified."
   },
@@ -4963,6 +4978,9 @@
   },
   "app.lab.mod-translation.title": {
     "message": "Mod translation"
+  },
+  "app.lab.mod-translation.unavailable-option": {
+    "message": "Unavailable"
   },
   "app.lab.no-favorites": {
     "message": "You have not favorited any tools yet."
@@ -9470,6 +9488,21 @@
   "app.project.versions.start-server": {
     "message": "Create server"
   },
+  "app.project.versions-failed": {
+    "message": "Could not load the version list."
+  },
+  "app.project.versions-stale": {
+    "message": "Showing a cached version list; it may be out of date."
+  },
+  "app.project.snapshot-failed": {
+    "message": "Could not check what is already installed."
+  },
+  "app.project.instance-failed": {
+    "message": "Could not load the selected instance."
+  },
+  "app.project.instance-gone": {
+    "message": "That instance no longer exists."
+  },
   "app.resources.backups.back": {
     "message": "Back to selection"
   },
@@ -13261,6 +13294,18 @@
   },
   "app.translation-settings.title": {
     "message": "Translation"
+  },
+  "app.translation-settings.unavailable-option": {
+    "message": "Unavailable"
+  },
+  "app.translation-settings.ai-unavailable": {
+    "message": "AI translation is currently unavailable: AI features are off, or no provider has an enabled model. Your saved AI choice is kept."
+  },
+  "app.translation-settings.ai-provider-unavailable": {
+    "message": "The saved AI provider is currently unavailable. It stays selected until you choose another provider."
+  },
+  "app.translation-settings.ai-model-unavailable": {
+    "message": "The saved text model is currently unavailable. It stays selected until you choose another model."
   },
   "app.translation.auto-translate-hint.text": {
     "message": "You can turn this on in Settings → Language & translation so browse results and project pages translate for you."

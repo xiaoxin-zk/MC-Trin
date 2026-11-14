@@ -114,6 +114,25 @@ pub(crate) fn scan_content_backups_from(
     Ok(backups)
 }
 
+/// Root-relative folders [`for_each_content_folder`] walks.
+///
+/// This is the single source of truth shared with
+/// `content_rows::mark_instance_files_missing`: a row may only be marked
+/// missing when its path lives under one of these roots, because every other
+/// path can never be re-discovered by the scanner. `saves/` is intentionally
+/// absent — worlds are enumerated by `api::worlds` and their files (including
+/// world datapacks under `saves/<world>/datapacks/`) are never content-scanned.
+pub(crate) const SCANNED_CONTENT_ROOTS: &[&str] = &[
+    "mods",
+    "datapacks",
+    "resourcepacks",
+    "shaderpacks",
+    "schematics",
+    // Paxi loads packs from this nested folder instead of the root-level
+    // `resourcepacks/` the vanilla game reads.
+    "config/paxi/resourcepacks",
+];
+
 /// Walks every content folder (and, for schematics, nested subfolders) and
 /// invokes `visit` for each folder that may hold project files.
 fn for_each_content_folder(
@@ -129,6 +148,20 @@ fn for_each_content_folder(
         }
 
         walk_content_folder(&folder_path, folder, project_type, &mut visit)?;
+    }
+
+    // Content roots that are not a `ProjectType` folder. `Paxi` reads resource
+    // packs from `config/paxi/resourcepacks`; its own loader only reads the
+    // top level, which matches `walk_content_folder`'s non-recursive behaviour
+    // for resource packs.
+    let paxi_resourcepacks = instance_dir.join("config/paxi/resourcepacks");
+    if paxi_resourcepacks.is_dir() {
+        walk_content_folder(
+            &paxi_resourcepacks,
+            "config/paxi/resourcepacks",
+            ProjectType::ResourcePack,
+            &mut visit,
+        )?;
     }
 
     Ok(())
@@ -248,6 +281,7 @@ pub(crate) fn is_scannable_project_path(
             extension.eq_ignore_ascii_case("litematic")
                 || extension.eq_ignore_ascii_case("schematic")
                 || extension.eq_ignore_ascii_case("schem")
+                || extension.eq_ignore_ascii_case("nbt")
         }
         // WorldSave folders (saves/) are handled separately via worlds.rs,
         // not scanned as regular project files.
@@ -287,6 +321,64 @@ mod tests {
         assert!(!paths.contains(&"schematics/redstone/notes.txt"));
         assert!(paths.contains(&"mods/example.jar"));
         assert_eq!(files.len(), 4);
+    }
+
+    #[test]
+    fn scan_content_files_finds_paxi_resourcepacks_and_nbt_schematics() {
+        let root = tempdir().unwrap();
+        let instance_dir = root.path().join("inst");
+        fs::create_dir_all(instance_dir.join("config/paxi/resourcepacks"))
+            .unwrap();
+        fs::create_dir_all(instance_dir.join("schematics")).unwrap();
+        fs::write(
+            instance_dir.join("config/paxi/resourcepacks/pack.zip"),
+            "pack",
+        )
+        .unwrap();
+        fs::write(instance_dir.join("schematics/house.nbt"), "nbt").unwrap();
+        // A configuration file next to the pack must not be mistaken for one.
+        fs::write(
+            instance_dir.join("config/paxi/resourcepacks/pack.zip.txt"),
+            "sidecar",
+        )
+        .unwrap();
+
+        let files = scan_content_files(root.path(), "inst").unwrap();
+        let mut paths: Vec<&str> = files
+            .iter()
+            .map(|file| file.relative_path.as_str())
+            .collect();
+        paths.sort_unstable();
+
+        let expected =
+            ["config/paxi/resourcepacks/pack.zip", "schematics/house.nbt"];
+        assert_eq!(paths, expected);
+    }
+
+    #[test]
+    fn every_scanned_root_is_reachable_by_the_missing_filter() {
+        // `mark_instance_files_missing` only resets rows under these roots, so
+        // the scanner and the filter must agree on the exact spelling.
+        let expected: &[&str] = &[
+            "mods",
+            "datapacks",
+            "resourcepacks",
+            "shaderpacks",
+            "schematics",
+            "config/paxi/resourcepacks",
+        ];
+        assert_eq!(SCANNED_CONTENT_ROOTS, expected);
+        for project_type in ProjectType::iterator() {
+            let folder = project_type.get_folder();
+            if project_type == ProjectType::WorldSave {
+                assert!(!SCANNED_CONTENT_ROOTS.contains(&folder));
+                continue;
+            }
+            assert!(
+                SCANNED_CONTENT_ROOTS.contains(&folder),
+                "scanner walks {folder} but the missing filter ignores it"
+            );
+        }
     }
 
     #[test]

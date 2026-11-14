@@ -1097,6 +1097,12 @@
   "app.assistant.analyze": {
     "message": "分析日志"
   },
+  "app.assistant.approval.timed-out": {
+    "message": "确认已超时"
+  },
+  "app.assistant.approval.timed-out-hint": {
+    "message": "等待期间未收到确认，本次请求已取消。如仍需要，请重新发起。"
+  },
   "app.assistant.ask": {
     "message": "询问助手"
   },
@@ -1212,10 +1218,10 @@
     "message": "完全访问已开启：工具执行不再询问。"
   },
   "app.assistant.permission-mode.dangerous-hint": {
-    "message": "你添加的 MCP 服务器上的所有工具也会询问，因为启动器无法控制这些工具会做什么。"
+    "message": "这些工具只会在你确认具体调用之后运行。你添加的 MCP 服务器上的所有工具也会询问，因为启动器无法控制这些工具会做什么。"
   },
   "app.assistant.permission-mode.dangerous-title": {
-    "message": "自由模式仍会询问的工具"
+    "message": "始终需要确认的写操作工具"
   },
   "app.assistant.permission-mode.default": {
     "message": "每次更改都询问"
@@ -1230,7 +1236,7 @@
     "message": "自由模式"
   },
   "app.assistant.permission-mode.free-hint": {
-    "message": "常规操作不再询问。破坏性操作（删除实例、移除内容文件、修改启动器设置、安装运行时）和所有 MCP 工具仍会先询问。"
+    "message": "读取启动器数据不再询问。所有写操作工具和所有 MCP 工具调用仍会先询问。"
   },
   "app.assistant.permission-mode.full": {
     "message": "完全访问"
@@ -2188,6 +2194,9 @@
   },
   "app.downloads.download-fallbacks": {
     "message": "已回退 {count} 次"
+  },
+  "app.downloads.download-fallbacks-summary": {
+    "message": "本次下载共回退 {count} 次"
   },
   "app.downloads.download-source": {
     "message": "来源：{source}"
@@ -8855,6 +8864,12 @@
   "app.lab.mod-translation.select-file": {
     "message": "选择模组 JAR"
   },
+  "app.lab.mod-translation.selection-unavailable": {
+    "message": "已保存的 AI 供应商或模型当前不可用。请另选一个后再翻译。"
+  },
+  "app.lab.mod-translation.unavailable-option": {
+    "message": "不可用"
+  },
   "app.lab.mod-translation.signed-mod": {
     "message": "该模组带有数字签名，无法修改。"
   },
@@ -13268,6 +13283,12 @@
   "app.project.install-context.install-content-to-instance": {
     "message": "将内容安装到实例中"
   },
+  "app.project.instance-failed": {
+    "message": "无法加载目标实例，安装将使用默认目标。"
+  },
+  "app.project.instance-gone": {
+    "message": "目标实例已不存在，请选择其他实例进行安装。"
+  },
   "app.project.load-failed": {
     "message": "无法加载项目，请重试。"
   },
@@ -13364,6 +13385,9 @@
   "app.project.planet-minecraft.versions": {
     "message": "下载"
   },
+  "app.project.snapshot-failed": {
+    "message": "无法检查此实例中已安装的版本，已安装标记可能不准确。"
+  },
   "app.project.translation.failed": {
     "message": "翻译失败，已保留原文。请重试。"
   },
@@ -13396,6 +13420,12 @@
   },
   "app.project.versions.start-server": {
     "message": "开服"
+  },
+  "app.project.versions-failed": {
+    "message": "无法加载版本列表，在恢复之前无法安装。"
+  },
+  "app.project.versions-stale": {
+    "message": "无法连接内容来源，版本列表可能不是最新的。"
   },
   "app.resources.backups.back": {
     "message": "返回选择"
@@ -17249,8 +17279,17 @@
   "app.translation-settings.ai-model": {
     "message": "文本模型"
   },
+  "app.translation-settings.ai-model-unavailable": {
+    "message": "已保存的文本模型当前不可用，将保留到你选择其他模型为止。"
+  },
   "app.translation-settings.ai-provider": {
     "message": "AI 供应商"
+  },
+  "app.translation-settings.ai-provider-unavailable": {
+    "message": "已保存的 AI 供应商当前不可用，将保留到你选择其他供应商为止。"
+  },
+  "app.translation-settings.ai-unavailable": {
+    "message": "AI 翻译当前不可用：AI 功能已关闭，或没有任何供应商启用了模型。你保存的 AI 选择会保留。"
   },
   "app.translation-settings.auto-translate": {
     "message": "自动翻译项目页面"
@@ -17383,6 +17422,9 @@
   },
   "app.translation-settings.title": {
     "message": "翻译"
+  },
+  "app.translation-settings.unavailable-option": {
+    "message": "不可用"
   },
   "app.translation.auto-translate-hint.text": {
     "message": "可在「设置 → 语言与翻译」中开启自动翻译，浏览结果与项目页会自动翻译。"
