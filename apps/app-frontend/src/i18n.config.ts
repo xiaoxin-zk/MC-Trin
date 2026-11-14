@@ -64,6 +64,11 @@ const localeLoader = createLocaleLoader(
     [DEFAULT_LOCALE],
 )
 
+/** The catalogue `activateLocale` would activate for `requested`, without activating it. */
+function resolveAppLocale(requested: string | null | undefined): string {
+    return resolveLocale(requested, availableLocales)
+}
+
 /**
  * Activates `requested` through the shared resolution chain and returns the
  * locale that ends up active.
@@ -80,7 +85,7 @@ const localeLoader = createLocaleLoader(
  * read back instead of assumed.
  */
 async function activateLocale(requested: string | null | undefined): Promise<string> {
-    const target = resolveLocale(requested, availableLocales)
+    const target = resolveAppLocale(requested)
     await localeLoader.select(target)
     return getActiveLocale()
 }
@@ -91,6 +96,22 @@ async function activateLocale(requested: string | null | undefined): Promise<str
  */
 export async function setAppLocale(locale: string): Promise<string> {
     return await activateLocale(locale)
+}
+
+/**
+ * Resolves a requested tag and loads the catalogue behind it without changing
+ * the active locale, returning the code `setAppLocale` would activate.
+ *
+ * A caller that stores the preference before switching uses this so a catalogue
+ * that cannot be loaded aborts the change while nothing has been written yet.
+ * Activating afterwards only has to flip the already loaded catalogue, so a
+ * failed load can never leave the stored preference ahead of the rendered
+ * language.
+ */
+export async function prepareAppLocale(requested: string): Promise<string> {
+    const target = resolveAppLocale(requested)
+    await localeLoader.ensure(target)
+    return target
 }
 
 /** Resolves and activates a stored or system preference, returning the concrete locale. */

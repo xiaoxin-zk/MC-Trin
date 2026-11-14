@@ -603,21 +603,29 @@ watch(
  * Watching `path` rather than `fullPath` keeps filter and sort query edits from
  * scrolling the list the user is looking at.
  *
- * This cannot fight the content tab's restoration: that restore is gated on its
- * own `tableItems` watcher plus `nextTick`, only runs for the content sub-page
- * where a saved offset exists, and is one-shot per mount (`scrollStateRestored`).
- * This watcher fires on navigation instead — before that `nextTick` write — so
- * the two never race for the same destination: when the content tab remounts
- * its restore still lands last and resumes the saved position, and for every
- * other sub-page this reset is the only writer. Keeping it on the instance page
- * rather than inside the shared content layout also leaves that layout owning
- * its per-instance memory.
+ * `flush: 'post'` is what keeps this reset and the content tab's scroll memory
+ * from clobbering each other, and the two directions have opposite orders:
+ * - leaving Content: the layout captures `scrollTop` (and the row anchor) from
+ *   `onBeforeUnmount`, which runs while the outgoing sub-page is patched out of
+ *   the render. A pre-flush reset would already have written `0` when that
+ *   capture reads the container, so the saved offset would be lost and the tab
+ *   would always come back at the top. Running after the render puts the
+ *   capture first and the reset second.
+ * - entering Content: the layout restores the saved offset from a
+ *   `flush: 'post'` `tableItems` watcher that then writes inside `nextTick`,
+ *   i.e. after every post-flush job of the same flush — including this reset.
+ *   The restore therefore still lands last and resumes the saved position, and
+ *   for every other sub-page this reset is the only writer.
+ *
+ * Keeping it on the instance page rather than inside the shared content layout
+ * also leaves that layout owning its per-instance memory.
  */
 watch(
     () => displayedInstanceRoute.value.path,
     () => {
         document.querySelector<HTMLElement>('.app-viewport')?.scrollTo({ top: 0 })
     },
+    { flush: 'post' },
 )
 
 const appSettings = useQuery(appSettingsQueryOptions())

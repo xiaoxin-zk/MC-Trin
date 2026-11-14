@@ -27,7 +27,23 @@ test('both backend cancellation spellings are recognised', () => {
 })
 
 test('abort errors and unrelated failures are classified correctly', () => {
-    assert.equal(isCanceledResourceError({ name: 'AbortError', message: 'aborted' }), true)
+    // An abort name alone is not a content cancellation: it must not be
+    // suppressed, or a genuine failure carrying it never reaches the user.
+    assert.equal(isCanceledResourceError({ name: 'AbortError', message: 'aborted' }), false)
+    assert.equal(
+        isCanceledResourceError(new DOMException('The operation was aborted.', 'AbortError')),
+        false,
+    )
+    assert.equal(isCanceledResourceError({ name: 'CanceledError', message: 'canceled' }), false)
+    // A resource cancellation that surfaces as an abort is still suppressed.
+    assert.equal(
+        isCanceledResourceError({ name: 'AbortError', message: 'resource request canceled' }),
+        true,
+    )
+    assert.equal(
+        isCanceledResourceError({ name: 'CanceledError', message: 'resource operation canceled' }),
+        true,
+    )
     assert.equal(
         isCanceledResourceError(new Error('resource request failed (HTTP status None)')),
         false,
@@ -37,6 +53,21 @@ test('abort errors and unrelated failures are classified correctly', () => {
         false,
     )
     assert.equal(isCanceledResourceError(new Error('A user-provided description')), false)
+})
+
+test('a genuine error that merely mentions cancellation is not hidden', () => {
+    // The word "canceled" outside a resource operation is a real failure.
+    assert.equal(isCanceledResourceError(new Error('Update was canceled by the server')), false)
+    assert.equal(isCanceledResourceError(new Error('Download canceled: checksum mismatch')), false)
+    assert.equal(
+        isCanceledResourceError(new DOMException('Public lobby request cancelled', 'AbortError')),
+        false,
+    )
+    // The content operation is still recognised in both of its spellings.
+    assert.equal(
+        isCanceledResourceError(new DOMException('resource request canceled', 'AbortError')),
+        true,
+    )
 })
 
 test('cancellation is localized instead of leaking the raw backend diagnostic', () => {

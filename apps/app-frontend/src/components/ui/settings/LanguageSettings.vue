@@ -15,14 +15,16 @@ import {
 import { computed, ref } from 'vue'
 
 import { get, update } from '@/helpers/settings.ts'
-import i18n, {
+import {
     getActiveLocale,
     getSystemResolvedLocale,
     isFollowingSystemLocale,
+    prepareAppLocale,
     setAppLocale,
     setFollowSystemLocale,
 } from '@/i18n.config'
 
+import { createLocalePersistence } from './locale-persistence'
 import SettingsSaveStatus from './SettingsSaveStatus.vue'
 import SettingsSection from './SettingsSection.vue'
 
@@ -34,7 +36,14 @@ const settings = ref(await get())
 const $isChanging = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const retryLocale = ref<string | null>(null)
-let localeRun = 0
+
+const localePersistence = createLocalePersistence({
+    prepare: prepareAppLocale,
+    write: async (locale) => {
+        await update({ locale })
+    },
+    activate: setAppLocale,
+})
 
 const messages = defineMessages({
     systemLanguage: {
@@ -95,42 +104,37 @@ const localeOptions = computed<ComboboxOption<string>[]>(() =>
 async function persistLocale(follow: boolean, concreteLocale: string) {
     const previousStoredLocale = settings.value.locale
     const previousFollow = followSystem.value
-    const previousActiveLocale = i18n.global.locale.value
 
-    // Two runs can be in flight at once (for example the system toggle and a
-    // list selection). Each one awaits a locale chunk load and a settings IPC
-    // write, so they can finish out of order; the stale run would then write its
-    // own locale over the newer one and the picker, the database and the
-    // rendered language would disagree. Only the newest run may commit.
-    const run = ++localeRun
+    // Written before the switch because the remount that follows it reads this
+    // flag back through `isFollowingSystemLocale`, and a flag stored afterwards
+    // would leave the fresh toggle showing the state the user just left.
+    setFollowSystemLocale(follow)
+    followSystem.value = follow
     $isChanging.value = true
     saveStatus.value = 'saving'
     retryLocale.value = null
 
-    try {
-        setFollowSystemLocale(follow)
-        followSystem.value = follow
-        // `setAppLocale` returns the catalogue that actually became active. It is
-        // not always `concreteLocale` (an unknown tag resolves to en-US), and the
-        // stored value must describe what the UI shows, otherwise the picker, the
-        // database and the rendered language disagree after a restart.
-        const appliedLocale = await setAppLocale(concreteLocale)
-        if (run !== localeRun) return
-        settings.value.locale = appliedLocale
-        await update({ locale: appliedLocale })
-        if (run !== localeRun) return
+    const outcome = await localePersistence.persist(concreteLocale)
+    // A newer pick owns the UI: it set the flags when it started, so this run
+    // must not report an outcome over it.
+    if (outcome.status === 'superseded') return
+
+    if (outcome.status === 'saved') {
+        settings.value.locale = outcome.locale
         saveStatus.value = 'saved'
-    } catch {
-        if (run !== localeRun) return
-        setFollowSystemLocale(previousFollow)
-        followSystem.value = previousFollow
-        await setAppLocale(previousActiveLocale)
-        settings.value.locale = previousStoredLocale
-        retryLocale.value = follow ? 'system' : concreteLocale
-        saveStatus.value = 'error'
-    } finally {
-        if (run === localeRun) $isChanging.value = false
+        $isChanging.value = false
+        return
     }
+
+    // Nothing was stored and the locale was never switched, so this instance is
+    // still mounted and its picker still describes what is on screen. Restore
+    // the stored value and offer a retry instead of silently reverting.
+    setFollowSystemLocale(previousFollow)
+    followSystem.value = previousFollow
+    settings.value.locale = previousStoredLocale
+    retryLocale.value = follow ? 'system' : concreteLocale
+    saveStatus.value = 'error'
+    $isChanging.value = false
 }
 
 async function unlockSystemLanguage() {

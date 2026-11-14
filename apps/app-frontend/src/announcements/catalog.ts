@@ -41,37 +41,37 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
             added: [
                 {
                     'en-US':
-                        'Added an Instance tabs section in Settings that gathers the Files, Worlds and Screenshots tab switches in one place, so the tabs an instance page shows can be chosen per profile instead of being fixed. All three default to on.',
+                        'Added an Instance tabs setting under Settings > Home & navigation with a separate switch for each of the Files, Worlds and Screenshots tabs: turning one off removes that tab from the instance tab strip, and all three start switched on.',
                     'zh-CN':
-                        '设置中新增「实例标签页」分组，把文件、世界与截图标签页的开关集中在一处，实例页面显示哪些标签页可以按配置选择，而不再固定不变。三项均默认开启。',
+                        '设置「首页与导航」中新增「实例标签页」设置项，文件、世界与截图三个标签页各有独立开关：关闭其中一项，实例页面的标签栏就不再显示该标签页；三项默认全部开启。',
                 },
             ],
             changed: [
                 {
                     'en-US':
-                        'Changed assistant write actions so they always ask for confirmation before running. Free mode used to auto-approve several of them — creating an instance, deleting content, installing Java and similar — so the first sign of a change was its result; those now show the approval dialog with the exact call, while read-only tools keep running without interrupting you. Full access, which carries its own warning, still runs writes directly.',
+                        'Changed assistant write actions so every one of them shows the approval dialog with the exact call, in the default mode and in free mode alike. Free mode used to approve several of them without asking — creating or renaming an instance, enabling or disabling content and similar — so the first sign of a change was its result; in free mode read-only tools still run without interrupting you, and full access, which carries its own warning, still runs writes directly.',
                     'zh-CN':
-                        '调整了助手的写操作：执行前一律请求确认。此前的「自由模式」会自动批准其中若干项（新建实例、删除内容、安装 Java 等），等到你发觉时操作已经执行；现在这类写入会弹出确认框并列出具体调用，只读工具仍然不会打断你。带有独立警告的「完全访问」模式仍会直接执行写操作。',
+                        '调整了助手的写操作：无论在默认模式还是自由模式，每一次写入都会先弹出确认框并列出具体调用。此前的「自由模式」会不经询问就批准其中若干项（新建或重命名实例、启用或禁用内容等），等到你发觉时操作已经执行；自由模式下只读工具仍然不会打断你，带有独立警告的「完全访问」模式仍会直接执行写操作。',
                 },
             ],
             fixed: [
                 {
                     'en-US':
-                        'Fixed selecting 简体中文 sometimes storing and loading 繁體中文, and switching language in Settings leaving the page in the previous language until the launcher was restarted. The picker, the saved preference and the system-language path each decided what a language tag meant, and could disagree about the same code; one shared resolver now handles all three, and the Settings page re-renders as soon as the language changes instead of waiting for the next visit.',
+                        'Fixed the picker, the saved preference and the system-language path each deciding for themselves what a language tag meant, so the same code could resolve to different catalogues and the stored value could name a language the window was not rendering. One shared resolver now serves all three, and switching the language in Settings re-renders that page as soon as it changes.',
                     'zh-CN':
-                        '修复选择简体中文却可能保存并加载繁體中文，以及在设置中切换语言后页面仍停留在旧语言、要重启启动器才生效的问题。此前语言选择器、已保存的偏好和系统语言三条路径各自判断语言代码的含义，同一个代码可能得到不同结果；现在三者统一由同一个解析器处理，设置页面也会在切换后立即重新渲染，不必等到下次进入。',
+                        '修复语言选择器、已保存的偏好和系统语言三条路径各自判断语言代码含义的问题：同一个代码可能解析成不同的语言包，保存下来的值也可能指向界面并未显示的语言。现在三者统一由同一个解析器处理，在设置中切换语言后页面会立即重新渲染。',
                 },
                 {
                     'en-US':
-                        'Fixed a language being offered in the picker when the launcher had no usable catalogue behind it. Selecting it activated an empty set of messages, so every label fell back on its own and the window rendered a hybrid of that language and English. Only languages that actually ship a loaded, non-empty catalogue can be selected now.',
+                        'Fixed the launcher activating a language that ships a folder on disk but is not one of the offered ones — the Arabic bundle is shipped that way — when the system language or a stored preference asked for it, which loaded no messages at all, so the window stayed in English while the launcher believed it was running that language. The list of offered languages and the list of loadable catalogues are now the same list, and an empty bundle is refused instead of applied.',
                     'zh-CN':
-                        '修复语言列表中会出现启动器其实没有可用语言包的语种的问题。选中后会启用一份空的文案，界面便逐条回退，最终显示成该语言与英文混杂的样子。现在只有真正随包提供且内容非空的语言才会出现在列表中。',
+                        '修复系统语言或已保存的偏好请求某个语种时，启动器会启用它、而这个语种只有磁盘上的语言文件夹、并不在可选列表中（随包发布的阿拉伯语就是如此）的问题：启用后加载到一份空文案，界面实际仍是英文，启动器却认为自己正在使用该语言。现在可选语言列表与可加载的语言包列表是同一份列表，空语言包会被拒绝，不再被启用。',
                 },
                 {
                     'en-US':
-                        'Fixed several page breadcrumbs showing raw English route names — "AI assistant", "Plugins", "Versions", "Gallery" and "Command generator" — even when the launcher was running in Chinese. Those route names were never mapped to translated strings; they are now, so the breadcrumb trail matches the rest of the interface in every language.',
+                        'Fixed several page breadcrumbs showing raw English route names — "AI assistant", "Plugins", "Versions", "Gallery" and "Command generator" — even when the launcher was running in Chinese. Those route names were never mapped to translated strings; they are now, so those breadcrumbs follow the selected language instead of always reading as English.',
                     'zh-CN':
-                        '修复多处面包屑在中文界面下仍显示 "AI assistant"、"Plugins"、"Versions"、"Gallery"、"Command generator" 等英文原文的问题。此前这些路由名称从未映射到翻译文案，现在已补上映射，面包屑在各语言下都与界面其余部分保持一致。',
+                        '修复多处面包屑在中文界面下仍显示 "AI assistant"、"Plugins"、"Versions"、"Gallery"、"Command generator" 等英文原文的问题。此前这些路由名称从未映射到翻译文案，现在已补上映射，这些面包屑会跟随所选语言，而不再固定显示英文。',
                 },
                 {
                     'en-US':
@@ -81,15 +81,15 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Fixed questions about an instance taking 35–42 seconds on a large instance, because every question re-read and re-hashed all 425 jars before it could answer. File hashes are now cached and reused, so an unchanged instance answers immediately, and a first scan that is still running returns a "still scanning" reply — the assistant asks again shortly instead of blocking the whole turn.',
+                        'Fixed content questions about a large instance taking 35–42 seconds, because every question re-read and re-hashed all 425 jar files before it could answer. Answers now come from the hashes already recorded: the scan writes back each hash it computes, an unchanged file is reused instead of read again, and a question whose scan is still running returns a "still scanning" reply after eight seconds — the assistant asks again shortly instead of blocking the whole turn.',
                     'zh-CN':
-                        '修复大型实例上每条与实例内容相关的问题都要等 35–42 秒的问题：此前每次提问都会重新读取并计算全部 425 个 jar 的哈希，之后才能作答。现在文件哈希会被缓存复用，实例没有变化时可以立即回答；首次扫描尚未完成时会先返回「仍在扫描」的回复，让助手稍后重试，而不是把整轮对话卡住。',
+                        '修复大型实例上每条与实例内容相关的问题都要等 35–42 秒的问题：此前每次提问都会重新读取并计算全部 425 个 jar 文件的哈希，之后才能作答。现在作答直接使用已记录的哈希：扫描会把它计算出的哈希写回缓存，未变化的文件不再重新读取；扫描尚未完成时，会在八秒后先返回「仍在扫描」的回复，让助手稍后重试，而不是把整轮对话卡住。',
                 },
                 {
                     'en-US':
-                        'Fixed one unrecognised provider protocol value making the entire AI settings page fail to load, which hid every provider and left the page unusable. The single damaged entry is now isolated and logged, and the rest of the provider list is shown normally.',
+                        'Fixed one unrecognised provider protocol value making the entire AI settings page fail to load, which hid every provider and left the page unusable. The stored value is now logged and ignored in favour of the built-in one, so that provider and the rest of the list load normally.',
                     'zh-CN':
-                        '修复单个无法识别的服务商协议值导致整个 AI 设置页面加载失败、所有服务商一起消失、页面完全不可用的问题。现在只会隔离并记录这一条异常数据，其余服务商照常显示。',
+                        '修复单个无法识别的服务商协议值导致整个 AI 设置页面加载失败、所有服务商一起消失、页面完全不可用的问题。现在会记录并忽略这个无法识别的值，改用内置协议，该服务商和其余列表都能照常加载。',
                 },
                 {
                     'en-US':
@@ -99,9 +99,9 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Fixed "Fetch models" force-enabling every model it discovered, silently switching models back on after you had turned them off. Refreshing a provider now only records what the endpoint offers; what is enabled stays exactly as you left it.',
+                        'Fixed "Fetch models" switching on every model it discovered, so a refresh could enable models you had never approved. Refreshing a provider now only records what the endpoint offers; what is enabled stays exactly as you left it.',
                     'zh-CN':
-                        '修复「获取模型」会把它发现的所有模型强制启用、把你之前关闭的模型悄悄重新打开的问题。现在刷新服务商只记录该服务端提供了哪些模型，启用状态完全保持你设置时的样子。',
+                        '修复「获取模型」会把它发现的每个模型都设为启用、刷新后可能出现你从未批准过的模型的问题。现在刷新服务商只记录该服务端提供了哪些模型，启用状态完全保持你设置时的样子。',
                 },
                 {
                     'en-US':
@@ -111,15 +111,15 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Fixed the "Configure AI" button in the log-diagnosis tab landing on a settings page with no AI controls at all. It now opens the section that actually contains the log-analysis provider and model pickers, and the page waits for that control to appear before scrolling to it, so the destination is highlighted even while the category is still loading.',
+                        'Fixed the "Configure AI" button in the log-diagnosis tab opening a settings section that had no AI controls at all. It now opens the section holding the log-analysis provider and model pickers, and the page keeps looking for that control for a few seconds so it is still scrolled to and highlighted when the section loads slowly.',
                     'zh-CN':
-                        '修复日志诊断标签页里的「Configure AI」按钮跳转到根本没有任何 AI 选项的设置页面的问题。现在会打开真正包含日志分析服务商与模型选择器的分区，并且会等到该控件出现后再滚动定位，即使分类仍在加载也能准确高亮目标。',
+                        '修复日志诊断标签页里的「Configure AI」按钮打开的分区根本没有 AI 选项的问题。现在会打开真正包含日志分析服务商与模型选择器的分区，页面还会在几秒内持续查找该控件，分区加载较慢时也能正确定位并高亮。',
                 },
                 {
                     'en-US':
-                        'Fixed a write request from the assistant hanging the turn forever when its approval dialog never appeared or was never answered. Waiting for approval is now capped at 120 seconds, after which the request is denied and a notification explains what happened, so the conversation always continues.',
+                        'Fixed a write request from the assistant hanging the turn forever when its approval dialog was never answered. Waiting for an answer is now capped at 120 seconds, after which the request is denied and a notification explains what happened, so the conversation always continues.',
                     'zh-CN':
-                        '修复助手的写入请求在确认框没有弹出或始终无人应答时让整轮对话无限挂起的问题。现在等待确认最多 120 秒，超时后该请求按拒绝处理，并通过通知说明原因，对话始终能够继续。',
+                        '修复助手的写入请求在确认框始终无人应答时让整轮对话无限挂起的问题。现在等待应答最多 120 秒，超时后该请求按拒绝处理，并通过通知说明原因，对话始终能够继续。',
                 },
                 {
                     'en-US':
@@ -147,21 +147,21 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        'Fixed the "show screenshots tab in instances" setting doing nothing at all: the value was stored but never read, so the tab vanished no matter what it said. The setting is now honoured, defaults to on, and a profile still carrying the old shipped-off value gets the tab back once — turning it off yourself afterwards keeps it off.',
+                        'Fixed the "show screenshots tab in instances" setting doing nothing at all: the value was stored but never read, so the tab stayed visible whatever it said. The setting is now honoured, defaults to on, and an existing settings database still carrying the old shipped-off value gets the tab back once — turning it off yourself afterwards keeps it off.',
                     'zh-CN':
-                        '修复「在实例中显示截图标签页」设置完全无效的问题：此前该值只被保存、从未被读取，无论怎么设置标签页都会消失。现在设置真正生效并默认开启；沿用旧版默认值（关闭）的配置会一次性恢复该标签页，之后你手动关闭则会保持关闭。',
+                        '修复「在实例中显示截图标签页」设置完全无效的问题：此前该值只被保存、从未被读取，无论怎么设置标签页都照常显示。现在设置真正生效并默认开启；沿用旧版默认值（关闭）的配置库会一次性恢复该标签页，之后你手动关闭则会保持关闭。',
                 },
                 {
                     'en-US':
-                        'Fixed accent colour names in Settings being cut down to "Ora…", "Gre…" and "Pur…". The colour chip spent most of its width on the swatch and the check mark, leaving roughly 30 px for text; the check now overlays the corner and the chip has room for the full name.',
+                        'Fixed accent colour names in Settings being cut down to "Ora…", "Gre…" and "Pur…". The colour chip reserved a fixed column for the swatch and another for the check mark, leaving little room for the name; the check now overlays the corner and the chip has room for the full label.',
                     'zh-CN':
-                        '修复设置中的强调色名称显示不全、只剩「Ora…」「Gre…」「Pur…」这样开头几个字母的问题。此前色块和勾选标记占掉了大部分宽度，文字只剩约 30 像素；现在勾选标记改为覆盖在右上角，色块把宽度留给完整名称。',
+                        '修复设置中的强调色名称显示不全、只剩「Ora…」「Gre…」「Pur…」这样开头几个字母的问题。此前色块和勾选标记各占一个固定列，留给名称的宽度很小；现在勾选标记改为覆盖在右上角，色块把宽度留给完整名称。',
                 },
                 {
                     'en-US':
-                        'Fixed a single network hiccup while loading a project page disabling the Install button for the rest of the visit. Three unrelated requests — the project classification, the version list and the optional instance context — shared one failure flag, so a failure in any of them blocked installing. Install now depends only on what it actually needs, and a failed version list falls back to the cached copy when one exists.',
+                        'Fixed a single network hiccup while loading a project page disabling the Install button for the rest of the visit. The project classification, the version list and the optional instance context each had to finish before installing, so a failure in any of them blocked it. Install now depends only on what it actually needs, and a failed version list falls back to the cached copy when one exists.',
                     'zh-CN':
-                        '修复项目页面加载时一次网络抖动就让「安装」按钮在本次浏览中彻底不可用的问题。此前项目分类、版本列表和可选的实例信息三个互不相关的请求共用一个失败标记，任何一个失败都会堵住安装。现在安装只依赖真正需要的条件，版本列表加载失败时也会回退到本地缓存。',
+                        '修复项目页面加载时一次网络抖动就让「安装」按钮在本次浏览中彻底不可用的问题。此前项目分类、版本列表和可选的实例信息都必须加载成功才能安装，任何一项失败都会堵住安装。现在安装只依赖真正需要的条件，版本列表加载失败时也会回退到本地缓存。',
                 },
                 {
                     'en-US':
@@ -177,9 +177,9 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                 },
                 {
                     'en-US':
-                        "Fixed a single 404 on one specific file permanently demoting a download mirror and sending every later download to the slower official source. A missing object says nothing about the mirror's health, so object misses no longer count as mirror failures — only genuine server errors, timeouts and rate limiting do.",
+                        "Fixed a 404 on one file counting towards a download mirror's failure streak, which could push that mirror behind the official source for later downloads. A missing file says nothing about the mirror's health, so object misses no longer count as mirror failures — only server errors, timeouts and rate limiting do.",
                     'zh-CN':
-                        '修复某个文件的一次 404 就让下载镜像被永久降级、之后所有下载都改走较慢的官方源的问题。单个对象不存在并不能说明镜像本身有问题，因此对象级失败不再计入镜像故障，只有真正的服务器错误、超时和限流才算。',
+                        '修复某个文件的一次 404 就被计入镜像的连续失败次数、进而可能让该镜像在后续下载中排到官方源之后的问题。单个文件不存在并不能说明镜像本身有问题，因此对象级失败不再计入镜像故障，只有服务器错误、超时和限流才算。',
                 },
             ],
         },

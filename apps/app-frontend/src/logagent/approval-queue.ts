@@ -33,6 +33,12 @@ type Entry = PendingApproval & { id: number; settled: boolean }
  * `timeoutMs`, settles as denied, leaves the queue and reports the tool through
  * `onTimeout`, so the run always continues or fails visibly.
  *
+ * The deadline is the time the dialog is on screen, not the time since the tool
+ * call was made. Only the head is visible, so only the head runs a timer: a
+ * queued entry is armed when it reaches the front. Otherwise parallel tool calls
+ * would spend the budget of the second call while the user is still reading the
+ * first, and it would expire the moment it appeared — or before anyone saw it.
+ *
  * Entries carry their own id and settled flag because the queue is a Vue `ref`:
  * reading it returns reactive proxies, and comparing them with the raw object a
  * timer closed over would never match.
@@ -55,6 +61,27 @@ export function createApprovalQueue(
         entry.resolve(approved)
     }
 
+    /**
+     * Arms the deadline for whichever entry is now at the front of the queue.
+     * Only the head can have a timer, so a queued request never spends its
+     * budget while the user is still reading an older dialog.
+     */
+    function armHead(): void {
+        const head = entries.value[0]
+        if (!head || head.settled || head.timer !== undefined) return
+        head.timer = setTimeout(() => {
+            settle(head, false)
+            try {
+                // One notification per expired entry: the timer left with the
+                // entry, and the next head arms its own below.
+                onTimeout(head.tool)
+            } finally {
+                // A throwing listener must not strand the rest of the queue.
+                armHead()
+            }
+        }, timeoutMs)
+    }
+
     function request(
         endpoint: string,
         tool: RemoteMcpTool,
@@ -70,17 +97,16 @@ export function createApprovalQueue(
                 args,
                 resolve,
             }
-            entry.timer = setTimeout(() => {
-                settle(entry, false)
-                onTimeout(tool)
-            }, timeoutMs)
             entries.value = [...entries.value, entry]
+            armHead()
         })
     }
 
     function resolve(approved: boolean): void {
         const entry = entries.value[0]
-        if (entry) settle(entry, approved)
+        if (!entry) return
+        settle(entry, approved)
+        armHead()
     }
 
     function denyAll(): void {

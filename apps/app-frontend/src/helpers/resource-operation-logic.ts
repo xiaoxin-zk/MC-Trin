@@ -157,6 +157,8 @@ export function isResourceOperationError(error: unknown): boolean {
     )
 }
 
+const CANCELED_RESOURCE_MESSAGE = /resource (?:operation|request) cancel+ed/i
+
 /**
  * Recognises a cancelled content operation in every encoding that reaches the UI.
  *
@@ -167,22 +169,16 @@ export function isResourceOperationError(error: unknown): boolean {
  *   `ErrorKind::InputError("resource operation canceled")`, which the Tauri shell
  *   serialises as `code: "resourceError"` with an "Invalid input: " prefix.
  *
- * Abort-triggered navigation also surfaces as a DOMException named `AbortError`, so
- * that is treated as cancellation as well.
+ * The diagnostic is the evidence, never the error's name or code on its own.
+ * `code: "resourceError"` marks every resource failure, and `AbortError` /
+ * `CanceledError` are raised by every aborted fetch, file read and background
+ * task, so either one alone would suppress genuine failures that merely surface
+ * with it. The message above is simultaneously a content operation and its
+ * cancellation, which is why it is what qualifies; an abort raised on behalf of
+ * content work is spelled that way too, so the real case stays suppressed.
  */
 export function isCanceledResourceError(error: unknown): boolean {
-    if (typeof error === 'object' && error !== null) {
-        if ('code' in error && String(error.code) === 'resourceError') {
-            return /resource (?:operation|request) cancel+ed/i.test(rawMessage(error))
-        }
-        if (
-            ('name' in error && String(error.name) === 'AbortError') ||
-            ('name' in error && String(error.name) === 'CanceledError')
-        ) {
-            return true
-        }
-    }
-    return /resource (?:operation|request) cancel+ed/i.test(rawMessage(error))
+    return CANCELED_RESOURCE_MESSAGE.test(rawMessage(error))
 }
 
 export function resourceOperationError(error: unknown, formatMessage?: FormatMessage): string {
