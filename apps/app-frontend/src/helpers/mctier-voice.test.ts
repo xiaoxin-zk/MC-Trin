@@ -317,15 +317,32 @@ test('negotiates an offer, buffers early candidates and applies them in order', 
     }
 })
 
+/** Lets an in-flight ICE-restart chain finish between simulated failures.
+ *
+ * `recoverPeer` deliberately ignores a `failed` report that arrives while its
+ * restart offer is still in flight, because one real failure is reported on
+ * both state channels and the budget must not be spent twice for it. A genuine
+ * second failure can only arrive once that offer has been sent, so the fake has
+ * to wait past the whole `createOffer` -> `setLocalDescription` -> `send` chain.
+ * A single `await Promise.resolve()` yields one microtask, which is why the
+ * later events were dropped by the in-flight guard and the restart budget was
+ * never exhausted. */
+function settleRestart(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 test('reports a peer unreachable once its ICE restarts are exhausted', async () => {
     const environment = installVoiceEnvironment()
     try {
         const { stream } = createStream()
         const unreachable: string[] = []
+        const sent: string[] = []
         const session = new MctierVoiceSession({
             localPlayerId: FROM,
             stream,
-            send: async () => {},
+            send: async (signal) => {
+                sent.push(signal.type)
+            },
             onPeerUnreachable: (playerId) => {
                 unreachable.push(playerId)
             },
@@ -333,11 +350,22 @@ test('reports a peer unreachable once its ICE restarts are exhausted', async () 
         // FROM sorts before TO, so this side owns the restart budget.
         await session.syncPeers([{ playerId: TO }])
         const [connection] = environment.connections
-        connection.connectionState = 'failed'
-        for (let attempt = 0; attempt <= 2; attempt += 1) {
+        const fail = async () => {
+            connection.connectionState = 'failed'
             connection.onconnectionstatechange?.()
-            await Promise.resolve()
+            await settleRestart()
         }
+
+        // Both restarts must be spent first: reporting on either of these would
+        // abandon a call that still had a recovery attempt left.
+        await fail()
+        assert.deepEqual(unreachable, [])
+        await fail()
+        assert.deepEqual(unreachable, [])
+
+        // The third failure finds the budget exhausted and gives up on the peer.
+        await fail()
+        assert.deepEqual(sent, ['offer', 'offer', 'offer'])
         assert.deepEqual(unreachable, [TO])
         session.close()
     } finally {
@@ -350,38 +378,49 @@ test('a peer that reconnects starts a fresh ICE restart budget', async () => {
     try {
         const { stream } = createStream()
         const unreachable: string[] = []
+        const sent: string[] = []
         const session = new MctierVoiceSession({
             localPlayerId: FROM,
             stream,
-            send: async () => {},
+            send: async (signal) => {
+                sent.push(signal.type)
+            },
             onPeerUnreachable: (playerId) => {
                 unreachable.push(playerId)
             },
         })
         await session.syncPeers([{ playerId: TO }])
         const [connection] = environment.connections
-        connection.connectionState = 'failed'
-        for (let attempt = 0; attempt <= 2; attempt += 1) {
+        const fail = async () => {
+            connection.connectionState = 'failed'
             connection.onconnectionstatechange?.()
-            await Promise.resolve()
+            await settleRestart()
         }
+        await fail()
+        await fail()
+        await fail()
         assert.deepEqual(unreachable, [TO])
 
-        // A working restart resets the budget, so the next failure streak must
-        // again use up both restarts before the peer is declared unreachable.
+        // A working restart resets the budget, so the next streak has to spend
+        // both restarts again instead of giving up on the first failure.
         connection.connectionState = 'connected'
         connection.onconnectionstatechange?.()
-        connection.connectionState = 'failed'
-        connection.onconnectionstatechange?.()
-        await Promise.resolve()
-        connection.connectionState = 'failed'
-        connection.onconnectionstatechange?.()
-        await Promise.resolve()
+        await fail()
+        await fail()
         assert.deepEqual(
             unreachable,
             [TO],
             'the reset budget must not be consumed by a single failure',
         )
+        // One initial offer plus two restarts in each streak: the reconnect
+        // refilled the budget in full rather than leaving it partly spent.
+        assert.deepEqual(sent, ['offer', 'offer', 'offer', 'offer', 'offer'])
+
+        // The third failure of the new streak exhausts the refilled budget and
+        // reports the peer again, without offering a third restart.
+        await fail()
+        assert.deepEqual(unreachable, [TO, TO])
+        assert.deepEqual(sent, ['offer', 'offer', 'offer', 'offer', 'offer'])
         session.close()
     } finally {
         environment.restore()
