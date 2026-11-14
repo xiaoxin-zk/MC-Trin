@@ -16,14 +16,26 @@ pub struct AssistantAiSettings {
 
 pub async fn get_assistant_ai_settings() -> crate::Result<AssistantAiSettings> {
     let state = State::get().await?;
+    read_assistant_ai_settings(&state.pool).await
+}
+
+/// `fetch_optional`: a database repaired by hand (or downgraded and re-upgraded)
+/// can lack the seeded row, and that must read as "not chosen" rather than break
+/// the assistant page.
+async fn read_assistant_ai_settings(
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<AssistantAiSettings> {
     let row = sqlx::query_as::<_, (String, String)>(
         "SELECT provider_id, model_id FROM assistant_ai_settings WHERE id = 0",
     )
-    .fetch_one(&state.pool)
+    .fetch_optional(pool)
     .await?;
-    Ok(AssistantAiSettings {
-        provider_id: row.0,
-        model_id: row.1,
+    Ok(match row {
+        Some((provider_id, model_id)) => AssistantAiSettings {
+            provider_id,
+            model_id,
+        },
+        None => AssistantAiSettings::default(),
     })
 }
 
@@ -49,7 +61,8 @@ async fn save_assistant_ai_settings(
             (provider_id, model_id)
         };
     sqlx::query(
-        "UPDATE assistant_ai_settings SET provider_id = ?, model_id = ? WHERE id = 0",
+        "INSERT INTO assistant_ai_settings (id, provider_id, model_id) VALUES (0, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET provider_id = excluded.provider_id, model_id = excluded.model_id",
     )
     .bind(provider_id)
     .bind(model_id)
@@ -121,5 +134,89 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(row, (String::new(), String::new()));
+    }
+
+    /// A repaired database can lack the seeded row. Reading it must mean "no
+    /// choice yet", not an error that takes the assistant page down.
+    #[tokio::test]
+    async fn a_missing_row_reads_as_no_choice() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE assistant_ai_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 0),
+                provider_id TEXT NOT NULL DEFAULT '',
+                model_id TEXT NOT NULL DEFAULT ''
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let missing = read_assistant_ai_settings(&pool).await.unwrap();
+        assert_eq!(missing, AssistantAiSettings::default());
+
+        // The insert path repairs the row rather than silently doing nothing.
+        save_assistant_ai_settings(
+            &pool,
+            AssistantAiSettings {
+                provider_id: "openai".into(),
+                model_id: "gpt-4o-mini".into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            read_assistant_ai_settings(&pool).await.unwrap(),
+            AssistantAiSettings {
+                provider_id: "openai".into(),
+                model_id: "gpt-4o-mini".into(),
+            }
+        );
+    }
+
+    /// The assistant pair lives in its own table, so saving it cannot touch the
+    /// crash-analysis pair that drives log diagnosis.
+    #[tokio::test]
+    async fn saving_the_assistant_pair_leaves_crash_analysis_alone() {
+        let pool = pool().await;
+        sqlx::query(
+            "CREATE TABLE crash_analysis_ai_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 0),
+                enabled INTEGER NOT NULL DEFAULT FALSE,
+                provider_id TEXT NOT NULL DEFAULT '',
+                model_id TEXT NOT NULL DEFAULT '',
+                ai_source TEXT NOT NULL DEFAULT 'logshare'
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO crash_analysis_ai_settings VALUES (0, 1, 'openai', 'crash-model', 'custom')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        save_assistant_ai_settings(
+            &pool,
+            AssistantAiSettings {
+                provider_id: "deepseek".into(),
+                model_id: "deepseek-chat".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let crash: (i64, String, String, String) = sqlx::query_as(
+            "SELECT enabled, provider_id, model_id, ai_source
+             FROM crash_analysis_ai_settings WHERE id = 0",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            crash,
+            (1, "openai".into(), "crash-model".into(), "custom".into())
+        );
     }
 }

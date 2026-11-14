@@ -851,13 +851,13 @@ const selectedLogModel = computed(() => {
  * diagnosis feature, and reusing it here is what forced the first enabled model
  * on everyone.
  */
-const assistantModelOptions = computed(() =>
+const assistantModelOptions = computed(() => {
+    const state = aiState.value
     // AI features can be switched off globally; a picker that cannot be used
     // must not be offered.
-    aiState.value?.settings.enabled
-        ? collectAssistantModelOptions(aiState.value.providers, providerCatalog.value)
-        : [],
-)
+    if (!state?.settings.enabled) return []
+    return collectAssistantModelOptions(state.providers, providerCatalog.value)
+})
 
 const assistantModelGroups = computed(() => groupAssistantModels(assistantModelOptions.value))
 
@@ -918,15 +918,22 @@ const hasConfiguredModel = computed(() => {
     return Boolean(assistantModel.value)
 })
 
-const settingsTarget = computed(() => {
-    return mode.value === 'logs' && assistantModel.value ? '#logs' : '#ai'
-})
+/**
+ * Where "Configure AI" sends the user. Log diagnosis has its own provider and
+ * model, so it belongs in the log settings; a launcher with no usable model at
+ * all has to enable one in the AI settings first.
+ */
+const aiHasUsableModel = computed(() => assistantModelOptions.value.length > 0)
 
-const configurationMessage = computed(() => {
-    return mode.value === 'logs' && assistantModel.value
+const settingsTarget = computed(() =>
+    mode.value === 'logs' && aiHasUsableModel.value ? '#logs' : '#ai',
+)
+
+const configurationMessage = computed(() =>
+    mode.value === 'logs' && aiHasUsableModel.value
         ? messages.configureAnalysis
-        : messages.configureModel
-})
+        : messages.configureModel,
+)
 
 const canSubmit = computed(
     () =>

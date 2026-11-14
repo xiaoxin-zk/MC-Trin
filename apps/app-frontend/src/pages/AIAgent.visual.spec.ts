@@ -416,6 +416,52 @@ it('keeps the crash-analysis model independent from the assistant selection', as
     expect(mocks.saveAssistantSettings).not.toHaveBeenCalled()
 })
 
+it('shows which model log diagnosis will use instead of the assistant picker', async () => {
+    mocks.aiState.mockResolvedValue(multiModelAI())
+    mocks.analysisSettings.mockResolvedValue({
+        enabled: true,
+        provider_id: 'openai',
+        model_id: 'gpt-4o-mini-name-only',
+        ai_source: 'custom',
+    })
+    mocks.assistantSettings.mockResolvedValue({
+        provider_id: 'deepseek',
+        model_id: 'deepseek-reasoner',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    // General mode owns the picker.
+    expect(wrapper.find('[data-onboarding-id="assistant-model-select"]').exists()).toBe(true)
+
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Log diagnosis'))!
+        .trigger('click')
+
+    // Log mode must not offer the assistant pair: it reports the crash-analysis
+    // pair instead, which is the model the run will actually use.
+    expect(wrapper.find('[data-onboarding-id="assistant-model-select"]').exists()).toBe(false)
+    const logModel = wrapper.get('[data-onboarding-id="assistant-log-model"]')
+    expect(logModel.text()).toContain('openai')
+    expect(logModel.text()).toContain('gpt-4o-mini-name-only')
+    expect(logModel.text()).not.toContain('deepseek-reasoner')
+})
+
+it('keeps a single enabled model selectable so its identity stays explicit', async () => {
+    mocks.catalog.mockResolvedValue([{ id: 'openai', name: 'OpenAI', auth_type: 'apiKey' }])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const select = wrapper.get('[data-onboarding-id="assistant-model-select"]')
+    expect(select.findAll('option').map((option) => option.text())).toEqual(['GPT-4o mini'])
+    // One model is not a choice, but hiding the picker would hide which model
+    // answers; it stays visible with the automatic pick preselected.
+    expect((select.element as HTMLSelectElement).value).toBe('openai\u001fgpt-4o-mini')
+    // No stored choice yet, so the page says the pick is automatic.
+    expect(wrapper.text()).toContain('No model picked yet')
+})
+
 it('keeps tool settings collapsed and shows a visible reset result', async () => {
     localStorage.setItem(
         'mctrin.assistant.tool-settings.v1',

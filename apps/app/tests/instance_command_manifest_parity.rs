@@ -236,3 +236,36 @@ fn friends_runtime_handlers_match_the_build_manifest() {
         "the main window must be allowed to reach the friends plugin"
     );
 }
+
+/// The assistant now stores its own provider/model pair, so the two settings
+/// commands have to exist in both the runtime handler and the build manifest.
+/// A runtime-only command fails at call time with an ACL error that no Rust
+/// unit test or `cargo check` can catch.
+#[test]
+fn ai_runtime_handlers_match_the_build_manifest() {
+    let runtime = runtime_commands(include_str!("../src/api/ai.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "ai");
+    assert_eq!(
+        runtime, manifest,
+        "ai commands must be identical in the runtime handler and the \
+         build-time manifest"
+    );
+    for command in ["ai_get_assistant_settings", "ai_update_assistant_settings"]
+    {
+        assert!(
+            runtime.contains(command),
+            "runtime handler is missing {command}"
+        );
+    }
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "ai:default"),
+        "the main window must be allowed to reach the ai plugin"
+    );
+}

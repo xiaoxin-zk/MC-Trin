@@ -3603,3 +3603,71 @@ async fn content_dependency_backfill_marker_migration_upgrades_preserving_rows()
             .unwrap();
     assert!(foreign_key_errors.is_empty());
 }
+
+const ASSISTANT_AI_SETTINGS_MIGRATION_VERSION: i64 = 20261114120000;
+
+/// The assistant's model choice lives in its own row, so the migration has to
+/// create it for a fresh database and for one upgraded from the previous build
+/// without touching the crash-analysis row.
+#[tokio::test]
+async fn assistant_ai_settings_migrate_fresh_and_existing_databases() {
+    for previous_schema in [false, true] {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        if previous_schema {
+            let previous_migrator = Migrator {
+                migrations: std::borrow::Cow::Owned(
+                    MIGRATOR
+                        .iter()
+                        .filter(|migration| {
+                            migration.version
+                                < ASSISTANT_AI_SETTINGS_MIGRATION_VERSION
+                        })
+                        .cloned()
+                        .collect(),
+                ),
+                ..Migrator::DEFAULT
+            };
+            previous_migrator.run(&pool).await.unwrap();
+            sqlx::query(
+                "UPDATE crash_analysis_ai_settings
+                 SET enabled = TRUE, provider_id = 'openai',
+                     model_id = 'crash-model' WHERE id = 0",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        MIGRATOR.run(&pool).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT provider_id, model_id FROM assistant_ai_settings WHERE id = 0",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row, (String::new(), String::new()));
+        let crash: (i64, String, String) = sqlx::query_as(
+            "SELECT enabled, provider_id, model_id FROM crash_analysis_ai_settings WHERE id = 0",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        if previous_schema {
+            assert_eq!(crash, (1, "openai".into(), "crash-model".into()));
+        }
+        let foreign_key_errors: Vec<(String, i64, String, i64)> =
+            sqlx::query_as("PRAGMA foreign_key_check")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert!(foreign_key_errors.is_empty());
+    }
+}
