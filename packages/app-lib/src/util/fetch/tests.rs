@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::download::constants::ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD;
 
 #[test]
 fn custom_modrinth_sources_follow_priority_and_keep_official_fallback() {
