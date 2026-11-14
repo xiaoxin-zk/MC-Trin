@@ -374,6 +374,9 @@
   "app.ai-settings.field.region": {
     "message": "Region"
   },
+  "app.ai-settings.guide": {
+    "message": "How this works"
+  },
   "app.ai-settings.looking-for-translation": {
     "message": "Looking for content translation?"
   },
@@ -869,6 +872,9 @@
   "app.assistant.mcp.arguments": {
     "message": "Arguments"
   },
+  "app.assistant.mcp.config-error": {
+    "message": "Check the server name and HTTPS address, then try again."
+  },
   "app.assistant.mcp.connect": {
     "message": "Connect"
   },
@@ -890,6 +896,18 @@
   "app.assistant.mcp.endpoint-placeholder": {
     "message": "https://mcp.example.com/mcp"
   },
+  "app.assistant.mcp.name": {
+    "message": "Server name"
+  },
+  "app.assistant.mcp.remove-server": {
+    "message": "Remove server"
+  },
+  "app.assistant.mcp.save-server": {
+    "message": "Save server"
+  },
+  "app.assistant.mcp.saved-servers": {
+    "message": "Saved MCP servers"
+  },
   "app.assistant.mcp.server": {
     "message": "Server"
   },
@@ -901,6 +919,12 @@
   },
   "app.assistant.mcp.tool": {
     "message": "Tool"
+  },
+  "app.assistant.mcp.update-server": {
+    "message": "Update server"
+  },
+  "app.assistant.mcp.use-server": {
+    "message": "Select server"
   },
   "app.assistant.mode.general": {
     "message": "Launcher help"
@@ -920,20 +944,104 @@
   "app.assistant.no-instances": {
     "message": "Create an instance before analyzing its logs."
   },
+  "app.assistant.permission-mode.active-badge": {
+    "message": "Full access is active: tools run without asking."
+  },
   "app.assistant.permission-mode.dangerous-hint": {
     "message": "These run only after you approve the exact call. Everything on an MCP server you add also asks, because this launcher does not control what those tools do."
   },
   "app.assistant.permission-mode.dangerous-title": {
     "message": "Write tools that always ask for approval"
   },
+  "app.assistant.permission-mode.default": {
+    "message": "Confirm every change"
+  },
+  "app.assistant.permission-mode.default-hint": {
+    "message": "Every write and every MCP tool call asks for approval first."
+  },
+  "app.assistant.permission-mode.description": {
+    "message": "Decides when the assistant must ask before acting. The mode applies immediately; full access always resets when this page is reloaded."
+  },
+  "app.assistant.permission-mode.free": {
+    "message": "Free mode"
+  },
   "app.assistant.permission-mode.free-hint": {
     "message": "Reading launcher data runs without asking. Every write tool and every MCP tool call still asks first."
+  },
+  "app.assistant.permission-mode.full": {
+    "message": "Full access"
   },
   "app.assistant.permission-mode.full-banner": {
     "message": "Full access is on: the assistant runs every tool without asking, including deleting instances and changing launcher settings."
   },
   "app.assistant.permission-mode.full-banner-action": {
     "message": "Turn it off"
+  },
+  "app.assistant.permission-mode.full-hint": {
+    "message": "The assistant runs every tool without asking, including destructive and MCP tools."
+  },
+  "app.assistant.permission-mode.full-warning-body": {
+    "message": "The assistant will run every tool without asking: it can delete instances, remove content files, change launcher settings, install runtimes, and call any tool on the MCP servers you connected. Only continue if you trust the configured model and MCP servers."
+  },
+  "app.assistant.permission-mode.full-warning-confirm": {
+    "message": "Enable full access"
+  },
+  "app.assistant.permission-mode.full-warning-title": {
+    "message": "Enable full access?"
+  },
+  "app.assistant.permission-mode.matrix.allowed": {
+    "message": "Allowed"
+  },
+  "app.assistant.permission-mode.matrix.ask": {
+    "message": "Asks first"
+  },
+  "app.assistant.permission-mode.matrix.read": {
+    "message": "Reading launcher state"
+  },
+  "app.assistant.permission-mode.matrix.remote": {
+    "message": "Tools on MCP servers"
+  },
+  "app.assistant.permission-mode.matrix.write": {
+    "message": "Changing launcher data"
+  },
+  "app.assistant.permission-mode.table.what": {
+    "message": "Action"
+  },
+  "app.assistant.permission-mode.title": {
+    "message": "Permission mode"
+  },
+  "app.assistant.profiles.cancel": {
+    "message": "Cancel"
+  },
+  "app.assistant.profiles.create": {
+    "message": "New agent"
+  },
+  "app.assistant.profiles.delete": {
+    "message": "Delete agent"
+  },
+  "app.assistant.profiles.edit": {
+    "message": "Edit agent"
+  },
+  "app.assistant.profiles.error": {
+    "message": "Check the agent name and instructions, then try again."
+  },
+  "app.assistant.profiles.hint": {
+    "message": "Profiles guide the assistant. Built-in tools are limited, and every write requires your approval."
+  },
+  "app.assistant.profiles.instructions": {
+    "message": "Agent instructions"
+  },
+  "app.assistant.profiles.name": {
+    "message": "Agent name"
+  },
+  "app.assistant.profiles.save": {
+    "message": "Save agent"
+  },
+  "app.assistant.profiles.select": {
+    "message": "Agent profile"
+  },
+  "app.assistant.profiles.title": {
+    "message": "Agents"
   },
   "app.assistant.question": {
     "message": "Question"
@@ -964,6 +1072,192 @@
   },
   "app.assistant.tools.approval-title": {
     "message": "Review local write request"
+  },
+  "app.assistant.tools.cancel-job.description": {
+    "message": "Cancel a running Java or resource installation after approval."
+  },
+  "app.assistant.tools.cancel-job.name": {
+    "message": "Cancel installation job"
+  },
+  "app.assistant.tools.check-updates.description": {
+    "message": "Find compatible updates without installing them."
+  },
+  "app.assistant.tools.check-updates.name": {
+    "message": "Check content updates"
+  },
+  "app.assistant.tools.content.description": {
+    "message": "Inspect installed mods, resource packs, shaders, updates, and compatibility warnings."
+  },
+  "app.assistant.tools.content.name": {
+    "message": "Inspect instance content"
+  },
+  "app.assistant.tools.create-instance.description": {
+    "message": "Create an empty instance record; no files are downloaded."
+  },
+  "app.assistant.tools.create-instance.name": {
+    "message": "Create instance"
+  },
+  "app.assistant.tools.delete-instance.description": {
+    "message": "Delete an instance and managed files after approval."
+  },
+  "app.assistant.tools.delete-instance.name": {
+    "message": "Delete instance"
+  },
+  "app.assistant.tools.description": {
+    "message": "Choose which local tools the agent may call. Read tools expose sanitized data; write tools require approval for every call."
+  },
+  "app.assistant.tools.diagnostics.description": {
+    "message": "Operating system, architecture and memory totals for troubleshooting."
+  },
+  "app.assistant.tools.diagnostics.name": {
+    "message": "Platform diagnostics"
+  },
+  "app.assistant.tools.disable-content.description": {
+    "message": "Temporarily disable a mod or resource to test a reversible fix."
+  },
+  "app.assistant.tools.disable-content.name": {
+    "message": "Disable content"
+  },
+  "app.assistant.tools.enable-content.description": {
+    "message": "Restore a previously disabled content entry after approval."
+  },
+  "app.assistant.tools.enable-content.name": {
+    "message": "Enable content"
+  },
+  "app.assistant.tools.external": {
+    "message": "Need your own tools? Connect an MCP server below and its tools are offered to the assistant automatically."
+  },
+  "app.assistant.tools.grep-log.description": {
+    "message": "Find a literal string in one snapshot file with surrounding context."
+  },
+  "app.assistant.tools.grep-log.name": {
+    "message": "Search log lines"
+  },
+  "app.assistant.tools.install-java.description": {
+    "message": "Download and install a compatible Java runtime after approval."
+  },
+  "app.assistant.tools.install-java.name": {
+    "message": "Install Java"
+  },
+  "app.assistant.tools.install-job.description": {
+    "message": "Read download and installation progress or errors."
+  },
+  "app.assistant.tools.install-job.name": {
+    "message": "Check installation job"
+  },
+  "app.assistant.tools.instance.description": {
+    "message": "Names, stable IDs, game versions, loaders and install status. Paths stay hidden."
+  },
+  "app.assistant.tools.instance.name": {
+    "message": "Instances"
+  },
+  "app.assistant.tools.java-vendors.description": {
+    "message": "List Java vendors available for this platform."
+  },
+  "app.assistant.tools.java-vendors.name": {
+    "message": "List Java vendors"
+  },
+  "app.assistant.tools.java.description": {
+    "message": "Find local Java runtimes without exposing their paths."
+  },
+  "app.assistant.tools.java.name": {
+    "message": "Find installed Java"
+  },
+  "app.assistant.tools.list-logs.description": {
+    "message": "The files captured in the current log snapshot."
+  },
+  "app.assistant.tools.list-logs.name": {
+    "message": "List log files"
+  },
+  "app.assistant.tools.prepare-install.description": {
+    "message": "Resolve dependencies and compatibility before downloading anything."
+  },
+  "app.assistant.tools.prepare-install.name": {
+    "message": "Prepare resource install"
+  },
+  "app.assistant.tools.prepare-update.description": {
+    "message": "Prepare a dependency-aware update plan before changing installed files."
+  },
+  "app.assistant.tools.prepare-update.name": {
+    "message": "Prepare content update"
+  },
+  "app.assistant.tools.queue-install.description": {
+    "message": "Download and install a reviewed resource plan after approval."
+  },
+  "app.assistant.tools.queue-install.name": {
+    "message": "Start resource installation"
+  },
+  "app.assistant.tools.read-log.description": {
+    "message": "Read up to 160 numbered lines from one snapshot file."
+  },
+  "app.assistant.tools.read-log.name": {
+    "message": "Read log lines"
+  },
+  "app.assistant.tools.remove-content.description": {
+    "message": "Remove one identified managed content file after approval."
+  },
+  "app.assistant.tools.remove-content.name": {
+    "message": "Remove content"
+  },
+  "app.assistant.tools.rename-instance.description": {
+    "message": "Rename an instance by ID without exposing its path."
+  },
+  "app.assistant.tools.rename-instance.name": {
+    "message": "Rename instance"
+  },
+  "app.assistant.tools.reset": {
+    "message": "Enable all"
+  },
+  "app.assistant.tools.resource-releases.description": {
+    "message": "List compatible versions for a resource project."
+  },
+  "app.assistant.tools.resource-releases.name": {
+    "message": "List resource releases"
+  },
+  "app.assistant.tools.search-resources.description": {
+    "message": "Search configured Modrinth, CurseForge, and other resource sources."
+  },
+  "app.assistant.tools.search-resources.name": {
+    "message": "Search resources"
+  },
+  "app.assistant.tools.set-java-default.description": {
+    "message": "Set a discovered Java runtime as the default for its major version."
+  },
+  "app.assistant.tools.set-java-default.name": {
+    "message": "Set default Java"
+  },
+  "app.assistant.tools.settings.description": {
+    "message": "Language, memory and download preferences. Credentials and paths stay hidden."
+  },
+  "app.assistant.tools.settings.name": {
+    "message": "Launcher settings"
+  },
+  "app.assistant.tools.title": {
+    "message": "Built-in tools"
+  },
+  "app.assistant.tools.update-settings.description": {
+    "message": "Change language, theme, memory and download preferences after approval."
+  },
+  "app.assistant.tools.update-settings.name": {
+    "message": "Change launcher settings"
+  },
+  "app.assistant.usage-guide.step-1": {
+    "message": "Open the AI settings to add an OpenAI-compatible provider with its endpoint and API key."
+  },
+  "app.assistant.usage-guide.step-2": {
+    "message": "Pick an agent profile to give the assistant standing instructions, or keep the default."
+  },
+  "app.assistant.usage-guide.step-3": {
+    "message": "Enable the built-in tools you need; connect an MCP server to offer your own tools."
+  },
+  "app.assistant.usage-guide.step-4": {
+    "message": "Choose a permission mode. Start with confirm-every-change and relax it once you trust the setup."
+  },
+  "app.assistant.usage-guide.step-5": {
+    "message": "Chat with the assistant. Reading launcher data is free; acting is gated by your permission mode."
+  },
+  "app.assistant.usage-guide.title": {
+    "message": "How to use the assistant"
   },
   "app.auth-servers.unreachable.body": {
     "message": "Minecraft authentication servers may be down right now. Check your internet connection and try again later."
@@ -1027,6 +1321,9 @@
   },
   "app.browse.choose-instance": {
     "message": "Choose instance"
+  },
+  "app.browse.community-sites": {
+    "message": "Community sites"
   },
   "app.browse.discover-content": {
     "message": "Discover content"
