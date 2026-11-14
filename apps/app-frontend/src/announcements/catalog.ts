@@ -1,4 +1,4 @@
-﻿export type AnnouncementLocale = 'en-US' | 'zh-CN'
+export type AnnouncementLocale = 'en-US' | 'zh-CN'
 
 export type AnnouncementChangeType =
     'added' | 'changed' | 'deprecated' | 'removed' | 'fixed' | 'security'
@@ -29,6 +29,161 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 ]
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
+    {
+        id: 'launcher-0.0.6-beta',
+        version: '0.0.6-beta',
+        publishedAt: '2026-11-15',
+        title: {
+            'en-US': 'MC-Trin 0.0.6-beta',
+            'zh-CN': 'MC-Trin 0.0.6-beta',
+        },
+        changes: {
+            added: [
+                {
+                    'en-US':
+                        'Added an Instance tabs section in Settings that gathers the Files, Worlds and Screenshots tab switches in one place, so the tabs an instance page shows can be chosen per profile instead of being fixed. All three default to on.',
+                    'zh-CN':
+                        '设置中新增「实例标签页」分组，把文件、世界与截图标签页的开关集中在一处，实例页面显示哪些标签页可以按配置选择，而不再固定不变。三项均默认开启。',
+                },
+            ],
+            changed: [
+                {
+                    'en-US':
+                        'Changed assistant write actions so they always ask for confirmation before running. Free mode used to auto-approve several of them — creating an instance, deleting content, installing Java and similar — so the first sign of a change was its result; those now show the approval dialog with the exact call, while read-only tools keep running without interrupting you. Full access, which carries its own warning, still runs writes directly.',
+                    'zh-CN':
+                        '调整了助手的写操作：执行前一律请求确认。此前的「自由模式」会自动批准其中若干项（新建实例、删除内容、安装 Java 等），等到你发觉时操作已经执行；现在这类写入会弹出确认框并列出具体调用，只读工具仍然不会打断你。带有独立警告的「完全访问」模式仍会直接执行写操作。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed selecting 简体中文 sometimes storing and loading 繁體中文, and switching language in Settings leaving the page in the previous language until the launcher was restarted. The picker, the saved preference and the system-language path each decided what a language tag meant, and could disagree about the same code; one shared resolver now handles all three, and the Settings page re-renders as soon as the language changes instead of waiting for the next visit.',
+                    'zh-CN':
+                        '修复选择简体中文却可能保存并加载繁體中文，以及在设置中切换语言后页面仍停留在旧语言、要重启启动器才生效的问题。此前语言选择器、已保存的偏好和系统语言三条路径各自判断语言代码的含义，同一个代码可能得到不同结果；现在三者统一由同一个解析器处理，设置页面也会在切换后立即重新渲染，不必等到下次进入。',
+                },
+                {
+                    'en-US':
+                        'Fixed a language being offered in the picker when the launcher had no usable catalogue behind it. Selecting it activated an empty set of messages, so every label fell back on its own and the window rendered a hybrid of that language and English. Only languages that actually ship a loaded, non-empty catalogue can be selected now.',
+                    'zh-CN':
+                        '修复语言列表中会出现启动器其实没有可用语言包的语种的问题。选中后会启用一份空的文案，界面便逐条回退，最终显示成该语言与英文混杂的样子。现在只有真正随包提供且内容非空的语言才会出现在列表中。',
+                },
+                {
+                    'en-US':
+                        'Fixed several page breadcrumbs showing raw English route names — "AI assistant", "Plugins", "Versions", "Gallery" and "Command generator" — even when the launcher was running in Chinese. Those route names were never mapped to translated strings; they are now, so the breadcrumb trail matches the rest of the interface in every language.',
+                    'zh-CN':
+                        '修复多处面包屑在中文界面下仍显示 "AI assistant"、"Plugins"、"Versions"、"Gallery"、"Command generator" 等英文原文的问题。此前这些路由名称从未映射到翻译文案，现在已补上映射，面包屑在各语言下都与界面其余部分保持一致。',
+                },
+                {
+                    'en-US':
+                        'Fixed the assistant refusing to answer anything about an instance that had never produced a crash log: it treated the diagnostic snapshot as mandatory for every run, so an instance that had not been launched yet failed with "No crash logs available for analysis". A general question now runs normally without a snapshot, and only log diagnosis and cloud upload still require one.',
+                    'zh-CN':
+                        '修复实例从未产生崩溃日志时，助手直接拒绝回答任何相关问题的问题：此前每次对话都强制要求诊断快照，尚未启动过的实例就会报「No crash logs available for analysis」。现在普通提问在没有日志的情况下也能正常作答，只有日志诊断和云端上传流程仍然必须提供快照。',
+                },
+                {
+                    'en-US':
+                        'Fixed questions about an instance taking 35–42 seconds on a large instance, because every question re-read and re-hashed all 425 jars before it could answer. File hashes are now cached and reused, so an unchanged instance answers immediately, and a first scan that is still running returns a "still scanning" reply — the assistant asks again shortly instead of blocking the whole turn.',
+                    'zh-CN':
+                        '修复大型实例上每条与实例内容相关的问题都要等 35–42 秒的问题：此前每次提问都会重新读取并计算全部 425 个 jar 的哈希，之后才能作答。现在文件哈希会被缓存复用，实例没有变化时可以立即回答；首次扫描尚未完成时会先返回「仍在扫描」的回复，让助手稍后重试，而不是把整轮对话卡住。',
+                },
+                {
+                    'en-US':
+                        'Fixed one unrecognised provider protocol value making the entire AI settings page fail to load, which hid every provider and left the page unusable. The single damaged entry is now isolated and logged, and the rest of the provider list is shown normally.',
+                    'zh-CN':
+                        '修复单个无法识别的服务商协议值导致整个 AI 设置页面加载失败、所有服务商一起消失、页面完全不可用的问题。现在只会隔离并记录这一条异常数据，其余服务商照常显示。',
+                },
+                {
+                    'en-US':
+                        'Fixed a freshly added Ollama provider showing 52 greyed-out models with nothing selectable, which made it unusable out of the box. A provider with no enabled model now offers one working default model, while a model you deliberately turned off stays off.',
+                    'zh-CN':
+                        '修复刚添加的 Ollama 服务商列出 52 个全部置灰的模型、一个都无法选择、开箱即不可用的问题。现在没有任何已启用模型的服务商会自动提供一个可用的默认模型；你主动关闭的模型则仍保持关闭。',
+                },
+                {
+                    'en-US':
+                        'Fixed "Fetch models" force-enabling every model it discovered, silently switching models back on after you had turned them off. Refreshing a provider now only records what the endpoint offers; what is enabled stays exactly as you left it.',
+                    'zh-CN':
+                        '修复「获取模型」会把它发现的所有模型强制启用、把你之前关闭的模型悄悄重新打开的问题。现在刷新服务商只记录该服务端提供了哪些模型，启用状态完全保持你设置时的样子。',
+                },
+                {
+                    'en-US':
+                        'Fixed a model you had turned off still being usable by the mod translator and by the provider test button. Both now reject a disabled model with a clear message instead of quietly sending the request anyway.',
+                    'zh-CN':
+                        '修复你已关闭的模型仍会被模组翻译和「测试服务商」按钮使用的问题。现在两者都会拒绝已禁用的模型并给出明确提示，而不是照常悄悄发出请求。',
+                },
+                {
+                    'en-US':
+                        'Fixed the "Configure AI" button in the log-diagnosis tab landing on a settings page with no AI controls at all. It now opens the section that actually contains the log-analysis provider and model pickers, and the page waits for that control to appear before scrolling to it, so the destination is highlighted even while the category is still loading.',
+                    'zh-CN':
+                        '修复日志诊断标签页里的「Configure AI」按钮跳转到根本没有任何 AI 选项的设置页面的问题。现在会打开真正包含日志分析服务商与模型选择器的分区，并且会等到该控件出现后再滚动定位，即使分类仍在加载也能准确高亮目标。',
+                },
+                {
+                    'en-US':
+                        'Fixed a write request from the assistant hanging the turn forever when its approval dialog never appeared or was never answered. Waiting for approval is now capped at 120 seconds, after which the request is denied and a notification explains what happened, so the conversation always continues.',
+                    'zh-CN':
+                        '修复助手的写入请求在确认框没有弹出或始终无人应答时让整轮对话无限挂起的问题。现在等待确认最多 120 秒，超时后该请求按拒绝处理，并通过通知说明原因，对话始终能够继续。',
+                },
+                {
+                    'en-US':
+                        'Fixed opening the translation settings page overwriting the saved AI provider and model with the first available option whenever the saved one was temporarily disabled or unavailable. The saved pair is now kept and shown as "Unavailable" until you pick another one yourself, so a brief outage no longer erases your choice.',
+                    'zh-CN':
+                        '修复已保存的 AI 服务商或模型临时被禁用或不可用时，打开翻译设置页面就会用第一个可用选项覆盖原选择的问题。现在会保留原来的组合并标注为「不可用」，直到你亲自改选其他选项，短暂异常不会再抹掉你的设置。',
+                },
+                {
+                    'en-US':
+                        'Fixed some mods showing a literal ${version} in the version column. Such mods ship the unexpanded Gradle build placeholder in their metadata, which the launcher stored verbatim; the real version is now read from the jar manifest, and when the manifest carries none the column shows "Unknown" instead of the placeholder.',
+                    'zh-CN':
+                        '修复部分模组在版本列显示字面量 ${version} 的问题。这类模组的元数据里带着未展开的 Gradle 构建占位符，启动器此前原样保存了它；现在会从 jar 清单中读取真实版本，清单里也没有版本时则显示「未知」，不再显示占位符。',
+                },
+                {
+                    'en-US':
+                        'Fixed Paxi resource packs and .nbt schematic files being permanently marked as missing, which removed them from the content list even though the files were still on disk. The content scan now covers config/paxi/resourcepacks and .nbt schematics, and only folders the scanner actually walks can be marked missing, so a file the scanner cannot see is no longer treated as deleted.',
+                    'zh-CN':
+                        '修复 Paxi 资源包和 .nbt 投影文件被永久标记为缺失、文件明明还在却从内容列表中消失的问题。内容扫描现在会覆盖 config/paxi/resourcepacks 和 .nbt 投影文件，并且只会把扫描器真正遍历的目录标记为缺失，扫描器看不到的文件不再被当作已删除。',
+                },
+                {
+                    'en-US':
+                        'Fixed the instance tab bar scrolling out of view on long pages and clipping its last tab in a narrow window. The strip now stays pinned to the top of the page while the content scrolls underneath, and shows a soft fade at either end when the tabs do not all fit, so every tab stays reachable.',
+                    'zh-CN':
+                        '修复实例标签栏在长页面上滚出视野、以及窗口变窄时最后一个标签被裁掉的问题。现在整条标签栏固定在页面顶部，内容在其下方滚动；标签放不下时两端会出现渐变提示，每个标签都仍然够得到。',
+                },
+                {
+                    'en-US':
+                        'Fixed the "show screenshots tab in instances" setting doing nothing at all: the value was stored but never read, so the tab vanished no matter what it said. The setting is now honoured, defaults to on, and a profile still carrying the old shipped-off value gets the tab back once — turning it off yourself afterwards keeps it off.',
+                    'zh-CN':
+                        '修复「在实例中显示截图标签页」设置完全无效的问题：此前该值只被保存、从未被读取，无论怎么设置标签页都会消失。现在设置真正生效并默认开启；沿用旧版默认值（关闭）的配置会一次性恢复该标签页，之后你手动关闭则会保持关闭。',
+                },
+                {
+                    'en-US':
+                        'Fixed accent colour names in Settings being cut down to "Ora…", "Gre…" and "Pur…". The colour chip spent most of its width on the swatch and the check mark, leaving roughly 30 px for text; the check now overlays the corner and the chip has room for the full name.',
+                    'zh-CN':
+                        '修复设置中的强调色名称显示不全、只剩「Ora…」「Gre…」「Pur…」这样开头几个字母的问题。此前色块和勾选标记占掉了大部分宽度，文字只剩约 30 像素；现在勾选标记改为覆盖在右上角，色块把宽度留给完整名称。',
+                },
+                {
+                    'en-US':
+                        'Fixed a single network hiccup while loading a project page disabling the Install button for the rest of the visit. Three unrelated requests — the project classification, the version list and the optional instance context — shared one failure flag, so a failure in any of them blocked installing. Install now depends only on what it actually needs, and a failed version list falls back to the cached copy when one exists.',
+                    'zh-CN':
+                        '修复项目页面加载时一次网络抖动就让「安装」按钮在本次浏览中彻底不可用的问题。此前项目分类、版本列表和可选的实例信息三个互不相关的请求共用一个失败标记，任何一个失败都会堵住安装。现在安装只依赖真正需要的条件，版本列表加载失败时也会回退到本地缓存。',
+                },
+                {
+                    'en-US':
+                        'Fixed navigating away while content was loading producing an error toast and a full-page error card reading "Invalid input: resource request canceled". A cancelled load is now recognised as a cancellation rather than a failure, so it neither toasts nor leaves a card behind, and a stale error card from an earlier visit is cleared as soon as the next load starts instead of surviving the navigation.',
+                    'zh-CN':
+                        '修复内容仍在加载时离开页面会弹出错误通知、并留下写着「Invalid input: resource request canceled」的整页错误卡片的问题。现在会识别出这是取消而不是失败，既不弹通知也不留下卡片；上一次访问遗留的错误卡片也会在下次加载开始时立即清除，不再跨页面残留。',
+                },
+                {
+                    'en-US':
+                        'Fixed a finished download showing a green 已完成 badge, a 正在完成安装 subtitle and a 已回退 68 次 counter at the same time. A completed job now reports its final state throughout the row, and the fallback count is labelled as something that happened during the download rather than a retry that is still running.',
+                    'zh-CN':
+                        '修复已完成的下载同时显示绿色「已完成」徽章、「正在完成安装」副标题和「已回退 68 次」计数的问题。现在已完成的任务在整行中都显示最终状态，回退次数也会标明是本次下载期间发生过的记录，而不是仍在重试。',
+                },
+                {
+                    'en-US':
+                        "Fixed a single 404 on one specific file permanently demoting a download mirror and sending every later download to the slower official source. A missing object says nothing about the mirror's health, so object misses no longer count as mirror failures — only genuine server errors, timeouts and rate limiting do.",
+                    'zh-CN':
+                        '修复某个文件的一次 404 就让下载镜像被永久降级、之后所有下载都改走较慢的官方源的问题。单个对象不存在并不能说明镜像本身有问题，因此对象级失败不再计入镜像故障，只有真正的服务器错误、超时和限流才算。',
+                },
+            ],
+        },
+    },
     {
         id: 'launcher-0.0.5-beta',
         version: '0.0.5-beta',
