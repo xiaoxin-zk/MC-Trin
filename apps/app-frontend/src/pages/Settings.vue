@@ -72,12 +72,17 @@ const searchResultsPending = ref(false)
 const showContentSkeleton = ref(false)
 let searchDebounceTimer: ReturnType<typeof window.setTimeout> | undefined
 let searchHighlightTimer: ReturnType<typeof window.setTimeout> | undefined
+let searchTargetWaitTimer: ReturnType<typeof window.setTimeout> | undefined
 let categoryTransitionToken = 0
 
 const SEARCH_DEBOUNCE_MS = 120
 const CATEGORY_SKELETON_MIN_MS = 160
 /** Hard cap so a stuck async settings chunk cannot pin the skeleton forever (dev). */
 const CATEGORY_SKELETON_MAX_MS = 4000
+/** Give-up window for a control that never renders, so a stale link cannot linger. */
+const SEARCH_TARGET_WAIT_MS = 4000
+/** Retry cadence while the panel or the category body is still being mounted. */
+const SEARCH_TARGET_RETRY_MS = 50
 
 const isContentLoading = computed(() => showContentSkeleton.value || settingsContentPending.value)
 
@@ -137,6 +142,7 @@ onUnmounted(() => {
     categoryTransitionToken++
     if (searchDebounceTimer) window.clearTimeout(searchDebounceTimer)
     if (searchHighlightTimer) window.clearTimeout(searchHighlightTimer)
+    stopSearchTargetWait()
 })
 
 // The settings registry keeps each category lazy. Track only the currently
@@ -255,18 +261,82 @@ function toggleGroup(groupId: string) {
 
 async function revealSearchTarget() {
     await nextTick()
+    attemptSearchTarget(Date.now() + SEARCH_TARGET_WAIT_MS)
+}
+
+/**
+ * Scrolls to and highlights the pending target once its element exists.
+ *
+ * Returns `false` while the anchor is still missing. A cached category chunk
+ * resolves inside its own mount, before this page's refs are assigned, and a
+ * category body may keep its rows behind its own async load (`v-if="!loading"`).
+ * Either way the control can appear well after `@resolve`, so the pending
+ * target is kept and retried instead of being dropped by the first miss.
+ */
+function applySearchTarget(): boolean {
     const pending = pendingSearchTarget.value
-    if (!pending || isContentLoading.value || activeCategory.value?.id !== pending.categoryId)
-        return
+    if (!pending || isContentLoading.value || activeCategory.value?.id !== pending.categoryId) {
+        return false
+    }
     const target = contentContainer.value?.querySelector<HTMLElement>(`#${pending.targetId}`)
-    if (!target) return
+    if (!target) return false
+
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     flashSearchTarget(target)
     pendingSearchTarget.value = null
+    stopSearchTargetWait()
     if (searchQuery.value === pending.query) searchQuery.value = ''
+    return true
+}
+
+/**
+ * Retries until the anchor mounts, then stops.
+ *
+ * One attempt is not enough for two independent reasons: a cached category
+ * chunk resolves during mount, before this page's template refs are assigned,
+ * and a category body can keep its rows behind its own async load
+ * (`LogShareSettings` renders `v-if="!loading"`). Both make the control appear
+ * after `@resolve`, so the pending target is kept and retried rather than
+ * dropped by the first miss.
+ */
+function attemptSearchTarget(deadline: number) {
+    if (applySearchTarget()) return
+    if (!pendingSearchTarget.value) {
+        stopSearchTargetWait()
+        return
+    }
+    if (Date.now() >= deadline) {
+        // A link whose control never mounts must not capture a later navigation.
+        pendingSearchTarget.value = null
+        stopSearchTargetWait()
+        return
+    }
+    if (searchTargetWaitTimer) window.clearTimeout(searchTargetWaitTimer)
+    searchTargetWaitTimer = window.setTimeout(
+        () => attemptSearchTarget(deadline),
+        SEARCH_TARGET_RETRY_MS,
+    )
+}
+
+function stopSearchTargetWait() {
+    if (searchTargetWaitTimer) {
+        window.clearTimeout(searchTargetWaitTimer)
+        searchTargetWaitTimer = undefined
+    }
 }
 
 watch(isContentLoading, () => void revealSearchTarget(), { flush: 'post' })
+
+// A target can arrive without the loading state changing (same category, new
+// `?target=`), so the pending target itself is a trigger too. Clearing it (done
+// on success) must not start a wait for something that no longer exists.
+watch(
+    pendingSearchTarget,
+    (target) => {
+        if (target) void revealSearchTarget()
+    },
+    { flush: 'post' },
+)
 
 function onSettingsContentResolved() {
     settingsContentPending.value = false

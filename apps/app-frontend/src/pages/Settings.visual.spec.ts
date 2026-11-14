@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { defineComponent, h, Suspense } from 'vue'
 
 import Settings from './Settings.vue'
@@ -11,6 +11,8 @@ const fixture = vi.hoisted(() => ({
         hash: string
         query: Record<string, unknown>
     },
+    /** Rebuilds the category list so no test inherits another's resolved chunk. */
+    resetRegistry: () => {},
 }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '1.0' }))
 vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'windows', version: () => '11' }))
@@ -34,12 +36,33 @@ vi.mock('@modrinth/ui', () => ({
     }),
 }))
 vi.mock('@/components/ui/settings/settings-search-index', () => ({
-    getSettingsSearchTargetId: (entry: { id: string }) => `settings-target-${entry.id}`,
+    // Mirrors the real rule (`entry.targetId ?? settings-category-<category>`).
+    // An invented `settings-target-<entry id>` would let the fixture pass with
+    // anchors the registry never produces, so it would not test the contract.
+    getSettingsSearchTargetId: (entry: { targetId?: string; categoryId: string }) =>
+        entry.targetId ?? `settings-category-${entry.categoryId}`,
 }))
 vi.mock('@/components/ui/settings/settings-registry', async () => {
-    const { defineAsyncComponent, h, markRaw } = await import('vue')
+    const { defineAsyncComponent, defineComponent, h, markRaw, nextTick, onMounted, ref } =
+        await import('vue')
     const message = (text: string) => ({ id: text, defaultMessage: text })
-    const categories = [
+
+    // Real category bodies keep their anchors behind their own async load:
+    // `LogShareSettings` renders `v-if="!loading"` and clears `loading` in
+    // `onMounted`, so the control appears a tick after Suspense reports
+    // `@resolve`. A fixture that mounts the anchor synchronously cannot
+    // reproduce the defect this suite exists to pin.
+    const control = (id: string) =>
+        defineComponent({
+            setup() {
+                const ready = ref(false)
+                onMounted(() => void nextTick(() => (ready.value = true)))
+                return () =>
+                    ready.value ? h('input', { id: `settings-target-${id}-target` }) : null
+            },
+        })
+
+    const buildCategories = () => [
         {
             id: 'interface',
             group: 'launcher',
@@ -52,18 +75,31 @@ vi.mock('@/components/ui/settings/settings-registry', async () => {
             group: 'launcher',
             name: message(id),
             icon: markRaw({ render: () => null }),
-            entries: [{ id: `${id}-target`, label: message(`${id} setting`) }],
+            entries: [
+                {
+                    id: `${id}-target`,
+                    categoryId: id,
+                    targetId: `settings-target-${id}-target`,
+                    label: message(`${id} setting`),
+                },
+            ],
             content: defineAsyncComponent(
                 () =>
                     new Promise((resolve) => {
-                        fixture.finish[id] = () =>
-                            resolve({
-                                render: () => h('input', { id: `settings-target-${id}-target` }),
-                            })
+                        fixture.finish[id] = () => resolve(control(id))
                     }),
             ),
         })),
     ]
+
+    // One list shared by both accessors, rebuilt per test. A single module-level
+    // `defineAsyncComponent` would cache its resolved component, so the second
+    // test would silently mount a settled chunk and test something else.
+    let categories = buildCategories()
+    fixture.resetRegistry = () => {
+        categories = buildCategories()
+    }
+
     return {
         getVisibleSettingsCategories: () => categories,
         getVisibleSettingsGroups: () => [{ id: 'launcher', name: message('Launcher'), categories }],
@@ -71,9 +107,15 @@ vi.mock('@/components/ui/settings/settings-registry', async () => {
     }
 })
 
-it('waits for async settings to resolve and only locates the latest selected result', async () => {
+beforeEach(() => {
+    fixture.finish = {}
     fixture.route.hash = '#interface'
     fixture.route.query = {}
+    fixture.replace.mockClear()
+    fixture.resetRegistry()
+})
+
+it('waits for async settings to resolve and only locates the latest selected result', async () => {
     const wrapper = mount(
         defineComponent({ render: () => h(Suspense, null, { default: () => h(Settings) }) }),
         { attachTo: document.body },
