@@ -166,8 +166,18 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
      * joined voice" from "a peer is in the room but the network blocks a
      * direct connection", and the panel used to show the former for both. */
     const unreachablePeers = ref<Set<string>>(new Set())
-    /** A failed call: someone is in the room, we tried, and ICE gave up. */
+    /** Somebody is in the room, we tried, and ICE gave up. This is also true
+     * when only *some* peers failed: the call itself may be perfectly healthy
+     * for everyone else. */
     const iceFailed = computed(() => unreachablePeers.value.size > 0)
+    /** A failed call, as opposed to a partially working one. `retry()` rebuilds
+     * the session — closing every peer — so it may only be offered when there
+     * is nothing left to destroy. */
+    const voiceUnreachable = computed(() => iceFailed.value && connectedPeers.value === 0)
+    /** The only state in which a full rebuild is the right action. */
+    const canRetry = computed(() => active.value && !starting.value && voiceUnreachable.value)
+    /** Peers that gave up, for the partial-call notice. */
+    const unreachablePeerCount = computed(() => unreachablePeers.value.size)
     let session: MctierVoiceSession | null = null
     let sessionReady = false
     let roomLocalPlayerId: string | null = null
@@ -573,10 +583,17 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
 
     /** Rebuilds the call after a failed negotiation. A fresh peer connection
      * re-runs candidate gathering, which is the only remedy available without
-     * a relay: the previous attempt exhausted its ICE restarts. */
+     * a relay: the previous attempt exhausted its ICE restarts.
+     *
+     * This closes every peer, so it is only correct when no peer is connected —
+     * see `canRetry`. Rebuilding a call that still works for some peers would
+     * destroy their audio to retry one unreachable participant, and the new
+     * negotiation is no likelier to reach that participant than the restarts
+     * just exhausted. */
     async function retry() {
         const state = lastState
         if (!state) return
+        if (connectedPeers.value > 0) return
         stop()
         await startSession(state)
     }
@@ -819,6 +836,9 @@ export function useMctierVoice(send: (signal: MctierVoiceSignal) => Promise<void
         voiceActivation,
         voiceActivationSupported,
         iceFailed,
+        voiceUnreachable,
+        canRetry,
+        unreachablePeerCount,
         retry,
         noiseReduction,
         noiseSuppressionMode,

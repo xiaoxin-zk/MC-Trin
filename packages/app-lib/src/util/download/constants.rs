@@ -272,8 +272,11 @@ pub(crate) const ROUTE_HEALTH_EWMA_ALPHA: f64 = 0.25;
 /// leading with it.
 ///
 /// A locale preference is a user's statement about which origin should serve
-/// their downloads; one 404 is a property of a single object, not of the route.
-/// Only a streak this long is evidence that the mirror itself is unreachable,
+/// their downloads; only evidence that the origin itself is failing outranks
+/// it. `record_route_failure` therefore feeds this counter only with
+/// connect/TLS/timeout, `429` and `5xx` answers — never with an object-level
+/// `4xx`, which names one URL rather than the authority. Only a streak this
+/// long of genuine route failures is evidence that the mirror is unreachable,
 /// at which point the official route must lead until the next success resets
 /// the counter.
 pub(crate) const ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD: u32 = 3;
@@ -686,6 +689,11 @@ pub(crate) const FETCH_V2_USER: &str = "/v2/user";
 pub(crate) const FETCH_V3_FRIEND: &str = "/v3/friend/";
 pub(crate) const FETCH_V3_FRIENDS: &str = "/v3/friends";
 pub(crate) const FETCH_V3_NOTIFICATION: &str = "/v3/notification";
+/// Content-addressed object endpoint on `piston-data`/`launcher.mojang.com`.
+pub(crate) const FETCH_V1_OBJECTS: &str = "/v1/objects/";
+/// Metadata endpoint on `piston-data`; the mirror preserves it verbatim rather
+/// than mapping it onto the content-addressed object endpoint.
+pub(crate) const FETCH_V1_PACKAGES: &str = "/v1/packages/";
 pub(crate) const H2_DOWNLOAD_ASSET: &str = "asset";
 pub(crate) const H2_DOWNLOAD_MCTRIN_LAUNCHER: &str = "MC-Trin";
 pub(crate) const H2_DOWNLOAD_BELOW_EXPECTATION: &str = "below expectation";

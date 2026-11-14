@@ -470,13 +470,8 @@ fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
 
 #[test]
 fn a_refused_batch_route_is_skipped_instead_of_failing_every_asset() {
-    // Under a system proxy (or an HTTP/1-only authority, a configured proxy or
-    // a retired source) the H2 batch refuses its route before requesting
-    // anything. The old selection took the leading route unconditionally, so
-    // one policy refusal produced `completed=0 failed=<every asset>` and pushed
-    // all of them into the per-file path. The batch must instead pick a route
-    // the policy permits, and only give up on batching when none exists.
-    // A retired source is refused on every machine, so the fixture does not
+    // A retired source is refused by the native policy before anything is
+    // requested, and it is refused on every machine, so the fixture does not
     // depend on this host having a proxy configured.
     let refused = DownloadRoute {
         url: "https://mod.tianpao.top/data/project/file.jar".to_string(),
@@ -486,8 +481,9 @@ fn a_refused_batch_route_is_skipped_instead_of_failing_every_asset() {
         supports_range: true,
         proxy: ProxyPolicy::System,
     };
+    let permitted_url = "https://bmclapi2.bangbang93.com/assets/85/object";
     let permitted = DownloadRoute {
-        url: "https://bmclapi2.bangbang93.com/assets/85/object".to_string(),
+        url: permitted_url.to_string(),
         source: DownloadRouteSource::Bmclapi,
         is_mirror: true,
         allow_sensitive_headers: false,
@@ -507,20 +503,26 @@ fn a_refused_batch_route_is_skipped_instead_of_failing_every_asset() {
     );
     assert!(batch_route_is_permitted(&permitted));
 
-    // The selection the batch performs: first permitted route wins, no matter
-    // that the refused one leads the resolved order.
-    let mut routes = vec![refused, permitted];
-    let selected = routes
-        .drain(..)
-        .find(|route| batch_route_is_permitted(route));
-    assert_eq!(
-        selected.map(|route| route.proxy),
-        Some(ProxyPolicy::Direct),
-        "the batch must select a route the native policy permits"
-    );
+    // The selection the batch performs: walk the resolved order and take the
+    // first route the policy permits. The assertion is on the *selected route*
+    // so the test fails when the refused leader is chosen; draining the vector
+    // and asserting it is empty could never fail, because `Drain` drops the
+    // remainder on scope exit wherever `find` stopped.
+    let routes = vec![refused, permitted];
+    let selected = routes.iter().find(|route| batch_route_is_permitted(route));
     assert!(
-        routes.is_empty(),
-        "the refused leading route must have been consumed, not retried"
+        selected.is_some(),
+        "the batch must find a route it is allowed to use"
+    );
+    assert_eq!(
+        selected.unwrap().url,
+        permitted_url,
+        "the batch must select the permitted route, not the refused leader"
+    );
+    assert_eq!(
+        selected.unwrap().proxy,
+        ProxyPolicy::Direct,
+        "the selected route must keep the proxy policy the policy accepted"
     );
 }
 

@@ -8,13 +8,18 @@ use crate::util::download::constants::{
     FETCH_META_FABRICMC_NET, FETCH_MOD_MCIMIRROR_TOP,
     FETCH_PISTON_DATA_MOJANG_COM, FETCH_RELEASES, FETCH_REPO_MAVEN_APACHE_ORG,
     FETCH_REPO1_MAVEN_ORG, FETCH_RESOURCES_DOWNLOAD_MINECRAFT_NET,
-    MODRINTH_CDN_HOST, RETIRED_SOURCES_MEDIA_FORGECDN_NET,
+    FETCH_V1_OBJECTS, FETCH_V1_PACKAGES, MODRINTH_CDN_HOST,
+    RETIRED_SOURCES_MEDIA_FORGECDN_NET,
     ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD,
     ROUTE_POLICY_LAUNCHERMETA_MOJANG_COM, ROUTE_POLICY_MAVEN_FABRICMC_NET,
     ROUTE_POLICY_MAVEN_MINECRAFTFORGE_NET, ROUTE_POLICY_MAVEN_NEOFORGED_NET,
     ROUTE_POLICY_PISTON_META_MOJANG_COM,
 };
 use crate::util::download::route_policy;
+
+/// Flat name under a 40-hex-digit hash on BMCLAPI's object endpoint; a full
+/// SHA-1 is the only hash length the endpoint accepts.
+const SHA1_HEX_LEN: usize = 40;
 
 pub(super) fn is_mrpack_url(url: &str) -> bool {
     reqwest::Url::parse(url).ok().is_some_and(|url| {
@@ -222,12 +227,27 @@ pub(super) fn explicit_mirror_routes(
             path.to_string(),
             DownloadRouteSource::Bmclapi,
         ),
+        // `piston-data` also serves metadata under `/v1/packages/<sha>/<name>`
+        // (the Java runtime package documents). That is a *metadata* path with
+        // different host semantics from the content-addressed object endpoint:
+        // the mirror preserves it verbatim, and the original route builder
+        // mirrored it that way. The object-name guard below must therefore not
+        // swallow it.
+        FETCH_PISTON_DATA_MOJANG_COM if path.starts_with(FETCH_V1_PACKAGES) => {
+            push_mirror(
+                &mut routes,
+                BMCLAPI_BASE_URL,
+                path.to_string(),
+                DownloadRouteSource::Bmclapi,
+            );
+        }
         // Only the object names BMCLAPI actually stores may be mapped onto its
         // `/v1/objects/<sha>/<name>` endpoint. The endpoint is content
         // addressed, but the mirror only knows the objects it synchronised from
-        // the version manifest (client/server jars and their mappings); every
-        // other object name — including the log4j `client-1.12.xml` config — is
-        // a guaranteed 404 there and must not produce a mirror route.
+        // the version manifest (client/server jars and their mappings) and the
+        // Java runtime it distributes; every other object name — including the
+        // log4j `client-1.12.xml` config — is a guaranteed 404 there and must
+        // not produce a mirror route.
         FETCH_PISTON_DATA_MOJANG_COM | FETCH_LAUNCHER_MOJANG_COM
             if bmclapi_serves_mojang_object(path) =>
         {
@@ -244,39 +264,60 @@ pub(super) fn explicit_mirror_routes(
     routes
 }
 
+/// Object names BMCLAPI has been observed serving from `/v1/objects/<sha>/`.
+///
+/// This is an allowlist, not a blocklist: the endpoint answers `404` for any
+/// name it did not index, so a name that cannot be attributed to a manifest
+/// family is refused rather than guessed. `client.jar`/`server.jar` are the
+/// version jars, `*.txt` their ProGuard mappings, and the remaining suffixes
+/// the files the Java runtime manifests reference (native libraries, launchers
+/// and the runtime's own JSON documents). Every entry was verified answering
+/// `302` on the real service.
+const BMCLAPI_OBJECT_NAMES: &[&str] = &["client.jar", "server.jar"];
+const BMCLAPI_OBJECT_SUFFIXES: &[&str] =
+    &[".txt", ".dll", ".so", ".dylib", ".exe", ".bin", ".json"];
+
 /// Object paths under `piston-data`/`launcher.mojang.com` that BMCLAPI mirrors.
 ///
 /// BMCLAPI's object endpoint is content addressed, but it only holds the
-/// objects it indexed from the version and Java-runtime manifests: client and
-/// server jars, their ProGuard mappings, and the runtime's own files (all
-/// verified serving `302` on the real service). It does *not* hold the log4j
-/// configuration from `logging.client.file`: `GET
+/// objects it indexed from the version and Java-runtime manifests. It does
+/// *not* hold the log4j configuration from `logging.client.file`: `GET
 /// /v1/objects/<sha1>/client-1.12.xml` answers `404` there while the very same
-/// object exists on Mojang's host. Emitting a route for it therefore only
-/// manufactures a mirror failure, and that failure used to be recorded against
-/// the whole mirror authority, demoting it for every later download in the
-/// session.
+/// object exists on Mojang's host, and the whole `.xml` family is absent for the
+/// same reason — no manifest it synchronises references one.
 ///
-/// The rule is deliberately narrow: only the endpoint's real shape is accepted
-/// (a flat file name under a 40-hex-digit hash), and the `.xml` log-config
-/// family — the one object shape proven missing — is refused. Anything not
-/// recognised simply keeps its official URL, which is the same behaviour as any
-/// other host without a mirror.
+/// The rule is therefore positive: the endpoint's real shape (a flat file name
+/// under a 40-hex-digit hash) **and** a name shape in
+/// [`BMCLAPI_OBJECT_NAMES`]/[`BMCLAPI_OBJECT_SUFFIXES`]. A blocklist cannot
+/// express this, because every unknown name is equally unserved. Anything not
+/// recognised keeps its official URL, which is the same behaviour as any other
+/// host without a mirror.
 fn bmclapi_serves_mojang_object(path: &str) -> bool {
-    const V1_OBJECTS_PREFIX: &str = "/v1/objects/";
-    const SHA1_HEX_LEN: usize = 40;
-    const LOG_CONFIG_SUFFIX: &str = ".xml";
     let Some((hash, name)) = path
-        .strip_prefix(V1_OBJECTS_PREFIX)
+        .strip_prefix(FETCH_V1_OBJECTS)
         .and_then(|rest| rest.split_once('/'))
     else {
         return false;
     };
-    hash.len() == SHA1_HEX_LEN
-        && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+    let sha1_hash = hash.len() == SHA1_HEX_LEN
+        && hash.bytes().all(|byte| byte.is_ascii_hexdigit());
+    sha1_hash
         && !name.is_empty()
         && !name.contains('/')
-        && !name.ends_with(LOG_CONFIG_SUFFIX)
+        && bmclapi_object_name_is_served(name)
+}
+
+fn bmclapi_object_name_is_served(name: &str) -> bool {
+    if BMCLAPI_OBJECT_NAMES.contains(&name) {
+        return true;
+    }
+    // `.so` is the shortest suffix, and a bare `.so` names no library; the
+    // stem must carry at least one character. The comparison is exact: these
+    // are server-side paths, where case is significant, so `FOO.DLL` is a name
+    // the mirror was never shown to hold.
+    BMCLAPI_OBJECT_SUFFIXES
+        .iter()
+        .any(|suffix| name.len() > suffix.len() && name.ends_with(suffix))
 }
 
 /// Mirrors supplied by the user for one resource class.

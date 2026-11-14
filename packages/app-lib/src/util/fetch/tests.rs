@@ -1799,6 +1799,160 @@ fn a_dead_mirror_falls_back_after_repeated_failures() {
 }
 
 #[test]
+fn only_route_health_statuses_count_against_the_authority() {
+    // The counter `order_auto_routes` reads describes the authority, so a
+    // status may only reach it when the authority itself failed to answer.
+    for (status, health, object_miss) in [
+        (StatusCode::TOO_MANY_REQUESTS, true, false),
+        (StatusCode::REQUEST_TIMEOUT, true, false),
+        (StatusCode::INTERNAL_SERVER_ERROR, true, false),
+        (StatusCode::BAD_GATEWAY, true, false),
+        (StatusCode::SERVICE_UNAVAILABLE, true, false),
+        (StatusCode::NOT_FOUND, false, true),
+        (StatusCode::GONE, false, true),
+        (StatusCode::FORBIDDEN, false, true),
+        (StatusCode::UNAUTHORIZED, false, true),
+        (StatusCode::BAD_REQUEST, false, true),
+        (StatusCode::RANGE_NOT_SATISFIABLE, false, true),
+        (StatusCode::FOUND, false, false),
+        (StatusCode::OK, false, false),
+    ] {
+        assert_eq!(
+            route_status_is_health_failure(status),
+            health,
+            "{status} route-health classification"
+        );
+        assert_eq!(
+            status_is_object_miss(status),
+            object_miss,
+            "{status} object-miss classification"
+        );
+    }
+}
+
+#[test]
+fn object_404s_never_demote_a_healthy_mirror() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The production failure: three *unrelated* objects answered 404 from the
+    // mirror. Each 404 is a property of its object, so after all of them the
+    // mirror must still lead with the locale preference — under the previous
+    // code the third one pushed `consecutive_failures` to the demotion
+    // threshold and pinned the official host for the rest of the session, and
+    // the persisted reputation carried that into later launches.
+    //
+    // This drives the production decision point, not the logging helper: if
+    // the branch at `record_route_status_failure` reverted to counting statuses
+    // unconditionally, the mirror would be demoted here and the assertion would
+    // fail.
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+
+    for _ in 0..(ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD + 2) {
+        record_route_status_failure(
+            &mirror,
+            ResourceClass::MinecraftAsset,
+            StatusCode::NOT_FOUND,
+            None,
+        );
+    }
+
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    assert!(
+        !ROUTE_HEALTH.lock().contains_key(&key),
+        "an object miss must not create a route-health entry"
+    );
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "object misses must not demote the mirror, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    // The control: the same number of *route* failures must still demote it,
+    // so the test cannot pass by disabling the counter altogether.
+    for _ in 0..ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD {
+        record_route_status_failure(
+            &mirror,
+            ResourceClass::MinecraftAsset,
+            StatusCode::SERVICE_UNAVAILABLE,
+            None,
+        );
+    }
+    let health = ROUTE_HEALTH.lock().get(&key).cloned().unwrap_or_default();
+    assert_eq!(
+        health.consecutive_failures, ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD,
+        "5xx answers must still accumulate"
+    );
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a genuinely failing mirror must still be demoted"
+    );
+
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[tokio::test]
+async fn a_http_404_leaves_no_route_health_behind() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // End-to-end proof at the HTTP layer: a real 404 must not create a health
+    // entry at all. `record_route_failure` used to be called for every 4xx, so
+    // the same object miss that this fix is about left
+    // `consecutive_failures: 1` on the authority and `order_auto_routes` read
+    // it on the next, unrelated download.
+    let (missing_url, missing_requests, missing_server) =
+        spawn_http_fixture(HttpFixture::new("404 Not Found", Vec::new())).await;
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("missing.bin");
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_lazy("sqlite::memory:")
+        .unwrap();
+
+    let result = download_to_path(
+        DownloadRequest::new(&missing_url, ResourceClass::Other)
+            .with_integrity(Integrity::default().with_size(4)),
+        &destination,
+        &FetchSemaphore(Semaphore::new(ROUTE_PROBE_CONCURRENCY)),
+        &pool,
+        None,
+    )
+    .await;
+
+    assert!(result.is_err(), "the fixture answers 404");
+    assert_eq!(missing_requests.load(Ordering::Relaxed), 1);
+    // Check the key rather than the whole map: unrelated tests share it.
+    let key = route_health_key(
+        &official_route(&missing_url, ResourceClass::Other),
+        ResourceClass::Other,
+    )
+    .unwrap();
+    assert!(
+        !ROUTE_HEALTH.lock().contains_key(&key),
+        "a 404 must not be recorded as route health"
+    );
+
+    missing_server.abort();
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
 fn a_failing_official_route_yields_to_the_mirror_without_a_locale_preference() {
     let _guard = AUTO_SOURCE_TEST_LOCK
         .lock()
@@ -1807,7 +1961,8 @@ fn a_failing_official_route_yields_to_the_mirror_without_a_locale_preference() {
 
     // Without the locale preference, any failure still promotes the other
     // reachable origin; the demotion threshold must not make a broken official
-    // route sticky either.
+    // route sticky either. This records a genuine route failure — the kind
+    // `record_route_failure` is now reserved for — not an object miss.
     let mut routes = auto_order_test_routes();
     let official = routes
         .iter()
@@ -2355,7 +2510,6 @@ fn malformed_object_paths_do_not_get_a_mirror_route() {
         "https://piston-data.mojang.com/v1/objects/not-a-hash/client.jar",
         "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/",
         "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/nested/client.jar",
-        "https://piston-data.mojang.com/v1/packages/9f67e10ed013deeaad20ac3c800652765d493408/26.3.json",
     ] {
         let routes =
             explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
@@ -2364,6 +2518,102 @@ fn malformed_object_paths_do_not_get_a_mirror_route() {
             "{url} must not produce a mirror route, got {routes:?}"
         );
     }
+}
+
+#[test]
+fn only_object_names_bmclapi_has_proven_serving_get_a_mirror_route() {
+    // The object endpoint is not a generic passthrough: it answers 404 for any
+    // name it did not index. The rule has to be an allowlist of name shapes
+    // seen serving 302, otherwise an unindexed name — a rename of
+    // `client.jar`, some future config — silently manufactures a mirror 404.
+    for (url, expected) in [
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/client.jar",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/server.jar",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/server.txt",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/java.dll",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/libjvm.so",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/liblwjgl.dylib",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/javaw.exe",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/launcher.bin",
+            true,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/d2383b0da07ec21c15834b00a13d7b4925868acd/26.3.json",
+            true,
+        ),
+        // Names the mirror never indexed: a blocklist accepted all of these.
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/client-1.12.xml",
+            false,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/client.jar.sha256",
+            false,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/readme.md",
+            false,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/classes.jar",
+            false,
+        ),
+        (
+            "https://piston-data.mojang.com/v1/objects/0c3ec587af28e5a785c0b4a7b8a30f9a8f78f838/.so",
+            false,
+        ),
+    ] {
+        let routes =
+            explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
+        assert_eq!(
+            routes.len(),
+            if expected { 1 } else { 0 },
+            "{url} mirror expectation, got {routes:?}"
+        );
+    }
+}
+
+#[test]
+fn piston_data_packages_keep_their_verbatim_mirror_route() {
+    // `/v1/packages` is a metadata path, not the content-addressed object
+    // endpoint: the mirror preserves it verbatim, which is what the original
+    // route builder did (`fe23642`) before the object guard was introduced.
+    // Requiring `/v1/objects/` for every `piston-data` URL silently dropped
+    // this route.
+    let url = "https://piston-data.mojang.com/v1/packages/9f67e10ed013deeaad20ac3c800652765d493408/26.3.json";
+    let routes = explicit_mirror_routes(url, ResourceClass::MinecraftLibrary);
+    assert_eq!(routes.len(), 1, "expected one mirror route, got {routes:?}");
+    assert_eq!(
+        routes[0].url,
+        "https://bmclapi2.bangbang93.com/v1/packages/9f67e10ed013deeaad20ac3c800652765d493408/26.3.json"
+    );
+    assert!(routes[0].is_mirror);
 }
 
 #[test]

@@ -250,6 +250,11 @@ const messages = defineMessages({
         id: 'app.multiplayer.mctier.voice.ice-failed',
         defaultMessage: 'The voice connection failed — the network may block direct connections.',
     },
+    voiceIcePartiallyFailed: {
+        id: 'app.multiplayer.mctier.voice.ice-partially-failed',
+        defaultMessage:
+            '{count, plural, one {# player could not be reached. Everyone else is still connected.} other {# players could not be reached. Everyone else is still connected.}}',
+    },
     voiceIceRetry: {
         id: 'app.multiplayer.mctier.voice.ice-retry',
         defaultMessage: 'Retry voice',
@@ -765,25 +770,37 @@ function prefillInviteFromDeepLink() {
                 class="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-surface-4 px-4 py-3"
                 role="status"
             >
-                <p class="m-0 text-sm">
-                    {{
-                        voice.connectedPeers.value
-                            ? formatMessage(messages.voiceConnected, {
-                                  count: voice.connectedPeers.value,
-                              })
-                            : voice.iceFailed.value
-                              ? formatMessage(messages.voiceIceFailed)
-                              : formatMessage(messages.voiceWaiting)
-                    }}
-                </p>
-                <!-- A failed negotiation stays failed until a new peer
-                     connection is built; the previous one already exhausted its
-                     ICE restarts, so the only useful action is a retry. -->
-                <Button
-                    v-if="voice.iceFailed.value && !voice.starting.value"
-                    type="outlined"
-                    @click="retryVoice"
-                >
+                <div class="flex min-w-0 flex-col gap-1">
+                    <p class="m-0 text-sm">
+                        {{
+                            voice.connectedPeers.value
+                                ? formatMessage(messages.voiceConnected, {
+                                      count: voice.connectedPeers.value,
+                                  })
+                                : voice.voiceUnreachable.value
+                                  ? formatMessage(messages.voiceIceFailed)
+                                  : formatMessage(messages.voiceWaiting)
+                        }}
+                    </p>
+                    <!-- A partial failure is reported beside the live call, not
+                         instead of it: some peers are talking and one is not. -->
+                    <p
+                        v-if="voice.iceFailed.value && voice.connectedPeers.value"
+                        class="m-0 text-sm text-[var(--color-text-tertiary)]"
+                    >
+                        {{
+                            formatMessage(messages.voiceIcePartiallyFailed, {
+                                count: voice.unreachablePeerCount.value,
+                            })
+                        }}
+                    </p>
+                </div>
+                <!-- Retrying closes every peer connection and rebuilds the
+                     call, so it is only offered when nothing is connected. With
+                     a working peer still on the call the one action that exists
+                     would break it, and a fresh negotiation would not reach the
+                     peer whose ICE restarts already ran out. -->
+                <Button v-if="voice.canRetry.value" type="outlined" @click="retryVoice">
                     {{ formatMessage(messages.voiceIceRetry) }}
                 </Button>
             </div>

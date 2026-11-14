@@ -1961,11 +1961,16 @@ fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
 
 /// Whether the native policy allows this route to carry an HTTP/2 asset batch.
 ///
-/// The batch refuses a route the policy rejects (a system proxy, a configured
-/// proxy, an HTTP/1 fallback, a retired source, a certificate policy) before it
-/// requests anything. Selecting such a route for the whole set therefore
-/// produces no downloads at all and pushes every asset into the per-file path.
-/// The batch must skip those routes and use one it can actually run on.
+/// The batch refuses a route the policy rejects (a configured proxy, an HTTP/1
+/// fallback, a retired source, a certificate policy) before it requests
+/// anything, so selecting such a route for the whole set produces no downloads
+/// at all and pushes every asset into the per-file path. The batch must skip
+/// those routes and use one it can actually run on.
+///
+/// This does not make the batch work behind a system proxy: production routes
+/// are all `ProxyPolicy::System` (`routes::route`), so with a proxy configured
+/// every route is refused and the batch correctly falls back to per-file. The
+/// selection only recovers a batch from a *mixed* route list.
 fn batch_route_is_permitted(route: &DownloadRoute) -> bool {
     crate::util::download::native::h2_ineligible_reason(route).is_none()
 }
@@ -2196,13 +2201,25 @@ pub async fn download_assets(
             .await;
         }
         // A route the native policy refuses describes the transport, not the
-        // files: under a system proxy, an HTTP/1-only authority or a retired
-        // source every H2 batch attempt is refused before a single object is
-        // requested. Picking the leading route blindly turned one policy
-        // refusal into `completed=0 failed=<every asset>`, and every asset was
-        // then retried per file against the same refused transport. Pick the
-        // first route the batch may actually use instead; only when no route
-        // can host a batch at all is the set handed to the per-file path.
+        // files: a retired source, an authority currently on HTTP/1 fallback,
+        // a configured proxy or a certificate policy makes every H2 batch
+        // attempt on that route fail before a single object is requested.
+        // Picking the leading route blindly turned one refusal into
+        // `completed=0 failed=<every asset>`, and every asset was then retried
+        // per file against the same refused transport.
+        //
+        // Pick the first route the batch may actually use instead; only when no
+        // route can host a batch at all is the set handed to the per-file path.
+        //
+        // The benefit is real but narrower than "the batch always survives":
+        // every production route is built with `ProxyPolicy::System`, so when a
+        // system proxy is configured `h2_ineligible_reason` refuses all of them
+        // and this still falls through to the per-file path. What this
+        // selection buys is that a *mixed* list — a retired custom source, an
+        // authority that fell back to HTTP/1, a route the certificate policy
+        // rejects — still batches on the remaining permitted route instead of
+        // failing the whole set on the first one. Under a system proxy the
+        // per-file path is the intended transport, not a degraded fallback.
         let route = routes.into_iter().find(|route| {
             !apply_native_policy || batch_route_is_permitted(route)
         });

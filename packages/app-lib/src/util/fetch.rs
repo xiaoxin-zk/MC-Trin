@@ -1118,6 +1118,71 @@ fn record_route_failure(
     record_route_health_failure(route, resource, cooldown);
 }
 
+/// Whether an HTTP status describes the route rather than one object.
+///
+/// `429` is a rate-limit instruction for the whole authority, `408` means the
+/// request never completed on the wire, and `5xx` says the server could not
+/// answer at all, so all three are route-health evidence. Every other `4xx`
+/// names one object: a mirror that has not cached
+/// `/v1/objects/<sha>/client.jar` still serves every other object, and counting
+/// that miss against the authority demoted a healthy mirror for the rest of the
+/// session — and, through the persisted reputation, across launches. The
+/// `ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD` only changed how many unrelated
+/// 404s it took, not the failure mode.
+fn route_status_is_health_failure(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS
+        || status == StatusCode::REQUEST_TIMEOUT
+        || status.is_server_error()
+}
+
+/// Whether a failed status names one object instead of the route.
+///
+/// Everything that is not a client error — a `5xx`, or a redirect the client
+/// refused to follow — describes the exchange with the authority, so it is not
+/// an object miss.
+fn status_is_object_miss(status: StatusCode) -> bool {
+    status.is_client_error() && !route_status_is_health_failure(status)
+}
+
+/// Records one failed HTTP status at the scope it actually describes.
+///
+/// This is the single decision point for both request paths: a status that
+/// names an object never reaches `consecutive_failures`, and everything else
+/// does. Keeping it in one place is what stops a future call site from
+/// re-introducing the per-object demotion.
+fn record_route_status_failure(
+    route: &DownloadRoute,
+    resource: ResourceClass,
+    status: StatusCode,
+    cooldown: Option<time::Duration>,
+) {
+    if status_is_object_miss(status) {
+        record_route_object_miss(route, status);
+    } else {
+        record_route_failure(route, resource, cooldown);
+    }
+}
+
+/// Records an object-level miss without touching route health.
+///
+/// Deliberately separate from [`record_route_failure`]: `consecutive_failures`
+/// is the ordering key in `order_auto_routes`, the persisted native reputation
+/// and the input to `adaptive_range_cap`, and all three describe the authority.
+/// A missing object says nothing about it. The attempt history already carries
+/// the status for diagnostics, so nothing is lost by not counting it here.
+///
+/// Per-object memory stays where it belongs: a file download puts a route that
+/// answered `404`/`410` into `session.terminal_routes`, so the same route is not
+/// retried for the same object, while other objects keep using it.
+fn record_route_object_miss(route: &DownloadRoute, status: StatusCode) {
+    tracing::debug!(
+        url = %sanitize_url_for_log(&route.url),
+        source = route.source.as_str(),
+        status = status.as_u16(),
+        "Route answered with an object-level client error; not counted against the authority"
+    );
+}
+
 pub(crate) fn record_dns_connection_failure(
     route: &DownloadRoute,
     error: &reqwest::Error,
@@ -1164,6 +1229,14 @@ fn record_native_status_failure(
     }
 }
 
+/// Charges one failure to a route's authority, in memory and in the persisted
+/// reputation.
+///
+/// Callers must only reach this for a failure of the *route* — connect/TLS/
+/// timeout, a refused transfer, a failed integrity check, or an HTTP status
+/// that describes the server (`429`, `408`, `5xx`). An object-level `4xx` is
+/// handled by [`record_route_status_failure`], which routes it away from this
+/// counter.
 pub(crate) fn record_route_health_failure(
     route: &DownloadRoute,
     resource: ResourceClass,
@@ -1308,9 +1381,13 @@ async fn fetch_validated_metadata_route(
     let http_version = response.version();
     let response_retry_after = retry_after(&response);
     if !status.is_success() {
-        record_route_failure(
+        // A metadata request has no object identity of its own, but a 4xx still
+        // names one document: a mirror missing that manifest must not be
+        // demoted for every other request it serves.
+        record_route_status_failure(
             route,
             resource,
+            status,
             (status == StatusCode::TOO_MANY_REQUESTS).then_some(
                 response_retry_after.unwrap_or_else(|| fetch_retry_delay(1)),
             ),
@@ -2363,9 +2440,10 @@ async fn fetch_advanced_inner(
                         break;
                     }
                     if status.is_client_error() || status.is_server_error() {
-                        record_route_failure(
+                        record_route_status_failure(
                             route,
                             resource,
+                            status,
                             (status == StatusCode::TOO_MANY_REQUESTS)
                                 .then_some(retry_after.unwrap_or_else(|| {
                                     fetch_retry_delay(total_attempts)
@@ -3793,7 +3871,11 @@ async fn probe_route_throughput(
     if response.status() != StatusCode::PARTIAL_CONTENT
         || !content_range_matches
     {
-        record_route_health_failure(route, resource, None);
+        // A probe measures the route through one specific object, so a 4xx for
+        // that object says nothing about the route. Counting it here is the
+        // probe-shaped version of the same bug: three objects the mirror does
+        // not hold would demote it for every other download.
+        record_route_status_failure(route, resource, response.status(), None);
         return None;
     }
     let remote_addr = response.remote_addr();
@@ -7126,9 +7208,10 @@ async fn run_native_route_attempts(
         );
         if status.is_client_error() || status.is_server_error() {
             if status != StatusCode::RANGE_NOT_SATISFIABLE {
-                record_route_failure(
+                record_route_status_failure(
                     route,
                     request.resource,
+                    status,
                     (status == StatusCode::TOO_MANY_REQUESTS).then_some(
                         response_retry_after.unwrap_or_else(|| {
                             fetch_retry_delay(session.attempts)

@@ -854,6 +854,14 @@ enum AssetBatchItemOutcome {
     LocalObjectFailed {
         error: crate::Error,
     },
+    /// The server answered for this object with a client error that names the
+    /// object (404 and friends), not the transport. It fails the item — the
+    /// per-file path retries it against another source — but it must not count
+    /// as a route-health failure, or one unindexed mirror object would demote
+    /// the authority for the whole batch and every later download.
+    ObjectMiss {
+        status: u16,
+    },
 }
 
 impl Clone for H2BatchAsset {
@@ -1284,6 +1292,18 @@ where
                     }
                     failed.push(item);
                 }
+                Ok(AssetBatchItemOutcome::ObjectMiss { status }) => {
+                    // Not retried on this authority: the answer is
+                    // deterministic for this URL, so another pass would get the
+                    // same 404. The per-file path can still try another source.
+                    tracing::warn!(
+                        url = %fetch::sanitize_url_for_log(&item.url),
+                        status,
+                        source = route.source.as_str(),
+                        "Asset object is missing on this route; downloading it per file"
+                    );
+                    failed.push(item);
+                }
                 Err(error) => {
                     network_failures = network_failures.saturating_add(1);
                     tracing::debug!(
@@ -1537,9 +1557,20 @@ async fn download_asset_item(
         fetch::retry_after_headers(response.headers()),
     );
     if !response.status().is_success() {
+        let status = response.status();
+        // A 404 on one object is the mirror not storing that object, not the
+        // mirror being unreachable. Report it as an object miss so the batch
+        // does not charge it to the authority's route health.
+        if status.is_client_error()
+            && status != StatusCode::TOO_MANY_REQUESTS
+            && status != StatusCode::REQUEST_TIMEOUT
+        {
+            return Ok(AssetBatchItemOutcome::ObjectMiss {
+                status: status.as_u16(),
+            });
+        }
         return Err(crate::ErrorKind::OtherError(format!(
-            "HTTP/2 GET failed with status {}",
-            response.status()
+            "HTTP/2 GET failed with status {status}"
         ))
         .into());
     }

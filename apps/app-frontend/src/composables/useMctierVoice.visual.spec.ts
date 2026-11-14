@@ -473,6 +473,64 @@ it('drops a peer from the failed set once it connects', async () => {
     expect(voice.connectedPeers.value).toBe(1)
 })
 
+it('does not offer a full retry while another peer is still connected', async () => {
+    // Two peers where one is talking and one exhausted its ICE restarts. The
+    // retry action closes *every* peer and rebuilds the session, so offering it
+    // here would destroy a working call to retry one unreachable participant.
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    // 'a' sorts before both peers, so this side offers and owns the restart
+    // budget for each of them.
+    const state = roomState('a', ['b', 'c'])
+    voice.syncRoom(state)
+    await voice.start(state)
+    expect(connections).toHaveLength(2)
+
+    const [doomed, healthy] = connections
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+        doomed.setConnectionState('failed')
+        await flushPromises()
+    }
+    healthy.setConnectionState('connected')
+
+    expect(voice.connectedPeers.value).toBe(1)
+    expect(voice.iceFailed.value).toBe(true)
+    // Partial failure: the notice is reported but no destructive action is
+    // offered, and the guard in `retry()` keeps a stray click from tearing the
+    // working peer down too.
+    expect(voice.voiceUnreachable.value).toBe(false)
+    expect(voice.canRetry.value).toBe(false)
+    expect(voice.unreachablePeerCount.value).toBe(1)
+
+    const survivors = connections.filter((connection) => !connection.closed)
+    expect(survivors).toHaveLength(2)
+    await voice.retry()
+    expect(connections.filter((connection) => connection.closed)).toHaveLength(0)
+    expect(voice.active.value).toBe(true)
+    expect(voice.connectedPeers.value).toBe(1)
+})
+
+it('offers a full retry only when no peer is connected', async () => {
+    const { stream } = createStream()
+    stubGetUserMedia(vi.fn(async () => stream))
+    vi.stubGlobal('RTCPeerConnection', FakeRTCPeerConnection)
+    const { voice } = createVoice()
+    const state = roomState('a', ['z'])
+    voice.syncRoom(state)
+    await voice.start(state)
+    const peer = connections.find((candidate) => !candidate.closed)!
+    for (let attempt = 0; attempt <= 2; attempt += 1) {
+        peer.setConnectionState('failed')
+        await flushPromises()
+    }
+
+    expect(voice.connectedPeers.value).toBe(0)
+    expect(voice.voiceUnreachable.value).toBe(true)
+    expect(voice.canRetry.value).toBe(true)
+})
+
 it('closes every peer connection and stops the capture track when voice stops', async () => {
     const { stream, track } = createStream()
     stubGetUserMedia(vi.fn(async () => stream))
