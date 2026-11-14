@@ -902,6 +902,15 @@
   "app.assistant.mode.logs": {
     "message": "Log diagnosis"
   },
+  "app.assistant.model.auto": {
+    "message": "No model picked yet: using {model}. Choose one above to keep it."
+  },
+  "app.assistant.model.hint": {
+    "message": "Only this chat uses the selected model. Log diagnosis keeps its own provider and model in settings."
+  },
+  "app.assistant.model.label": {
+    "message": "Assistant model"
+  },
   "app.assistant.no-instances": {
     "message": "Create an instance before analyzing its logs."
   },
@@ -8443,6 +8452,9 @@
   },
   "app.multiplayer.mctier.voice.ice-failed": {
     "message": "The voice connection failed — the network may block direct connections."
+  },
+  "app.multiplayer.mctier.voice.ice-partially-failed": {
+    "message": "{count, plural, one {# player could not be reached. Everyone else is still connected.} other {# players could not be reached. Everyone else is still connected.}}"
   },
   "app.multiplayer.mctier.voice.ice-retry": {
     "message": "Retry voice"

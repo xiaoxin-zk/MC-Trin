@@ -1,9 +1,14 @@
 //! AI provider catalog, credentials, and text-generation adapters.
 
+mod assistant_settings;
 mod catalog;
 pub mod chat;
 mod credentials;
 mod protocol;
+pub use assistant_settings::{
+    AssistantAiSettings, get_assistant_ai_settings,
+    update_assistant_ai_settings,
+};
 pub use catalog::catalog;
 #[cfg(test)]
 use catalog::{BUILTIN_MODEL_CATALOG, SPONSORED_PROVIDERS};

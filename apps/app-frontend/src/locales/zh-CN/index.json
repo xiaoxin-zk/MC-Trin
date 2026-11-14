@@ -1196,6 +1196,15 @@
   "app.assistant.mode.logs": {
     "message": "日志诊断"
   },
+  "app.assistant.model.auto": {
+    "message": "尚未选择模型：当前使用 {model}。在上方选择后会记住该模型。"
+  },
+  "app.assistant.model.hint": {
+    "message": "只有本页对话使用所选模型，日志诊断仍在设置中保留自己的服务商与模型。"
+  },
+  "app.assistant.model.label": {
+    "message": "助手模型"
+  },
   "app.assistant.no-instances": {
     "message": "请先创建实例，再分析它的日志。"
   },
@@ -12364,6 +12373,9 @@
   },
   "app.multiplayer.mctier.voice.ice-failed": {
     "message": "语音连接失败——当前网络可能阻止了直连。"
+  },
+  "app.multiplayer.mctier.voice.ice-partially-failed": {
+    "message": "有 {count} 位玩家无法连接，其余玩家仍保持通话。"
   },
   "app.multiplayer.mctier.voice.ice-retry": {
     "message": "重试语音"

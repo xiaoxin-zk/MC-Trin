@@ -5,6 +5,14 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 
+import {
+    assistantModelKey as assistantModelOptionValue,
+    assistantModelOptions as collectAssistantModelOptions,
+    type AssistantModelSelection,
+    findAssistantModel as findAssistantModelOption,
+    groupAssistantModels,
+    parseAssistantModelValue,
+} from '@/assistant/assistant-model'
 import { type McpToolDefinition, StreamableHttpMcpClient } from '@/assistant/mcp-client'
 import {
     type McpServerConfig,
@@ -15,13 +23,13 @@ import {
 import LogAgentActivity from '@/components/ui/LogAgentActivity.vue'
 import { useLogAgent } from '@/composables/useLogAgent'
 import {
-    type AIProviderConfig,
     type AIProviderDefinition,
-    type AIProviderModel,
     type AIState,
     getAICatalog,
     getAIState,
+    getAssistantAISettings,
     sanitizeAiErrorText,
+    updateAssistantAISettings,
 } from '@/helpers/ai'
 import {
     addAgentProfile,
@@ -127,6 +135,19 @@ const messages = defineMessages({
         defaultMessage: 'Enable local log analysis and choose the provider and model to use.',
     },
     configure: { id: 'app.assistant.configure', defaultMessage: 'Configure AI' },
+    assistantModel: {
+        id: 'app.assistant.model.label',
+        defaultMessage: 'Assistant model',
+    },
+    assistantModelHint: {
+        id: 'app.assistant.model.hint',
+        defaultMessage:
+            'Only this chat uses the selected model. Log diagnosis keeps its own provider and model in settings.',
+    },
+    assistantModelAuto: {
+        id: 'app.assistant.model.auto',
+        defaultMessage: 'No model picked yet: using {model}. Choose one above to keep it.',
+    },
     agentProfiles: { id: 'app.assistant.profiles.title', defaultMessage: 'Agents' },
     agentProfileLabel: { id: 'app.assistant.profiles.select', defaultMessage: 'Agent profile' },
     agentProfileHint: {
@@ -547,6 +568,8 @@ const instances = ref<GameInstance[]>([])
 const providerCatalog = ref<AIProviderDefinition[]>([])
 const aiState = ref<AIState | null>(null)
 const analysisSettings = ref<AnalysisSettings | null>(null)
+const assistantSettings = ref<AssistantModelSelection | null>(null)
+const savingAssistantModel = ref(false)
 const selectedInstanceId = ref('')
 const mode = ref<'general' | 'logs'>('general')
 const question = ref('')
@@ -822,50 +845,71 @@ const selectedLogModel = computed(() => {
     return hasCredential ? { provider, model } : null
 })
 
-function firstUsableModel(
-    provider: AIProviderConfig,
-): { provider: AIProviderConfig; model: AIProviderModel } | null {
-    if (!provider.enabled) return null
-    const definition = providerCatalog.value.find((item) => item.id === provider.provider_id)
-    const model = provider.models.find((candidate) => candidate.enabled)
-    if (!model) return null
-    const hasCredential =
-        definition?.auth_type === 'none' ||
-        provider.has_api_key ||
-        provider.oauth_connected ||
-        provider.configured_credentials.length > 0
-    return hasCredential ? { provider, model } : null
-}
+/**
+ * Every enabled model of every usable provider, as one list. The assistant is
+ * not restricted to the crash-analysis pair: that pair drives the separate log
+ * diagnosis feature, and reusing it here is what forced the first enabled model
+ * on everyone.
+ */
+const assistantModelOptions = computed(() =>
+    collectAssistantModelOptions(aiState.value?.providers ?? [], providerCatalog.value),
+)
 
-const assistantModel = computed(() => {
-    if (!aiState.value?.settings.enabled) return null
-    if (selectedLogModel.value) return selectedLogModel.value
-    for (const provider of aiState.value.providers) {
-        const usable = firstUsableModel(provider)
-        if (usable) return usable
-    }
-    return null
-})
+const assistantModelGroups = computed(() => groupAssistantModels(assistantModelOptions.value))
+
+/** The stored assistant pair, dropped as soon as it stops being selectable. */
+const assistantSelection = computed(() =>
+    findAssistantModelOption(assistantModelOptions.value, assistantSettings.value),
+)
 
 /**
- * True when the assistant fell back to the first enabled provider rather than
- * the model the user configured for analysis. The selection decides which third
- * party receives the question, so it is never left implicit in the UI.
+ * The model a run will actually use: the stored choice, otherwise the first
+ * configured one so a fresh install still answers without visiting settings.
+ * The fallback is deliberately never persisted, so an explicit pick is the only
+ * thing that outlives this page.
  */
-const assistantModelIsAuto = computed(
-    () => Boolean(assistantModel.value) && !selectedLogModel.value,
-)
+const assistantModel = computed(() => {
+    const chosen = assistantSelection.value
+    if (chosen) return chosen
+    if (!aiState.value?.settings.enabled) return null
+    return assistantModelOptions.value[0] ?? null
+})
+
+const assistantModelValue = computed({
+    get: () => {
+        // Show the effective model, including the automatic first choice, so
+        // the picker never reads as "nothing selected" while a run would answer.
+        const selected = assistantModel.value
+        return selected ? assistantModelOptionValue(selected.providerId, selected.modelId) : ''
+    },
+    set: (value: string) => {
+        const parsed = parseAssistantModelValue(value)
+        if (!parsed) return
+        void saveAssistantModel(parsed)
+    },
+})
 
 const assistantModelLabel = computed(() => {
     const selected = assistantModel.value
+    if (!selected) return ''
+    return `${selected.providerLabel} · ${selected.modelLabel}`
+})
+
+/** The crash-analysis pair, shown as-is in log diagnosis mode. */
+const logModelLabel = computed(() => {
+    const selected = selectedLogModel.value
     if (!selected) return ''
     const name =
         selected.provider.custom_name?.trim() ||
         providerCatalog.value.find((item) => item.id === selected.provider.provider_id)?.name ||
         selected.provider.provider_id
-    const model = selected.model.name?.trim() || selected.model.id
-    return `${name} · ${model}`
+    return `${name} · ${selected.model.name?.trim() || selected.model.id}`
 })
+
+/** True while the page is showing a fallback the user has not picked yet. */
+const assistantModelIsAuto = computed(
+    () => Boolean(assistantModel.value) && !assistantSelection.value,
+)
 
 const hasConfiguredModel = computed(() => {
     if (mode.value === 'logs')
@@ -893,19 +937,48 @@ const canSubmit = computed(
 )
 const parsedResult = computed(() => parseLogAgentInsight(agent.output.value))
 
+/** Remembers one assistant model choice; the crash-analysis pair is untouched. */
+async function saveAssistantModel(selection: AssistantModelSelection): Promise<void> {
+    if (savingAssistantModel.value) return
+    const previous = assistantSettings.value
+    assistantSettings.value = selection
+    savingAssistantModel.value = true
+    try {
+        await updateAssistantAISettings({
+            provider_id: selection.providerId,
+            model_id: selection.modelId,
+        })
+    } catch (error) {
+        assistantSettings.value = previous
+        reportAiError(error)
+    } finally {
+        savingAssistantModel.value = false
+    }
+}
+
 async function load() {
     loading.value = true
     try {
-        const [loadedInstances, catalog, state, localSettings] = await Promise.all([
-            list(),
-            getAICatalog(),
-            getAIState(),
-            get_crash_analysis_ai_settings(),
-        ])
+        const [loadedInstances, catalog, state, localSettings, storedAssistant] = await Promise.all(
+            [
+                list(),
+                getAICatalog(),
+                getAIState(),
+                get_crash_analysis_ai_settings(),
+                getAssistantAISettings(),
+            ],
+        )
         instances.value = loadedInstances
         providerCatalog.value = catalog
         aiState.value = state
         analysisSettings.value = localSettings
+        assistantSettings.value =
+            storedAssistant.provider_id && storedAssistant.model_id
+                ? {
+                      providerId: storedAssistant.provider_id,
+                      modelId: storedAssistant.model_id,
+                  }
+                : null
         if (!availableInstances.value.some((instance) => instance.id === selectedInstanceId.value))
             selectedInstanceId.value = availableInstances.value[0]?.id ?? ''
     } catch (error) {
@@ -953,8 +1026,8 @@ async function submit() {
         prompt,
         remoteMcp,
         {
-            providerId: model.provider.provider_id,
-            modelId: model.model.id,
+            providerId: model.providerId,
+            modelId: model.modelId,
         },
         selectedAgentProfile.value.instructions,
         requestLocalToolApproval,
@@ -966,9 +1039,14 @@ function openAISettings() {
     void router.push({ path: '/settings', hash: '#ai' })
 }
 
-/** Opens the settings section that decides the model when one is auto-picked. */
+/** Opens AI settings, where providers and their models are enabled. */
 function openAssistantModelSettings() {
-    void router.push({ path: '/settings', hash: assistantModelIsAuto.value ? '#logs' : '#ai' })
+    void router.push({ path: '/settings', hash: '#ai' })
+}
+
+/** Opens the log-diagnosis model settings, which stay independent. */
+function openLogModelSettings() {
+    void router.push({ path: '/settings', hash: '#logs' })
 }
 
 function openRequiredSettings() {
@@ -1218,18 +1296,64 @@ onUnmounted(denyPendingApprovals)
         </p>
 
         <template v-else>
-            <p
-                v-if="assistantModelLabel"
-                class="m-0 flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-tertiary)]"
+            <div
+                v-if="mode === 'general' && assistantModelOptions.length"
+                class="flex max-w-2xl flex-wrap items-end gap-2"
                 data-onboarding-id="assistant-active-model"
             >
+                <label class="flex min-w-48 flex-1 flex-col gap-1.5 text-sm font-semibold">
+                    <span>{{ formatMessage(messages.assistantModel) }}</span>
+                    <select
+                        v-model="assistantModelValue"
+                        class="h-10 min-w-0 rounded-md border border-solid border-surface-5 bg-surface-2 px-3 text-sm font-normal text-[var(--color-text-primary)]"
+                        :disabled="agent.busy.value || savingAssistantModel"
+                        data-onboarding-id="assistant-model-select"
+                    >
+                        <optgroup
+                            v-for="group in assistantModelGroups"
+                            :key="group.providerId"
+                            :label="group.label"
+                        >
+                            <option
+                                v-for="option in group.options"
+                                :key="`${option.providerId}/${option.modelId}`"
+                                :value="
+                                    assistantModelOptionValue(option.providerId, option.modelId)
+                                "
+                            >
+                                {{ option.modelLabel }}
+                            </option>
+                        </optgroup>
+                    </select>
+                </label>
+                <Button type="outlined" @click="openAssistantModelSettings">{{
+                    formatMessage(messages.settings)
+                }}</Button>
+            </div>
+            <p
+                v-if="mode === 'general' && assistantModelOptions.length"
+                class="m-0 max-w-2xl text-xs text-[var(--color-text-tertiary)]"
+            >
+                {{
+                    assistantModelIsAuto
+                        ? formatMessage(messages.assistantModelAuto, {
+                              model: assistantModelLabel,
+                          })
+                        : formatMessage(messages.assistantModelHint)
+                }}
+            </p>
+            <p
+                v-else-if="mode === 'logs' && logModelLabel"
+                class="m-0 flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-tertiary)]"
+                data-onboarding-id="assistant-log-model"
+            >
                 <strong class="break-all font-medium text-[var(--color-text-primary)]">
-                    {{ assistantModelLabel }}
+                    {{ logModelLabel }}
                 </strong>
                 <button
                     type="button"
                     class="cursor-pointer border-0 bg-transparent p-0 text-sm font-normal text-brand underline"
-                    @click="openAssistantModelSettings"
+                    @click="openLogModelSettings"
                 >
                     {{ formatMessage(messages.settings) }}
                 </button>

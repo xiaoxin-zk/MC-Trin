@@ -124,6 +124,19 @@ export async function updateAISettings(enabled: boolean): Promise<void> {
     if (sharedAIState.value) sharedAIState.value.settings.enabled = enabled
 }
 
+export interface AssistantAISettings {
+    provider_id: string
+    model_id: string
+}
+
+export async function getAssistantAISettings(): Promise<AssistantAISettings> {
+    return await invoke<AssistantAISettings>('plugin:ai|ai_get_assistant_settings')
+}
+
+export async function updateAssistantAISettings(settings: AssistantAISettings): Promise<void> {
+    await invoke('plugin:ai|ai_update_assistant_settings', { settings })
+}
+
 export async function updateAIProvider(update: AIProviderConfigUpdate): Promise<void> {
     await invoke('plugin:ai|ai_update_provider', { update })
 }

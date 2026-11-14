@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
     catalog: vi.fn(),
     aiState: vi.fn(),
     analysisSettings: vi.fn(),
+    assistantSettings: vi.fn(),
+    saveAssistantSettings: vi.fn(),
     handleError: vi.fn(),
     push: vi.fn(),
     mcpTools: [{ name: 'lookup_server', description: 'Read a server status' }],
@@ -26,6 +28,8 @@ vi.mock('@/helpers/instance', () => ({ list: mocks.instances }))
 vi.mock('@/helpers/ai', () => ({
     getAICatalog: mocks.catalog,
     getAIState: mocks.aiState,
+    getAssistantAISettings: mocks.assistantSettings,
+    updateAssistantAISettings: mocks.saveAssistantSettings,
     sanitizeAiErrorText: (text: string) => text,
 }))
 vi.mock('@/helpers/logs', () => ({
@@ -103,6 +107,39 @@ function configuredAI() {
     }
 }
 
+/** Two providers with several models: the assistant must offer a real choice. */
+function multiModelAI() {
+    return {
+        settings: { enabled: true },
+        providers: [
+            {
+                provider_id: 'deepseek',
+                enabled: true,
+                models: [
+                    { id: 'deepseek-chat', name: 'DeepSeek Chat', enabled: true },
+                    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', enabled: true },
+                    { id: 'deepseek-disabled', name: 'Hidden', enabled: false },
+                ],
+                has_api_key: true,
+                oauth_connected: false,
+                configured_credentials: [],
+            },
+            {
+                provider_id: 'openai',
+                enabled: true,
+                models: [{ id: 'gpt-4o-mini-name-only', name: '', enabled: true }],
+                has_api_key: true,
+                oauth_connected: false,
+                configured_credentials: [],
+            },
+        ],
+    }
+}
+
+function noAssistantSelection() {
+    return { provider_id: '', model_id: '' }
+}
+
 function configuredAnalysis(enabled = true) {
     return {
         enabled,
@@ -134,6 +171,8 @@ beforeEach(() => {
     mocks.catalog.mockResolvedValue([{ id: 'openai', auth_type: 'apiKey' }])
     mocks.aiState.mockResolvedValue(configuredAI())
     mocks.analysisSettings.mockResolvedValue(configuredAnalysis())
+    mocks.assistantSettings.mockResolvedValue(noAssistantSelection())
+    mocks.saveAssistantSettings.mockResolvedValue(undefined)
     mocks.mcpTools = [{ name: 'lookup_server', description: 'Read a server status' }]
     mocks.mcpToken = ''
     mocks.mcpCalls = []
@@ -277,6 +316,106 @@ it('answers general questions without an installed instance or enabled log analy
     ])
     expect(typeof args[8]).toBe('function')
     expect(args[9]).toBe(true)
+})
+
+it('lists every enabled model and sends the selected one to the assistant', async () => {
+    mocks.aiState.mockResolvedValue(multiModelAI())
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const select = wrapper.get('[data-onboarding-id="assistant-model-select"]')
+    const options = select.findAll('option')
+    expect(options.map((option) => option.text())).toEqual([
+        'DeepSeek Chat',
+        'DeepSeek Reasoner',
+        'gpt-4o-mini-name-only',
+    ])
+    // display_name when present, else model_id — the third option proves it.
+    expect(
+        options.map((option) => (option.element as HTMLOptionElement).value),
+    ).toEqual([
+        'deepseek\u001fdeepseek-chat',
+        'deepseek\u001fdeepseek-reasoner',
+        'openai\u001fgpt-4o-mini-name-only',
+    ])
+
+    await select.setValue('openai\u001fgpt-4o-mini-name-only')
+    await wrapper.get('textarea').setValue('Which model answers this?')
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Ask assistant'))!
+        .trigger('click')
+
+    expect(mocks.saveAssistantSettings).toHaveBeenCalledWith({
+        provider_id: 'openai',
+        model_id: 'gpt-4o-mini-name-only',
+    })
+    expect(latestStartCall().slice(4, 8)).toEqual([
+        'Which model answers this?',
+        undefined,
+        { providerId: 'openai', modelId: 'gpt-4o-mini-name-only' },
+        DEFAULT_AI_AGENT_PROFILE.instructions,
+    ])
+})
+
+it('preselects the stored assistant model without touching crash analysis', async () => {
+    mocks.aiState.mockResolvedValue(multiModelAI())
+    mocks.assistantSettings.mockResolvedValue({
+        provider_id: 'deepseek',
+        model_id: 'deepseek-reasoner',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const select = wrapper.get('[data-onboarding-id="assistant-model-select"]')
+    expect((select.element as HTMLSelectElement).value).toBe('deepseek\u001fdeepseek-reasoner')
+    await wrapper.get('textarea').setValue('Explain this crash.')
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Ask assistant'))!
+        .trigger('click')
+
+    expect(latestStartCall().slice(4, 8)).toEqual([
+        'Explain this crash.',
+        undefined,
+        { providerId: 'deepseek', modelId: 'deepseek-reasoner' },
+        DEFAULT_AI_AGENT_PROFILE.instructions,
+    ])
+    // Crash analysis keeps its own pair; the assistant never wrote to it.
+    expect(mocks.analysisSettings).toHaveBeenCalledTimes(1)
+    expect(mocks.saveAssistantSettings).not.toHaveBeenCalled()
+})
+
+it('keeps the crash-analysis model independent from the assistant selection', async () => {
+    mocks.aiState.mockResolvedValue(multiModelAI())
+    mocks.analysisSettings.mockResolvedValue({
+        enabled: true,
+        provider_id: 'openai',
+        model_id: 'gpt-4o-mini-name-only',
+        ai_source: 'custom',
+    })
+    mocks.assistantSettings.mockResolvedValue({
+        provider_id: 'deepseek',
+        model_id: 'deepseek-chat',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Log diagnosis'))!
+        .trigger('click')
+    await wrapper.get('textarea').setValue('Find the first error.')
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Analyze logs'))!
+        .trigger('click')
+
+    // Log diagnosis keeps using the crash-analysis pair and still sends no
+    // explicit selection, so the backend resolves it from analysis settings.
+    expect(latestStartCall().slice(0, 3)).toEqual(['instance-1', 'custom', null])
+    expect(latestStartCall()[6]).toBeUndefined()
+    expect(mocks.saveAssistantSettings).not.toHaveBeenCalled()
 })
 
 it('keeps tool settings collapsed and shows a visible reset result', async () => {

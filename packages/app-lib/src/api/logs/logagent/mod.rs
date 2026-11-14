@@ -10,6 +10,7 @@ use super::{
 use crate::{
     State,
     api::ai::chat::{ChatMessage, ChatModel, ChatTurn},
+    api::ai::get_assistant_ai_settings,
     prelude::Credentials,
 };
 use rand::RngCore;
@@ -322,6 +323,105 @@ pub async fn prepare(
     result
 }
 
+/// What one run needs from the crash snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SnapshotPolicy {
+    /// No snapshot at all; the run answers from launcher context tools.
+    Skip,
+    /// The snapshot is the point of the run, so a missing one is an error.
+    Required,
+    /// Attach a snapshot when it exists; a missing one only drops the logs.
+    /// A general assistant question is not a diagnosis, so an instance that
+    /// never ran must not turn it into "No crash logs available for analysis".
+    Optional,
+}
+
+fn snapshot_policy(
+    source: &str,
+    include_logs: bool,
+    instance_id: &str,
+) -> SnapshotPolicy {
+    // Remote analysis always uploads the latest crash snapshot.
+    if source == "logshare" {
+        return SnapshotPolicy::Required;
+    }
+    if !include_logs || instance_id.is_empty() {
+        return SnapshotPolicy::Skip;
+    }
+    if source == "assistant" {
+        SnapshotPolicy::Optional
+    } else {
+        SnapshotPolicy::Required
+    }
+}
+
+/// Prompt context for a run that deliberately carries no crash snapshot.
+const NO_SNAPSHOT_SELECTED_CONTEXT: &str = "Use enabled launcher context tools when local details materially improve the answer. No instance crash snapshot was selected for this run.";
+
+/// Prompt context for an assistant run whose instance has no readable log yet.
+/// The tools still exist, so the model can say what is missing instead of
+/// treating the absence of a crash report as the answer.
+const NO_SNAPSHOT_AVAILABLE_CONTEXT: &str = "The selected instance has no readable crash snapshot for this run. Answer the user's question with the enabled launcher context tools and general Minecraft guidance, and mention that a log snapshot becomes available after the game has run once.";
+
+/// Materializes the sanitized crash snapshot for one instance.
+async fn crash_snapshot(
+    pool: &sqlx::SqlitePool,
+    instance_id: &str,
+) -> crate::Result<(Vec<LogFile>, String)> {
+    let analysis = analyze_crash(instance_id).await?;
+    let credentials = Credentials::get_all(pool)
+        .await?
+        .into_iter()
+        .collect::<Vec<_>>();
+    let mut remaining = 16 * 1024 * 1024usize;
+    let files = analysis
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            let mut lines = Vec::new();
+            for line in source.content.as_str().lines() {
+                if line.len() + 1 > remaining {
+                    break;
+                }
+                remaining -= line.len() + 1;
+                lines.push(line.to_string());
+            }
+            LogFile {
+                id: format!("log-{}", index + 1),
+                name: CensoredString::censor(
+                    source.filename.clone(),
+                    &credentials,
+                )
+                .as_str()
+                .to_string(),
+                source_type: source.source_type.clone(),
+                first_line: source.first_line,
+                truncated: source.first_line > 1
+                    || lines.len() < source.line_count,
+                line_count: lines.len(),
+                lines,
+            }
+        })
+        .collect::<Vec<_>>();
+    if files.iter().all(|file| file.lines.is_empty()) {
+        return Err(error("No crash logs available for analysis"));
+    }
+    let mut metadata = json!({ "findings": analysis.findings, "matched_mods": analysis.mods, "mod_changes": analysis.mod_changes, "windows_events": analysis.windows_events });
+    sanitize(&mut metadata, &credentials);
+    let context = format!(
+        "[Diagnostic metadata; may be shortened]\n{}\n[Snapshot file IDs and original line ranges]\n{}\n[Focused initial log excerpts; use tools to expand]\n{}",
+        metadata
+            .to_string()
+            .chars()
+            .take(20_000)
+            .collect::<String>(),
+        serde_json::to_string(&files)?,
+        window::initial_window(&files)
+    );
+    Ok((files, context))
+}
+
 async fn prepare_snapshot(
     instance_id: &str,
     run_id: &str,
@@ -348,16 +448,36 @@ async fn prepare_snapshot(
             )
         }
         "assistant" => {
+            // The page sends its selector value; a caller that omits it still
+            // gets the choice the user persisted for the assistant, never the
+            // crash-analysis pair.
+            let stored = if requested_provider_id
+                .is_none_or(|value| value.trim().is_empty())
+                || requested_model_id
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                Some(get_assistant_ai_settings().await?)
+            } else {
+                None
+            };
             let provider_id = requested_provider_id
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+                .or_else(|| {
+                    stored.as_ref().map(|pair| pair.provider_id.clone())
+                })
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| {
                     error("Select an AI provider for the assistant")
                 })?;
             let model_id = requested_model_id
                 .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+                .or_else(|| stored.as_ref().map(|pair| pair.model_id.clone()))
+                .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| error("Select an AI model for the assistant"))?;
-            let model = ChatModel::prepare(provider_id, model_id).await?;
-            (provider_id.to_string(), model_id.to_string(), Some(model))
+            let model = ChatModel::prepare(&provider_id, &model_id).await?;
+            (provider_id, model_id, Some(model))
         }
         _ => (
             settings.provider_id.clone(),
@@ -368,67 +488,26 @@ async fn prepare_snapshot(
     let share_settings = get_log_share_settings().await?;
     let state = State::get().await?;
     let locale = crate::state::Settings::get(&state.pool).await?.locale;
-    let (files, context) = if session.source != "logshare"
-        && (!include_logs || instance_id.is_empty())
-    {
-        (
-            Vec::new(),
-            "Use enabled launcher context tools when local details materially improve the answer. No instance crash snapshot was selected for this run.".to_string(),
-        )
-    } else {
-        let analysis = analyze_crash(instance_id).await?;
-        let credentials = Credentials::get_all(&state.pool)
-            .await?
-            .into_iter()
-            .collect::<Vec<_>>();
-        let mut remaining = 16 * 1024 * 1024usize;
-        let files = analysis
-            .sources
-            .iter()
-            .enumerate()
-            .map(|(index, source)| {
-                let mut lines = Vec::new();
-                for line in source.content.as_str().lines() {
-                    if line.len() + 1 > remaining {
-                        break;
-                    }
-                    remaining -= line.len() + 1;
-                    lines.push(line.to_string());
+    // A logshare run always uploads the latest crash snapshot. Everything else
+    // only reads one when the caller asked for it and named an instance.
+    let (files, context) =
+        match snapshot_policy(&session.source, include_logs, instance_id) {
+            SnapshotPolicy::Skip => {
+                (Vec::new(), NO_SNAPSHOT_SELECTED_CONTEXT.to_string())
+            }
+            policy => match crash_snapshot(&state.pool, instance_id).await {
+                Ok(snapshot) => snapshot,
+                Err(cause) if policy == SnapshotPolicy::Optional => {
+                    tracing::info!(
+                        instance_id,
+                        error = %cause,
+                        "Assistant run continues without a crash snapshot"
+                    );
+                    (Vec::new(), NO_SNAPSHOT_AVAILABLE_CONTEXT.to_string())
                 }
-                LogFile {
-                    id: format!("log-{}", index + 1),
-                    name: CensoredString::censor(
-                        source.filename.clone(),
-                        &credentials,
-                    )
-                    .as_str()
-                    .to_string(),
-                    source_type: source.source_type.clone(),
-                    first_line: source.first_line,
-                    truncated: source.first_line > 1
-                        || lines.len() < source.line_count,
-                    line_count: lines.len(),
-                    lines,
-                }
-            })
-            .collect::<Vec<_>>();
-        if files.iter().all(|file| file.lines.is_empty()) {
-            return Err(error("No crash logs available for analysis"));
-        }
-        let mut metadata = json!({ "findings": analysis.findings, "matched_mods": analysis.mods, "mod_changes": analysis.mod_changes, "windows_events": analysis.windows_events });
-        sanitize(&mut metadata, &credentials);
-        let context = format!(
-            "[Diagnostic metadata; may be shortened]\n{}\n[Snapshot file IDs and original line ranges]\n{}\n[Focused initial log excerpts; use tools to expand]\n{}",
-            metadata
-                .to_string()
-                .chars()
-                .take(20_000)
-                .collect::<String>(),
-            serde_json::to_string(&files)?,
-            window::initial_window(&files)
-        );
-        (files, context)
-    };
+                Err(cause) => return Err(cause),
+            },
+        };
     session
         .snapshot
         .set(Snapshot {
@@ -1356,5 +1435,66 @@ mod tests {
         assert!(allowed_tool_name("custom", "read_log_file"));
         assert!(!remote_mcp_tool_name("mcp_x_lookup_server"));
         assert!(!remote_mcp_tool_name("mcp_0_execute;"));
+    }
+
+    /// The reported bug: a plain question in the launcher-help mode answered
+    /// `No crash logs available for analysis`. That only happens because the
+    /// assistant run treated the snapshot as required; it must be optional.
+    #[test]
+    fn a_general_assistant_run_never_requires_a_crash_snapshot() {
+        assert_eq!(
+            snapshot_policy("assistant", true, "instance-1"),
+            SnapshotPolicy::Optional
+        );
+        assert_eq!(
+            snapshot_policy("assistant", false, "instance-1"),
+            SnapshotPolicy::Skip
+        );
+        // Without an instance there is nothing to read either.
+        assert_eq!(
+            snapshot_policy("assistant", true, ""),
+            SnapshotPolicy::Skip
+        );
+    }
+
+    /// Log diagnosis and remote upload must keep failing loudly when the
+    /// instance has no crash log, so a silent empty answer cannot be mistaken
+    /// for "your run was fine".
+    #[test]
+    fn log_diagnosis_and_logshare_still_require_a_snapshot() {
+        assert_eq!(
+            snapshot_policy("custom", true, "instance-1"),
+            SnapshotPolicy::Required
+        );
+        assert_eq!(
+            snapshot_policy("logshare", true, "instance-1"),
+            SnapshotPolicy::Required
+        );
+        assert_eq!(
+            snapshot_policy("logshare", false, "instance-1"),
+            SnapshotPolicy::Required
+        );
+    }
+
+    /// The assistant's own pair is what an omitted selection falls back to.
+    /// Reading crash-analysis settings here is exactly the bug being fixed.
+    #[test]
+    fn the_assistant_model_never_comes_from_the_crash_analysis_settings() {
+        const SOURCE: &str = include_str!("mod.rs");
+        let start = SOURCE
+            .find("\"assistant\" => {")
+            .expect("the assistant branch must exist");
+        let branch = &SOURCE[start..];
+        let end = branch.find("\n        _ => (").unwrap_or(branch.len());
+        let branch = &branch[..end];
+        assert!(
+            branch.contains("get_assistant_ai_settings"),
+            "the assistant branch must read its own settings"
+        );
+        assert!(
+            !branch.contains("settings.provider_id")
+                && !branch.contains("settings.model_id"),
+            "the assistant branch must not borrow the crash-analysis pair"
+        );
     }
 }

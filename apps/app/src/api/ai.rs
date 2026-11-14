@@ -1,7 +1,8 @@
 use crate::api::Result;
 use mctrin::ai::{
     self, AiModelUpdate, AiProviderConfigUpdate, AiProviderDefinition,
-    AiProviderModel, AiSettings, AiState, OAuthDeviceCode, OAuthPollStatus,
+    AiProviderModel, AiSettings, AiState, AssistantAiSettings, OAuthDeviceCode,
+    OAuthPollStatus,
 };
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
@@ -10,6 +11,8 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             ai_get_catalog,
             ai_get_state,
             ai_update_settings,
+            ai_get_assistant_settings,
+            ai_update_assistant_settings,
             ai_update_provider,
             ai_set_api_key,
             ai_set_credential,
@@ -37,6 +40,20 @@ pub async fn ai_get_state() -> Result<AiState> {
 #[tauri::command]
 pub async fn ai_update_settings(settings: AiSettings) -> Result<()> {
     Ok(ai::update_settings(settings).await?)
+}
+
+/// The provider/model pair the launcher assistant uses, stored apart from the
+/// crash-analysis pair so neither feature can re-point the other.
+#[tauri::command]
+pub async fn ai_get_assistant_settings() -> Result<AssistantAiSettings> {
+    Ok(ai::get_assistant_ai_settings().await?)
+}
+
+#[tauri::command]
+pub async fn ai_update_assistant_settings(
+    settings: AssistantAiSettings,
+) -> Result<()> {
+    Ok(ai::update_assistant_ai_settings(settings).await?)
 }
 
 #[tauri::command]

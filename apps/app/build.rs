@@ -929,6 +929,8 @@ fn main() {
                         "ai_get_catalog",
                         "ai_get_state",
                         "ai_update_settings",
+                        "ai_get_assistant_settings",
+                        "ai_update_assistant_settings",
                         "ai_update_provider",
                         "ai_set_api_key",
                         "ai_set_credential",
