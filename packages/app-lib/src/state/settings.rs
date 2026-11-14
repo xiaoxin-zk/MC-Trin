@@ -1855,10 +1855,28 @@ mod tests {
         settings.locale = "zh-TW".to_string();
         assert!(!settings.auto_prefers_mirror());
 
-        settings.locale = String::new();
+        // The empty-locale fallback is deliberately not asserted against a fixed
+        // value. It resolves through `TZ` and then `read_link("/etc/localtime")`,
+        // so its result is a property of the host rather than of this code: a
+        // Linux runner with `TZ=Etc/UTC` yields `false`, a Windows host yields
+        // `true`, and a container without tzdata yields `true` again. Asserting
+        // either value would encode one machine's configuration and fail on the
+        // other.
+        //
+        // Mutating `TZ` around the assertion would not make that portable
+        // either: the write is `unsafe` in edition 2024, it races with the other
+        // tests that read the environment, and it still cannot reach the `None`
+        // arm, which requires `TZ` absent *and* no `/etc/localtime`. So the
+        // fallback value is left uncovered here; the mapping it performs is
+        // covered directly by `auto_source_detection_distinguishes_mainland_locales`.
+        //
+        // What is host-independent is that whitespace must not decide the
+        // question: `auto_prefers_mirror` trims first, so a padded Chinese
+        // locale still resolves through the locale branch without reading `TZ`.
+        settings.locale = "  zh-CN  ".to_string();
         assert!(
             settings.auto_prefers_mirror(),
-            "an empty locale keeps the documented mirror-preferring fallback"
+            "a padded Chinese locale must still select the locale branch"
         );
     }
 
