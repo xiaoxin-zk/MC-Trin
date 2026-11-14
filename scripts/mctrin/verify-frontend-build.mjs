@@ -148,11 +148,15 @@ export function assertFrontendDist({ dist, head, stamp, inputs = 'unknown' }) {
  * executable was compiled against a different frontend build. That is how a
  * shipped installer ended up with an older `AIAgent-*.js` than the `dist`
  * beside it, and no assertion caught it.
+ *
+ * The scan stays on bytes: the keys are embedded as raw UTF-8, so decoding the
+ * executable as `latin1` (one character per byte) turned `篝火-3KaXPIat.png`
+ * into `ç¯ç«-3KaXPIat.png` and made every non-ASCII asset look missing.
  */
 export function assertBinaryEmbeds(dist, build, binary) {
     if (!fs.existsSync(binary)) throw new Error(`Missing build artifact: ${binary}`)
-    const contents = fs.readFileSync(binary).toString('latin1')
-    const embedded = (asset) => contents.includes(path.basename(asset))
+    const contents = fs.readFileSync(binary)
+    const embedded = (asset) => contents.includes(Buffer.from(path.basename(asset), 'utf8'))
     const missing = build.assets.filter((asset) => !embedded(asset))
     if (missing.length === 0) return
     if (missing.length === build.assets.length) {

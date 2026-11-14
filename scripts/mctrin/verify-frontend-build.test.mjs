@@ -174,6 +174,39 @@ test('one stale chunk is enough to refuse the executable', () => {
     )
 })
 
+test('a non-ASCII asset name round-trips through the executable scan', () => {
+    // Tauri emits asset keys as raw UTF-8 string literals. Decoding the binary
+    // as `latin1` - one character per byte - made `篝火-3KaXPIat.png` read back
+    // as `ç¯ç«-3KaXPIat.png`, so a correctly built executable failed the check.
+    const png = 'assets/篝火-3KaXPIat.png'
+    const chunk = 'assets/index-New.js'
+    const dist = fixture({
+        stamp: stampFor(HEAD, [png, chunk]),
+        assets: { [png]: 'png', [chunk]: 'js' },
+    })
+    const binary = path.join(dist, 'MC-Trin.exe')
+    // A binary is not text: surround the keys with bytes that are not valid
+    // UTF-8 so the fixture cannot be read as a decoded string by accident.
+    fs.writeFileSync(
+        binary,
+        Buffer.concat([
+            Buffer.from([0x4d, 0x5a, 0x00, 0xff]),
+            Buffer.from(`${chunk}\0${png}`, 'utf8'),
+            Buffer.from([0x00, 0xfe]),
+        ]),
+    )
+    assert.doesNotThrow(() => verifyFrontendBuild({ dist, head: HEAD, binary }))
+    assert.deepEqual(verifyFrontendBuild({ dist, head: HEAD, binary }).assets, [chunk, png].sort())
+
+    // A stale binary embeds the same non-ASCII file name with an older hash.
+    // That must still be refused, so the encoding fix is not a weakening.
+    fs.writeFileSync(binary, Buffer.from(`${chunk} assets/篝火-OldHash0.png`, 'utf8'))
+    assert.throws(
+        () => verifyFrontendBuild({ dist, head: HEAD, binary }),
+        /assets\/篝火-3KaXPIat\.png missing/,
+    )
+})
+
 test('a missing stamp or executable fails closed', () => {
     const dist = fixture({ stamp: stampFor(OTHER, ['assets/AIAgent-New.js']) })
     assert.throws(() => assertFrontendDist({ dist, head: HEAD, stamp: null }))
