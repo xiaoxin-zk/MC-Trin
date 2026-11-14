@@ -325,7 +325,6 @@ app.assistant.permission-mode.full-warning-confirm
 app.assistant.permission-mode.full-warning-title
 app.assistant.permission-mode.matrix.allowed
 app.assistant.permission-mode.matrix.ask
-app.assistant.permission-mode.matrix.dangerous
 app.assistant.permission-mode.matrix.read
 app.assistant.permission-mode.matrix.remote
 app.assistant.permission-mode.matrix.write

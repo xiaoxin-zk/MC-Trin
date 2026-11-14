@@ -619,7 +619,8 @@ const messages = defineMessages({
     },
     instanceGone: {
         id: 'app.project.instance-gone',
-        defaultMessage: 'The target instance no longer exists. Choose another instance to install into.',
+        defaultMessage:
+            'The target instance no longer exists. Choose another instance to install into.',
     },
     comingSoon: { id: 'app.project.coming-soon', defaultMessage: 'Coming soon' },
     loadFailed: {
@@ -1598,17 +1599,13 @@ onUnmounted(() => {
     unlistenProcesses?.()
 })
 
-watch(
-    [() => route.params.id, () => route.query.i],
-    ([id, instanceId], [, previousInstanceId]) => {
-        if (!id || !route.path.startsWith('/project')) return
-        // Clearing a stale ?i= after its instance disappeared is not a new page load: the
-        // page has already fallen back to the default install target.
-        if (!instanceId && previousInstanceId && missingInstanceId.value === previousInstanceId)
-            return
-        void loadProjectPage()
-    },
-)
+watch([() => route.params.id, () => route.query.i], ([id, instanceId], [, previousInstanceId]) => {
+    if (!id || !route.path.startsWith('/project')) return
+    // Clearing a stale ?i= after its instance disappeared is not a new page load: the
+    // page has already fallen back to the default install target.
+    if (!instanceId && previousInstanceId && missingInstanceId.value === previousInstanceId) return
+    void loadProjectPage()
+})
 
 async function install(version) {
     // Mirrors the readiness half of installButtonDisabled: the optional instance and

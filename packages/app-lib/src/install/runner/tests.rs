@@ -571,6 +571,36 @@ fn cache_repair_validation_accepts_only_whitelisted_terminal_jobs() {
 }
 
 #[test]
+fn succeeded_jobs_finish_in_the_completed_phase_for_every_request_kind() {
+    // A succeeded job must not keep the `Finalizing` phase: Downloads renders the phase as
+    // the subtitle, so the row would show "Completed" and "Finalizing" at the same time.
+    let mut job_state = InstallJobState::new(InstallRequest::DownloadJava {
+        vendor: "test".to_string(),
+        version: 21,
+    });
+    job_state.set_progress(
+        InstallPhaseId::Finalizing,
+        None,
+        InstallPhaseDetails::Empty,
+    );
+    job_state.error = Some(InstallErrorView::from_message(
+        "network_error",
+        InstallPhaseId::PreparingJava,
+        "stale failure",
+    ));
+
+    mark_job_succeeded(&mut job_state);
+
+    assert_eq!(job_state.progress.phase, InstallPhaseId::Completed);
+    assert!(job_state.error.is_none());
+    assert!(job_state.progress.progress.is_none());
+    assert!(job_state.events.iter().any(|event| matches!(
+        event.kind,
+        InstallJobEventKind::JobSucceeded { .. }
+    )));
+}
+
+#[test]
 fn missing_required_content_pauses_without_starting_rollback() {
     let mut job_state = InstallJobState::new(InstallRequest::DownloadJava {
         vendor: "test".to_string(),

@@ -106,6 +106,10 @@ const messages = defineMessages({
         id: 'content.page-layout.failed-to-load',
         defaultMessage: 'Failed to load content',
     },
+    failedToLoadDescription: {
+        id: 'content.page-layout.failed-to-load-description',
+        defaultMessage: 'Your content list could not be loaded. Retry or change the filters.',
+    },
     sortAlphabetical: {
         id: 'content.page-layout.sort.alphabetical',
         defaultMessage: 'Alphabetical',
@@ -195,7 +199,7 @@ const skipNonEssentialWarnings = computed(() => ctx.skipNonEssentialWarnings?.va
 const errorMessage = computed(() => {
     const error = ctx.error.value
     if (!error) return ''
-    return ctx.formatError?.(error) ?? formatMessage(messages.failedToLoad)
+    return ctx.formatError?.(error) ?? formatMessage(messages.failedToLoadDescription)
 })
 
 function getItemId(item: ContentItem) {

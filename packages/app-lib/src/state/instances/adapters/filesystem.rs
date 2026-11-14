@@ -114,14 +114,16 @@ pub(crate) fn scan_content_backups_from(
     Ok(backups)
 }
 
-/// Root-relative folders [`for_each_content_folder`] walks.
+/// Root-relative folders the content scanner reports project files from.
 ///
 /// This is the single source of truth shared with
 /// `content_rows::mark_instance_files_missing`: a row may only be marked
 /// missing when its path lives under one of these roots, because every other
-/// path can never be re-discovered by the scanner. `saves/` is intentionally
-/// absent — worlds are enumerated by `api::worlds` and their files (including
-/// world datapacks under `saves/<world>/datapacks/`) are never content-scanned.
+/// path can never be re-discovered by `scan_content_files_from`. `saves/` is
+/// intentionally absent — worlds are enumerated by `api::worlds` and their
+/// files (including world datapacks under `saves/<world>/datapacks/`) are never
+/// content-scanned, so a tracked world row keeps whatever `missing` value it
+/// has instead of being flipped to missing on every sync.
 pub(crate) const SCANNED_CONTENT_ROOTS: &[&str] = &[
     "mods",
     "datapacks",

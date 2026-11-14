@@ -141,34 +141,33 @@ export function assertFrontendDist({ dist, head, stamp, inputs = 'unknown' }) {
 /**
  * Confirms the executable embeds the frontend build that is about to ship.
  *
- * Tauri records every asset key as a string in the binary even though the file
- * contents are compressed, so a key that is absent proves the executable was
- * compiled against a different frontend build. That is how a shipped installer
- * ended up with an older `AIAgent-*.js` than the `dist` beside it.
- *
- * The entry files `index.html` names are checked strictly: they carry the
- * content hash, so they change whenever the bundle changes. The remaining chunks
- * are only required to be present in bulk, because a future Tauri version might
- * store keys differently and a false failure here would block every release.
+ * Tauri records every asset key as a `&str` literal in the binary - see
+ * `EmbeddedAssets::to_tokens` in `tauri-codegen`, which emits
+ * `"assets/index-*.js" => { include_bytes!(..) }` - even though the file
+ * contents are compressed. A key that is absent therefore proves the
+ * executable was compiled against a different frontend build. That is how a
+ * shipped installer ended up with an older `AIAgent-*.js` than the `dist`
+ * beside it, and no assertion caught it.
  */
 export function assertBinaryEmbeds(dist, build, binary) {
     if (!fs.existsSync(binary)) throw new Error(`Missing build artifact: ${binary}`)
     const contents = fs.readFileSync(binary).toString('latin1')
     const embedded = (asset) => contents.includes(path.basename(asset))
-    const missingEntries = build.referenced.filter((asset) => !embedded(asset))
-    if (missingEntries.length > 0) {
+    const missing = build.assets.filter((asset) => !embedded(asset))
+    if (missing.length === 0) return
+    if (missing.length === build.assets.length) {
         throw new Error(
-            `${binary} does not embed the current frontend build in ${dist}: ` +
-                `${missingEntries.join(', ')} missing. Rebuild the application.`,
+            `${binary} contains none of the ${build.assets.length} asset names from ` +
+                `${dist}. Either it was built from another frontend or it is not the ` +
+                'application binary. Rebuild the application.',
         )
     }
-    const present = build.assets.filter(embedded).length
-    if (present * 2 < build.assets.length) {
-        throw new Error(
-            `${binary} embeds only ${present} of ${build.assets.length} assets from ` +
-                `${dist}; it was built against another frontend. Rebuild the application.`,
-        )
-    }
+    throw new Error(
+        `${binary} does not embed the current frontend build in ${dist}: ` +
+            `${missing.slice(0, 5).join(', ')} missing` +
+            `${missing.length > 5 ? ` and ${missing.length - 5} more` : ''}. ` +
+            'Rebuild the application.',
+    )
 }
 
 export function verifyFrontendBuild({ dist, head, binary } = {}) {

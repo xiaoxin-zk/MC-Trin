@@ -150,9 +150,10 @@ export function agentToolPermission(id: string): AgentToolPermission {
 /**
  * Whether a tool call must go through the approval dialog.
  *
- * `full` runs everything directly. Every other mode asks for remote tools,
- * because this launcher does not control what those servers do, and for every
- * local write: the assistant prompt tells the model each write needs explicit
+ * `full` runs everything directly. `default` asks for everything. `free`
+ * auto-approves local non-write tools but still asks for remote tools, because
+ * this launcher does not control what those servers do, and for every local
+ * write: the assistant prompt tells the model each write needs explicit
  * approval, so no mode below full may silently grant one.
  */
 export function toolNeedsApproval(

@@ -574,12 +574,9 @@ import { useAppEvent } from '@/composables/use-app-event'
 import { useDownloadTelemetry } from '@/composables/useDownloadTelemetry'
 import { listPendingCurseForgeManualDownloads } from '@/helpers/curseforge'
 import type { CurseForgeManualDownloadItem } from '@/helpers/curseforge-manual'
+import { downloadFallbackLabelKind, downloadJobPhaseLabel } from '@/helpers/download-job-labels'
 import { resolveDownloadUrl } from '@/helpers/download-url'
 import { retiredDownloadMessage } from '@/helpers/download-url-messages'
-import {
-    downloadFallbackLabelKind,
-    downloadJobPhaseLabel,
-} from '@/helpers/download-job-labels'
 import { selectDownloadEmptyState } from '@/helpers/downloads-empty-state'
 import {
     download_job_support_details,

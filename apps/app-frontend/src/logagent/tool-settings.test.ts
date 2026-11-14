@@ -45,7 +45,15 @@ test('the danger set does not hide a write tool from the approval prompt', () =>
     }
 })
 
-test('free mode keeps read tools prompt-free but asks for every write', () => {
+test('default mode asks for everything, including local reads', () => {
+    for (const tool of BUILT_IN_AGENT_TOOLS) {
+        assert.equal(toolNeedsApproval('default', tool.id, true), true, tool.id)
+    }
+})
+
+test('free mode keeps non-write local tools prompt-free but asks for every write', () => {
+    // Only write tools and remote tools reach the gate; a local read is listed
+    // here so a future re-route through the gate cannot silently start asking.
     for (const tool of BUILT_IN_AGENT_TOOLS) {
         const expected = tool.permission === 'write'
         assert.equal(
@@ -56,15 +64,20 @@ test('free mode keeps read tools prompt-free but asks for every write', () => {
     }
 })
 
+test('default and free both ask for every write, full access asks for none', () => {
+    for (const mode of ['default', 'free'] as const) {
+        for (const id of ASSISTANT_WRITE_TOOLS) {
+            assert.equal(toolNeedsApproval(mode, id, true), true, `${mode} let ${id} run`)
+        }
+    }
+    for (const id of ASSISTANT_WRITE_TOOLS) {
+        assert.equal(toolNeedsApproval('full', id, true), false)
+    }
+})
+
 test('remote tools ask in every mode except full access', () => {
     for (const mode of ['default', 'free'] as const) {
         assert.equal(toolNeedsApproval(mode, 'lookup_server', false), true)
     }
     assert.equal(toolNeedsApproval('full', 'lookup_server', false), false)
-})
-
-test('default mode asks for every tool and full access asks for none', () => {
-    assert.equal(toolNeedsApproval('default', 'get_instance_overview', true), true)
-    assert.equal(toolNeedsApproval('default', 'create_instance', true), true)
-    assert.equal(toolNeedsApproval('full', 'create_instance', true), false)
 })

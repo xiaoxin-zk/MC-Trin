@@ -1,5 +1,4 @@
 import type { InstallJobSnapshot, InstallPhaseId } from './install'
-import { isInstallJobFinished } from './install'
 
 /**
  * What the Downloads row subtitle should describe.
@@ -38,7 +37,16 @@ export function downloadJobPhaseLabel(job: InstallJobSnapshot): DownloadJobPhase
 export function downloadFallbackLabelKind(job: InstallJobSnapshot): 'active' | 'historical' | null {
     if (!job.summary.fallback_count) return null
     if (job.execution_mode === 'recovery_validation') return null
-    return isInstallJobFinished(job.status) ? 'historical' : 'active'
+    return isTerminalStatus(job.status) ? 'historical' : 'active'
+}
+
+function isTerminalStatus(status: InstallJobSnapshot['status']) {
+    return (
+        status === 'succeeded' ||
+        status === 'failed' ||
+        status === 'interrupted' ||
+        status === 'canceled'
+    )
 }
 
 function activeRequestCount(job: InstallJobSnapshot) {

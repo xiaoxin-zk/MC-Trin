@@ -135,7 +135,7 @@ test('an executable that does not embed the current assets is refused', () => {
     fs.writeFileSync(binary, 'blob with assets/AIAgent-Old.js inside')
     assert.throws(
         () => verifyFrontendBuild({ dist, head: HEAD, binary }),
-        /does not embed the current frontend build/,
+        /contains none of the 1 asset names/,
     )
     fs.writeFileSync(binary, 'blob with assets/AIAgent-New.js inside')
     assert.doesNotThrow(() => verifyFrontendBuild({ dist, head: HEAD, binary }))
@@ -152,12 +152,25 @@ test('an executable that embeds almost none of the assets is refused', () => {
         '<script type="module" src="/assets/chunk-0.js"></script>',
     )
     const binary = path.join(dist, 'MC-Trin.exe')
-    // The entry file the page loads is present, but the bulk of the bundle was
-    // compiled from another build; most lazy chunk names cannot be found.
     fs.writeFileSync(binary, 'assets/chunk-0.js assets/chunk-1.js')
     assert.throws(
         () => verifyFrontendBuild({ dist, head: HEAD, binary }),
-        /embeds only 2 of 10 assets/,
+        /does not embed the current frontend build in .*: assets\/chunk-2\.js, assets\/chunk-3\.js/,
+    )
+})
+
+test('one stale chunk is enough to refuse the executable', () => {
+    // This is the shipped defect: everything matched except one chunk whose
+    // content hash came from the previous frontend build.
+    const dist = fixture({
+        stamp: stampFor(HEAD, ['assets/index-New.js', 'assets/AIAgent-New.js']),
+        assets: { 'assets/index-New.js': 'a', 'assets/AIAgent-New.js': 'b' },
+    })
+    const binary = path.join(dist, 'MC-Trin.exe')
+    fs.writeFileSync(binary, 'assets/index-New.js assets/AIAgent-Old.js')
+    assert.throws(
+        () => verifyFrontendBuild({ dist, head: HEAD, binary }),
+        /assets\/AIAgent-New\.js missing/,
     )
 })
 

@@ -1265,9 +1265,6 @@
   "app.assistant.permission-mode.matrix.ask": {
     "message": "先询问"
   },
-  "app.assistant.permission-mode.matrix.dangerous": {
-    "message": "高危操作"
-  },
   "app.assistant.permission-mode.matrix.read": {
     "message": "读取启动器状态"
   },

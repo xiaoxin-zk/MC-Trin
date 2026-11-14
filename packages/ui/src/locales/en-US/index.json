@@ -1082,6 +1082,9 @@
   "content.page-layout.failed-to-load": {
     "defaultMessage": "Failed to load content"
   },
+  "content.page-layout.failed-to-load-description": {
+    "defaultMessage": "Your content list could not be loaded. Retry or change the filters."
+  },
   "content.page-layout.no-content-found": {
     "defaultMessage": "No content found."
   },

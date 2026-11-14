@@ -962,6 +962,9 @@
   "content.page-layout.failed-to-load": {
     "defaultMessage": "加载内容失败"
   },
+  "content.page-layout.failed-to-load-description": {
+    "defaultMessage": "无法加载内容列表。请重试或更改筛选条件。"
+  },
   "content.page-layout.no-content-found": {
     "defaultMessage": "未找到内容。"
   },

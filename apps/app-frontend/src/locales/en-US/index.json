@@ -920,6 +920,15 @@
   "app.assistant.no-instances": {
     "message": "Create an instance before analyzing its logs."
   },
+  "app.assistant.permission-mode.dangerous-hint": {
+    "message": "These run only after you approve the exact call. Everything on an MCP server you add also asks, because this launcher does not control what those tools do."
+  },
+  "app.assistant.permission-mode.dangerous-title": {
+    "message": "Write tools that always ask for approval"
+  },
+  "app.assistant.permission-mode.free-hint": {
+    "message": "Reading launcher data runs without asking. Every write tool and every MCP tool call still asks first."
+  },
   "app.assistant.permission-mode.full-banner": {
     "message": "Full access is on: the assistant runs every tool without asking, including deleting instances and changing launcher settings."
   },
@@ -13160,8 +13169,17 @@
   "app.translation-settings.ai-model": {
     "message": "Text model"
   },
+  "app.translation-settings.ai-model-unavailable": {
+    "message": "The saved text model is currently unavailable. It stays selected until you choose another model."
+  },
   "app.translation-settings.ai-provider": {
     "message": "AI provider"
+  },
+  "app.translation-settings.ai-provider-unavailable": {
+    "message": "The saved AI provider is currently unavailable. It stays selected until you choose another provider."
+  },
+  "app.translation-settings.ai-unavailable": {
+    "message": "AI translation is currently unavailable: AI features are off, or no provider has an enabled model. Your saved AI choice is kept."
   },
   "app.translation-settings.auto-translate": {
     "message": "Translate project pages automatically"

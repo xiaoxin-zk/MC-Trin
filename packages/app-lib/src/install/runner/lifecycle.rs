@@ -79,6 +79,24 @@ pub(super) fn begin_waiting_for_user(
     job_state.record_event(InstallJobEventKind::WaitingForUser { reason });
 }
 
+/// Marks the terminal success state of a job whose finalize step genuinely finished.
+///
+/// `progress.phase` must become `Completed` for every request kind: the old code only did
+/// that for `UpgradeUnmanagedInstance` and left everything else on `Finalizing`, so a
+/// succeeded job rendered a green "Completed" badge next to "正在完成安装" / "Finalizing".
+pub(super) fn mark_job_succeeded(job_state: &mut InstallJobState) {
+    job_state.record_event(InstallJobEventKind::JobSucceeded {
+        instance_id: current_instance_id(job_state),
+    });
+    job_state.progress.phase = InstallPhaseId::Completed;
+    job_state.progress.progress = None;
+    job_state.progress.details = InstallPhaseDetails::Empty;
+    job_state.progress.parallel = None;
+    job_state.error = None;
+    job_state.rollback_error = None;
+    job_state.pause_reason = None;
+}
+
 async fn run_job(job_id: Uuid) -> crate::Result<()> {
     let _metadata_usage = crate::storage::usage::lease().await?;
     let state = State::get().await?;
@@ -211,18 +229,7 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
                 finish_canceled_job(job_id, &mut job_state, &state).await?;
                 return Ok(());
             }
-            job_state.record_event(InstallJobEventKind::JobSucceeded {
-                instance_id: current_instance_id(&job_state),
-            });
-            // The finalize step has genuinely finished here, for every request kind. Leaving
-            // `Finalizing` behind made a succeeded job contradict its own status badge.
-            job_state.progress.phase = InstallPhaseId::Completed;
-            job_state.progress.progress = None;
-            job_state.progress.details = InstallPhaseDetails::Empty;
-            job_state.progress.parallel = None;
-            job_state.error = None;
-            job_state.rollback_error = None;
-            job_state.pause_reason = None;
+            mark_job_succeeded(&mut job_state);
             if !matches!(
                 job_state.request,
                 InstallRequest::ChangeContent { .. }
