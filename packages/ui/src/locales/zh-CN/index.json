@@ -293,6 +293,15 @@
   "collections.label.private": {
     "defaultMessage": "私有"
   },
+  "combobox.no-results": {
+    "defaultMessage": "未找到结果"
+  },
+  "combobox.search-placeholder": {
+    "defaultMessage": "搜索…"
+  },
+  "combobox.select-placeholder": {
+    "defaultMessage": "请选择一个选项"
+  },
   "console.action.collapse": {
     "defaultMessage": "收起"
   },
@@ -2551,6 +2560,12 @@
   },
   "pagination.loading-page": {
     "defaultMessage": "正在加载页面……"
+  },
+  "pagination.next-page": {
+    "defaultMessage": "下一页"
+  },
+  "pagination.previous-page": {
+    "defaultMessage": "上一页"
   },
   "payment-method.amazon_pay": {
     "defaultMessage": "Amazon 支付"

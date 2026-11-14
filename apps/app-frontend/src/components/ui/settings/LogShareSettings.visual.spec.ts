@@ -3,11 +3,22 @@ import '@/test/visual-styles.scss'
 import { mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import chinese from '@/locales/zh-CN/index.json'
 
+import { I18N_INJECTION_KEY } from '../../../../../../packages/ui/src/providers/i18n'
 import LogShareSettings from './LogShareSettings.vue'
+
+/** The real shared Combobox is mounted below, so it needs the app's i18n context. */
+const i18nProvide = {
+    [I18N_INJECTION_KEY as symbol]: {
+        locale: ref('en-US'),
+        t: (key: string) => key,
+        setLocale: () => undefined,
+    },
+}
 
 const calls = vi.hoisted(() => ({
     saveAI: vi.fn(),
@@ -110,7 +121,10 @@ async function render(width = 900, localSetup = false) {
     const wrapper = mount(LogShareSettings, {
         props: { localSetup },
         attachTo: document.body,
-        global: { plugins: [router], provide: { replayOnboarding: async () => {} } },
+        global: {
+            plugins: [router],
+            provide: { replayOnboarding: async () => {}, ...i18nProvide },
+        },
     })
     wrappers.push(wrapper)
     await vi.waitFor(() =>

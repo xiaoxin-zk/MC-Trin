@@ -3,11 +3,22 @@ import '@/test/visual-styles.scss'
 import { mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { ref } from 'vue'
 
 import chinese from '@/locales/zh-CN/index.json'
 
+import { I18N_INJECTION_KEY } from '../../../../../../packages/ui/src/providers/i18n'
 import { diagnosticReport, type NetworkTestResult, resultStatus } from './network-diagnostics'
 import NetworkConnectionSettings from './NetworkConnectionSettings.vue'
+
+/** The real shared Combobox is mounted below, so it needs the app's i18n context. */
+const i18nProvide = {
+    [I18N_INJECTION_KEY as symbol]: {
+        locale: ref('en-US'),
+        t: (key: string) => key,
+        setLocale: () => undefined,
+    },
+}
 
 const calls = vi.hoisted(() => ({ invoke: vi.fn(), chinese: false, clipboard: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: calls.invoke }))
@@ -81,7 +92,10 @@ async function render(theme = 'dark', width = 900) {
         configurable: true,
         value: { writeText: calls.clipboard },
     })
-    const wrapper = mount(NetworkConnectionSettings, { attachTo: document.body })
+    const wrapper = mount(NetworkConnectionSettings, {
+        attachTo: document.body,
+        global: { provide: i18nProvide },
+    })
     wrapper.element.setAttribute(
         'style',
         `width: min(${width}px, 100%); padding: 24px; box-sizing: border-box; background: var(--surface-2)`,

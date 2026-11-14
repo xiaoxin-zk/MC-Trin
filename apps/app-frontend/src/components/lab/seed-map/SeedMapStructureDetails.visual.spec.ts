@@ -3,6 +3,7 @@ import '@/test/visual-styles.scss'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { ref } from 'vue'
 
 import type { SeedMapStructureDetails as StructureDetails } from '@/lab/seed-map/advanced'
 import type { SeedMapFeatureKind } from '@/lab/seed-map/features'
@@ -13,8 +14,18 @@ import type {
 } from '@/lab/seed-map/structure-blocks'
 import { seedMapTemplatePieces } from '@/lab/seed-map/structure-blocks'
 
+import { I18N_INJECTION_KEY } from '../../../../../../packages/ui/src/providers/i18n'
 import SeedMapLayoutPreview from './SeedMapLayoutPreview.vue'
 import SeedMapStructureDetails from './SeedMapStructureDetails.vue'
+
+/** The real shared Combobox is mounted below, so it needs the app's i18n context. */
+const i18nProvide = {
+    [I18N_INJECTION_KEY as symbol]: {
+        locale: ref('en-US'),
+        t: (key: string) => key,
+        setLocale: () => undefined,
+    },
+}
 
 const calls = vi.hoisted(() => ({ details: vi.fn(), loot: vi.fn() }))
 const language = vi.hoisted(() => ({ current: 'en-US' }))
@@ -84,6 +95,7 @@ function render(actions?: string) {
         props: { query, kind: 'village', title: 'Village' },
         slots: actions ? { actions } : {},
         attachTo: document.body,
+        global: { provide: i18nProvide },
     })
     wrappers.push(wrapper)
     ;(wrapper.element as HTMLElement).style.cssText =

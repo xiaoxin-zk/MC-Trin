@@ -7643,6 +7643,12 @@
   "app.lab.tool-count-plural": {
     "message": "{count} tools"
   },
+  "app.lab.tool-filters": {
+    "message": "Lab tool filters"
+  },
+  "app.lab.tools": {
+    "message": "Lab tools"
+  },
   "app.library.context-menu.pin-instance": {
     "message": "Pin in Library"
   },

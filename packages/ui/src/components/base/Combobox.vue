@@ -27,7 +27,7 @@
                 :icon="showSearchIcon ? SearchIcon : undefined"
                 :type="searchType"
                 :name="searchName"
-                :placeholder="searchPlaceholder || placeholder"
+                :placeholder="resolvedSearchPlaceholder"
                 :disabled="disabled"
                 :autocomplete="searchAutocomplete"
                 :autocorrect="searchAutocorrect"
@@ -245,7 +245,7 @@
                         v-else-if="searchQuery || showNoOptionsWhenEmpty"
                         class="p-4 text-center text-sm text-[var(--color-text-tertiary)]"
                     >
-                        {{ noOptionsMessage }}
+                        {{ resolvedNoOptionsMessage }}
                     </div>
 
                     <slot name="dropdown-footer"></slot>
@@ -264,6 +264,7 @@ import { OverlayScrollbars, type PartialOptions } from 'overlayscrollbars'
 import { type Component, computed, nextTick, onUnmounted, ref, useSlots, watch } from 'vue'
 
 import { useDropdownPosition } from '../../composables/dropdown-position'
+import { defineMessages, useVIntl } from '../../composables/i18n'
 import StyledInput from './StyledInput.vue'
 
 export interface ComboboxOption<T> {
@@ -350,15 +351,12 @@ const props = withDefaults(
     }>(),
     {
         width: 'full',
-        placeholder: 'Select an option',
         disabled: false,
         searchable: false,
-        searchPlaceholder: 'Search...',
         listbox: true,
         showChevron: true,
         showIconInSelected: false,
         maxHeight: DEFAULT_MAX_HEIGHT,
-        noOptionsMessage: 'No results found',
         showNoOptionsWhenEmpty: false,
         minSearchLengthToOpen: 0,
         syncWithSelection: true,
@@ -378,6 +376,23 @@ const emit = defineEmits<{
     searchInput: [query: string]
     searchBlur: [query: string]
 }>()
+
+const { formatMessage } = useVIntl()
+
+const messages = defineMessages({
+    selectPlaceholder: {
+        id: 'combobox.select-placeholder',
+        defaultMessage: 'Select an option',
+    },
+    searchPlaceholder: {
+        id: 'combobox.search-placeholder',
+        defaultMessage: 'Search...',
+    },
+    noOptionsMessage: {
+        id: 'combobox.no-results',
+        defaultMessage: 'No results found',
+    },
+})
 
 const slots = useSlots()
 
@@ -452,8 +467,23 @@ const selectedTriggerText = computed(() => {
 
 const placeholderText = computed(() => {
     if (props.displayValue !== undefined) return props.displayValue
-    return props.placeholder
+    return props.placeholder ?? formatMessage(messages.selectPlaceholder)
 })
+
+/**
+ * Replaces the former `searchPlaceholder` prop default, which was the
+ * hard-coded `Search...` literal. The resolution order is unchanged: an
+ * explicit `searchPlaceholder` wins, then this translated default. (The old
+ * `|| placeholder` step was already unreachable, because the removed default
+ * was always truthy, so passing `placeholder` alone never changed this text.)
+ */
+const resolvedSearchPlaceholder = computed(
+    () => props.searchPlaceholder || formatMessage(messages.searchPlaceholder),
+)
+
+const resolvedNoOptionsMessage = computed(
+    () => props.noOptionsMessage ?? formatMessage(messages.noOptionsMessage),
+)
 
 const hasMinimumSearchLength = computed(
     () => !props.searchable || searchQuery.value.trim().length >= props.minSearchLengthToOpen,

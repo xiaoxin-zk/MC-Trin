@@ -374,6 +374,15 @@
   "collections.label.private": {
     "defaultMessage": "Private"
   },
+  "combobox.no-results": {
+    "defaultMessage": "No results found"
+  },
+  "combobox.search-placeholder": {
+    "defaultMessage": "Search..."
+  },
+  "combobox.select-placeholder": {
+    "defaultMessage": "Select an option"
+  },
   "console.action.collapse": {
     "defaultMessage": "Collapse"
   },
@@ -3070,6 +3079,12 @@
   },
   "pagination.loading-page": {
     "defaultMessage": "Loading page…"
+  },
+  "pagination.next-page": {
+    "defaultMessage": "Next page"
+  },
+  "pagination.previous-page": {
+    "defaultMessage": "Previous page"
   },
   "payment-method.amazon_pay": {
     "defaultMessage": "Amazon Pay"

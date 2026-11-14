@@ -11243,6 +11243,12 @@
   "app.lab.tool-count-plural": {
     "message": "{count} 个工具"
   },
+  "app.lab.tool-filters": {
+    "message": "实验室工具筛选"
+  },
+  "app.lab.tools": {
+    "message": "实验室工具"
+  },
   "app.library.context-menu.pin-instance": {
     "message": "在实例库中置顶"
   },

@@ -5,7 +5,7 @@
             type="quiet"
             circular
             icon-only
-            label="Previous Page"
+            :label="formatMessage(messages.previousPage)"
             :href="linkFunction(page - 1)"
             :disabled="loading"
             @click.prevent="!loading && switchPage(page - 1)"
@@ -14,7 +14,7 @@
         </ButtonLink>
         <IconButton
             v-else-if="page > 1"
-            label="Previous Page"
+            :label="formatMessage(messages.previousPage)"
             type="quiet"
             :disabled="loading"
             @click="switchPage(page - 1)"
@@ -99,7 +99,7 @@
             type="quiet"
             circular
             icon-only
-            label="Next Page"
+            :label="formatMessage(messages.nextPage)"
             :href="linkFunction(page + 1)"
             :disabled="loading"
             @click.prevent="!loading && switchPage(page + 1)"
@@ -108,7 +108,7 @@
         </ButtonLink>
         <IconButton
             v-else-if="page !== pages[pages.length - 1]"
-            label="Next Page"
+            :label="formatMessage(messages.nextPage)"
             type="quiet"
             :disabled="loading"
             @click="switchPage(page + 1)"
@@ -152,6 +152,14 @@ const props = withDefaults(
 const { formatMessage } = useVIntl()
 
 const messages = defineMessages({
+    previousPage: {
+        id: 'pagination.previous-page',
+        defaultMessage: 'Previous page',
+    },
+    nextPage: {
+        id: 'pagination.next-page',
+        defaultMessage: 'Next page',
+    },
     goToPage: {
         id: 'pagination.go-to-page',
         defaultMessage: 'Go to page',

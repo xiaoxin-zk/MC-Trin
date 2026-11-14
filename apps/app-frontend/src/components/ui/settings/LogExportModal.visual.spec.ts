@@ -1,8 +1,18 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 
+import { I18N_INJECTION_KEY } from '../../../../../../packages/ui/src/providers/i18n'
 import LogExportModal from './LogExportModal.vue'
+
+/** The real shared Combobox is mounted below, so it needs the app's i18n context. */
+const i18nProvide = {
+    [I18N_INJECTION_KEY as symbol]: {
+        locale: ref('en-US'),
+        t: (key: string) => key,
+        setLocale: () => undefined,
+    },
+}
 
 const calls = vi.hoisted(() => ({
     invoke: vi.fn(),
@@ -53,7 +63,7 @@ function render() {
     }
     calls.save.mockResolvedValue('C:/logs.zip')
     calls.invoke.mockResolvedValue(undefined)
-    const wrapper = mount(LogExportModal)
+    const wrapper = mount(LogExportModal, { global: { provide: i18nProvide } })
     wrappers.push(wrapper)
     return wrapper
 }
