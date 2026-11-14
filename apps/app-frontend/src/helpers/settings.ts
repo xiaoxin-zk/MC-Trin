@@ -287,7 +287,7 @@ function normalizeDownloadSettings(settings: AppSettings & LegacyMirrorSettings)
     settings.sync_features_across_devices ??= false
     settings.show_files_tab_in_instances ??= true
     settings.show_worlds_tab_in_instances ??= true
-    settings.show_screenshots_tab_in_instances ??= false
+    settings.show_screenshots_tab_in_instances ??= true
     settings.show_skin_selector_in_sidebar ??= true
     for (const [key, value] of Object.entries(DEFAULT_FEATURE_FLAGS)) {
         settings.feature_flags[key as FeatureFlag] ??= value

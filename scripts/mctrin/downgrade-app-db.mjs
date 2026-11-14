@@ -53,6 +53,8 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+	// The instance screenshots tab default flip; data only.
+	20261114220000: {},
 	// The assistant's own provider/model pair, separate from crash analysis.
 	20261114120000: { tables: ['assistant_ai_settings'] },
 	// Screenshot gallery preferences now control which existing instances are included; data only.

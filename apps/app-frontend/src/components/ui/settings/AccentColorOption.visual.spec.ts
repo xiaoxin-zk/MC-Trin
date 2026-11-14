@@ -10,7 +10,7 @@ import AccentColorOption from './AccentColorOption.vue'
 const cleanup: (() => void)[] = []
 afterEach(() => cleanup.splice(0).forEach((fn) => fn()))
 
-it('reserves a check column for every label and keeps selection geometry stable in narrow regions', async () => {
+it('keeps the label clear of the corner check and keeps selection geometry stable in narrow regions', async () => {
     for (const label of ['Pink', '自定义强调色', 'Follow the operating system accent color']) {
         const wrapper = await mountThemed(
             AccentColorOption,
@@ -27,12 +27,15 @@ it('reserves a check column for every label and keeps selection geometry stable 
             check.getBoundingClientRect().left,
             button.getBoundingClientRect().height,
         ]
-        expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(
-            check.getBoundingClientRect().left - 7,
-        )
-        expect(check.getBoundingClientRect().right).toBeLessThan(
-            button.getBoundingClientRect().right,
-        )
+        const buttonRect = button.getBoundingClientRect()
+        const textRect = text.getBoundingClientRect()
+        const checkRect = check.getBoundingClientRect()
+
+        // The check is taken out of the flow, so the label column is the only
+        // track and the button's right padding is what keeps text off the check.
+        expect(checkRect.left).toBeGreaterThanOrEqual(textRect.right)
+        expect(checkRect.right).toBeLessThanOrEqual(buttonRect.right)
+        expect(checkRect.top).toBeLessThan(textRect.top + textRect.height / 2)
         expect(getComputedStyle(check).opacity).toBe('0')
         await wrapper.setProps({ selected: true })
         expect(getComputedStyle(check).opacity).toBe('1')
@@ -57,7 +60,7 @@ it('keeps the system description and status separate and preserves disabled acti
             selected: false,
             disabled: true,
             onClick,
-            style: { width: '144px' },
+            style: { width: '168px' },
         },
         'dark',
         { global: { directives: { tooltip: tooltipDirective } } },

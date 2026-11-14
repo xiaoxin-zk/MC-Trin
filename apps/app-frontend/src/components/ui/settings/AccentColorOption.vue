@@ -19,7 +19,7 @@ defineProps<{
         :aria-label="accessibleLabel ?? label"
         :aria-checked="selected"
         :disabled="disabled"
-        class="grid min-w-0 flex-1 grid-cols-[1rem_minmax(0,1fr)_0.875rem] items-center gap-2 overflow-hidden rounded-lg border border-solid px-2 py-2.5 font-semibold transition-[background-color,border-color,color,transform] enabled:active:scale-[0.97]"
+        class="relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-lg border border-solid py-2.5 pl-2 pr-6 font-semibold transition-[background-color,border-color,color,transform] enabled:active:scale-[0.97]"
         :class="
             disabled
                 ? 'cursor-not-allowed border-surface-4 bg-surface-2 text-[var(--color-text-tertiary)] opacity-60'
@@ -29,16 +29,21 @@ defineProps<{
         "
     >
         <span
-            class="size-4 rounded-full ring-2 ring-white/20"
+            class="size-4 shrink-0 rounded-full ring-2 ring-white/20"
             :style="{ background }"
             aria-hidden="true"
         />
-        <span class="flex min-w-0 flex-col text-start leading-tight">
+        <!--
+            The check overlays the top-right corner instead of taking a grid
+            column, and the button's `pr-6` keeps the label clear of it, so the
+            chip spends its width on text instead of a 14px track plus a gap.
+        -->
+        <span class="flex min-w-0 flex-1 flex-col text-start leading-tight">
             <span class="truncate">{{ label }}</span>
             <span v-if="description" class="truncate text-xs font-normal">{{ description }}</span>
         </span>
         <CheckIcon
-            class="size-3.5"
+            class="absolute right-0.5 top-0.5 size-3.5"
             :class="selected ? 'opacity-100' : 'opacity-0'"
             aria-hidden="true"
         />

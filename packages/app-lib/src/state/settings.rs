@@ -227,7 +227,7 @@ pub struct Settings {
     pub show_files_tab_in_instances: bool,
     #[serde(default = "default_true")]
     pub show_worlds_tab_in_instances: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub show_screenshots_tab_in_instances: bool,
     #[serde(default = "default_true")]
     pub show_skin_selector_in_sidebar: bool,

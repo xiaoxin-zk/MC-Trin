@@ -118,6 +118,21 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         label: message('app.appearance-settings.hidden-nav-items.title', 'Navigation items'),
     },
     {
+        id: 'appearance-instance-tabs',
+        categoryId: 'home-navigation',
+        targetId: 'settings-target-appearance-instance-tabs',
+        label: message('app.appearance-settings.instance-tabs.title', 'Instance tabs'),
+        description: message(
+            'app.appearance-settings.instance-tabs.description',
+            'Choose which tabs appear on an instance page.',
+        ),
+        keywords: [
+            message('app.appearance-settings.instance-tabs.files', 'Files tab'),
+            message('app.appearance-settings.instance-tabs.worlds', 'Worlds tab'),
+            message('app.appearance-settings.instance-tabs.screenshots', 'Screenshots tab'),
+        ],
+    },
+    {
         id: 'appearance-home-layout',
         categoryId: 'home-navigation',
         targetId: 'settings-target-appearance-home-layout',

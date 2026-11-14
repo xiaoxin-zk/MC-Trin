@@ -2409,7 +2409,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                     :label="formatMessage(messages.screenshots)"
                     data-onboarding-id="nav-screenshots"
                     to="/screenshots"
-                    :is-primary="(r) => r.path.startsWith('/screenshots')"
+                    :is-primary="
+                        (r) =>
+                            r.path.startsWith('/screenshots') ||
+                            /^\/instance\/[^/]+\/screenshots(?:\/|$)/.test(r.path)
+                    "
                 >
                     <ImagesIcon />
                 </NavButton>

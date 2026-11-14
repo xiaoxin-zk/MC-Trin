@@ -1,81 +1,101 @@
 <template>
-    <nav
-        v-if="filteredLinks.length > 1"
-        ref="scrollContainer"
-        :role="mode === 'local' ? 'tablist' : undefined"
-        class="relative flex w-fit select-none overflow-x-auto rounded-full bg-surface-3 p-1 text-sm font-bold"
-        :class="{ 'shadow-xl border border-solid border-surface-4': mode === 'navigation' }"
-    >
-        <template v-if="mode === 'navigation'">
-            <RouterLink
-                v-for="(link, index) in filteredLinks"
-                v-show="link.shown ?? true"
-                :key="link.href"
-                ref="tabLinkElements"
-                :replace="replace"
-                :to="query ? (link.href ? `?${query}=${link.href}` : '?') : link.href"
-                :data-onboarding-id="link.onboardingId"
-                class="button-animation z-[1] flex flex-row items-center gap-2 px-4 py-2 focus:rounded-full"
-                :class="getSSRFallbackClasses(index)"
-                @click="saveSliderSnapshot(true)"
-                @mouseenter="link.onHover?.()"
-                @focus="link.onHover?.()"
-            >
-                <component
-                    :is="link.icon"
-                    v-if="link.icon"
-                    class="size-5"
-                    :class="getIconClasses(index)"
-                />
-                <span class="text-nowrap" :class="getLabelClasses(index)">
-                    {{ link.label }}
-                </span>
-            </RouterLink>
-        </template>
+    <div v-if="filteredLinks.length > 1" class="relative w-fit max-w-full min-w-0">
+        <nav
+            ref="scrollContainer"
+            :role="mode === 'local' ? 'tablist' : undefined"
+            class="relative flex w-fit max-w-full min-w-0 select-none overflow-x-auto rounded-full bg-surface-3 p-1 text-sm font-bold"
+            :class="{ 'shadow-xl border border-solid border-surface-4': mode === 'navigation' }"
+            @scroll.passive="updateOverflowAffordance"
+        >
+            <template v-if="mode === 'navigation'">
+                <RouterLink
+                    v-for="(link, index) in filteredLinks"
+                    v-show="link.shown ?? true"
+                    :key="link.href"
+                    ref="tabLinkElements"
+                    :replace="replace"
+                    :to="query ? (link.href ? `?${query}=${link.href}` : '?') : link.href"
+                    :data-onboarding-id="link.onboardingId"
+                    class="button-animation z-[1] flex flex-row items-center gap-2 px-4 py-2 focus:rounded-full"
+                    :class="getSSRFallbackClasses(index)"
+                    @click="saveSliderSnapshot(true)"
+                    @mouseenter="link.onHover?.()"
+                    @focus="link.onHover?.()"
+                >
+                    <component
+                        :is="link.icon"
+                        v-if="link.icon"
+                        class="size-5"
+                        :class="getIconClasses(index)"
+                    />
+                    <span class="text-nowrap" :class="getLabelClasses(index)">
+                        {{ link.label }}
+                    </span>
+                </RouterLink>
+            </template>
 
-        <template v-else>
-            <!--
-				A local tab carries an id derived from its href so a consumer can point
-				its panel's aria-labelledby at `nav-tab-<href>`. The href is also the
-				v-for key, so the id is unique without a prefix prop to thread through.
-			-->
-            <button
-                v-for="(link, index) in filteredLinks"
-                v-show="link.shown ?? true"
-                :id="link.href ? `nav-tab-${link.href}` : undefined"
-                :key="link.href"
-                ref="tabLinkElements"
-                type="button"
-                role="tab"
-                :aria-selected="index === currentActiveIndex"
-                class="button-animation z-[1] flex flex-row items-center gap-2 border-0 bg-transparent px-4 py-2 text-inherit hover:cursor-pointer focus:rounded-full"
-                :class="getSSRFallbackClasses(index)"
-                @click="emit('tabClick', index, link)"
-            >
-                <component
-                    :is="link.icon"
-                    v-if="link.icon"
-                    class="size-5"
-                    :class="getIconClasses(index)"
-                />
-                <span class="text-nowrap" :class="getLabelClasses(index)">
-                    {{ link.label }}
-                </span>
-            </button>
-        </template>
+            <template v-else>
+                <!--
+                    A local tab carries an id derived from its href so a consumer can point
+                    its panel's aria-labelledby at `nav-tab-<href>`. The href is also the
+                    v-for key, so the id is unique without a prefix prop to thread through.
+                -->
+                <button
+                    v-for="(link, index) in filteredLinks"
+                    v-show="link.shown ?? true"
+                    :id="link.href ? `nav-tab-${link.href}` : undefined"
+                    :key="link.href"
+                    ref="tabLinkElements"
+                    type="button"
+                    role="tab"
+                    :aria-selected="index === currentActiveIndex"
+                    class="button-animation z-[1] flex flex-row items-center gap-2 border-0 bg-transparent px-4 py-2 text-inherit hover:cursor-pointer focus:rounded-full"
+                    :class="getSSRFallbackClasses(index)"
+                    @click="emit('tabClick', index, link)"
+                >
+                    <component
+                        :is="link.icon"
+                        v-if="link.icon"
+                        class="size-5"
+                        :class="getIconClasses(index)"
+                    />
+                    <span class="text-nowrap" :class="getLabelClasses(index)">
+                        {{ link.label }}
+                    </span>
+                </button>
+            </template>
 
-        <!-- Animated slider background -->
+            <!-- Animated slider background -->
+            <div
+                v-if="sliderReady && currentActiveIndex !== -1"
+                class="pointer-events-none absolute h-[calc(100%-0.5rem)] overflow-hidden rounded-full p-1"
+                :class="[
+                    subpageSelected ? 'bg-surface-4' : 'bg-button-bgSelected',
+                    { 'navtabs-transition': transitionsEnabled },
+                ]"
+                :style="sliderStyle"
+                aria-hidden="true"
+            />
+        </nav>
+
+        <!--
+            Overflow affordance. Items are `text-nowrap`, so at narrow widths the
+            last tab is clipped by the scroll container. These gradients sit
+            outside the scroller (a child would scroll away with the content) and
+            match the pill's own surface so the clipped edge reads as "there is
+            more", not as a rendering bug.
+        -->
         <div
-            v-if="sliderReady && currentActiveIndex !== -1"
-            class="pointer-events-none absolute h-[calc(100%-0.5rem)] overflow-hidden rounded-full p-1"
-            :class="[
-                subpageSelected ? 'bg-surface-4' : 'bg-button-bgSelected',
-                { 'navtabs-transition': transitionsEnabled },
-            ]"
-            :style="sliderStyle"
+            class="pointer-events-none absolute inset-y-1 left-0 z-10 w-8 rounded-l-full bg-gradient-to-r from-surface-3 to-transparent transition-opacity"
+            :class="canScrollLeft ? 'opacity-100' : 'opacity-0'"
             aria-hidden="true"
         />
-    </nav>
+        <div
+            class="pointer-events-none absolute inset-y-1 right-0 z-10 w-8 rounded-r-full bg-gradient-to-l from-surface-3 to-transparent transition-opacity"
+            :class="canScrollRight ? 'opacity-100' : 'opacity-0'"
+            aria-hidden="true"
+        />
+    </div>
 </template>
 
 <script setup lang="ts">
@@ -130,6 +150,25 @@ const emit = defineEmits<{
 const scrollContainer = ref<HTMLElement | null>(null)
 const tabLinkElements = ref<HTMLElement[]>()
 let containerResizeObserver: ResizeObserver | null = null
+
+// Overflow affordance state: the fades only show on edges with hidden content.
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
+function updateOverflowAffordance() {
+    const container = scrollContainer.value
+    if (!container) {
+        canScrollLeft.value = false
+        canScrollRight.value = false
+        return
+    }
+
+    // A one-pixel tolerance keeps sub-pixel widths from flickering the fades on
+    // layouts that technically fit exactly.
+    const maxScrollLeft = container.scrollWidth - container.clientWidth
+    canScrollLeft.value = container.scrollLeft > 1
+    canScrollRight.value = container.scrollLeft < maxScrollLeft - 1
+}
 
 // Slider pos state
 const sliderLeft = ref(4)
@@ -252,13 +291,25 @@ function getTabElement(index: number): HTMLElement | null {
 
 function measureActiveTab() {
     const el = getTabElement(currentActiveIndex.value)
-    if (!el?.offsetParent) return null
-    const parent = el.offsetParent as HTMLElement
+    const container = scrollContainer.value
+    if (!el || !container || !el.offsetParent) return null
+
+    // Both rects live in viewport space, so they share one origin even while
+    // the strip is scrolled; `offsetLeft`/`offsetWidth` mix the item's layout
+    // offset with the parent's border box and drift once the strip scrolls.
+    // `clientLeft`/`clientTop` remove the container border, and `scrollLeft`/
+    // `scrollTop` map back to the containing block the slider is positioned in
+    // (the scrolled padding box), so the pill scrolls with its tab.
+    const containerRect = container.getBoundingClientRect()
+    const tabRect = el.getBoundingClientRect()
+    const left = tabRect.left - containerRect.left - container.clientLeft + container.scrollLeft
+    const top = tabRect.top - containerRect.top - container.clientTop + container.scrollTop
+
     return {
-        left: el.offsetLeft,
-        top: el.offsetTop,
-        right: parent.offsetWidth - el.offsetLeft - el.offsetWidth,
-        bottom: parent.offsetHeight - el.offsetTop - el.offsetHeight,
+        left,
+        top,
+        right: container.clientWidth - left - tabRect.width,
+        bottom: container.clientHeight - top - tabRect.height,
     }
 }
 
@@ -393,6 +444,7 @@ if (restoredSliderSnapshot) {
 }
 
 onMounted(() => {
+    updateOverflowAffordance()
     if (!restoredSliderSnapshot) {
         void updateActiveTab()
     } else {
@@ -407,9 +459,18 @@ watch(
     (el) => {
         containerResizeObserver?.disconnect()
         containerResizeObserver = null
-        if (!el) return
-        containerResizeObserver = new ResizeObserver(() => snapSliderToActiveTab())
+        if (!el) {
+            updateOverflowAffordance()
+            return
+        }
+        // The observer also covers `scrollWidth` changes: label swaps and
+        // `shown` toggles change the item count without resizing the strip.
+        containerResizeObserver = new ResizeObserver(() => {
+            snapSliderToActiveTab()
+            updateOverflowAffordance()
+        })
         containerResizeObserver.observe(el)
+        updateOverflowAffordance()
     },
     { immediate: true },
 )
@@ -451,6 +512,7 @@ watch(
     async () => {
         await nextTick()
         updateActiveTab()
+        updateOverflowAffordance()
     },
     { deep: true },
 )

@@ -731,6 +731,30 @@
   "app.appearance-settings.home-widget-background-opacity.title": {
     "message": "Home widget background opacity"
   },
+  "app.appearance-settings.instance-tabs.description": {
+    "message": "Choose which tabs appear on an instance page."
+  },
+  "app.appearance-settings.instance-tabs.files": {
+    "message": "Files tab"
+  },
+  "app.appearance-settings.instance-tabs.files-description": {
+    "message": "Browse and edit the files inside an instance."
+  },
+  "app.appearance-settings.instance-tabs.screenshots": {
+    "message": "Screenshots tab"
+  },
+  "app.appearance-settings.instance-tabs.screenshots-description": {
+    "message": "Browse the screenshots captured in an instance."
+  },
+  "app.appearance-settings.instance-tabs.title": {
+    "message": "Instance tabs"
+  },
+  "app.appearance-settings.instance-tabs.worlds": {
+    "message": "Worlds tab"
+  },
+  "app.appearance-settings.instance-tabs.worlds-description": {
+    "message": "Browse, import and edit the worlds saved in an instance."
+  },
   "app.appearance-settings.lightweight-mode.description": {
     "message": "Closes the launcher webview after Minecraft starts to reduce memory use. Restore it from the system tray."
   },

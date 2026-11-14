@@ -428,6 +428,38 @@ const messages = defineMessages({
         id: 'app.appearance-settings.hidden-nav-items.locked-default-page',
         defaultMessage: 'This item is your default landing page. Change that first to hide it.',
     },
+    instanceTabsTitle: {
+        id: 'app.appearance-settings.instance-tabs.title',
+        defaultMessage: 'Instance tabs',
+    },
+    instanceTabsDescription: {
+        id: 'app.appearance-settings.instance-tabs.description',
+        defaultMessage: 'Choose which tabs appear on an instance page.',
+    },
+    instanceTabsFiles: {
+        id: 'app.appearance-settings.instance-tabs.files',
+        defaultMessage: 'Files tab',
+    },
+    instanceTabsFilesDescription: {
+        id: 'app.appearance-settings.instance-tabs.files-description',
+        defaultMessage: 'Browse and edit the files inside an instance.',
+    },
+    instanceTabsWorlds: {
+        id: 'app.appearance-settings.instance-tabs.worlds',
+        defaultMessage: 'Worlds tab',
+    },
+    instanceTabsWorldsDescription: {
+        id: 'app.appearance-settings.instance-tabs.worlds-description',
+        defaultMessage: 'Browse, import and edit the worlds saved in an instance.',
+    },
+    instanceTabsScreenshots: {
+        id: 'app.appearance-settings.instance-tabs.screenshots',
+        defaultMessage: 'Screenshots tab',
+    },
+    instanceTabsScreenshotsDescription: {
+        id: 'app.appearance-settings.instance-tabs.screenshots-description',
+        defaultMessage: 'Browse the screenshots captured in an instance.',
+    },
     navGroupBrowse: {
         id: 'app.appearance-settings.hidden-nav-items.group-browse',
         defaultMessage: 'Browse',
@@ -585,6 +617,51 @@ function setNavItemVisible(id: string, visible: boolean) {
     settings.value.hidden_nav_items = [...hidden]
     themeStore.hiddenNavItems = settings.value.hidden_nav_items
 }
+
+/**
+ * Optional instance page tabs. The instance page reads the same three flags from
+ * the settings query, so hiding a tab here removes it from the tab strip there.
+ */
+type InstanceTabSetting =
+    | 'show_files_tab_in_instances'
+    | 'show_worlds_tab_in_instances'
+    | 'show_screenshots_tab_in_instances'
+
+const instanceTabOptions: Array<{
+    key: string
+    setting: InstanceTabSetting
+    label: MessageDescriptor
+    description: MessageDescriptor
+}> = [
+    {
+        key: 'files',
+        setting: 'show_files_tab_in_instances',
+        label: messages.instanceTabsFiles,
+        description: messages.instanceTabsFilesDescription,
+    },
+    {
+        key: 'worlds',
+        setting: 'show_worlds_tab_in_instances',
+        label: messages.instanceTabsWorlds,
+        description: messages.instanceTabsWorldsDescription,
+    },
+    {
+        key: 'screenshots',
+        setting: 'show_screenshots_tab_in_instances',
+        label: messages.instanceTabsScreenshots,
+        description: messages.instanceTabsScreenshotsDescription,
+    },
+]
+
+/** Missing values count as visible, matching the settings defaults. */
+function isInstanceTabVisible(tab: { setting: InstanceTabSetting }) {
+    return settings.value[tab.setting] !== false
+}
+
+function setInstanceTabVisible(tab: { setting: InstanceTabSetting }, visible: boolean) {
+    settings.value[tab.setting] = visible
+}
+
 const customBackgroundPreview = computed(() =>
     settings.value.custom_background_path
         ? convertFileSrc(settings.value.custom_background_path)
@@ -963,7 +1040,7 @@ watch(
                         :label="formatMessage(accentColor.label)"
                         :selected="settings.accent_color === accentColor.value"
                         :background="accentColor.color"
-                        class="basis-[5.75rem]"
+                        class="basis-[10rem]"
                         @click="
                             () => {
                                 themeStore.setAccentColor(accentColor.value)
@@ -988,7 +1065,7 @@ watch(
                         :disabled="themeStore.systemAccentSupported !== true"
                         :selected="isSystemAccent"
                         :background="themeStore.systemAccentColor ?? 'var(--color-green)'"
-                        class="basis-[8.25rem]"
+                        class="basis-[12.5rem]"
                         @click="
                             () => {
                                 themeStore.setAccentColor('system')
@@ -1004,7 +1081,7 @@ watch(
                                 ? customAccentHex
                                 : 'conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #6366f1, #ec4899, #ef4444)'
                         "
-                        class="basis-[6.75rem]"
+                        class="basis-[12.5rem]"
                         @click="applyCustomAccent(customAccentHex)"
                     />
                 </div>
@@ -1581,6 +1658,45 @@ watch(
                                 </label>
                             </div>
                         </div>
+                    </div>
+                </template>
+            </SettingsRow>
+            <SettingsRow stacked>
+                <template #label>
+                    <span id="settings-target-appearance-instance-tabs" tabindex="-1">
+                        {{ formatMessage(messages.instanceTabsTitle) }}
+                    </span>
+                </template>
+                <template #description>{{
+                    formatMessage(messages.instanceTabsDescription)
+                }}</template>
+                <template #control>
+                    <div
+                        class="flex w-full flex-col overflow-hidden rounded-lg border border-solid border-surface-4 bg-surface-3"
+                    >
+                        <label
+                            v-for="tab in instanceTabOptions"
+                            :key="tab.key"
+                            class="flex items-center justify-between gap-3 px-3 py-2"
+                        >
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-sm text-[var(--color-text-primary)]">
+                                    {{ formatMessage(tab.label) }}
+                                </span>
+                                <span class="text-xs text-[var(--color-text-tertiary)]">
+                                    {{ formatMessage(tab.description) }}
+                                </span>
+                            </span>
+                            <Toggle
+                                :id="`instance-tab-${tab.key}`"
+                                :model-value="isInstanceTabVisible(tab)"
+                                @update:model-value="
+                                    (value) => {
+                                        setInstanceTabVisible(tab, !!value)
+                                    }
+                                "
+                            />
+                        </label>
                     </div>
                 </template>
             </SettingsRow>

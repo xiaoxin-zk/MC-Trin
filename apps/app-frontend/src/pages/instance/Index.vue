@@ -290,7 +290,16 @@
         </div>
         <div
             data-onboarding-id="instance-tabs"
-            :class="['px-6', { 'shrink-0': isFixedRender, hidden: isStudioMode }]"
+            :class="[
+                // Sticky inside `.app-viewport` so the strip stays reachable while
+                // a sub-page scrolls. `--dc-panel-bg` is what `.app-contents`
+                // paints as the page, so the strip matches the surface behind it
+                // exactly instead of introducing a surface rung as a band. The
+                // custom/transparent modes repaint a translucent page, so the
+                // rule below swaps this for the same frosted mix they use.
+                'instance-tabs-chrome sticky top-0 z-20 bg-[var(--dc-panel-bg,var(--color-bg))] px-6 pb-2 pt-1',
+                { 'shrink-0': isFixedRender, hidden: isStudioMode },
+            ]"
         >
             <SymlinkInstanceWarning
                 v-if="instance?.symlink_target && !symlinkWarning.isHidden.value"
@@ -420,7 +429,7 @@ import {
     useLoadingBarToken,
     useVIntl,
 } from '@modrinth/ui'
-import { useQueryClient } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import dayjs from 'dayjs'
 import duration from 'dayjs/plugin/duration'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -460,6 +469,7 @@ import {
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { get_by_instance_id } from '@/helpers/process'
 import { createRequestGeneration } from '@/helpers/request-generation'
+import { appSettingsQueryOptions } from '@/helpers/settings'
 import type { GameInstance } from '@/helpers/types'
 import { createInstanceShortcut, showInstanceInFolder } from '@/helpers/utils.js'
 import { refreshWorlds, type ServerStatus } from '@/helpers/worlds'
@@ -581,6 +591,40 @@ watch(
         }
     },
     { immediate: true },
+)
+
+/**
+ * Starts every instance sub-page at the top of `.app-viewport`, the page's
+ * scroll container. The router already resets it on path changes, but the
+ * content tab restores a remembered `scrollTop` after its list renders, and
+ * that write lands after the router's. Doing the reset here, on the sub-page
+ * change itself, keeps the tab strip and the new sub-page's header in view.
+ *
+ * Watching `path` rather than `fullPath` keeps filter and sort query edits from
+ * scrolling the list the user is looking at.
+ *
+ * This cannot fight the content tab's restoration: that restore is gated on its
+ * own `tableItems` watcher plus `nextTick`, only runs for the content sub-page
+ * where a saved offset exists, and is one-shot per mount (`scrollStateRestored`).
+ * This watcher fires on navigation instead — before that `nextTick` write — so
+ * the two never race for the same destination: when the content tab remounts
+ * its restore still lands last and resumes the saved position, and for every
+ * other sub-page this reset is the only writer. Keeping it on the instance page
+ * rather than inside the shared content layout also leaves that layout owning
+ * its per-instance memory.
+ */
+watch(
+    () => displayedInstanceRoute.value.path,
+    () => {
+        document.querySelector<HTMLElement>('.app-viewport')?.scrollTo({ top: 0 })
+    },
+)
+
+const appSettings = useQuery(appSettingsQueryOptions())
+const showFilesTab = computed(() => appSettings.data.value?.show_files_tab_in_instances !== false)
+const showWorldsTab = computed(() => appSettings.data.value?.show_worlds_tab_in_instances !== false)
+const showScreenshotsTab = computed(
+    () => appSettings.data.value?.show_screenshots_tab_in_instances !== false,
 )
 
 function applyServerStatus(status: ServerStatus) {
@@ -772,16 +816,19 @@ const tabs = computed(() => [
         label: formatMessage(messages.filesTab),
         href: `${basePath.value}/files`,
         icon: FolderOpenIcon,
+        shown: showFilesTab.value,
     },
     {
         label: formatMessage(messages.screenshotsTab),
         href: `${basePath.value}/screenshots`,
         icon: ImageIcon,
+        shown: showScreenshotsTab.value,
     },
     {
         label: formatMessage(messages.worldsTab),
         href: `${basePath.value}/worlds`,
         icon: GlobeIcon,
+        shown: showWorldsTab.value,
     },
     {
         label: formatMessage(messages.logsTab),
@@ -1063,5 +1110,20 @@ onUnmounted(() => {
 .app-viewport:has(.instance-fixed-render) .page-transition-layer {
     height: 100%;
     min-height: 0;
+}
+
+/* In the custom-background and transparent-window modes the page behind the
+   strip is translucent, so an opaque `--dc-panel-bg` would punch a flat hole in
+   it. Swap in the same frosted page-surface mix the other sticky page chrome
+   uses; it still hides scrolling rows because the blur composites them away. */
+.app-contents.has-custom-background .instance-tabs-chrome,
+.app-contents.has-transparent-background .instance-tabs-chrome {
+    background-color: color-mix(
+        in srgb,
+        var(--surface-1-opaque, var(--surface-1)) 20%,
+        transparent
+    );
+    backdrop-filter: blur(20px) saturate(115%);
+    -webkit-backdrop-filter: blur(20px) saturate(115%);
 }
 </style>

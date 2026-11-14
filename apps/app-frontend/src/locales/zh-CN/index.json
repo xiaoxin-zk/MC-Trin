@@ -1001,6 +1001,30 @@
   "app.appearance-settings.home-widget-background-opacity.title": {
     "message": "主页小组件背景不透明度"
   },
+  "app.appearance-settings.instance-tabs.description": {
+    "message": "选择实例页面显示哪些标签页。"
+  },
+  "app.appearance-settings.instance-tabs.files": {
+    "message": "文件标签页"
+  },
+  "app.appearance-settings.instance-tabs.files-description": {
+    "message": "浏览并编辑实例内的文件。"
+  },
+  "app.appearance-settings.instance-tabs.screenshots": {
+    "message": "截图标签页"
+  },
+  "app.appearance-settings.instance-tabs.screenshots-description": {
+    "message": "浏览实例中保存的截图。"
+  },
+  "app.appearance-settings.instance-tabs.title": {
+    "message": "实例标签页"
+  },
+  "app.appearance-settings.instance-tabs.worlds": {
+    "message": "世界标签页"
+  },
+  "app.appearance-settings.instance-tabs.worlds-description": {
+    "message": "浏览、导入并编辑实例中的世界。"
+  },
   "app.appearance-settings.lightweight-mode.description": {
     "message": "Minecraft 启动后关闭启动器 Webview 以减少内存占用。可通过系统托盘恢复启动器。"
   },
