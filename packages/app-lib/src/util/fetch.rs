@@ -132,7 +132,7 @@ use url::Url;
 
 mod connection_budget;
 pub(crate) use connection_budget::{
-    NativeConnectionPermit, acquire_native_connection,
+    NativeConnectionPermit, acquire_native_connection, acquire_socket,
     configured_semaphore_limit,
 };
 use connection_budget::{
@@ -811,11 +811,13 @@ impl DownloadClients {
             // beats every concurrency tweak. `pool_max_idle_per_host(0)` used
             // to be applied in automatic mode to keep reqwest's idle sockets
             // from outliving request permits; that traded the whole measured
-            // gain away. The pool is now bounded instead of disabled: 32 idle
-            // sockets per host is enough for the many-small-files paths and is
-            // still far below the per-host admission ceiling, and idle
-            // connections expire after 30 s so a stale socket cannot outlive a
-            // network change.
+            // gain away. The pool is now bounded instead of disabled, and the
+            // bound is clamped to the smallest measured per-host knee rather
+            // than to the many-small-files concurrency knee: idle sockets are
+            // charged to neither socket budget, so they can outlive the install
+            // that opened them, and only the smallest knee is safe for every
+            // authority. Idle connections still expire after 30 s so a stale
+            // socket cannot outlive a network change.
             let builder = builder
                 .pool_max_idle_per_host(FILE_POOL_MAX_IDLE_PER_HOST)
                 .pool_idle_timeout(Some(FILE_POOL_IDLE_TIMEOUT));
@@ -4876,11 +4878,8 @@ async fn download_segment(
                             < MAX_TAIL_HEDGES_PER_FILE;
                     if hedge_reserved {
                         let global_permit = TAIL_HEDGE_SEMAPHORE.try_acquire();
-                        let connection_permit = try_acquire_native_connection(
-                            route,
-                            semaphore,
-                            Some(total_size),
-                        );
+                        let connection_permit =
+                            try_acquire_native_connection(route, semaphore);
                         if let (Ok(_global_permit), Some(_connection_permit)) =
                             (global_permit, connection_permit)
                         {
@@ -5348,7 +5347,7 @@ async fn try_segmented_download(
             reason: FETCH_CONFIGURED_CONNECTION_LIMIT_IS_ONE,
         };
     }
-    let permits = match acquire_initial_segment_permits(
+    let (_host_permit, permits) = match acquire_initial_segment_permits(
         route,
         semaphore,
         requested_initial_count,
@@ -5356,7 +5355,7 @@ async fn try_segmented_download(
     )
     .await
     {
-        Ok(permits) => permits,
+        Ok(admitted) => admitted,
         Err(error) => return SegmentedDownloadOutcome::Fatal(error),
     };
     let mut cleanup_guard =
@@ -5662,7 +5661,7 @@ async fn try_segmented_download(
                         .filter(|range| range.is_active())
                         .max_by_key(|range| range.remaining())
                         .cloned() else { break; };
-                    let Some(permit) = try_acquire_native_connection(route, semaphore, Some(size)) else { break; };
+                    let Some(permit) = try_acquire_native_connection(route, semaphore) else { break; };
                     let Some(new_range) = range.split_tail(next_range_index) else { break; };
                     tracing::debug!(
                         original_url = %sanitize_url_for_log(&route.url),
@@ -7534,6 +7533,14 @@ async fn run_native_route_attempts(
             .size
             .unwrap_or(starting_size.saturating_add(response_length));
         let transfer_started = Instant::now();
+        // Bytes belong to the host that *served* them, so the meter is built
+        // from the final hop, never the requested URL: a redirector name here
+        // would credit a node's throughput to a metadata endpoint.
+        let authority_meter =
+            super::download::host_admission::TransferMeter::for_url(
+                &final_url,
+                route.proxy,
+            );
         let mut downloaded = starting_size;
         let mut batch_tail =
             super::download::h2_receive::BatchTailWindow::new(transfer_started);
@@ -7606,6 +7613,14 @@ async fn run_native_route_attempts(
                     request.transfer_counters.commit(starting_size, downloaded.saturating_sub(file.pending_bytes()));
                     if let Some(state) = crate::State::get_if_initialized() {
                         state.record_download_bytes(chunk.len() as u64);
+                    }
+                    // The host's observed rate is measured from the bytes it
+                    // actually delivered. This per-chunk meter is the only place
+                    // that happens on the plain path; `record_completion` does
+                    // not add the total again, precisely so the two do not
+                    // double-count.
+                    if let Some(meter) = &authority_meter {
+                        meter.record(chunk.len() as u64);
                     }
                     let persisted = downloaded.saturating_sub(file.pending_bytes());
                     if progress_gate.should_report(persisted, total_size) {

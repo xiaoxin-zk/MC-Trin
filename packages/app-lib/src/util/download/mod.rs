@@ -5,6 +5,7 @@
 //! applied uniformly to every download.
 
 pub(crate) mod authority_scheduler;
+pub(crate) mod bounded_table;
 pub(crate) mod constants;
 pub mod custom_sources;
 pub(crate) mod diagnostics;

@@ -10,7 +10,7 @@ use crate::util::download::constants::{
 use crate::util::fetch::{DownloadRoute, ProxyPolicy, ResourceClass};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -315,6 +315,8 @@ const OBJECT_MISS_MEMORY_CAPACITY: usize = 8192;
 static OBJECT_MISSES_LOADED: tokio::sync::OnceCell<()> =
     tokio::sync::OnceCell::const_new();
 static OBJECT_MISS_WRITE_SCHEDULED: AtomicBool = AtomicBool::new(false);
+/// Bumped by every recorded miss so a write in flight knows it is stale.
+static OBJECT_MISS_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// File name under the settings directory.
 const OBJECT_MISS_FILE_NAME: &str = "download_object_misses.json";
@@ -426,6 +428,10 @@ async fn load_object_misses(path: &std::path::Path) {
 }
 
 fn schedule_object_miss_write() {
+    // Bump before anything else so a miss recorded while the write is in flight
+    // is never lost: the writer compares the generation it captured with the
+    // current one and loops when they differ.
+    OBJECT_MISS_GENERATION.fetch_add(1, Ordering::AcqRel);
     let Ok(runtime) = tokio::runtime::Handle::try_current() else {
         return;
     };
@@ -433,14 +439,24 @@ fn schedule_object_miss_write() {
         return;
     }
     runtime.spawn(async {
-        tokio::time::sleep(OBJECT_MISS_WRITE_DELAY).await;
-        if let Err(error) = write_object_misses().await {
-            tracing::debug!(
-                %error,
-                "Failed to persist download object-miss memo"
-            );
+        loop {
+            let generation = OBJECT_MISS_GENERATION.load(Ordering::Acquire);
+            tokio::time::sleep(OBJECT_MISS_WRITE_DELAY).await;
+            if let Err(error) = write_object_misses().await {
+                tracing::debug!(
+                    %error,
+                    "Failed to persist download object-miss memo"
+                );
+            }
+            if OBJECT_MISS_GENERATION.load(Ordering::Acquire) == generation {
+                OBJECT_MISS_WRITE_SCHEDULED.store(false, Ordering::Release);
+                if OBJECT_MISS_GENERATION.load(Ordering::Acquire) == generation
+                    || OBJECT_MISS_WRITE_SCHEDULED.swap(true, Ordering::AcqRel)
+                {
+                    break;
+                }
+            }
         }
-        OBJECT_MISS_WRITE_SCHEDULED.store(false, Ordering::Release);
     });
 }
 
@@ -501,7 +517,20 @@ pub(crate) fn remember_object_miss(route_url: &str) {
     if misses.len() >= OBJECT_MISS_MEMORY_CAPACITY {
         prune_object_misses(&mut misses);
         if misses.len() >= OBJECT_MISS_MEMORY_CAPACITY {
-            misses.clear();
+            // Evict by age rather than clearing: the newest learnings are the
+            // ones the current install will ask about again, so dropping the
+            // whole memo would re-pay a guaranteed `404` for every path it just
+            // learned.
+            let excess = misses.len() + 1 - OBJECT_MISS_MEMORY_CAPACITY;
+            let mut oldest: Vec<(String, Instant)> = misses
+                .iter()
+                .map(|(key, learned_at)| (key.clone(), *learned_at))
+                .collect();
+            // `Instant` is monotonic and only comparable, so sort oldest first.
+            oldest.sort_unstable_by_key(|(_, learned_at)| *learned_at);
+            for (key, _) in oldest.into_iter().take(excess) {
+                misses.remove(&key);
+            }
         }
     }
     misses.insert(key, Instant::now());

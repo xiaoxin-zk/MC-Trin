@@ -113,10 +113,6 @@ pub(crate) struct H2TransferActivity {
 }
 
 impl H2TransferActivity {
-    pub(crate) fn begin() -> Self {
-        Self::for_transfer(None, crate::util::fetch::ProxyPolicy::System)
-    }
-
     /// Attributes bytes to the host that delivers them.
     ///
     /// `url` must be the *final* URL: a redirector's name here would charge a
@@ -125,12 +121,30 @@ impl H2TransferActivity {
         url: Option<&str>,
         proxy: crate::util::fetch::ProxyPolicy,
     ) -> Self {
+        let authority = url.and_then(|url| {
+            super::host_admission::TransferMeter::for_url(url, proxy)
+        });
+        Self::with_meter(authority)
+    }
+
+    /// Attributes bytes through an already-resolved meter.
+    ///
+    /// Used where the serving identity is known before the transfer starts — the
+    /// multi-range plan resolves it once from the connection it will use, so
+    /// every worker charges the same host window instead of recomputing it.
+    pub(crate) fn for_meter(
+        meter: Option<&super::host_admission::TransferMeter>,
+    ) -> Self {
+        Self::with_meter(meter.cloned())
+    }
+
+    fn with_meter(
+        authority: Option<super::host_admission::TransferMeter>,
+    ) -> Self {
         Self {
             _activity: crate::State::get_if_initialized()
                 .map(|state| state.begin_download_connection()),
-            authority: url.and_then(|url| {
-                super::host_admission::TransferMeter::for_url(url, proxy)
-            }),
+            authority,
         }
     }
 

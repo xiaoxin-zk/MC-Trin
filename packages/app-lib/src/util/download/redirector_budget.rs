@@ -72,8 +72,6 @@ struct Bucket {
     /// Short-window tokens: ten per sixty seconds.
     tokens: f64,
     last_refill: Instant,
-    /// Authoritative window start announced by `x-ratelimit-reset-short`.
-    announced_reset: Option<Instant>,
     long_tokens: f64,
     long_started: Instant,
     parked_until: Option<Instant>,
@@ -89,7 +87,6 @@ impl Bucket {
         Self {
             tokens: REDIRECTOR_TOKEN_CAPACITY as f64,
             last_refill: now,
-            announced_reset: None,
             long_tokens: REDIRECTOR_LONG_BUCKET_CAPACITY as f64,
             long_started: now,
             parked_until: None,
@@ -185,6 +182,9 @@ fn bucket_key(host: &str, proxy: ProxyPolicy) -> BucketKey {
     }
 }
 
+/// Bounded map of redirector buckets.
+const BUCKET_TABLE_CAPACITY: usize = 64;
+
 fn with_bucket<R>(
     host: &str,
     proxy: ProxyPolicy,
@@ -192,16 +192,40 @@ fn with_bucket<R>(
     f: impl FnOnce(&mut Bucket) -> R,
 ) -> R {
     let mut buckets = BUCKETS.lock();
-    if buckets.len() >= 64 {
+    let key = bucket_key(host, proxy);
+    if let Some(bucket) = buckets.get_mut(&key) {
+        return f(bucket);
+    }
+    if buckets.len() >= BUCKET_TABLE_CAPACITY {
         buckets.retain(|_, bucket| {
             bucket.parked_until.is_some_and(|until| until > now)
                 || now.saturating_duration_since(bucket.last_refill)
                     < REDIRECTOR_MAX_PARK
         });
     }
-    let bucket = buckets
-        .entry(bucket_key(host, proxy))
-        .or_insert_with(|| Bucket::new(now));
+    if buckets.len() >= BUCKET_TABLE_CAPACITY
+        && let Some(victim) = buckets
+            .iter()
+            .filter(|(_, bucket)| {
+                // A parked bucket carries the authority's ban; dropping it
+                // would let the next request probe a blackholed origin again.
+                !bucket.parked_until.is_some_and(|until| until > now)
+            })
+            .min_by_key(|(_, bucket)| bucket.last_refill)
+            .map(|(key, _)| key.clone())
+    {
+        buckets.remove(&victim);
+    }
+    if buckets.len() >= BUCKET_TABLE_CAPACITY {
+        // Every entry is parked: a new authority gets a transient bucket that
+        // still paces its own requests but is not remembered.
+        tracing::debug!(
+            capacity = BUCKET_TABLE_CAPACITY,
+            "Redirector bucket table is full of parked authorities"
+        );
+        return f(&mut Bucket::new(now));
+    }
+    let bucket = buckets.entry(key).or_insert_with(|| Bucket::new(now));
     f(bucket)
 }
 
@@ -243,12 +267,16 @@ fn try_acquire_at(
     })
 }
 
-/// Waits at most [`REDIRECTOR_WAIT`] for a token.
+/// Waits for a token, but only for as long as the token is actually worth.
 ///
 /// A redirector is never the only route for Minecraft libraries or assets, so
 /// waiting a whole refill window would stall an install for a minute to save a
-/// metadata request. An exhausted window is reported as a route failure and
-/// the caller moves to the official host.
+/// metadata request. The wait is therefore precise: if the shortfall is within
+/// [`REDIRECTOR_WAIT`] the caller sleeps exactly that and retries once, which
+/// succeeds because the bucket refills continuously. If the shortfall is longer
+/// than that — the usual case at a full window, where one token is ~6 s away —
+/// the wait is pointless, so the route is reported as exhausted immediately and
+/// the caller moves to the official host instead of burning the full timeout.
 pub(crate) async fn acquire(
     host: &str,
     proxy: ProxyPolicy,
@@ -259,10 +287,27 @@ pub(crate) async fn acquire(
             denied @ (RedirectorDenied::BulkPlanRefused
             | RedirectorDenied::LongBucketExhausted),
         ) => Err(denied),
-        Err(denied) => {
-            let wait = denied.retry_after().unwrap_or(REDIRECTOR_WAIT);
-            tokio::time::sleep(wait.min(REDIRECTOR_WAIT)).await;
-            try_acquire(host, proxy)
+        Err(denied @ RedirectorDenied::Parked(_)) => Err(denied),
+        Err(RedirectorDenied::Exhausted(needed)) => {
+            if needed > REDIRECTOR_WAIT {
+                return Err(RedirectorDenied::Exhausted(needed));
+            }
+            // Sleep the real shortfall (plus a token's worth of slack so the
+            // bucket cannot be a fraction short of 1.0 on the retry) rather
+            // than a fixed slice that almost always undershoots.
+            tokio::time::sleep(needed + REDIRECTOR_WAIT / 4).await;
+            let retried = try_acquire(host, proxy);
+            if let Err(denied) = &retried
+                && let Some(after) = denied.retry_after()
+            {
+                tracing::debug!(
+                    host,
+                    retry_after_secs = after.as_secs_f32(),
+                    "Redirector metadata budget still exhausted after waiting; \
+                     the caller must fall back to an official host"
+                );
+            }
+            retried
         }
     }
 }
@@ -327,14 +372,16 @@ fn apply_announced(bucket: &mut Bucket, headers: &HeaderMap, now: Instant) {
         let remaining = remaining.min(limit) as f64;
         bucket.tokens = remaining;
     }
-    if let Some(reset) = headers
+    if headers
         .get(REDIRECTOR_RATELIMIT_RESET_SHORT)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.trim().parse::<u64>().ok())
+        .is_some()
     {
-        // The header is a window length in seconds; the window restarts from
-        // this response, which is exactly the semantics of a fixed window.
-        bucket.announced_reset = Some(now + Duration::from_secs(reset));
+        // The header is a window length in seconds and the window restarts
+        // from this response, which is exactly the semantics of a fixed window:
+        // the refill clock is reset so no stale elapsed time is credited to the
+        // remaining count that `x-ratelimit-remaining-short` just announced.
         bucket.last_refill = now;
     }
 }
@@ -351,7 +398,22 @@ pub(crate) fn note_response(
     status: reqwest::StatusCode,
     headers: &HeaderMap,
 ) {
-    let now = Instant::now();
+    note_response_at(host, proxy, status, headers, Instant::now());
+}
+
+/// [`note_response`] against an explicit clock.
+///
+/// The park deadline is an instant, so the period it covers can only be checked
+/// against the instant the announcement was recorded. Reading the wall clock
+/// here and querying from a different one made the announced period look longer
+/// than it is by exactly the time between the two readings.
+fn note_response_at(
+    host: &str,
+    proxy: ProxyPolicy,
+    status: reqwest::StatusCode,
+    headers: &HeaderMap,
+    now: Instant,
+) {
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         let duration =
             parse_retry_after_short(headers).unwrap_or(REDIRECTOR_DEFAULT_PARK);
@@ -361,7 +423,7 @@ pub(crate) fn note_response(
         });
         tracing::debug!(
             host,
-            byte_limit = byte_limit(host, proxy),
+            byte_limit = byte_limit_at(host, proxy, now),
             "Redirector rate limited; halving its byte allowance"
         );
         return;
@@ -382,7 +444,10 @@ pub(crate) fn note_response(
 /// [`acquire`] because a single file GET is one token either way: the halving
 /// exists to stop a wide batch from re-filling the window it just overran.
 pub(crate) fn byte_limit(host: &str, proxy: ProxyPolicy) -> usize {
-    let now = Instant::now();
+    byte_limit_at(host, proxy, Instant::now())
+}
+
+fn byte_limit_at(host: &str, proxy: ProxyPolicy, now: Instant) -> usize {
     with_bucket(host, proxy, now, |bucket| bucket.byte_limit)
 }
 
@@ -544,21 +609,28 @@ mod tests {
         clear_for_test();
         let now = Instant::now();
         let host = "parked.example";
-        note_response(
+        // The park deadline is an instant, so the announcement has to be
+        // recorded against the same clock the assertion queries: reading two
+        // wall clocks would add the gap between them to the announced period.
+        note_response_at(
             host,
             ProxyPolicy::Direct,
             reqwest::StatusCode::TOO_MANY_REQUESTS,
             &headers(&[("retry-after-short", "62")]),
+            now,
         );
         assert_eq!(
-            byte_limit(host, ProxyPolicy::Direct),
+            byte_limit_at(host, ProxyPolicy::Direct, now),
             REDIRECTOR_TOKEN_CAPACITY / 2
         );
         let denied =
             try_acquire_at(host, ProxyPolicy::Direct, now).unwrap_err();
         assert!(matches!(denied, RedirectorDenied::Parked(_)));
-        assert!(denied.retry_after().unwrap() <= Duration::from_secs(62));
-        assert!(denied.retry_after().unwrap() > Duration::from_secs(60));
+        assert_eq!(
+            denied.retry_after(),
+            Some(Duration::from_secs(62)),
+            "the announced period is the park, neither longer nor shorter"
+        );
         // The park expires on its own; it is not a permanent ban.
         assert!(
             try_acquire_at(

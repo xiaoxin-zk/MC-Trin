@@ -211,9 +211,23 @@ pub(crate) const FILE_H2_KEEPALIVE: Duration = Duration::from_secs(15);
 ///
 /// The many-small-files workload measured 1.73 files/s with a fresh connection
 /// per file and 8.85 files/s on keep-alive, so the pool must not be disabled.
-/// 32 is above the measured knee of a 400-file batch (N=32, 178.9 files/s) and
-/// below every per-host admission ceiling.
-pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 32;
+///
+/// The value is clamped to [`HOST_CONCURRENCY_CAP_MEASURED_MIN`], not to the
+/// many-small-files knee of 32. Idle sockets are charged against neither socket
+/// budget — [`super::native_budget`] and [`super::host_admission`] only count
+/// sockets that carry a transfer — so whatever this allows can remain open on a
+/// host after the install that opened them has finished. Eight is the smallest
+/// measured knee in the table (`cmcc.mirrors.ustc.edu.cn` answers
+/// `ConnectionRefused` from sixteen up, 731 RSTs at N=96), which makes it the
+/// only value that is safe for every authority the launcher talks to. The
+/// keep-alive win that motivated the pool survives at eight; the difference
+/// between eight and thirty-two idle sockets is the number of sockets a burst
+/// has to re-open, not the number it may run at once.
+pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 8;
+const _: () = assert!(
+    FILE_POOL_MAX_IDLE_PER_HOST <= HOST_CONCURRENCY_CAP_MEASURED_MIN,
+    "idle sockets must not exceed the smallest measured per-host knee"
+);
 /// Idle sockets expire after this long so a network change (or a proxy
 /// switch) cannot strand a connection that will only fail on next use.
 pub(crate) const FILE_POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -310,6 +324,13 @@ pub(crate) const HOST_CONCURRENCY_CAP_BULK: usize = 128;
 /// that was never measured therefore keeps that measured-safe number rather
 /// than being handed a ceiling nothing in this build can fund.
 pub(crate) const HOST_CONCURRENCY_CAP_UNMEASURED: usize = 64;
+/// The smallest per-host knee in the measured table.
+///
+/// `cmcc.mirrors.ustc.edu.cn` answers `ConnectionRefused` from sixteen up and
+/// produced 731 RSTs at N=96; `host_cap` therefore returns 8 for it. Anything
+/// that must be safe for *every* authority without knowing which host it is —
+/// the shared keep-alive pool is the one such setting — has to fit inside this.
+pub(crate) const HOST_CONCURRENCY_CAP_MEASURED_MIN: usize = 8;
 /// p90 TTFB may grow to this percentage of the host's own baseline before the
 /// small-object knee is considered reached.
 pub(crate) const HOST_CONCURRENCY_LATENCY_RATIO_PERCENT: u128 = 125;

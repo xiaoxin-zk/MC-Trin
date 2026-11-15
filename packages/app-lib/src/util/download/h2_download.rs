@@ -757,6 +757,20 @@ async fn single_stream(
     )
     .await?;
 
+    // The serving host earns connections from this transfer exactly as it does
+    // on the plain and asset-batch paths: its own TTFB and its own bytes. The
+    // call has to live here because `H2DownloadOutcome::Completed` returns to
+    // the caller before the legacy path's completion is ever reached, so
+    // without it a warm H2 pool — the ordinary case — never fed the controller
+    // and every host stayed pinned at its cold-start limit.
+    super::host_admission::record_completion(
+        uri_text.as_str(),
+        route.proxy,
+        Some(downloaded),
+        transfer_started.elapsed(),
+        downloaded,
+    );
+
     Ok(DownloadResult {
         path: destination.to_path_buf(),
         url: uri.to_string(),

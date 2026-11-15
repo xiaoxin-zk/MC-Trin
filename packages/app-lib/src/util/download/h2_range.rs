@@ -73,6 +73,16 @@ trait RangeTransport: Sync {
     ) -> bool {
         false
     }
+
+    /// Admission meter for the authority that serves this transport's bytes.
+    ///
+    /// Range bytes must be charged to the host that delivers them, or the host
+    /// controller never sees the multi-range path and that host's measurement
+    /// window stays empty. `None` means the transport cannot name a serving
+    /// identity, in which case no admission policy is charged.
+    fn meter(&self) -> Option<super::host_admission::TransferMeter> {
+        None
+    }
 }
 
 struct RangeIdentity {
@@ -105,6 +115,13 @@ impl<'a> RangeResponse<'a> {
     }
 }
 
+/// One range plan's transport, plus the identity its bytes are charged to.
+///
+/// `h2_authority` is the authority the shared HTTP/2 connection was established
+/// to, recorded at construction. It is how a range worker charges its bytes to
+/// the host that actually serves them even when `route.url` named a redirector;
+/// `None` for the resume path, which has no connection and falls back to the
+/// route's own authority.
 struct NativeRangeTransport<'a> {
     uri: Uri,
     request: &'a DownloadRequest,
@@ -114,6 +131,7 @@ struct NativeRangeTransport<'a> {
     fallback_budget: fetch::FetchSemaphore,
     used_http1: std::sync::atomic::AtomicBool,
     protocol_failed: std::sync::atomic::AtomicBool,
+    h2_authority: Option<String>,
 }
 
 #[async_trait]
@@ -245,13 +263,11 @@ impl RangeTransport for NativeRangeTransport<'_> {
             });
         }
         self.used_http1.store(true, Ordering::Relaxed);
-        let semaphore = self.semaphore.unwrap_or(&self.fallback_budget);
         let permit = tokio::time::timeout(
             RESOURCE_WAIT_TIMEOUT,
-            fetch::acquire_native_connection(
+            fetch::acquire_socket(
                 self.route,
-                semaphore,
-                Some(self.total_size),
+                self.semaphore.unwrap_or(&self.fallback_budget),
             ),
         )
         .await
@@ -348,6 +364,25 @@ impl RangeTransport for NativeRangeTransport<'_> {
         }
     }
 
+    /// Admission meter for the authority this transport's sockets land on.
+    ///
+    /// The HTTP/2 connection is keyed by the authority it was established to, so
+    /// that — not `route.url` — is the host actually serving the bytes: a
+    /// redirector in `route.url` would otherwise be charged with a node's
+    /// throughput. Before the first connection the requested authority is the
+    /// only name known, which matches how [`super::host_admission::acquire`]
+    /// admits the transfer in the first place.
+    fn meter(&self) -> Option<super::host_admission::TransferMeter> {
+        let authority = self
+            .h2_authority
+            .clone()
+            .or_else(|| fetch::url_authority(&self.route.url))?;
+        super::host_admission::TransferMeter::for_url(
+            &format!("https://{authority}"),
+            self.route.proxy,
+        )
+    }
+
     fn on_slow(
         &self,
         identity: &RangeIdentity,
@@ -409,7 +444,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
 }
 
 pub(crate) async fn download(
-    _connection: &Arc<SharedH2Connection>,
+    connection: &Arc<SharedH2Connection>,
     uri: &Uri,
     request: &DownloadRequest,
     route: &DownloadRoute,
@@ -428,6 +463,7 @@ pub(crate) async fn download(
         fallback_budget: fetch::FetchSemaphore(tokio::sync::Semaphore::new(8)),
         used_http1: AtomicBool::default(),
         protocol_failed: AtomicBool::default(),
+        h2_authority: Some(connection.serving_authority().to_string()),
     };
     let started = std::time::Instant::now();
     let outcome = run_download(
@@ -505,6 +541,7 @@ pub(crate) async fn resume_http1(
         fallback_budget: fetch::FetchSemaphore(tokio::sync::Semaphore::new(8)),
         used_http1: AtomicBool::default(),
         protocol_failed: AtomicBool::default(),
+        h2_authority: None,
     };
     Ok(Some(
         run_download(
@@ -616,6 +653,9 @@ async fn run_download(
         AtomicU64::new(ranges.iter().map(|range| range.written).sum());
     let reported = Mutex::new(super::h2_receive::H2ProgressGate::new(size));
     let workers = concurrency.clamp(1, H2_RANGE_MAX_WORKERS);
+    // One meter per plan, shared by every range worker: the identity is the
+    // whole plan's serving host, so every worker charges the same window.
+    let meter = transport.meter();
     let mut tasks = futures::stream::iter(ranges.into_iter().enumerate())
         .map(|(index, range)| {
             recover_range(
@@ -629,6 +669,7 @@ async fn run_download(
                 &downloaded,
                 &reported,
                 size,
+                meter.as_ref(),
             )
         })
         .buffer_unordered(workers);
@@ -723,6 +764,7 @@ async fn recover_range(
     downloaded: &AtomicU64,
     reported: &Mutex<super::h2_receive::H2ProgressGate>,
     total_size: u64,
+    meter: Option<&super::host_admission::TransferMeter>,
 ) -> Result<(), H2DownloadFailure> {
     if range.start + range.written == range.end {
         return Ok(());
@@ -736,7 +778,9 @@ async fn recover_range(
         .open_range(offset, range.end)
         .await
         .map_err(|_| H2DownloadFailure::Io)?;
-    let activity = super::h2_receive::H2TransferActivity::begin();
+    // The plan's serving host, so range bytes are charged to it: without an
+    // identity here the multi-range path delivered bytes to no host's window.
+    let activity = super::h2_receive::H2TransferActivity::for_meter(meter);
     let mut last_checkpoint = offset;
     let mut last_failure = H2DownloadFailure::Protocol;
     for attempt in 0..H2_RANGE_RETRY_ATTEMPTS {

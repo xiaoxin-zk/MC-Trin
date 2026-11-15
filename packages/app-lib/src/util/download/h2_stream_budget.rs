@@ -23,12 +23,12 @@
 
 use crate::util::fetch::{DownloadRoute, ProxyPolicy};
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::{
     AcquireError, OwnedSemaphorePermit, Semaphore, SemaphorePermit,
 };
 
+use super::bounded_table::BoundedTable;
 use super::constants::{
     ASSET_RESOURCE_WAIT_TIMEOUT, MAX_ASSET_H2_STREAMS_PER_AUTHORITY,
     MAX_H2_STREAMS_PER_AUTHORITY, RESOURCE_WAIT_TIMEOUT,
@@ -42,9 +42,20 @@ struct AuthorityKey {
     asset: bool,
 }
 
+const STREAM_BUDGET_TABLE_CAPACITY: usize = 256;
+
 static AUTHORITY_BUDGETS: LazyLock<
-    Mutex<HashMap<AuthorityKey, Arc<Semaphore>>>,
-> = LazyLock::new(|| Mutex::new(HashMap::new()));
+    Mutex<BoundedTable<AuthorityKey, Arc<Semaphore>>>,
+> = LazyLock::new(|| {
+    Mutex::new(BoundedTable::new(STREAM_BUDGET_TABLE_CAPACITY))
+});
+
+/// A stream budget may be forgotten once no permit holds it: an evicted budget
+/// whose permits are still open would admit a second full allowance for the
+/// same authority.
+fn budget_is_droppable(budget: &Arc<Semaphore>) -> bool {
+    Arc::strong_count(budget) == 1
+}
 
 pub(crate) struct H2StreamPermit {
     _authority: Option<OwnedSemaphorePermit>,
@@ -110,21 +121,17 @@ fn budget_for(route: &DownloadRoute, asset: bool) -> Option<Arc<Semaphore>> {
         asset,
     };
     let mut budgets = AUTHORITY_BUDGETS.lock();
-    if budgets.len() >= 256 {
-        budgets.retain(|_, budget| Arc::strong_count(budget) > 1);
-    }
-    Some(
-        budgets
-            .entry(key)
-            .or_insert_with(|| {
-                Arc::new(Semaphore::new(if asset {
-                    MAX_ASSET_H2_STREAMS_PER_AUTHORITY
-                } else {
-                    MAX_H2_STREAMS_PER_AUTHORITY
-                }))
-            })
-            .clone(),
-    )
+    Some(budgets.get_or_insert_with(
+        key,
+        || {
+            Arc::new(Semaphore::new(if asset {
+                MAX_ASSET_H2_STREAMS_PER_AUTHORITY
+            } else {
+                MAX_H2_STREAMS_PER_AUTHORITY
+            }))
+        },
+        budget_is_droppable,
+    ))
 }
 
 /// Admits one multiplexed stream against both budgets.

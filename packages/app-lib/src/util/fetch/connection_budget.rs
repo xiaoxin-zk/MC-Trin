@@ -60,13 +60,37 @@ pub(crate) fn configured_semaphore_limit(semaphore: &FetchSemaphore) -> usize {
     available
 }
 
+/// Admits one file's range plan: the host's transfer slot plus one socket per
+/// range.
+///
+/// The host slot is charged **once per file**, not once per range. A range is a
+/// socket, and sockets are what [`native_budget`] bounds; charging each range
+/// against the learned transfer limit would re-impose the cold-start limit of
+/// four on every range plan and turn a 200 MB archive into a four-way download,
+/// which is exactly what `host_admission::capacity` exists to avoid. The slot
+/// must outlive the plan, so it is returned separately for the caller to hold.
 pub(super) async fn acquire_initial_segment_permits<'a>(
     route: &DownloadRoute,
     semaphore: &'a FetchSemaphore,
     count: usize,
     size: Option<u64>,
-) -> crate::Result<Vec<NativeConnectionPermit<'a>>> {
+) -> crate::Result<(
+    crate::util::download::host_admission::HostPermit,
+    Vec<NativeConnectionPermit<'a>>,
+)> {
     let queue_started = Instant::now();
+    let host = crate::util::download::host_admission::acquire(
+        route,
+        size,
+        RESOURCE_WAIT_TIMEOUT,
+    )
+    .await
+    .map_err(|error| {
+        crate::Error::from(crate::ErrorKind::NetworkError(format!(
+            "{}: {error}",
+            route.url
+        )))
+    })?;
     // Start with the available share instead of waiting for an entire batch.
     // The scheduler retains its configured ceiling and grows as slots return.
     let count = count
@@ -81,21 +105,10 @@ pub(super) async fn acquire_initial_segment_permits<'a>(
         let global = global
             .split(1)
             .expect(FETCH_FETCH_PERMIT_BATCH_HAS_ENOUGH_PERMITS);
-        let host = match crate::util::download::host_admission::try_acquire(
-            route, size,
-        ) {
-            Some(host) => host,
-            None => {
-                // A range plan is only started when the host's limit can fund
-                // it; if the limit shrank between planning and admission, hand
-                // the unused sockets back instead of overrunning the host.
-                break;
-            }
-        };
         permits.push(NativeConnectionPermit {
             _global: global,
             _native: native,
-            _host: host,
+            _host: None,
         });
     }
     if permits.is_empty() {
@@ -109,14 +122,18 @@ pub(super) async fn acquire_initial_segment_permits<'a>(
         actual_segments = permits.len(),
         "Acquired initial segmented download permits"
     );
-    Ok(permits)
+    Ok((host, permits))
 }
 
 pub(crate) struct NativeConnectionPermit<'a> {
     _global: SemaphorePermit<'a>,
     _native: crate::util::download::native_budget::NativeBudgetPermit,
     /// The serving host's learned transfer slot.
-    _host: crate::util::download::host_admission::HostPermit,
+    ///
+    /// `Some` only on the permit that admitted the file; extra sockets an
+    /// already-admitted transfer grows into leave it `None` because the file's
+    /// one transfer slot is held elsewhere for the life of the plan.
+    _host: Option<crate::util::download::host_admission::HostPermit>,
 }
 
 /// One file transfer's admission: a physical socket plus a slot in the serving
@@ -148,22 +165,40 @@ pub(crate) async fn acquire_native_connection<'a>(
     Ok(NativeConnectionPermit {
         _global: global,
         _native: native,
-        _host: host,
+        _host: Some(host),
     })
 }
 
+/// One more socket for an existing transfer.
+///
+/// Range expansion, tail hedges and the batch-tail recovery plan all run inside
+/// a file that already holds its host transfer slot, so they pay for the socket
+/// and the configured transfer budget only. Taking a second host slot here would
+/// make the host's learned limit cap how many ranges one file may grow to.
 pub(super) fn try_acquire_native_connection<'a>(
     route: &DownloadRoute,
     semaphore: &'a FetchSemaphore,
-    size: Option<u64>,
 ) -> Option<NativeConnectionPermit<'a>> {
-    let host = crate::util::download::host_admission::try_acquire(route, size)?;
     let native =
         crate::util::download::native_budget::try_acquire(route).ok()?;
     let global = semaphore.0.try_acquire().ok()?;
     Some(NativeConnectionPermit {
         _global: global,
         _native: native,
-        _host: host,
+        _host: None,
+    })
+}
+
+/// Blocks for one more socket inside an already-admitted transfer.
+pub(crate) async fn acquire_socket<'a>(
+    route: &DownloadRoute,
+    semaphore: &'a FetchSemaphore,
+) -> crate::Result<NativeConnectionPermit<'a>> {
+    let native = crate::util::download::native_budget::acquire(route).await?;
+    let global = semaphore.0.acquire().await?;
+    Ok(NativeConnectionPermit {
+        _global: global,
+        _native: native,
+        _host: None,
     })
 }

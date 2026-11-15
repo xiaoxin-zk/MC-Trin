@@ -23,10 +23,10 @@ use crate::util::download::constants::{
 };
 use crate::util::fetch::{DownloadRoute, ProxyPolicy};
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
 
+use super::bounded_table::BoundedTable;
 use super::constants::{
     MAX_CONNECTIONS_PER_AUTHORITY, MAX_PHYSICAL_DOWNLOAD_CONNECTIONS,
 };
@@ -40,11 +40,24 @@ struct AuthorityKey {
     proxy: ProxyPolicy,
 }
 
+/// Budget tables are bounded per table, not per authority.
+const BUDGET_TABLE_CAPACITY: usize = 256;
+
 static AUTHORITY_BUDGETS: LazyLock<
-    Mutex<HashMap<AuthorityKey, Arc<Semaphore>>>,
-> = LazyLock::new(|| Mutex::new(HashMap::new()));
-static REGULAR_BUDGETS: LazyLock<Mutex<HashMap<AuthorityKey, Arc<Semaphore>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+    Mutex<BoundedTable<AuthorityKey, Arc<Semaphore>>>,
+> = LazyLock::new(|| Mutex::new(BoundedTable::new(BUDGET_TABLE_CAPACITY)));
+static REGULAR_BUDGETS: LazyLock<
+    Mutex<BoundedTable<AuthorityKey, Arc<Semaphore>>>,
+> = LazyLock::new(|| Mutex::new(BoundedTable::new(BUDGET_TABLE_CAPACITY)));
+
+/// A budget may be forgotten once no permit holds it.
+///
+/// `strong_count == 1` means the table is the only owner; a live permit's
+/// `Arc` keeps it alive, and evicting then would let a second semaphore for the
+/// same authority admit a fresh set of sockets on top of the ones already open.
+fn budget_is_droppable(budget: &Arc<Semaphore>) -> bool {
+    Arc::strong_count(budget) == 1
+}
 
 pub(crate) struct NativeBudgetPermit {
     _regular: Option<OwnedSemaphorePermit>,
@@ -71,17 +84,11 @@ fn regular_budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
         proxy: route.proxy,
     };
     let mut budgets = REGULAR_BUDGETS.lock();
-    if budgets.len() >= 256 {
-        budgets.retain(|_, budget| Arc::strong_count(budget) > 1);
-    }
-    Some(
-        budgets
-            .entry(key)
-            .or_insert_with(|| {
-                Arc::new(Semaphore::new(MAX_CONNECTIONS_PER_AUTHORITY - 1))
-            })
-            .clone(),
-    )
+    Some(budgets.get_or_insert_with(
+        key,
+        || Arc::new(Semaphore::new(MAX_CONNECTIONS_PER_AUTHORITY - 1)),
+        budget_is_droppable,
+    ))
 }
 
 /// The host a route's sockets actually land on.
@@ -93,20 +100,14 @@ fn regular_budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
 fn budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
     let key = super::host_admission::scope_for_route(route)?;
     let mut budgets = AUTHORITY_BUDGETS.lock();
-    if budgets.len() >= 256 {
-        budgets.retain(|_, budget| Arc::strong_count(budget) > 1);
-    }
-    Some(
-        budgets
-            .entry(AuthorityKey {
-                authority: key,
-                proxy: route.proxy,
-            })
-            .or_insert_with(|| {
-                Arc::new(Semaphore::new(MAX_CONNECTIONS_PER_AUTHORITY))
-            })
-            .clone(),
-    )
+    Some(budgets.get_or_insert_with(
+        AuthorityKey {
+            authority: key,
+            proxy: route.proxy,
+        },
+        || Arc::new(Semaphore::new(MAX_CONNECTIONS_PER_AUTHORITY)),
+        budget_is_droppable,
+    ))
 }
 
 pub(crate) async fn acquire(
@@ -243,15 +244,18 @@ pub(crate) fn try_acquire_recovery(
     })
 }
 
+/// Free socket permits for a route's authority.
+///
+/// This answers the socket question only. Folding the learned transfer limit in
+/// here conflated the two budgets: callers use this number to size a *range
+/// plan* and to gate batch-tail recovery, and both want sockets. A host at its
+/// cold-start transfer limit would otherwise report four free sockets out of
+/// sixty-four, and — because of a floor of one — report a free socket when it
+/// had none, which is exactly the case the empty-plan check must catch.
 pub(crate) fn available(route: &DownloadRoute) -> usize {
     budget(route)
         .map(|budget| budget.available_permits())
         .unwrap_or(MAX_CONNECTIONS_PER_AUTHORITY)
-        .min(
-            // The learned transfer limit is the other half of admission: a host
-            // may have spare sockets and no spare transfers.
-            super::host_admission::available(route).max(1),
-        )
         .min(PHYSICAL_CONNECTIONS.available_permits())
 }
 

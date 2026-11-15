@@ -218,6 +218,15 @@ impl SharedH2Connection {
         self.active_streams.load(Ordering::Acquire)
     }
 
+    /// `host:port` this connection's socket actually lands on.
+    ///
+    /// The connection is created for the authority the pool keys on, so this is
+    /// the serving identity for anything that must be charged to a host — the
+    /// requested URL may have been a redirector.
+    pub(crate) fn serving_authority(&self) -> &str {
+        &self.authority
+    }
+
     pub(crate) fn record_bytes(&self, bytes: usize) {
         self.bytes_transferred.fetch_add(bytes, Ordering::Relaxed);
         if let Some(lease) = &self.endpoint_lease

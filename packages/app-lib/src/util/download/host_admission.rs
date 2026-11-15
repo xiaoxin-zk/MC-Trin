@@ -25,25 +25,36 @@
 
 use crate::util::download::constants::{
     GLOBAL_IN_FLIGHT_CAP, H2_STREAMS_PER_CONNECTION_CAP,
-    H2_STREAMS_PER_LEARNED_SOCKET, HOST_CONCURRENCY_CAP_UNMEASURED,
-    HOST_CONCURRENCY_COOLDOWN_LADDER, HOST_CONCURRENCY_FAST_ATTACK_PERCENT,
-    HOST_CONCURRENCY_FAST_GROWTH_CEILING, HOST_CONCURRENCY_FAST_GROWTH_STEP,
-    HOST_CONCURRENCY_FLOOR, HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS,
-    HOST_CONCURRENCY_GROWTH_STEP, HOST_CONCURRENCY_INITIAL,
-    HOST_CONCURRENCY_LATENCY_RATIO_PERCENT, HOST_CONCURRENCY_PERCENT_BASE,
-    SMALL_FILE_CONCURRENCY_CEILING, SMALL_FILE_SIGNAL_BYTES,
+    H2_STREAMS_PER_LEARNED_SOCKET, HOST_CONCURRENCY_CAP_MEASURED_MIN,
+    HOST_CONCURRENCY_CAP_UNMEASURED, HOST_CONCURRENCY_COOLDOWN_LADDER,
+    HOST_CONCURRENCY_FAST_ATTACK_PERCENT, HOST_CONCURRENCY_FAST_GROWTH_CEILING,
+    HOST_CONCURRENCY_FAST_GROWTH_STEP, HOST_CONCURRENCY_FLOOR,
+    HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS, HOST_CONCURRENCY_GROWTH_STEP,
+    HOST_CONCURRENCY_INITIAL, HOST_CONCURRENCY_LATENCY_RATIO_PERCENT,
+    HOST_CONCURRENCY_PERCENT_BASE, SMALL_FILE_CONCURRENCY_CEILING,
+    SMALL_FILE_SIGNAL_BYTES,
 };
 use crate::util::fetch::{DownloadRoute, ProxyPolicy};
 use parking_lot::Mutex;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
+
+use super::bounded_table::BoundedTable;
 
 /// Latency samples kept per host for the p90 estimate.
 const LATENCY_SAMPLES: usize = 32;
 /// Minimum samples before a p90 is trusted as a baseline.
 const LATENCY_BASELINE_SAMPLES: usize = 8;
+/// Low-concurrency p90 estimates the baseline remembers.
+///
+/// The baseline is their minimum, so this window is how long one anomalously
+/// fast estimate can hold the reference down: at one estimate per latency
+/// sample, sixteen estimates is twice the p90 window, which is long enough to
+/// average out a single outlier and short enough that a genuine improvement to
+/// the network path is picked up within a session.
+const BASELINE_WINDOW: usize = 16;
 /// A throughput window shorter than this is not evidence of a plateau.
 const RATE_WINDOW_MIN: Duration = Duration::from_millis(500);
 /// Growth stops after this many consecutive non-improving rate windows.
@@ -82,10 +93,18 @@ impl SizeClass {
     /// The small-file ceiling of 32 is where 400-file batches peaked
     /// (178.9 files/s) before declining at 64 and 96; it applies on top of
     /// whatever the host earned for bulk transfer.
+    ///
+    /// `Medium` — which includes an *unknown* size — is clamped to that same
+    /// 32 rather than to the bulk cap. Without a byte count there is no
+    /// throughput evidence to be had, so growth can only come from completions,
+    /// and letting an unmeasured object claim the full bulk ceiling would hand a
+    /// host of unknown capacity a plan nothing has justified.
     pub(crate) fn ceiling(self, host_cap: usize) -> usize {
         match self {
-            Self::Small => host_cap.min(SMALL_FILE_CONCURRENCY_CEILING),
-            Self::Medium | Self::Bulk => host_cap,
+            Self::Small | Self::Medium => {
+                host_cap.min(SMALL_FILE_CONCURRENCY_CEILING)
+            }
+            Self::Bulk => host_cap,
         }
     }
 }
@@ -108,6 +127,8 @@ struct HostState {
     completions: u32,
     latencies: VecDeque<f64>,
     baseline_p90_ms: Option<f64>,
+    /// Recent low-concurrency p90 estimates the baseline is the minimum of.
+    baseline_history: VecDeque<f64>,
     window_started: Instant,
     window_bytes: u64,
     last_rate: Option<u64>,
@@ -130,6 +151,7 @@ impl HostState {
             completions: 0,
             latencies: VecDeque::with_capacity(LATENCY_SAMPLES),
             baseline_p90_ms: None,
+            baseline_history: VecDeque::with_capacity(BASELINE_WINDOW),
             window_started: now,
             window_bytes: 0,
             last_rate: None,
@@ -188,11 +210,33 @@ impl HostState {
         if self.limit <= HOST_CONCURRENCY_FAST_GROWTH_CEILING
             && let Some(p90) = self.p90_ms()
         {
-            self.baseline_p90_ms = Some(
-                self.baseline_p90_ms
-                    .map_or(p90, |baseline| baseline.min(p90)),
-            );
+            self.remember_baseline(p90);
         }
+    }
+
+    /// Refreshes the latency baseline from a p90 measured at low concurrency.
+    ///
+    /// The reference is the *lowest* recent p90, not the lowest p90 ever seen.
+    /// A monotone minimum is not safe here: one anomalous fast sample — a
+    /// cache hit, a reused connection whose TLS handshake the other samples
+    /// paid for — would pin the floor below anything the host can repeat, so
+    /// [`Self::latency_within_baseline`] would answer `false` for the rest of
+    /// the session and the limit would never grow again. Keeping the minimum
+    /// over a bounded window of recent estimates preserves the intent (a knee
+    /// is judged against this host's own best *sustained* latency) while
+    /// letting the floor forget an outlier after [`BASELINE_WINDOW`] further
+    /// measurements.
+    fn remember_baseline(&mut self, p90: f64) {
+        if self.baseline_history.len() >= BASELINE_WINDOW {
+            self.baseline_history.pop_front();
+        }
+        self.baseline_history.push_back(p90);
+        self.baseline_p90_ms = self.baseline_history.iter().copied().fold(
+            None,
+            |lowest: Option<f64>, sample| {
+                Some(lowest.map_or(sample, |lowest| lowest.min(sample)))
+            },
+        );
     }
 
     fn observe_rate(&mut self, now: Instant) -> Option<u64> {
@@ -422,12 +466,19 @@ impl HostPolicy {
     }
 
     /// Records one finished request and applies the growth rules for its size.
+    ///
+    /// `_bytes` is the transfer's delivered total, kept for call-site symmetry
+    /// and diagnostics only; it is deliberately *not* added to `window_bytes`.
+    /// The per-chunk meter ([`TransferMeter::record`]) already accounts for
+    /// every byte that arrived, so adding the total again here doubled the
+    /// observed rate — a plateau (or a spurious improvement) computed from
+    /// twice the real throughput.
     pub(crate) fn record_completion(
         &self,
         size: SizeClass,
         host_cap: usize,
         latency_ms: f64,
-        bytes: u64,
+        _bytes: u64,
     ) {
         let now = Instant::now();
         let mut state = self.state.lock();
@@ -435,7 +486,6 @@ impl HostPolicy {
             return;
         }
         state.completions = state.completions.saturating_add(1);
-        state.window_bytes = state.window_bytes.saturating_add(bytes);
         state.push_latency(latency_ms);
         if state
             .last_strike_at
@@ -587,8 +637,8 @@ impl From<AdmissionError> for crate::ErrorKind {
 static GLOBAL_IN_FLIGHT: LazyLock<Arc<Semaphore>> =
     LazyLock::new(|| Arc::new(Semaphore::new(GLOBAL_IN_FLIGHT_CAP)));
 
-static POLICIES: LazyLock<Mutex<HashMap<String, Arc<HostPolicy>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static POLICIES: LazyLock<Mutex<BoundedTable<String, Arc<HostPolicy>>>> =
+    LazyLock::new(|| Mutex::new(BoundedTable::new(POLICY_TABLE_CAPACITY)));
 
 /// `(scheme, host, port)` identity of one post-redirect hop.
 ///
@@ -609,15 +659,42 @@ fn hop_host(url: &str) -> Option<String> {
         .and_then(|url| url.host_str().map(|host| host.to_ascii_lowercase()))
 }
 
+const POLICY_TABLE_CAPACITY: usize = 256;
+
+/// Whether a policy may be dropped from the table.
+///
+/// Two things make an entry unrecoverable if it is forgotten:
+///
+/// * a live permit still holds an `Arc` (`strong_count > 1`), and dropping the
+///   entry would let the next lookup create a second policy for the same scope —
+///   both would then admit a full limit on top of each other; and
+/// * the host is parked — cooling down or `blocked` for the session. A forgotten
+///   ban is the expensive case: `policy_for_scope` would recreate the host
+///   healthy and the measured ~20-minute TCP blackhole would be rediscovered by
+///   the next request.
+fn policy_is_droppable(policy: &Arc<HostPolicy>) -> bool {
+    Arc::strong_count(policy) == 1
+        && !policy.state.lock().parked(Instant::now())
+}
+
+/// The policy for one proxy-scoped authority, created on first use.
+///
+/// The table is bounded by [`POLICY_TABLE_CAPACITY`], and the bound is enforced
+/// on insertion rather than by pruning alone: a `retain(strong_count > 1)` pass
+/// frees nothing when every entry is in use, which is exactly the case a wide
+/// install produces, so `len` could otherwise grow without limit.
+///
+/// Eviction order is least-recently-used, and it never takes an entry that is
+/// still referenced by a permit or one that is parked — see
+/// [`policy_is_droppable`].
 pub(crate) fn policy_for_scope(scope: &str) -> Arc<HostPolicy> {
+    let now = Instant::now();
     let mut policies = POLICIES.lock();
-    if policies.len() >= 256 {
-        policies.retain(|_, policy| Arc::strong_count(policy) > 1);
-    }
-    policies
-        .entry(scope.to_ascii_lowercase())
-        .or_insert_with(|| Arc::new(HostPolicy::new(Instant::now())))
-        .clone()
+    policies.get_or_insert_with(
+        scope.to_ascii_lowercase(),
+        || Arc::new(HostPolicy::new(now)),
+        policy_is_droppable,
+    )
 }
 
 /// Hard per-host ceilings from the measurement table.
@@ -635,7 +712,7 @@ pub(crate) fn host_cap(host: &str) -> usize {
     }
     if host.contains("ustc.edu.cn") {
         // ConnectionRefused from 16 up; 731 RSTs at N=96.
-        return 8;
+        return HOST_CONCURRENCY_CAP_MEASURED_MIN;
     }
     if host == "libraries.minecraft.net" {
         // 91.8 MB/s at 64 and zero errors to 96.
@@ -709,6 +786,32 @@ fn cap_for_url(url: &str) -> usize {
 }
 
 /// Admission and release for one transfer against its effective host.
+///
+/// # Counter balance
+///
+/// `in_flight` is incremented exactly once per [`HostPermit`] handed out, and
+/// [`HostPermit::drop`] decrements it exactly once. Every path out of this
+/// function therefore either returns a permit — the only object that can
+/// release a reservation — or holds no reservation:
+///
+/// * The host admit fails: `reserve` made no increment, nothing to undo.
+/// * The host admit succeeds but the global ceiling is full: the host slot is
+///   released in the same synchronous block, so the reservation and its release
+///   are adjacent. The global permit that is then awaited is a local
+///   `OwnedSemaphorePermit`; if this future is dropped during that wait, or the
+///   re-admit below fails, the local's `Drop` returns it and no host slot is
+///   held.
+/// * The re-admit fails: the freshly acquired global permit is dropped on the
+///   error return; the host slot was never taken.
+/// * Success: `HostPermit` holds both, and the single `Drop` impl releases
+///   both. There is no `await` between a successful host admit and either the
+///   permit construction or the matching `release`, so a cancellation at a
+///   suspension point can never strand a reservation.
+///
+/// This is why the host slot is re-taken after the global permit arrives rather
+/// than reused from before the wait: the old shape released the slot, waited
+/// for the ceiling, and then built the permit without reserving again, leaving
+/// `in_flight` one short for the life of the host.
 pub(crate) async fn acquire(
     route: &DownloadRoute,
     size: Option<u64>,
@@ -724,20 +827,31 @@ pub(crate) async fn acquire(
     let class = SizeClass::of(size);
     let cap = cap_for_url(&url);
     let global = GLOBAL_IN_FLIGHT.clone();
+    let deadline = Instant::now() + wait;
     policy.admit(class, cap, wait).await?;
     let permit = match global.clone().try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => {
             // The process-wide ceiling is reached. Hand the host slot back
             // before waiting so a busy host cannot hold capacity it cannot
-            // use.
+            // use, then re-take it once the ceiling admits this transfer.
             policy.release(1);
-            match tokio::time::timeout(wait, global.clone().acquire_owned())
-                .await
-            {
-                Ok(Ok(permit)) => permit,
-                _ => return Err(AdmissionError::Exhausted),
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(AdmissionError::Exhausted);
             }
+            let Ok(Ok(permit)) =
+                tokio::time::timeout(remaining, global.clone().acquire_owned())
+                    .await
+            else {
+                return Err(AdmissionError::Exhausted);
+            };
+            // Re-reserving is what balances the release above: the returned
+            // `HostPermit` releases exactly this reservation on drop, so
+            // `in_flight` moves -1 then +1 and ends where it started.
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            policy.admit(class, cap, remaining).await?;
+            permit
         }
     };
     Ok(HostPermit {
@@ -753,17 +867,12 @@ pub(crate) fn try_acquire(
 ) -> Option<HostPermit> {
     let url = admission_url(route);
     let policy = policy_for_url(&url, route.proxy)?;
+    let global = GLOBAL_IN_FLIGHT.clone().try_acquire_owned().ok()?;
     policy.reserve(SizeClass::of(size), cap_for_url(&url))?;
-    match GLOBAL_IN_FLIGHT.clone().try_acquire_owned() {
-        Ok(permit) => Some(HostPermit {
-            policy: Some(policy),
-            _global: Some(permit),
-        }),
-        Err(_) => {
-            policy.release(1);
-            None
-        }
-    }
+    Some(HostPermit {
+        policy: Some(policy),
+        _global: Some(global),
+    })
 }
 
 /// Admission for one multiplexed HTTP/2 stream.
@@ -894,6 +1003,7 @@ pub(crate) fn record_suspected_ban(final_url: &str, proxy: ProxyPolicy) {
 /// The proxy scope is a content hash of the proxy configuration, so it is
 /// computed once per transfer and then reused: recomputing it for every
 /// received chunk would hash the configuration thousands of times per file.
+#[derive(Clone)]
 pub(crate) struct TransferMeter {
     scope: String,
 }
