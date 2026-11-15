@@ -3075,14 +3075,14 @@ async fn segmented_permits_wait_for_one_slot_instead_of_falling_back() {
         DownloadRouteSource::Official,
     );
     let started = Instant::now();
-    let (_, permits) = tokio::join!(
+    let (_, admitted) = tokio::join!(
         async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
             drop(held);
         },
         acquire_initial_segment_permits(&route, &semaphore, 4, None),
     );
-    let permits = permits.unwrap();
+    let (_host, permits) = admitted.unwrap();
     assert_eq!(permits.len(), 1);
     assert!(started.elapsed() >= Duration::from_millis(40));
 }

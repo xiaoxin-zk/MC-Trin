@@ -92,7 +92,14 @@ pub(crate) const CONNECTION_GROWTH_FACTOR: usize = 2;
 pub(crate) const CONNECTION_STABILITY_WINDOW: Duration =
     Duration::from_millis(500);
 pub(crate) const INITIAL_CONNECTION_TARGET: usize = 4;
-pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 32;
+/// Fixed outer bound on asset streams per URL authority.
+///
+/// It must not be tighter than [`H2_STREAMS_PER_HOST_CAP`], or it silently
+/// becomes the real ceiling: the learned host allowance can reach 64 streams,
+/// and an authority semaphore of 32 would hold the batch at half of what the
+/// measurement supports (57.41 files/s at N=8 rising to 138.54 at N=64). It is
+/// kept as a backstop for the case where no host policy can be resolved.
+pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 64;
 pub(crate) const MAX_CONNECTIONS_PER_AUTHORITY: usize = 64;
 pub(crate) const MAX_CONNECTION_TARGET: usize = 64;
 pub(crate) const MAX_H2_STREAMS_PER_AUTHORITY: usize = 256;
@@ -115,7 +122,23 @@ pub(crate) const H2_ADMISSION_LOG_THRESHOLD: Duration =
 /// sibling. This is an allocation target, not a hard block: while a sibling
 /// handshake is in flight the only available connection may briefly carry one
 /// stream more rather than stalling the batch.
+///
+/// This is a *per socket* number and must not also be used as the per-host
+/// stream allowance: the measured knee is at or above 64 file-equivalents, and
+/// capping the whole host at one connection's saturation point threw away
+/// every connection the measured batch had already been shown to need.
 pub(crate) const H2_STREAMS_PER_CONNECTION_CAP: usize = 16;
+/// Streams one learned host may multiplex at once, across all its sockets.
+///
+/// The measured keep-alive curve is still rising at 64 (9.89 files/s at N=1,
+/// 57.41 at N=8, 95.57 at N=16, 118.81 at N=32, 138.54 at N=64), so 64 is the
+/// highest measured floor of the knee, not an optimum: it is the smallest cap
+/// that does not cut the host off below the last point the rate was still
+/// improving. Eight streams behave like eight parallel HTTP/1.1 connections on
+/// this workload, so the socket ceiling (32, the small-file batch peak) scaled
+/// by [`H2_STREAMS_PER_LEARNED_SOCKET`] lands exactly here; anything lower
+/// makes the multiplexed path slower than the plain path it replaced.
+pub(crate) const H2_STREAMS_PER_HOST_CAP: usize = 64;
 /// Streams one learned socket slot may carry on the multiplexed path.
 ///
 /// Measured: sixteen streams on one connection tie eight parallel TCP

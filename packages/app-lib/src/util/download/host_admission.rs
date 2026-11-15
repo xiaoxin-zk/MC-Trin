@@ -320,16 +320,15 @@ impl HostPolicy {
     /// measurement is that sixteen streams on one connection tie eight parallel
     /// TCP connections, so one socket is worth about two streams. The stream
     /// allowance is therefore the learned socket limit scaled by that measured
-    /// ratio, capped at one connection's saturation point. The learned limit
-    /// still decides — a host that learnt two gets four streams rather than
-    /// sixteen, and a parked host gets none — but the scaling is what keeps the
-    /// multiplexed path from being handed less capacity than the plain path it
-    /// replaced.
+    /// ratio, capped at [`H2_STREAMS_PER_HOST_CAP`] — the measured batch knee,
+    /// not one connection's saturation point. Capping at the per-connection
+    /// number made a single socket the binding constraint on a workload whose
+    /// rate was still rising at 64 file-equivalents.
     fn stream_allowance_locked(state: &HostState) -> usize {
         state
             .limit
             .saturating_mul(H2_STREAMS_PER_LEARNED_SOCKET)
-            .min(H2_STREAMS_PER_CONNECTION_CAP)
+            .min(H2_STREAMS_PER_HOST_CAP)
     }
 
     /// Reserves one multiplexed stream against this host.
