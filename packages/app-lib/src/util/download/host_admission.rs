@@ -572,7 +572,10 @@ impl HostPolicy {
         // App-limited guard: with fewer than half the allowed units in flight
         // the limit is not what bounds throughput, so a latency change is
         // self-inflicted queueing rather than congestion. The unit and its
-        // allowance both follow the path that is completing.
+        // allowance both follow the path that is completing: reading `in_flight`
+        // for a stream completion measured a counter the stream path never
+        // increments, so the guard saw an idle host on every asset and refused
+        // to grow.
         let (in_flight, allowed) = match path {
             CompletionPath::Transfer => {
                 (state.in_flight, state.effective_limit(size, host_cap))
