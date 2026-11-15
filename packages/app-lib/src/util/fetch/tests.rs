@@ -4168,6 +4168,7 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
+    let permit_count = 8;
     let outcome = try_segmented_download(
         SegmentedDownloadContext::new(
             &request,
@@ -4175,7 +4176,7 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
             &[],
             size as u64,
             &part_path,
-            &FetchSemaphore(Semaphore::new(8)),
+            &FetchSemaphore(Semaphore::new(permit_count)),
             None,
             &client,
             &client,
@@ -4188,8 +4189,31 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
     .await;
 
     assert!(matches!(outcome, SegmentedDownloadOutcome::Success(_)));
-    assert_eq!(redirect_requests.load(Ordering::Relaxed), 2);
-    assert!(range_requests.load(Ordering::Relaxed) > 2);
+    // Ranges start concurrently, and the redirect target is only learnt from the
+    // first *successful* response, so every range of the cold-start plan pays a
+    // redirect of its own before any of them can cache the target. The count is
+    // therefore the plan size, not the fixed two the old split threshold produced;
+    // one extra is allowed for a retry that had already started down the
+    // redirecting URL before the target was cached. What must not regress is
+    // reuse: the deliberate mid-body failure and every later growth step must find
+    // the target already cached, so the count stays well below the range count.
+    let redirects = redirect_requests.load(Ordering::Relaxed);
+    let ranges_served = range_requests.load(Ordering::Relaxed);
+    let cold_start_plan =
+        route_segmented_concurrency_cap(&route, permit_count, size as u64);
+    assert!(
+        redirects >= 2,
+        "the initial ranges must start concurrently, before any of them has learnt the target: got {redirects} redirects"
+    );
+    assert!(
+        redirects <= cold_start_plan + 1,
+        "only the cold-start plan may pay a redirect: {redirects} redirects for a plan of {cold_start_plan}"
+    );
+    assert!(
+        redirects < ranges_served,
+        "retries must reuse the learnt redirect, got {redirects} redirects for {ranges_served} range requests"
+    );
+    assert!(ranges_served > 2);
     assert_eq!(normal_requests.load(Ordering::Relaxed), 0);
     redirect_server.abort();
     range_server.abort();
