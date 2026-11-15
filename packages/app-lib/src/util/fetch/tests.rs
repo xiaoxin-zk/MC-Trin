@@ -2848,7 +2848,7 @@ async fn segmented_permits_wait_for_one_slot_instead_of_falling_back() {
             tokio::time::sleep(Duration::from_millis(50)).await;
             drop(held);
         },
-        acquire_initial_segment_permits(&route, &semaphore, 4,),
+        acquire_initial_segment_permits(&route, &semaphore, 4, None),
     );
     let permits = permits.unwrap();
     assert_eq!(permits.len(), 1);
@@ -3104,7 +3104,10 @@ fn official_fallback_excludes_alternate_sources() {
 }
 
 #[test]
-fn segmented_download_starts_at_four_mebibytes() {
+fn segmented_download_starts_at_eight_mebibytes() {
+    // The measured cold-start ramp needs ~30 MB / 1.1 s to reach full speed, so
+    // splitting below 8 MB spends the whole file in the ramp.
+    assert_eq!(SEGMENTED_DOWNLOAD_THRESHOLD, 8 * 1024 * 1024);
     assert!(!should_use_segmented_download(
         SEGMENTED_DOWNLOAD_THRESHOLD - 1,
         0,

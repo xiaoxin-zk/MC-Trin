@@ -7,7 +7,7 @@ use crate::util::download::constants::{
 };
 use crate::util::fetch::{DownloadRoute, ProxyPolicy, ResourceClass};
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use tokio::sync::Notify;
@@ -230,4 +230,60 @@ pub(crate) fn probe_scope(family: &str, authorities: &mut Vec<String>) -> u64 {
     family.hash(&mut hasher);
     authorities.hash(&mut hasher);
     hasher.finish()
+}
+
+/// Paths a route has already answered `404`/`410` for.
+///
+/// A miss is a property of one object on one route, never of the route: USTC
+/// answers `404` for BMCLAPI's version API, and 13 % of small Maven paths are
+/// absent from `maven.aliyun.com/repository/public`. Both are statements that
+/// *this* route serves no artifact for *this* path, so the route is not offered
+/// for that path again and the authority is not demoted for every other object
+/// it does serve.
+///
+/// Bounded and session-scoped on purpose: a mirror can synchronise a missing
+/// object later, and a permanent cross-launch memory would keep sending those
+/// paths to a slower source forever.
+static OBJECT_MISSES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+const OBJECT_MISS_MEMORY_CAPACITY: usize = 8192;
+
+fn object_miss_key(route_url: &str) -> Option<String> {
+    crate::util::fetch::url_authority(route_url)
+        .map(|authority| format!("{authority}{}", url_path_of(route_url)))
+}
+
+fn url_path_of(url: &str) -> String {
+    url::Url::parse(url)
+        .map(|parsed| parsed.path().to_string())
+        .unwrap_or_default()
+}
+
+/// `404`/`410` from this route for this object: permanent for the session.
+pub(crate) fn remember_object_miss(route_url: &str) {
+    let Some(key) = object_miss_key(route_url) else {
+        return;
+    };
+    let mut misses = OBJECT_MISSES.lock();
+    if misses.len() >= OBJECT_MISS_MEMORY_CAPACITY {
+        misses.clear();
+    }
+    misses.insert(key);
+}
+
+/// Whether this route already said it has no artifact for this path.
+pub(crate) fn object_miss_is_known(route_url: &str) -> bool {
+    object_miss_key(route_url)
+        .is_some_and(|key| OBJECT_MISSES.lock().contains(&key))
+}
+
+/// Drops routes that already reported this exact object missing.
+///
+/// Runs after ordering, so it can only remove a route the caller had decided to
+/// try; the official route always remains if it has not itself missed.
+pub(crate) fn drop_known_object_misses(routes: &mut Vec<DownloadRoute>) {
+    if OBJECT_MISSES.lock().is_empty() {
+        return;
+    }
+    routes.retain(|route| !object_miss_is_known(&route.url));
 }

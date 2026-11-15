@@ -14,6 +14,7 @@ pub mod h2_pool;
 pub(crate) mod h2_range;
 pub(crate) mod h2_receive;
 pub(crate) mod h2_stream_budget;
+pub(crate) mod host_admission;
 pub(crate) mod integrity;
 /// Legacy namespace retained for public API compatibility.
 pub mod legacy {}
@@ -29,6 +30,7 @@ pub(crate) mod native_slow;
 pub(crate) mod proxy_context;
 pub(crate) mod range_journal;
 pub(crate) mod range_output;
+pub(crate) mod redirector_budget;
 pub(crate) mod retired_sources;
 pub(crate) mod route_health;
 pub(crate) mod route_policy;

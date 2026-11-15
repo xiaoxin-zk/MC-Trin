@@ -1,4 +1,20 @@
 //! Per-authority physical connection admission; transfer weights use the shared download semaphore.
+//!
+//! Two budgets exist, and they answer different questions:
+//!
+//! * This module's semaphore bounds *sockets* per authority. It is a fixed
+//!   ceiling, because a socket is a socket whether it carries one transfer or
+//!   sixteen multiplexed streams.
+//! * [`super::host_admission`] bounds *transfers* per post-redirect host. That
+//!   limit is learned, because a single global concurrency number is wrong in
+//!   both directions: `piston-data.mojang.com` was clean at 96 connections
+//!   while `maven.aliyun.com` kneed at 8–16 and `cmcc.mirrors.ustc.edu.cn`
+//!   refused connections from 16 up.
+//!
+//! Keeping them separate matters: charging a long-lived multiplexed HTTP/2
+//! socket against a transfer limit of four would starve the transfers that
+//! socket serves, and charging every stream against the socket ceiling would
+//! cap the multiplexing the measurements actually recommend.
 
 use crate::util::download::constants::{
     NATIVE_BUDGET_AUTHORITY_BATCH_CONTAINS_ENOUGH_PERMITS,
@@ -68,19 +84,24 @@ fn regular_budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
     )
 }
 
+/// The host a route's sockets actually land on.
+///
+/// `DownloadRoute.url` names the requested host. `ROUTE_EFFECTIVE_AUTHORITIES`
+/// records the final host of the last successful hop, so a socket is charged to
+/// the node that serves it. Before the first successful hop the requested
+/// authority is the only name known.
 fn budget(route: &DownloadRoute) -> Option<Arc<Semaphore>> {
-    let authority = crate::util::fetch::url_authority(&route.url)?;
-    let key = AuthorityKey {
-        authority: super::proxy_context::authority_key(&authority, route.proxy),
-        proxy: route.proxy,
-    };
+    let key = super::host_admission::scope_for_route(route)?;
     let mut budgets = AUTHORITY_BUDGETS.lock();
     if budgets.len() >= 256 {
         budgets.retain(|_, budget| Arc::strong_count(budget) > 1);
     }
     Some(
         budgets
-            .entry(key)
+            .entry(AuthorityKey {
+                authority: key,
+                proxy: route.proxy,
+            })
             .or_insert_with(|| {
                 Arc::new(Semaphore::new(MAX_CONNECTIONS_PER_AUTHORITY))
             })
@@ -98,16 +119,12 @@ async fn acquire_with_global(
     route: &DownloadRoute,
     global: &Arc<Semaphore>,
 ) -> Result<NativeBudgetPermit, tokio::sync::AcquireError> {
+    let pool_scope = super::host_admission::pool_scope_for_route(route);
     let regular = match regular_budget(route) {
         Some(budget) => {
             if budget.available_permits() == 0 {
-                super::h2_pool::evict_idle_connections(Some(
-                    &super::proxy_context::authority_key(
-                        &crate::util::fetch::url_authority(&route.url).unwrap(),
-                        route.proxy,
-                    ),
-                ))
-                .await;
+                super::h2_pool::evict_idle_connections(pool_scope.as_deref())
+                    .await;
             }
             Some(budget.acquire_owned().await?)
         }
@@ -116,13 +133,8 @@ async fn acquire_with_global(
     let authority = match budget(route) {
         Some(budget) => {
             if budget.available_permits() == 0 {
-                super::h2_pool::evict_idle_connections(Some(
-                    &super::proxy_context::authority_key(
-                        &crate::util::fetch::url_authority(&route.url).unwrap(),
-                        route.proxy,
-                    ),
-                ))
-                .await;
+                super::h2_pool::evict_idle_connections(pool_scope.as_deref())
+                    .await;
             }
             Some(budget.acquire_owned().await?)
         }
@@ -152,12 +164,10 @@ pub(crate) async fn acquire_many(
     let mut regular = match regular_budget {
         Some(budget) => {
             if budget.available_permits() < count {
-                super::h2_pool::evict_idle_connections(Some(
-                    &super::proxy_context::authority_key(
-                        &crate::util::fetch::url_authority(&route.url).unwrap(),
-                        route.proxy,
-                    ),
-                ))
+                super::h2_pool::evict_idle_connections(
+                    super::host_admission::pool_scope_for_route(route)
+                        .as_deref(),
+                )
                 .await;
             }
             Some(budget.acquire_many_owned(count as u32).await?)
@@ -167,12 +177,10 @@ pub(crate) async fn acquire_many(
     let mut authority = match budget(route) {
         Some(budget) => {
             if budget.available_permits() < count {
-                super::h2_pool::evict_idle_connections(Some(
-                    &super::proxy_context::authority_key(
-                        &crate::util::fetch::url_authority(&route.url).unwrap(),
-                        route.proxy,
-                    ),
-                ))
+                super::h2_pool::evict_idle_connections(
+                    super::host_admission::pool_scope_for_route(route)
+                        .as_deref(),
+                )
                 .await;
             }
             Some(
@@ -239,6 +247,12 @@ pub(crate) fn available(route: &DownloadRoute) -> usize {
     budget(route)
         .map(|budget| budget.available_permits())
         .unwrap_or(MAX_CONNECTIONS_PER_AUTHORITY)
+        .min(
+            // The learned transfer limit is the other half of admission: a host
+            // may have spare sockets and no spare transfers.
+            super::host_admission::available(route)
+                .max(1),
+        )
         .min(PHYSICAL_CONNECTIONS.available_permits())
 }
 

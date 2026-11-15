@@ -2174,6 +2174,12 @@ pub async fn download_assets(
 
     let mut batch_items = coalesce_batch_assets(batch_items);
 
+    // The asset index is the canonical many-small-files workload: 168 real
+    // 121 KB assets measured 1.73 files/s with a fresh connection each and
+    // 8.85 files/s on keep-alive. It is also far too large for BMCLAPI's
+    // metadata window, so the plan is announced before any route is resolved.
+    crate::util::download::redirector_budget::note_plan(batch_items.len());
+
     // Batch-download the object files over a single shared HTTP/2 connection:
     // hundreds of concurrent multiplexed streams, one connection per
     // authority — never one connection per file.
@@ -2544,6 +2550,12 @@ pub async fn download_libraries(
     }
 
     let num_files = tasks.len();
+    // A library set is planned file by file, but the *budget* question is a
+    // property of the whole set. BMCLAPI answers one metadata request per file
+    // from a window of ten per minute, so a set this size cannot go through it
+    // at all: tell route planning not to offer it, rather than spending the
+    // first ten files discovering the wall.
+    crate::util::download::redirector_budget::note_plan(num_files);
     loading_try_for_each_concurrent(
 		stream::iter(tasks).map(Ok::<LibraryDownloadTask<'_>, crate::Error>),
 		crate::util::download::task_concurrency_limit(st),

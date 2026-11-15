@@ -658,7 +658,50 @@ pub fn resolve_download_routes_for_with_sources(
         mode
     };
     order_routes_for_mode(&mut routes, resource, mode, &url, prefer_mirrors);
+    drop_redirectors_for_bulk_plan(&mut routes, resource);
+    // Then drop only routes that already said they have no artifact for this
+    // exact path. A miss is per object, not per authority: 13 % of small Maven
+    // paths are absent from Aliyun's `repository/public`, and USTC answers 404
+    // for BMCLAPI's version API. Neither is a health failure.
+    let known_misses = routes.len() > 1;
+    if known_misses {
+        super::super::download::route_health::drop_known_object_misses(
+            &mut routes,
+        );
+    }
     routes
+}
+
+/// Drops redirector routes when the plan is too large for their budget.
+///
+/// `bmclapi2.bangbang93.com` serves no bytes: each file costs one of ten
+/// metadata requests per minute, so a 400-file library set is 6.7 minutes of
+/// pure waiting at best and a `429` (or, measured, an IP blackhole) at worst.
+/// A bulk install is therefore planned against the official hosts from the
+/// start instead of discovering the budget wall halfway through.
+///
+/// Only *redirectors* are dropped. OpenBMCLAPI node URLs are byte sources and
+/// stay subject to their own measured per-host admission.
+fn drop_redirectors_for_bulk_plan(
+    routes: &mut Vec<DownloadRoute>,
+    resource: ResourceClass,
+) {
+    // A metadata document has no alternative path on the official host that
+    // the mirror also carries, and its single request never threatens the
+    // window on its own.
+    if matches!(resource, ResourceClass::Metadata) {
+        return;
+    }
+    if !super::super::download::redirector_budget::bulk_plan_active() {
+        return;
+    }
+    routes.retain(|route| {
+        !Url::parse(&route.url).is_ok_and(|url| {
+            url.host_str().is_some_and(
+                super::super::download::redirector_budget::is_redirector,
+            )
+        })
+    });
 }
 
 pub(super) fn source_mode_for_resource(

@@ -599,7 +599,10 @@ async fn single_stream(
         part_path,
     );
     let mut downloaded = 0_u64;
-    let activity = super::h2_receive::H2TransferActivity::begin();
+    let activity = super::h2_receive::H2TransferActivity::for_transfer(
+        Some(uri.as_str()),
+        route.proxy,
+    );
     let mut progress_gate = super::h2_receive::H2ProgressGate::new(total_size);
     let mut slow_policy = super::native_slow::NativeSlowPolicy::for_http2(
         0,
@@ -1589,7 +1592,11 @@ async fn download_asset_item(
             }
         };
         let mut downloaded = 0_u64;
-        let activity = super::h2_receive::H2TransferActivity::begin();
+        let transfer_started = Instant::now();
+        let activity = super::h2_receive::H2TransferActivity::for_transfer(
+            Some(current_uri.as_str()),
+            current_route.proxy,
+        );
         loop {
             let chunk = super::h2_receive::receive_chunk(
                 &mut stream,
@@ -1641,6 +1648,18 @@ async fn download_asset_item(
         {
             return Ok(AssetBatchItemOutcome::LocalObjectFailed { error });
         }
+
+        // The asset that just finished is the many-small-files signal: its
+        // TTFB is what inflates from 120 ms to 722 ms between 32 and 64
+        // streams, and its completion is one of the eight that may earn the
+        // host another connection.
+        super::host_admission::record_completion(
+            current_uri.as_str(),
+            current_route.proxy,
+            Some(downloaded),
+            transfer_started.elapsed(),
+            downloaded,
+        );
 
         Ok(match copy_asset_legacy_destinations(item).await {
             Ok(()) => AssetBatchItemOutcome::Completed { downloaded: true },

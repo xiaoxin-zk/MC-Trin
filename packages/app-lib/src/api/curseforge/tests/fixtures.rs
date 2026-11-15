@@ -127,6 +127,7 @@ pub(super) fn skipped_curseforge_manual_item(
         manual_url: Some("https://www.curseforge.com/download".to_string()),
         request_url: None,
         source: None,
+        speed_bytes_per_second: None,
     }
 }
 

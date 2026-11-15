@@ -42,6 +42,14 @@ pub(crate) const MAX_SEGMENT_CONCURRENCY: usize = 64;
 pub(crate) const MAX_TAIL_HEDGES_PER_FILE: usize = 2;
 pub(crate) const MIN_PARALLEL_RANGES: usize = 2;
 pub(crate) const MIN_SEGMENT_SIZE: u64 = 256 * 1024;
+/// Range splitting starts here, not at 4 MB.
+///
+/// The measured cold-start ramp needs about 30 MB / 1.1 s to reach full speed,
+/// which makes splitting a small object a net loss: the extra connections spend
+/// the whole file in the ramp. Files below [`MIN_SPLIT_BYTES`] are therefore
+/// never split, and nothing is split on a host that has not proven it honours
+/// `Range` (USTC answers `200` with the full body).
+pub(crate) const SEGMENTED_DOWNLOAD_THRESHOLD: u64 = MIN_SPLIT_BYTES;
 pub(crate) const RANGE_CHECKPOINT_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const RANGE_FULL_FAILURE_LIMIT: u32 = 1;
 pub(crate) const RANGE_IDLE_RECONNECT_TIMEOUT: Duration = if cfg!(test) {
@@ -53,7 +61,6 @@ pub(crate) const RANGE_JOURNAL_MAX_BYTES: u64 = 16 * 1024;
 pub(crate) const RANGE_REDUCED_CONCURRENCY: usize = 2;
 pub(crate) const RANGE_REDUCED_FAILURE_LIMIT: u32 = 3;
 pub(crate) const RANGE_SPLITTING_DISABLE_THRESHOLD: u32 = 2;
-pub(crate) const SEGMENTED_DOWNLOAD_THRESHOLD: u64 = 4 * 1024 * 1024;
 pub(crate) const SEGMENT_EXPANSION_INTERVAL: Duration =
     Duration::from_millis(1500);
 pub(crate) const SEGMENT_EXPANSION_SAMPLE_COUNT: usize = 3;
@@ -173,7 +180,16 @@ pub(crate) const FETCH_RETRY_DELAYS: [Duration; 3] = [
 pub(crate) const FETCH_RETRY_JITTER_MAX: f64 = 1.15;
 pub(crate) const FETCH_RETRY_JITTER_MIN: f64 = 0.85;
 pub(crate) const FILE_H2_KEEPALIVE: Duration = Duration::from_secs(15);
-pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 64;
+/// Idle sockets kept per host in the shared download client.
+///
+/// The many-small-files workload measured 1.73 files/s with a fresh connection
+/// per file and 8.85 files/s on keep-alive, so the pool must not be disabled.
+/// 32 is above the measured knee of a 400-file batch (N=32, 178.9 files/s) and
+/// below every per-host admission ceiling.
+pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 32;
+/// Idle sockets expire after this long so a network change (or a proxy
+/// switch) cannot strand a connection that will only fail on next use.
+pub(crate) const FILE_POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const FILE_RETRY_SINGLE_STREAM_ROUNDS: [bool; 3] =
     [false, true, true];
 pub(crate) const FILE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
@@ -217,6 +233,76 @@ pub(crate) const MODRINTH_CDN_ATTEMPT_TIMEOUT: Duration =
     Duration::from_secs(120);
 pub(crate) const RESOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
 pub(crate) const RETRY_AFTER_CAP: Duration = Duration::from_secs(60);
+
+/// Redirector metadata budget.
+///
+/// `bmclapi2.bangbang93.com` never serves bytes: every file `GET` costs one
+/// metadata request and answers `302` to a signed URL on a rotating
+/// OpenBMCLAPI node. Its own headers advertise the budget
+/// (`x-ratelimit-limit-short: 10`, `x-ratelimit-reset-short: 60`,
+/// `x-ratelimit-remaining-short`, and `Retry-After-short: 60` on a `429`).
+/// The measured penalty for overrunning it was not only a `429`: a 46 s
+/// overrun (200 requests at N=8) got the client's IP TCP-blackholed for about
+/// twenty minutes. The window is therefore a hard budget, never a hint.
+pub(crate) const REDIRECTOR_TOKEN_CAPACITY: usize = 10;
+pub(crate) const REDIRECTOR_REFILL_WINDOW: Duration = Duration::from_secs(60);
+pub(crate) const REDIRECTOR_DEFAULT_PARK: Duration = Duration::from_secs(60);
+pub(crate) const REDIRECTOR_MAX_PARK: Duration = Duration::from_secs(600);
+pub(crate) const REDIRECTOR_LONG_BUCKET_CAPACITY: usize = 1000;
+pub(crate) const REDIRECTOR_LONG_BUCKET_WINDOW: Duration =
+    Duration::from_secs(46 * 60);
+/// How long a transfer waits for a redirector token before it gives up and
+/// reports the route as unavailable. Waiting a whole window would stall an
+/// install for a metadata request that has an official alternative.
+pub(crate) const REDIRECTOR_WAIT: Duration = Duration::from_millis(750);
+pub(crate) const REDIRECTOR_RATELIMIT_LIMIT_SHORT: &str =
+    "x-ratelimit-limit-short";
+pub(crate) const REDIRECTOR_RATELIMIT_REMAINING_SHORT: &str =
+    "x-ratelimit-remaining-short";
+pub(crate) const REDIRECTOR_RATELIMIT_RESET_SHORT: &str =
+    "x-ratelimit-reset-short";
+pub(crate) const RETRY_AFTER_SHORT_HEADER: &str = "retry-after-short";
+
+/// Adaptive data-plane concurrency, measured per post-redirect host.
+///
+/// A single global number is wrong in both directions: `piston-data` was clean
+/// at 96 connections while `maven.aliyun.com` kneed at 8–16 and
+/// `cmcc.mirrors.ustc.edu.cn` refused connections from 16 up. Every host
+/// therefore starts at four (safe on the worst measured host and already worth
+/// 70–80 % of its eventual peak) and earns more only from its own signals.
+pub(crate) const HOST_CONCURRENCY_INITIAL: usize = 4;
+pub(crate) const HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS: u32 = 8;
+pub(crate) const HOST_CONCURRENCY_GROWTH_STEP: usize = 1;
+pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_STEP: usize = 2;
+pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_CEILING: usize = 16;
+pub(crate) const HOST_CONCURRENCY_CAP_BULK: usize = 128;
+/// Ceiling for a host with no measurement of its own.
+///
+/// The spec's two caps are 64 for small files and 128 for bulk, but a *socket*
+/// plan still has to fit the per-authority socket budget, which is 64. A host
+/// that was never measured therefore keeps that measured-safe number rather
+/// than being handed a ceiling nothing in this build can fund.
+pub(crate) const HOST_CONCURRENCY_CAP_UNMEASURED: usize = 64;
+/// p90 TTFB may grow to this percentage of the host's own baseline before the
+/// small-object knee is considered reached.
+pub(crate) const HOST_CONCURRENCY_LATENCY_RATIO_PERCENT: u128 = 125;
+pub(crate) const HOST_CONCURRENCY_FAST_ATTACK_PERCENT: usize = 70;
+pub(crate) const HOST_CONCURRENCY_PERCENT_BASE: usize = 100;
+pub(crate) const HOST_CONCURRENCY_FLOOR: usize = 2;
+pub(crate) const GLOBAL_IN_FLIGHT_CAP: usize = 128;
+/// Files below this size use p90 TTFB inflation as the knee signal instead of
+/// a throughput plateau: measured TTFB went 120 ms → 722 ms between 32 and 64
+/// streams on 121 KB objects.
+pub(crate) const SMALL_FILE_SIGNAL_BYTES: u64 = 500 * 1024;
+/// Objects at or above this size use the throughput-plateau controller.
+pub(crate) const BULK_SIGNAL_BYTES: u64 = 1024 * 1024;
+pub(crate) const SMALL_FILE_CONCURRENCY_CEILING: usize = 32;
+pub(crate) const HOST_CONCURRENCY_COOLDOWN_LADDER: [Duration; 3] =
+    [Duration::from_secs(60), Duration::from_secs(300), Duration::from_secs(1200)];
+/// Files smaller than this are never split; the cold-start ramp of the first
+/// ~30 MB costs more than the extra connections gain.
+pub(crate) const MIN_SPLIT_BYTES: u64 = 8 * 1024 * 1024;
+pub(crate) const SPLIT_CHUNK_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const STALE_PARTIAL_DOWNLOAD_MAX_AGE: Duration =
     Duration::from_secs(7 * 24 * 60 * 60);
 pub(crate) const TASK_PROBE_MAX_ROUTES: usize = 3;
