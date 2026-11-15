@@ -24,7 +24,8 @@
 //! congestion.
 
 use crate::util::download::constants::{
-    GLOBAL_IN_FLIGHT_CAP, HOST_CONCURRENCY_CAP_UNMEASURED,
+    GLOBAL_IN_FLIGHT_CAP, H2_STREAMS_PER_CONNECTION_CAP,
+    H2_STREAMS_PER_LEARNED_SOCKET, HOST_CONCURRENCY_CAP_UNMEASURED,
     HOST_CONCURRENCY_COOLDOWN_LADDER, HOST_CONCURRENCY_FAST_ATTACK_PERCENT,
     HOST_CONCURRENCY_FAST_GROWTH_CEILING, HOST_CONCURRENCY_FAST_GROWTH_STEP,
     HOST_CONCURRENCY_FLOOR, HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS,
@@ -92,6 +93,14 @@ impl SizeClass {
 struct HostState {
     limit: usize,
     in_flight: usize,
+    /// Multiplexed streams currently admitted against this host.
+    ///
+    /// Separate from `in_flight` because the two measure different things: a
+    /// stream is not a socket. Measured, one connection carrying sixteen
+    /// streams ties eight plain connections, so one socket is worth two streams
+    /// — charging each stream as a whole transfer slot would hand a fresh host
+    /// four streams where four plain sockets already deliver eight.
+    stream_in_flight: usize,
     /// `None` while healthy; `Some` until the cooldown elapses.
     cooldown_until: Option<Instant>,
     /// The ladder was exhausted; this host is done for the session.
@@ -115,6 +124,7 @@ impl HostState {
         Self {
             limit: HOST_CONCURRENCY_INITIAL,
             in_flight: 0,
+            stream_in_flight: 0,
             cooldown_until: None,
             blocked: false,
             completions: 0,
@@ -257,6 +267,92 @@ impl HostPolicy {
             return 0;
         }
         state.limit.saturating_sub(state.in_flight)
+    }
+
+    /// Stream slots this host may carry on the multiplexed path.
+    ///
+    /// The learned limit counts *sockets*, and a stream is not a socket: the
+    /// measurement is that sixteen streams on one connection tie eight parallel
+    /// TCP connections, so one socket is worth about two streams. The stream
+    /// allowance is therefore the learned socket limit scaled by that measured
+    /// ratio, capped at one connection's saturation point. The learned limit
+    /// still decides — a host that learnt two gets four streams rather than
+    /// sixteen, and a parked host gets none — but the scaling is what keeps the
+    /// multiplexed path from being handed less capacity than the plain path it
+    /// replaced.
+    fn stream_allowance_locked(state: &HostState) -> usize {
+        state
+            .limit
+            .saturating_mul(H2_STREAMS_PER_LEARNED_SOCKET)
+            .min(H2_STREAMS_PER_CONNECTION_CAP)
+    }
+
+    /// Reserves one multiplexed stream against this host.
+    fn reserve_stream(&self) -> Option<()> {
+        let now = Instant::now();
+        let mut state = self.state.lock();
+        if state.parked(now) {
+            return None;
+        }
+        if state.stream_in_flight >= Self::stream_allowance_locked(&state) {
+            return None;
+        }
+        state.stream_in_flight += 1;
+        Some(())
+    }
+
+    fn release_stream(&self, count: usize) {
+        {
+            let mut state = self.state.lock();
+            state.stream_in_flight =
+                state.stream_in_flight.saturating_sub(count);
+        }
+        self.notify.notify_waiters();
+    }
+
+    /// Waits for one multiplexed stream slot.
+    async fn admit_stream(
+        &self,
+        wait: Duration,
+    ) -> Result<(), AdmissionError> {
+        let deadline = Instant::now() + wait;
+        loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.reserve_stream().is_some() {
+                return Ok(());
+            }
+            {
+                let now = Instant::now();
+                let state = self.state.lock();
+                if state.blocked {
+                    return Err(AdmissionError::Blocked);
+                }
+                if let Some(until) = state.cooldown_until
+                    && until > now
+                {
+                    return Err(AdmissionError::Cooling(until - now));
+                }
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(AdmissionError::Exhausted);
+            }
+            let _ = tokio::time::timeout(remaining, notified).await;
+        }
+    }
+
+    /// Free multiplexed stream slots on this host right now.
+    #[cfg(test)]
+    pub(crate) fn stream_headroom(&self) -> usize {
+        let now = Instant::now();
+        let state = self.state.lock();
+        if state.parked(now) {
+            return 0;
+        }
+        Self::stream_allowance_locked(&state)
+            .saturating_sub(state.stream_in_flight)
     }
 
     fn reserve(&self, size: SizeClass, host_cap: usize) -> Option<()> {
@@ -674,6 +770,61 @@ pub(crate) fn try_acquire(
             None
         }
     }
+}
+
+/// Admission for one multiplexed HTTP/2 stream.
+///
+/// A stream is a transfer's worth of work against the serving host, so it must
+/// respect that host's learned limit: otherwise the controller never sees the
+/// multiplexed path at all, and a host that kneed at four sockets is handed
+/// thirty-two streams while its learned limit keeps reporting four.
+///
+/// The allowance is the learned limit scaled by the measured multiplexing ratio
+/// (`H2_STREAMS_PER_LEARNED_SOCKET`) and capped at one connection's saturation
+/// point (`H2_STREAMS_PER_CONNECTION_CAP`). Charging a stream as a whole socket
+/// would give a fresh host four streams where four plain sockets already
+/// deliver eight, so multiplexing could never pay for itself.
+///
+/// It deliberately does *not* take a [`GLOBAL_IN_FLIGHT_CAP`] permit. That
+/// ceiling exists to bound large byte transfers; charging every asset stream
+/// against it would make a four-hundred-file asset batch compete with the
+/// downloads the cap protects, and the batch already bounds its own logical
+/// workers through the configured download concurrency. The socket those
+/// streams share is charged separately by [`super::native_budget`].
+pub(crate) async fn acquire_stream(
+    route: &DownloadRoute,
+    wait: Duration,
+) -> Result<HostStreamPermit, AdmissionError> {
+    let url = admission_url(route);
+    let Some(policy) = policy_for_url(&url, route.proxy) else {
+        return Ok(HostStreamPermit { policy: None });
+    };
+    policy.admit_stream(wait).await?;
+    Ok(HostStreamPermit {
+        policy: Some(policy),
+    })
+}
+
+/// One stream's slot in the serving host's learned multiplexed allowance.
+pub(crate) struct HostStreamPermit {
+    policy: Option<Arc<HostPolicy>>,
+}
+
+impl Drop for HostStreamPermit {
+    fn drop(&mut self) {
+        if let Some(policy) = &self.policy {
+            policy.release_stream(1);
+        }
+    }
+}
+
+/// Free multiplexed stream slots on the host a route would land on.
+#[cfg(test)]
+pub(crate) fn stream_headroom(route: &DownloadRoute) -> usize {
+    let url = admission_url(route);
+    policy_for_url(&url, route.proxy)
+        .map(|policy| policy.stream_headroom())
+        .unwrap_or(H2_STREAMS_PER_CONNECTION_CAP)
 }
 
 /// Free slots on the host a route would land on.

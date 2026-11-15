@@ -1076,6 +1076,9 @@ fn record_route_success(
                 &mut entry.throughput_bps,
                 bytes as f64 / transfer_elapsed.as_secs_f64(),
             );
+            entry.throughput_samples =
+                entry.throughput_samples.saturating_add(1);
+            entry.throughput_measured_at = Some(Instant::now());
         }
     }
 }
@@ -1107,6 +1110,8 @@ pub(crate) fn record_route_transfer_success(
     entry.consecutive_failures = 0;
     entry.cooldown_until = None;
     update_ewma(&mut entry.throughput_bps, throughput_bps);
+    entry.throughput_samples = entry.throughput_samples.saturating_add(1);
+    entry.throughput_measured_at = Some(Instant::now());
 }
 
 fn record_route_failure(
@@ -4406,6 +4411,12 @@ pub(crate) async fn prepare_native_download_routes(
     semaphore: &FetchSemaphore,
 ) {
     crate::util::download::native_reputation::load_if_needed().await;
+    // The object-miss memo is what keeps a fresh install from paying the same
+    // guaranteed `404` on `maven.aliyun.com/repository/public` again: 13 % of
+    // small Maven paths (natives and classifiers) have no artifact there. It is
+    // loaded here, before ordering, so a memoised miss is skipped before it is
+    // attempted rather than discovered again.
+    crate::util::download::route_health::ensure_object_misses_loaded().await;
     ensure_task_routes_probed(
         request,
         routes,
@@ -6320,6 +6331,10 @@ async fn download_to_path_inner(
         "Acquired destination download lock"
     );
     let mode = source_mode_for_resource(request.resource);
+    // Load the object-miss memo before resolving routes: the resolver drops
+    // paths a route has already 404'd, and doing that after the plan is built
+    // would make the first download of every launch pay the miss again.
+    crate::util::download::route_health::ensure_object_misses_loaded().await;
     let mut routes = build_download_routes(&request, mode);
     let part_path = suffixed_path(destination, PARTIAL_FILE_SUFFIX);
 

@@ -11,7 +11,8 @@ use crate::util::download::constants::H2_ADDITIONAL_CONNECTIONS_ENABLED as ADDIT
 use crate::util::download::constants::H2_CONNECTION_ATTEMPTS;
 use crate::util::download::constants::{
     DOWNLOAD_SCHEDULING_GRACE, H2_ADMISSION_LOG_THRESHOLD,
-    H2_CONNECTION_WINDOW, H2_INITIAL_STREAM_WINDOW, H2_POOL_ADMISSION,
+    H2_CONNECTION_WINDOW, H2_HEAD_OF_LINE_STALLS_BEFORE_SIBLING,
+    H2_INITIAL_STREAM_WINDOW, H2_POOL_ADMISSION,
     H2_POOL_ENDPOINT_CHANGED_BEFORE_H2_STREAM_ASSIGNMENT,
     H2_POOL_ENDPOINT_CHANGED_WHILE_WAITING_FOR_THE_H2_CONNECTION_SLOT,
     H2_POOL_ENDPOINT_DID_NOT_NEGOTIATE_H2,
@@ -22,8 +23,8 @@ use crate::util::download::constants::{
     H2_POOL_HTTP_2_POOL_HAS_NO_LIVE_CONNECTION,
     H2_POOL_HTTP_2_ROUTE_HAS_NO_AUTHORITY,
     H2_POOL_PINNED_TCP_CONNECTION_TIMED_OUT,
-    H2_POOL_SHARED_HTTP_2_CONNECTION_IS_NOT_COVERED_BY_THE, HTTPS_PORT,
-    MODRINTH_CDN_AUTHORITY,
+    H2_POOL_SHARED_HTTP_2_CONNECTION_IS_NOT_COVERED_BY_THE,
+    H2_STREAMS_PER_CONNECTION_CAP, HTTPS_PORT, MODRINTH_CDN_AUTHORITY,
 };
 #[cfg(test)]
 use crate::util::download::constants::{
@@ -111,6 +112,11 @@ pub struct SharedH2Connection {
     bytes_transferred: AtomicUsize,
     reserved_streams: Arc<AtomicUsize>,
     successful_responses: AtomicUsize,
+    /// Consecutive streams that waited at the peer's stream limit.
+    ///
+    /// Reset by any stream that is admitted without a long wait, so the counter
+    /// always describes *current* queueing rather than a historical hiccup.
+    head_of_line_stalls: AtomicUsize,
     last_failure: Mutex<Option<std::time::Instant>>,
     last_activity: Arc<Mutex<std::time::Instant>>,
     evict: Arc<Notify>,
@@ -162,6 +168,7 @@ impl SharedH2Connection {
             bytes_transferred: AtomicUsize::new(0),
             reserved_streams: Arc::new(AtomicUsize::new(0)),
             successful_responses: AtomicUsize::new(0),
+            head_of_line_stalls: AtomicUsize::new(0),
             last_failure: Mutex::new(None),
             last_activity: Arc::new(Mutex::new(std::time::Instant::now())),
             evict: Arc::new(Notify::new()),
@@ -298,6 +305,40 @@ impl SharedH2Connection {
             Some(std::time::Instant::now());
     }
 
+    /// Records whether a stream had to wait at the peer's stream limit.
+    ///
+    /// This is the head-of-line signal the pool already produces on every
+    /// stream: `open_inner` times the wait on `SendRequest::ready()`, which is
+    /// exactly "this connection's stream credit is exhausted". Two consecutive
+    /// stalls mean more multiplexing is no longer free and a second TCP
+    /// connection is the cheaper way to add capacity.
+    fn record_stream_admission_wait(&self, waited: Duration) {
+        if waited >= H2_ADMISSION_LOG_THRESHOLD {
+            self.head_of_line_stalls.fetch_add(1, Ordering::AcqRel);
+        } else {
+            self.head_of_line_stalls.store(0, Ordering::Release);
+        }
+    }
+
+    /// Whether this connection has queued long enough to justify a sibling.
+    pub(crate) fn head_of_line_saturated(&self) -> bool {
+        self.head_of_line_stalls.load(Ordering::Acquire)
+            >= H2_HEAD_OF_LINE_STALLS_BEFORE_SIBLING
+    }
+
+    /// Whether another application stream should be placed on this connection.
+    ///
+    /// `H2_STREAMS_PER_CONNECTION_CAP` is the measured saturation point of one
+    /// connection, so beyond it the scheduler prefers a different connection and
+    /// asks the pool to open one. This is advisory rather than hard: a caller
+    /// takes a stream permit from `h2_stream_budget`, and the pool's
+    /// `select_connection` only chooses among live sockets. When every socket
+    /// is full the least-loaded one is still returned, because stalling a batch
+    /// on a handshake that may fail is worse than one stream over the target.
+    pub(crate) fn has_stream_capacity(&self) -> bool {
+        self.assigned_streams_for_scheduler() < H2_STREAMS_PER_CONNECTION_CAP
+    }
+
     fn healthy_for_expansion(&self) -> bool {
         self.successful_responses.load(Ordering::Acquire) > 0
             && self
@@ -368,6 +409,7 @@ impl SharedH2Connection {
                 })?
                 .map_err(crate::ErrorKind::DownloadH2Error)?;
         let ready_wait = ready_started.elapsed();
+        self.record_stream_admission_wait(ready_wait);
         if ready_wait >= H2_ADMISSION_LOG_THRESHOLD {
             tracing::debug!(
                 authority = %self.authority,

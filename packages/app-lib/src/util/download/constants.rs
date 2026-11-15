@@ -106,6 +106,33 @@ pub(crate) const ASSET_RESOURCE_WAIT_TIMEOUT: Duration =
 pub(crate) const H2_ADDITIONAL_CONNECTIONS_ENABLED: bool = true;
 pub(crate) const H2_ADMISSION_LOG_THRESHOLD: Duration =
     Duration::from_millis(25);
+/// Streams one shared HTTP/2 connection is planned to carry.
+///
+/// Measured saturation: a single connection stopped improving at about sixteen
+/// concurrent streams, and a second connection then raised the aggregate. The
+/// HTTP/2 pool therefore allocates new streams to the least-loaded connection
+/// below this number and treats a full connection as the signal to open a
+/// sibling. This is an allocation target, not a hard block: while a sibling
+/// handshake is in flight the only available connection may briefly carry one
+/// stream more rather than stalling the batch.
+pub(crate) const H2_STREAMS_PER_CONNECTION_CAP: usize = 16;
+/// Streams one learned socket slot may carry on the multiplexed path.
+///
+/// Measured: sixteen streams on one connection tie eight parallel TCP
+/// connections, so one socket is worth about two streams. Expressing the stream
+/// allowance as `learned_limit × this` is what keeps the learned limit in
+/// charge — a host that learnt two gets four streams rather than sixteen, and a
+/// parked host gets none — without handing a fresh host (limit four) only four
+/// streams, which is half of what four plain sockets already deliver.
+pub(crate) const H2_STREAMS_PER_LEARNED_SOCKET: usize = 2;
+/// Head-of-line stalls before a sibling connection earns its handshake.
+///
+/// A stall is a stream that waited at the peer's stream limit (the `ready()`
+/// gate in `SharedH2Connection::open`) for longer than
+/// [`H2_ADMISSION_LOG_THRESHOLD`]. Two stalls on one connection are what the
+/// measurement showed to be the point at which a second TCP connection wins
+/// over more multiplexing.
+pub(crate) const H2_HEAD_OF_LINE_STALLS_BEFORE_SIBLING: usize = 2;
 pub(crate) const H2_CONNECTION_ATTEMPTS: usize = 2;
 pub(crate) const H2_CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const H2_CONNECTION_WINDOW: u32 = 64 * 1024 * 1024;
@@ -354,6 +381,52 @@ pub(crate) const NATIVE_SWITCH_SPEED_PERCENT: u64 = 125;
 pub(crate) const RECONNECT_OVERHEAD_MAX: Duration = Duration::from_secs(5);
 pub(crate) const RECONNECT_OVERHEAD_MIN: Duration = Duration::from_millis(100);
 pub(crate) const ROUTE_HEALTH_EWMA_ALPHA: f64 = 0.25;
+/// How long a measured route throughput stays trustworthy for ordering.
+///
+/// A throughput sample describes a network path, not a server's identity: the
+/// same mirror that was fast this morning can be congested this afternoon, and
+/// the ISP route to it can change between launches. Thirty minutes is long
+/// enough for a session's own probes and first transfers to reorder the plan,
+/// and short enough that a stale number cannot pin the wrong source for a whole
+/// install or a whole day.
+pub(crate) const ROUTE_THROUGHPUT_TRUST_WINDOW: Duration =
+    Duration::from_secs(30 * 60);
+/// Successful transfers needed before a measured throughput may reorder routes.
+///
+/// One sample is one object on one connection, which is not yet evidence that
+/// the rate describes the route; two consecutive samples are. The threshold is
+/// deliberately the same confidence the cold-start probe uses
+/// ([`COLD_START_ROUTE_HEALTH_SAMPLE_THRESHOLD`]): a route the planner already
+/// treats as measured is a route it may reorder by.
+pub(crate) const ROUTE_THROUGHPUT_TRUST_SAMPLES: u32 = 2;
+/// How much faster a measured route must be before it outranks the configured
+/// source.
+///
+/// The measured gap this exists for is two orders of magnitude (13.6 MB/s
+/// official against 88–302 KB/s OpenBMCLAPI nodes), so a 25 % margin still
+/// captures it while leaving the user's preference in charge of routes whose
+/// measured difference is within run-to-run noise.
+pub(crate) const ROUTE_THROUGHPUT_PREFERENCE_PERCENT: f64 = 1.25;
+/// The rate a route is ordered by when it has no trustworthy measurement.
+///
+/// This is a prior, not a claim about any host: it is the rate at which an
+/// unmeasured route is considered "not obviously slower". It sits between the
+/// two measured populations on this network — OpenBMCLAPI nodes at 88–302 KB/s
+/// and the official hosts at 12–15 MB/s. A route measuring below it therefore
+/// loses its lead to an unmeasured one (the Chinese-locale mirror case), and a
+/// route measuring above it takes the lead; with nothing measured at all, every
+/// route uses the prior and the configured source preference decides, which is
+/// what keeps cold start unchanged.
+pub(crate) const ROUTE_THROUGHPUT_UNMEASURED_PRIOR_BPS: f64 =
+    4.0 * 1024.0 * 1024.0;
+/// How long a path known to be missing on one route stays skipped.
+///
+/// The memo is evidence about a mirror's index, not about the network: 13 % of
+/// small Maven paths have no artifact under `repository/public` because the
+/// repository does not mirror classifiers. It can still be synchronised later,
+/// so the memory expires rather than lasting forever.
+pub(crate) const ROUTE_OBJECT_MISS_TTL: Duration =
+    Duration::from_secs(24 * 60 * 60);
 /// Consecutive failures a mirror may accumulate before automatic mode stops
 /// leading with it.
 ///

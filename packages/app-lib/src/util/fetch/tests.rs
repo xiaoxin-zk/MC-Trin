@@ -1,5 +1,7 @@
 use super::*;
-use crate::util::download::constants::ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD;
+use crate::util::download::constants::{
+    ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD, ROUTE_THROUGHPUT_TRUST_WINDOW,
+};
 
 #[test]
 fn custom_modrinth_sources_follow_priority_and_keep_official_fallback() {
@@ -1460,6 +1462,8 @@ fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
         RouteHealth {
             success_samples: 8,
             throughput_bps: Some(900_000_000.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
             ttfb_ms: Some(1.0),
             ..RouteHealth::default()
         },
@@ -1585,6 +1589,232 @@ fn auto_without_a_mirror_preference_keeps_the_official_route_first() {
     *ROUTE_HEALTH.lock() = previous_health;
 }
 
+/// Records a trustworthy throughput measurement for one route.
+fn record_measured_throughput(
+    route: &DownloadRoute,
+    resource: ResourceClass,
+    bytes_per_second: f64,
+) {
+    let key = route_health_key(route, resource).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(bytes_per_second),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
+            ttfb_ms: Some(1.0),
+            ..RouteHealth::default()
+        },
+    );
+}
+
+#[test]
+fn a_measured_faster_mirror_leads_even_without_the_locale_preference() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The mirror is the measured-faster origin on this network, so it must lead
+    // whatever the locale says. Nothing in the ordering names a host: this is
+    // the "prefer the measured-faster route" rule, not "official first".
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        14.0 * 1024.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, false);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "the measured-faster route must lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_measured_faster_official_host_overtakes_a_locale_preferred_mirror() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The measured production case: official hosts at 12–15 MB/s against
+    // OpenBMCLAPI nodes at 88–302 KB/s. The locale preference is real and the
+    // mirror is healthy — only the measurement outranks it.
+    let mut routes = auto_order_test_routes();
+    let official = routes
+        .iter()
+        .find(|route| is_official_route(route))
+        .unwrap()
+        .clone();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &official,
+        ResourceClass::MinecraftAsset,
+        13.6 * 1024.0 * 1024.0,
+    );
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        180.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a measured 75x faster official host must lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes[1].source, DownloadRouteSource::Bmclapi);
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn an_unmeasured_route_is_never_sorted_below_a_slow_or_stale_measurement() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    // Very slow, and stale: outside the trust window.
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(64.0 * 1024.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(
+                Instant::now()
+                    - ROUTE_THROUGHPUT_TRUST_WINDOW
+                    - Duration::from_secs(60),
+            ),
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "a stale measurement must not displace the locale preference: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_freshly_measured_slow_mirror_yields_to_the_unmeasured_official_host() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The production case this rule exists for. With a Chinese locale the
+    // mirror leads at cold start; it then measures 88–302 KB/s on OpenBMCLAPI
+    // nodes while the official hosts measure 12–15 MB/s. Once the mirror has a
+    // *fresh* slow measurement it must stop leading — otherwise every install
+    // keeps paying two orders of magnitude for the user's locale preference.
+    // The official host has not transferred anything yet, so this is also the
+    // "measured beats unmeasured" direction of the rule.
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        180.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a measured-slow mirror must not keep leading, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_single_throughput_sample_is_not_a_measurement() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    let official = routes
+        .iter()
+        .find(|route| is_official_route(route))
+        .unwrap()
+        .clone();
+    let key =
+        route_health_key(&official, ResourceClass::MinecraftAsset).unwrap();
+    let single_sample = RouteHealth {
+        success_samples: 1,
+        throughput_bps: Some(13.6 * 1024.0 * 1024.0),
+        throughput_samples: 1,
+        throughput_measured_at: Some(Instant::now()),
+        ..RouteHealth::default()
+    };
+    assert!(
+        crate::util::download::route_health::trusted_throughput(&single_sample)
+            .is_none(),
+        "one object is one sample, not a route measurement"
+    );
+    ROUTE_HEALTH.lock().insert(key, single_sample);
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "an unproven sample must not displace the locale preference"
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
 #[test]
 fn official_only_drops_mirrors_even_when_the_locale_prefers_them() {
     let mut routes = auto_order_test_routes();
@@ -1645,6 +1875,8 @@ fn a_mirror_preference_never_promotes_mcim_above_other_routes() {
         RouteHealth {
             success_samples: 8,
             throughput_bps: Some(900_000_000.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
             ttfb_ms: Some(1.0),
             ..RouteHealth::default()
         },
