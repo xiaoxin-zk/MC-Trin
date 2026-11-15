@@ -599,8 +599,9 @@ async fn single_stream(
         part_path,
     );
     let mut downloaded = 0_u64;
+    let uri_text = uri.to_string();
     let activity = super::h2_receive::H2TransferActivity::for_transfer(
-        Some(uri.as_str()),
+        Some(uri_text.as_str()),
         route.proxy,
     );
     let mut progress_gate = super::h2_receive::H2ProgressGate::new(total_size);
@@ -1593,8 +1594,9 @@ async fn download_asset_item(
         };
         let mut downloaded = 0_u64;
         let transfer_started = Instant::now();
+        let current_uri_text = current_uri.to_string();
         let activity = super::h2_receive::H2TransferActivity::for_transfer(
-            Some(current_uri.as_str()),
+            Some(current_uri_text.as_str()),
             current_route.proxy,
         );
         loop {
@@ -1654,7 +1656,7 @@ async fn download_asset_item(
         // streams, and its completion is one of the eight that may earn the
         // host another connection.
         super::host_admission::record_completion(
-            current_uri.as_str(),
+            current_uri_text.as_str(),
             current_route.proxy,
             Some(downloaded),
             transfer_started.elapsed(),

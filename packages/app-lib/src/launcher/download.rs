@@ -2189,7 +2189,8 @@ pub async fn download_assets(
         // The memo must be merged before the batch resolves its first route,
         // otherwise a mirror path known to 404 is planned anyway and the whole
         // batch pays it once per fresh install.
-        crate::util::download::route_health::ensure_object_misses_loaded().await;
+        crate::util::download::route_health::ensure_object_misses_loaded()
+            .await;
         let mut routes = resolve_download_routes_for(
             &first_url,
             ResourceClass::MinecraftAsset,

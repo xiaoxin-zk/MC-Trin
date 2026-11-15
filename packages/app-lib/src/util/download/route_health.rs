@@ -360,9 +360,8 @@ fn prune_object_misses(misses: &mut HashMap<String, Instant>) {
     {
         return;
     }
-    misses.retain(|_, learned_at| {
-        learned_at.elapsed() <= ROUTE_OBJECT_MISS_TTL
-    });
+    misses
+        .retain(|_, learned_at| learned_at.elapsed() <= ROUTE_OBJECT_MISS_TTL);
 }
 
 /// Merges the persisted memo into this session, once.
@@ -450,17 +449,24 @@ async fn write_object_misses() -> std::io::Result<()> {
         return Ok(());
     };
     let now = unix_now();
-    let mut misses = OBJECT_MISSES.lock();
-    prune_object_misses(&mut misses);
-    let mut entries = misses
-        .iter()
-        .map(|(key, learned_at)| {
-            // The in-memory value is monotonic; store its age against wall
-            // clock so a restart can still measure how old it is.
-            (key.clone(), now.saturating_sub(learned_at.elapsed().as_secs()))
-        })
-        .collect::<Vec<_>>();
-    drop(misses);
+    let mut entries = {
+        // Keep the guard inside its own scope so it can never be captured by
+        // the future across an await below: `parking_lot`'s guard is not
+        // `Send`, and this function is spawned as a task.
+        let mut misses = OBJECT_MISSES.lock();
+        prune_object_misses(&mut misses);
+        misses
+            .iter()
+            .map(|(key, learned_at)| {
+                // The in-memory value is monotonic; store its age against wall
+                // clock so a restart can still measure how old it is.
+                (
+                    key.clone(),
+                    now.saturating_sub(learned_at.elapsed().as_secs()),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
     // Newest first, so the truncation below drops the oldest learnings rather
     // than the freshest ones.
     entries.sort_unstable_by(|left, right| right.1.cmp(&left.1));
@@ -549,8 +555,7 @@ pub(crate) fn drop_known_object_misses(routes: &mut Vec<DownloadRoute>) {
     let kept = routes
         .iter()
         .filter(|route| {
-            !object_miss_key(&route.url)
-                .is_some_and(|key| live.contains(&key))
+            !object_miss_key(&route.url).is_some_and(|key| live.contains(&key))
         })
         .cloned()
         .collect::<Vec<_>>();

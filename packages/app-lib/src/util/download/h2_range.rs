@@ -248,7 +248,11 @@ impl RangeTransport for NativeRangeTransport<'_> {
         let semaphore = self.semaphore.unwrap_or(&self.fallback_budget);
         let permit = tokio::time::timeout(
             RESOURCE_WAIT_TIMEOUT,
-            fetch::acquire_native_connection(self.route, semaphore),
+            fetch::acquire_native_connection(
+                self.route,
+                semaphore,
+                Some(self.total_size),
+            ),
         )
         .await
         .map_err(|_| H2DownloadFailure::Connect)?

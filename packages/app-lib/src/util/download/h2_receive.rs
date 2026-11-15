@@ -128,8 +128,9 @@ impl H2TransferActivity {
         Self {
             _activity: crate::State::get_if_initialized()
                 .map(|state| state.begin_download_connection()),
-            authority: url
-                .and_then(|url| super::host_admission::TransferMeter::for_url(url, proxy)),
+            authority: url.and_then(|url| {
+                super::host_admission::TransferMeter::for_url(url, proxy)
+            }),
         }
     }
 

@@ -250,8 +250,7 @@ pub(crate) fn available(route: &DownloadRoute) -> usize {
         .min(
             // The learned transfer limit is the other half of admission: a host
             // may have spare sockets and no spare transfers.
-            super::host_admission::available(route)
-                .max(1),
+            super::host_admission::available(route).max(1),
         )
         .min(PHYSICAL_CONNECTIONS.available_permits())
 }

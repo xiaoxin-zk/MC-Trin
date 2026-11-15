@@ -7170,11 +7170,7 @@ async fn run_native_route_attempts(
         .await;
         let permit_wait = tokio::time::timeout(
             RESOURCE_WAIT_TIMEOUT,
-            acquire_native_connection(
-                route,
-                semaphore,
-                request.integrity.size,
-            ),
+            acquire_native_connection(route, semaphore, request.integrity.size),
         );
         let resource_wait_started = Instant::now();
         let permit = if let Some(cancellation) = request.cancellation.as_ref() {

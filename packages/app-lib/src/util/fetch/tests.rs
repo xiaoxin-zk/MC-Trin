@@ -4289,7 +4289,9 @@ async fn invalid_content_range_disables_range_splitting_after_repeats() {
         .unwrap();
     let semaphore = FetchSemaphore(Semaphore::new(FILE_VALIDATION_CONCURRENCY));
     let (progress, _receiver) = tokio::sync::mpsc::unbounded_channel();
-    let permit = acquire_native_connection(&route, &semaphore).await.unwrap();
+    let permit = acquire_native_connection(&route, &semaphore, None)
+        .await
+        .unwrap();
     let speed = DownloadSpeedTracker::default();
     let validator = Mutex::new(None);
     let output = crate::util::download::range_output::RangeOutput::create(

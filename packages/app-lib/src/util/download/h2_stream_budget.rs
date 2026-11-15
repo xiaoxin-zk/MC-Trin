@@ -210,9 +210,8 @@ mod tests {
         tokio::pin!(pending);
         assert!(futures::poll!(pending.as_mut()).is_pending());
         assert_eq!(global.0.available_permits(), 2);
-        let available = acquire_download(&other, Some(&global), true)
-            .await
-            .unwrap();
+        let available =
+            acquire_download(&other, Some(&global), true).await.unwrap();
         assert_eq!(global.0.available_permits(), 1);
         drop(available);
         drop(pending);

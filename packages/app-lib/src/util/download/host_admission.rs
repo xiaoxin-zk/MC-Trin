@@ -189,7 +189,8 @@ impl HostState {
             && let Some(p90) = self.p90_ms()
         {
             self.baseline_p90_ms = Some(
-                self.baseline_p90_ms.map_or(p90, |baseline| baseline.min(p90)),
+                self.baseline_p90_ms
+                    .map_or(p90, |baseline| baseline.min(p90)),
             );
         }
     }
@@ -311,10 +312,7 @@ impl HostPolicy {
     }
 
     /// Waits for one multiplexed stream slot.
-    async fn admit_stream(
-        &self,
-        wait: Duration,
-    ) -> Result<(), AdmissionError> {
+    async fn admit_stream(&self, wait: Duration) -> Result<(), AdmissionError> {
         let deadline = Instant::now() + wait;
         loop {
             let notified = self.notify.notified();
@@ -453,7 +451,7 @@ impl HostPolicy {
             && let Some(rate) = rate
         {
             let plateau = state.last_rate.is_some_and(|previous| {
-                u128::from(rate) * HOST_CONCURRENCY_PERCENT_BASE
+                u128::from(rate) * HOST_CONCURRENCY_PERCENT_BASE as u128
                     <= u128::from(previous) * PLATEAU_GAIN_PERCENT
             });
             state.plateau_windows = if plateau {
@@ -668,10 +666,7 @@ fn admission_url(route: &DownloadRoute) -> String {
         .unwrap_or_else(|| route.url.clone())
 }
 
-fn policy_for_url(
-    url: &str,
-    proxy: ProxyPolicy,
-) -> Option<Arc<HostPolicy>> {
+fn policy_for_url(url: &str, proxy: ProxyPolicy) -> Option<Arc<HostPolicy>> {
     let identity = hop_identity(url)?;
     Some(policy_for_scope(&super::proxy_context::authority_key(
         &identity, proxy,
@@ -709,9 +704,8 @@ pub(crate) fn pool_scope_for_route(route: &DownloadRoute) -> Option<String> {
 }
 
 fn cap_for_url(url: &str) -> usize {
-    hop_host(url).map_or(HOST_CONCURRENCY_CAP_UNMEASURED, |host| {
-        host_cap(&host)
-    })
+    hop_host(url)
+        .map_or(HOST_CONCURRENCY_CAP_UNMEASURED, |host| host_cap(&host))
 }
 
 /// Admission and release for one transfer against its effective host.
@@ -882,10 +876,8 @@ pub(crate) fn record_fast_failure(final_url: &str, proxy: ProxyPolicy) {
     let Some(identity) = hop_identity(final_url) else {
         return;
     };
-    policy_for_scope(&super::proxy_context::authority_key(
-        &identity, proxy,
-    ))
-    .record_fast_failure();
+    policy_for_scope(&super::proxy_context::authority_key(&identity, proxy))
+        .record_fast_failure();
 }
 
 /// Records a suspected ban (a burst of failures with no delivered bytes).
@@ -893,10 +885,8 @@ pub(crate) fn record_suspected_ban(final_url: &str, proxy: ProxyPolicy) {
     let Some(identity) = hop_identity(final_url) else {
         return;
     };
-    policy_for_scope(&super::proxy_context::authority_key(
-        &identity, proxy,
-    ))
-    .record_suspected_ban();
+    policy_for_scope(&super::proxy_context::authority_key(&identity, proxy))
+        .record_suspected_ban();
 }
 
 /// A precomputed attribution target for one in-flight transfer.
@@ -935,11 +925,9 @@ pub(crate) fn observed_rate(
     proxy: ProxyPolicy,
 ) -> Option<u64> {
     let identity = hop_identity(final_url)?;
-    policy_for_scope(&super::proxy_context::authority_key(
-        &identity, proxy,
-    ))
-    .snapshot()
-    .observed_rate
+    policy_for_scope(&super::proxy_context::authority_key(&identity, proxy))
+        .snapshot()
+        .observed_rate
 }
 
 /// Expires elapsed cooldowns. Called from the existing maintenance tick so a

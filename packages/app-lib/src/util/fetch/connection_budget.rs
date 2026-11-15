@@ -84,7 +84,7 @@ pub(super) async fn acquire_initial_segment_permits<'a>(
         let host = match crate::util::download::host_admission::try_acquire(
             route, size,
         ) {
-            Some(host) => Some(host),
+            Some(host) => host,
             None => {
                 // A range plan is only started when the host's limit can fund
                 // it; if the limit shrank between planning and admission, hand
@@ -137,9 +137,12 @@ pub(crate) async fn acquire_native_connection<'a>(
         RESOURCE_WAIT_TIMEOUT,
     )
     .await
-    .map_err(|error| crate::Error::from(crate::ErrorKind::NetworkError(
-        format!("{}: {error}", route.url),
-    )))?;
+    .map_err(|error| {
+        crate::Error::from(crate::ErrorKind::NetworkError(format!(
+            "{}: {error}",
+            route.url
+        )))
+    })?;
     let native = crate::util::download::native_budget::acquire(route).await?;
     let global = semaphore.0.acquire().await?;
     Ok(NativeConnectionPermit {
@@ -154,8 +157,7 @@ pub(super) fn try_acquire_native_connection<'a>(
     semaphore: &'a FetchSemaphore,
     size: Option<u64>,
 ) -> Option<NativeConnectionPermit<'a>> {
-    let host =
-        crate::util::download::host_admission::try_acquire(route, size)?;
+    let host = crate::util::download::host_admission::try_acquire(route, size)?;
     let native =
         crate::util::download::native_budget::try_acquire(route).ok()?;
     let global = semaphore.0.try_acquire().ok()?;

@@ -104,14 +104,16 @@ impl Bucket {
         let elapsed = now.duration_since(self.last_refill);
         let window = REDIRECTOR_REFILL_WINDOW.as_secs_f64().max(1.0);
         self.tokens = (self.tokens
-            + elapsed.as_secs_f64() * REDIRECTOR_TOKEN_CAPACITY as f64 / window)
+            + elapsed.as_secs_f64() * REDIRECTOR_TOKEN_CAPACITY as f64
+                / window)
             .min(REDIRECTOR_TOKEN_CAPACITY as f64);
         self.last_refill = now;
 
         let long_elapsed = now.duration_since(self.long_started);
         let long_window = REDIRECTOR_LONG_BUCKET_WINDOW.as_secs_f64().max(1.0);
         self.long_tokens = (self.long_tokens
-            + long_elapsed.as_secs_f64() * REDIRECTOR_LONG_BUCKET_CAPACITY as f64
+            + long_elapsed.as_secs_f64()
+                * REDIRECTOR_LONG_BUCKET_CAPACITY as f64
                 / long_window)
             .min(REDIRECTOR_LONG_BUCKET_CAPACITY as f64);
         self.long_started = now;
@@ -143,7 +145,9 @@ pub(crate) enum RedirectorDenied {
 impl RedirectorDenied {
     pub(crate) fn retry_after(self) -> Option<Duration> {
         match self {
-            Self::Parked(duration) | Self::Exhausted(duration) => Some(duration),
+            Self::Parked(duration) | Self::Exhausted(duration) => {
+                Some(duration)
+            }
             Self::LongBucketExhausted | Self::BulkPlanRefused => None,
         }
     }
@@ -251,8 +255,10 @@ pub(crate) async fn acquire(
 ) -> Result<(), RedirectorDenied> {
     match try_acquire(host, proxy) {
         Ok(()) => Ok(()),
-        Err(denied @ (RedirectorDenied::BulkPlanRefused
-        | RedirectorDenied::LongBucketExhausted)) => Err(denied),
+        Err(
+            denied @ (RedirectorDenied::BulkPlanRefused
+            | RedirectorDenied::LongBucketExhausted),
+        ) => Err(denied),
         Err(denied) => {
             let wait = denied.retry_after().unwrap_or(REDIRECTOR_WAIT);
             tokio::time::sleep(wait.min(REDIRECTOR_WAIT)).await;
@@ -268,8 +274,7 @@ fn park_at(
     duration: Duration,
     now: Instant,
 ) -> Duration {
-    let duration =
-        duration.clamp(Duration::from_secs(1), REDIRECTOR_MAX_PARK);
+    let duration = duration.clamp(Duration::from_secs(1), REDIRECTOR_MAX_PARK);
     with_bucket(host, proxy, now, |bucket| {
         bucket.parked_until = Some(now + duration);
         // A parked authority must not accumulate a full burst while it waits:
@@ -313,18 +318,12 @@ fn header_usize(headers: &HeaderMap, name: &str) -> Option<usize> {
 /// that failed before reaching the redirector still consumed a token here), so
 /// trusting a larger `remaining` from the server is always safe and trusting a
 /// smaller one is conservative.
-fn apply_announced(
-    bucket: &mut Bucket,
-    headers: &HeaderMap,
-    now: Instant,
-) {
+fn apply_announced(bucket: &mut Bucket, headers: &HeaderMap, now: Instant) {
     if let Some(remaining) =
         header_usize(headers, REDIRECTOR_RATELIMIT_REMAINING_SHORT)
     {
-        let limit =
-            header_usize(headers, REDIRECTOR_RATELIMIT_LIMIT_SHORT).unwrap_or(
-                REDIRECTOR_TOKEN_CAPACITY,
-            );
+        let limit = header_usize(headers, REDIRECTOR_RATELIMIT_LIMIT_SHORT)
+            .unwrap_or(REDIRECTOR_TOKEN_CAPACITY);
         let remaining = remaining.min(limit) as f64;
         bucket.tokens = remaining;
     }
@@ -416,11 +415,8 @@ pub(crate) fn note_plan(files: usize) {
     if files < BULK_PLAN_MIN_FILES {
         return;
     }
-    let covers = long_bucket_can_plan(
-        REDIRECTOR_HOSTS[0],
-        ProxyPolicy::System,
-        files,
-    );
+    let covers =
+        long_bucket_can_plan(REDIRECTOR_HOSTS[0], ProxyPolicy::System, files);
     *BULK_PLAN_UNTIL.lock() = Some(Instant::now() + BULK_PLAN_LEASE);
     tracing::debug!(
         files,
@@ -582,12 +578,9 @@ mod tests {
         let duration = REDIRECTOR_DEFAULT_PARK;
         assert_eq!(duration, Duration::from_secs(60));
         park_at("default-park.example", ProxyPolicy::Direct, duration, start);
-        let denied = try_acquire_at(
-            "default-park.example",
-            ProxyPolicy::Direct,
-            start,
-        )
-        .unwrap_err();
+        let denied =
+            try_acquire_at("default-park.example", ProxyPolicy::Direct, start)
+                .unwrap_err();
         assert!(denied.retry_after().unwrap() <= Duration::from_secs(60));
         assert!(denied.retry_after().unwrap() > Duration::from_secs(59));
     }
@@ -623,12 +616,20 @@ mod tests {
         clear_for_test();
         let start = Instant::now();
         for _ in 0..REDIRECTOR_TOKEN_CAPACITY {
-            try_acquire_at("bmclapi2.bangbang93.com.", ProxyPolicy::Direct, start)
-                .unwrap();
+            try_acquire_at(
+                "bmclapi2.bangbang93.com.",
+                ProxyPolicy::Direct,
+                start,
+            )
+            .unwrap();
         }
         assert!(
-            try_acquire_at("BMCLAPI2.bangbang93.com", ProxyPolicy::Direct, start)
-                .is_err(),
+            try_acquire_at(
+                "BMCLAPI2.bangbang93.com",
+                ProxyPolicy::Direct,
+                start
+            )
+            .is_err(),
             "a trailing dot or different case is the same redirector"
         );
         assert!(is_redirector("bmclapi.bangbang93.com"));

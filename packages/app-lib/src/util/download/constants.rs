@@ -324,8 +324,11 @@ pub(crate) const SMALL_FILE_SIGNAL_BYTES: u64 = 500 * 1024;
 /// Objects at or above this size use the throughput-plateau controller.
 pub(crate) const BULK_SIGNAL_BYTES: u64 = 1024 * 1024;
 pub(crate) const SMALL_FILE_CONCURRENCY_CEILING: usize = 32;
-pub(crate) const HOST_CONCURRENCY_COOLDOWN_LADDER: [Duration; 3] =
-    [Duration::from_secs(60), Duration::from_secs(300), Duration::from_secs(1200)];
+pub(crate) const HOST_CONCURRENCY_COOLDOWN_LADDER: [Duration; 3] = [
+    Duration::from_secs(60),
+    Duration::from_secs(300),
+    Duration::from_secs(1200),
+];
 /// Files smaller than this are never split; the cold-start ramp of the first
 /// ~30 MB costs more than the extra connections gain.
 pub(crate) const MIN_SPLIT_BYTES: u64 = 8 * 1024 * 1024;
