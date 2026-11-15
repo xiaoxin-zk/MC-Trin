@@ -64,8 +64,9 @@ impl<K: Eq + Hash + Clone, V: Clone> BoundedTable<K, V> {
         F: FnOnce() -> V,
         D: Fn(&V) -> bool,
     {
+        let tick = self.tick();
         if let Some(entry) = self.entries.get_mut(&key) {
-            entry.last_used = self.tick();
+            entry.last_used = tick;
             return entry.value.clone();
         }
         if self.entries.len() >= self.capacity {

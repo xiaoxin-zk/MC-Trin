@@ -1509,7 +1509,7 @@ async fn download_asset_item(
     let mut current_uri = uri.clone();
     let mut current_route = route.clone();
     let mut redirect_count = 0;
-    let mut ttfb = std::time::Duration::ZERO;
+    let mut ttfb: Option<std::time::Duration> = None;
     let (connection, _stream_permit, _connection_stream, response, mut stream) = loop {
         let _stream_permit = if apply_native_policy {
             Some(
@@ -1570,7 +1570,7 @@ async fn download_asset_item(
             // The latency sample belongs to the hop that answered for the
             // object. A redirect hop's TTFB is the redirector's, and recording
             // it would teach the serving node a knee it never showed.
-            ttfb = hop_ttfb;
+            ttfb = Some(hop_ttfb);
             break (
                 connection,
                 _stream_permit,
@@ -1742,7 +1742,7 @@ async fn download_asset_item(
             current_uri_text.as_str(),
             current_route.proxy,
             Some(downloaded),
-            ttfb,
+            ttfb.unwrap_or_default(),
         );
 
         Ok(match copy_asset_legacy_destinations(item).await {
