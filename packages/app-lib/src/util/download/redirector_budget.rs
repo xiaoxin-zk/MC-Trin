@@ -467,10 +467,11 @@ fn note_response_at(
 /// parallel file GETs rather than the same number at a slower pace. Without
 /// that wiring the halving was a number nothing read, and a `429` left the
 /// next window as wide as the one that caused it.
-pub(crate) fn byte_limit(host: &str, proxy: ProxyPolicy) -> usize {
-    byte_limit_at(host, proxy, Instant::now())
-}
-
+///
+/// There is deliberately no public accessor: the allowance is enforced inside
+/// [`try_acquire_at`] and reported through the `429` tracing line, and a
+/// caller-facing getter would invite a second, divergent notion of "how many
+/// requests may I make".
 fn byte_limit_at(host: &str, proxy: ProxyPolicy, now: Instant) -> usize {
     with_bucket(host, proxy, now, |bucket| bucket.byte_limit)
 }

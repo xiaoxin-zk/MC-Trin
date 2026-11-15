@@ -292,6 +292,12 @@ pub(crate) struct HostPolicy {
 }
 
 /// A snapshot of one host's admission state, for diagnostics and tests.
+///
+/// Only `observed_rate` is read on a production path; the counters exist so a
+/// test can assert the balance of a permit's life, which is the invariant that
+/// has broken here before. `not(test)` therefore allows the unused fields
+/// rather than deleting the evidence a regression would need.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct HostSnapshot {
     pub(crate) limit: usize,
@@ -321,6 +327,15 @@ impl HostPolicy {
         }
     }
 
+    /// Free *transfer* slots on this host.
+    ///
+    /// Deliberately test-only: the production "how many more of these may I
+    /// start" question is the socket one, answered by
+    /// [`super::native_budget::available`]. Exposing a second `available` here
+    /// that answered in transfers is what let a range plan be sized from the
+    /// learned limit and a floor of one report a free socket when the host had
+    /// none.
+    #[cfg(test)]
     pub(crate) fn headroom(&self) -> usize {
         let now = Instant::now();
         let state = self.state.lock();
@@ -931,21 +946,6 @@ pub(crate) async fn acquire(
     })
 }
 
-/// Non-blocking admission for recovery and probe paths.
-pub(crate) fn try_acquire(
-    route: &DownloadRoute,
-    size: Option<u64>,
-) -> Option<HostPermit> {
-    let url = admission_url(route);
-    let policy = policy_for_url(&url, route.proxy)?;
-    let global = GLOBAL_IN_FLIGHT.clone().try_acquire_owned().ok()?;
-    policy.reserve(SizeClass::of(size), cap_for_url(&url))?;
-    Some(HostPermit {
-        policy: Some(policy),
-        _global: Some(global),
-    })
-}
-
 /// Admission for one multiplexed HTTP/2 stream.
 ///
 /// A stream is a transfer's worth of work against the serving host, so it must
@@ -1000,22 +1000,6 @@ pub(crate) fn stream_headroom(route: &DownloadRoute) -> usize {
     policy_for_url(&url, route.proxy)
         .map(|policy| policy.stream_headroom())
         .unwrap_or(H2_STREAMS_PER_HOST_CAP)
-}
-
-/// Free slots on the host a route would land on.
-pub(crate) fn available(route: &DownloadRoute) -> usize {
-    let url = admission_url(route);
-    policy_for_url(&url, route.proxy)
-        .map(|policy| policy.headroom())
-        .unwrap_or(HOST_CONCURRENCY_CAP_UNMEASURED)
-}
-
-/// Transfers currently in flight against that host.
-pub(crate) fn in_use(route: &DownloadRoute) -> usize {
-    let url = admission_url(route);
-    policy_for_url(&url, route.proxy)
-        .map(|policy| policy.snapshot().in_flight)
-        .unwrap_or(0)
 }
 
 /// Growth ceiling for a file's connection count — the host's *measured* cap,
@@ -1233,6 +1217,27 @@ mod tests {
         }
         assert!(policy.snapshot().limit > HOST_CONCURRENCY_INITIAL);
         assert!(policy.snapshot().limit <= cap);
+    }
+
+    #[test]
+    fn the_app_limited_guard_reads_the_counter_of_the_completing_path() {
+        let policy = HostPolicy::new(Instant::now());
+        // A pure stream workload: only `stream_in_flight` grows. A guard that
+        // read the transfer counter saw an idle host on every one of these
+        // completions, refused to grow, and pinned the stream allowance at
+        // eight for the rest of the session.
+        while policy.reserve_stream().is_some() {}
+        assert_eq!(policy.snapshot().limit, HOST_CONCURRENCY_INITIAL);
+        // A stream is not a socket: the transfer counter must stay untouched,
+        // which is exactly why the guard cannot read it here.
+        assert_eq!(policy.snapshot().in_flight, 0);
+        for _ in 0..64 {
+            policy.record_stream_completion(SizeClass::Small, 32, 40.0);
+        }
+        assert!(
+            policy.snapshot().limit > HOST_CONCURRENCY_INITIAL,
+            "a saturated stream path must grow the host limit"
+        );
     }
 
     #[test]

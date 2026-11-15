@@ -189,7 +189,8 @@ pub(crate) fn available_host_streams(route: &DownloadRoute) -> usize {
 mod tests {
     use super::*;
     use crate::util::download::constants::{
-        H2_STREAMS_PER_CONNECTION_CAP, HOST_CONCURRENCY_INITIAL,
+        H2_STREAMS_PER_HOST_CAP, H2_STREAMS_PER_LEARNED_SOCKET,
+        HOST_CONCURRENCY_INITIAL,
     };
     use crate::util::fetch::{DownloadRouteSource, FetchSemaphore};
 
@@ -252,13 +253,13 @@ mod tests {
     async fn a_host_learned_limit_gates_multiplexed_streams() {
         // A fresh host learns four sockets, and the multiplexed allowance is
         // that number scaled by the measured socket-to-stream ratio — never
-        // more than one connection's saturation point, and never just the raw
+        // more than the measured per-host batch knee, and never just the raw
         // limit, which would hand multiplexing less than the plain path already
         // delivers.
         let target = route("stream-gate.invalid");
         let expected = (HOST_CONCURRENCY_INITIAL
-            * crate::util::download::constants::H2_STREAMS_PER_LEARNED_SOCKET)
-            .min(H2_STREAMS_PER_CONNECTION_CAP);
+            * H2_STREAMS_PER_LEARNED_SOCKET)
+            .min(H2_STREAMS_PER_HOST_CAP);
         assert_eq!(available_host_streams(&target), expected);
         let mut held = Vec::new();
         for _ in 0..expected {
@@ -270,5 +271,37 @@ mod tests {
         assert!(futures::poll!(pending.as_mut()).is_pending());
         drop(held);
         assert!(pending.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn stream_completions_grow_a_host_the_transfer_guard_would_call_idle()
+    {
+        // The regression this guards: the app-limited guard used to read
+        // `in_flight` unconditionally, but a multiplexed asset batch only ever
+        // increments `stream_in_flight`. Every stream completion therefore saw
+        // an idle host, returned before growing, and the host stayed at its
+        // cold-start limit for the whole session — pinning the stream allowance
+        // at eight against a measured knee of 64.
+        let target = route("stream-growth.invalid");
+        let before = available_host_streams(&target);
+        // Fill the stream allowance so the guard's "fewer than half in flight"
+        // condition is satisfied, exactly as a saturated asset batch does.
+        let mut held = Vec::new();
+        for _ in 0..before {
+            held.push(acquire_for(&target, true).await.unwrap());
+        }
+        for _ in 0..64 {
+            crate::util::download::host_admission::record_stream_completion(
+                &target.url,
+                target.proxy,
+                Some(256 * 1024),
+                std::time::Duration::from_millis(40),
+            );
+        }
+        drop(held);
+        assert!(
+            available_host_streams(&target) > before,
+            "a saturated stream path must be able to grow the host"
+        );
     }
 }
