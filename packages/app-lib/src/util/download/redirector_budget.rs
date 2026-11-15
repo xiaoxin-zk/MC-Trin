@@ -388,7 +388,11 @@ fn apply_announced(bucket: &mut Bucket, headers: &HeaderMap, now: Instant) {
     {
         let limit = header_usize(headers, REDIRECTOR_RATELIMIT_LIMIT_SHORT)
             .unwrap_or(REDIRECTOR_TOKEN_CAPACITY);
-        let remaining = remaining.min(limit) as f64;
+        // Clamped to the bucket's own capacity, not only to the announced
+        // limit: after a `429` halved the allowance, the service can still
+        // report the *un-halved* remaining count, and adopting it would hand
+        // back the burst the halving exists to prevent.
+        let remaining = remaining.min(limit).min(bucket.byte_limit) as f64;
         bucket.tokens = remaining;
     }
     if headers
