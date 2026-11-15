@@ -569,7 +569,18 @@ async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
     .await;
     let clients =
         fixtures::clients(SelectionMode::Off, &server, &server, false);
-    let request = fixtures::request(size, 0).with_range_connection_floor(32);
+    // `fixtures::request` opts out of range segmentation so the plain-path
+    // fixtures stay single-stream. A connection floor alone does not re-open the
+    // gate — `with_range_connection_floor` only records the floor, it never
+    // lowers `MIN_SPLIT_BYTES` nor re-enables `allow_http1_segmented_download` —
+    // so a request built from it downloads this 64 MiB body on one connection
+    // and spends 16 MiB / 100 KB/s = 163.84 s in the slow quarter. That is the
+    // scenario the test must set up deliberately, exactly as the batch tail
+    // promotion in `run_native_route_attempts` does.
+    let mut request = fixtures::request(size, 0)
+        .with_batch_download_policy()
+        .with_range_connection_floor(32);
+    request.prefer_http1 = true;
     let directory = tempfile::tempdir().unwrap();
     let destination = directory.path().join("last-quarter.bin");
     let part = destination.with_extension("bin.part");
@@ -580,8 +591,27 @@ async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
     let semaphore = FetchSemaphore(tokio::sync::Semaphore::new(64));
     let trial = endpoint_trial_for_range_recovery().await;
     let started = Instant::now();
+    // Derived floor for this fixture, not a guess. The body is 64 MiB, the
+    // fixture paces every *connection* at 10 MB/s and the last 16 MiB at
+    // 100 KB/s, so the plans this test could run are:
+    //
+    //  * one connection (segmentation never enabled): 48 MiB / 10 MB/s = 4.80 s
+    //    plus 16 MiB / 100 KB/s = 163.84 s, total 168.64 s;
+    //  * 32 ranges of 2 MiB with no replenishment: create_remaining_ranges puts
+    //    exactly 8 of them inside the quarter, and 8 x 2 MiB at 100 KB/s each
+    //    runs in parallel for 20.48 s, which is the hard floor of that plan;
+    //  * 32 ranges with replenishment: the 24 fast ranges finish in 2 MiB /
+    //    10 MB/s = 0.21 s, then every 500 ms (DOWNLOAD_RANGE_RECOVERY_INTERVAL)
+    //    the largest remaining range is split tail-first, so the tail's
+    //    concurrency climbs from 8 towards the 40-odd sockets its 256 KiB
+    //    minimum split size allows. Work is 16 MiB, so at a ramp-average of
+    //    roughly twenty sockets it lands near 8 s.
+    //
+    // 30 s is therefore a ~1.5x margin over the 20.48 s an unreplenished plan
+    // already needs, and ~3.7x over the replenished estimate; it still fails by
+    // a wide margin if the request loses its range gate entirely (168.64 s).
     let result = tokio::time::timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(30),
         proxy_context::with_snapshot(
             clients,
             fetch::download_benchmark_fixture(
@@ -600,14 +630,39 @@ async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
         .iter()
         .filter(|(start, _)| *start >= size - tail)
         .count();
+    let elapsed = started.elapsed();
+    let peak = stats.peak.load(Ordering::Relaxed);
     println!(
-        "range_recovery elapsed_ms={} tail_requests={tail_requests}",
-        started.elapsed().as_millis()
+        "range_recovery elapsed_ms={} tail_requests={tail_requests} peak_connections={peak}",
+        elapsed.as_millis()
     );
     assert_eq!(result.size, size);
     assert!(
         tail_requests > 8,
         "the last eight original ranges must borrow new connections"
+    );
+    // `tail_requests > 8` is the assertion that rejects a "just wait longer"
+    // non-fix: the initial plan puts exactly eight of its 32 ranges inside the
+    // quarter, so more than eight tail requests can only come from sockets
+    // borrowed after the plan started. This elapsed bound is a coarser guard: it
+    // sits far above the ~8 s a replenished plan costs and an order of magnitude
+    // below the 168.64 s a single connection needs, so it catches a transfer that
+    // never splits at all without imposing a tight deadline on a loaded runner.
+    assert!(
+        elapsed < Duration::from_secs(25),
+        "tail recovery must not be starved to a single connection; took {:.2} s",
+        elapsed.as_secs_f64()
+    );
+    // A separate question from replenishment: the host slot must be charged once
+    // per file, not once per range. The plan asks for 32 ranges and the authority
+    // socket budget funds 63, so a peak at or below the host's cold-start
+    // transfer limit of four would mean the learned host limit — not
+    // `native_budget` — bounded the range count. Sixteen is the midpoint:
+    // unreachable by a four-way plan, and reachable without assuming every one of
+    // the 32 sockets wins its handshake race.
+    assert!(
+        peak >= 16,
+        "the range plan must outgrow the cold-start host limit of four, saw {peak}"
     );
     assert!(!trial.valid(Instant::now()));
     assert_eq!(
