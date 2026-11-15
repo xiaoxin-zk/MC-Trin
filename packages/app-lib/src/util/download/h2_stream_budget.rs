@@ -12,9 +12,10 @@
 //!   by the same controller the plain transfer path uses, so a host whose knee
 //!   is low is not handed thirty-two multiplexed streams just because they
 //!   share one socket. The learned limit stays in charge; the stream allowance
-//!   scales it by the measured multiplexing ratio, so a host whose limit grows
-//!   to eight reaches the measured sixteen-stream saturation point instead of
-//!   being stuck at the four-stream knee of a plain socket plan.
+//!   scales it by the measured multiplexing ratio and caps it at the measured
+//!   per-host batch knee, so a host that has earned eight sockets gets sixteen
+//!   streams and one that has earned the small-file ceiling gets the full
+//!   [`super::constants::H2_STREAMS_PER_HOST_CAP`].
 //!
 //! Streams are also allocated across connections at most
 //! [`super::constants::H2_STREAMS_PER_CONNECTION_CAP`] at a time (see
@@ -137,12 +138,15 @@ fn budget_for(route: &DownloadRoute, asset: bool) -> Option<Arc<Semaphore>> {
 /// Admits one multiplexed stream against both budgets.
 ///
 /// The learned host allowance is taken first and the fixed authority semaphore
-/// second. That order matters: the host allowance is always the tighter of the
-/// two (at most one connection's saturation point, against an authority bound
-/// of 32 asset streams or 256 range streams), so taking it first means a waiter
-/// never holds a slot in the looser budget while it waits on the tighter one.
-/// The authority semaphore then only narrows what the host already admitted,
-/// which is exactly the "outer bound" relationship the two are meant to have.
+/// second. That order matters: the host allowance is the tighter of the two by
+/// construction — at most [`super::constants::H2_STREAMS_PER_HOST_CAP`] streams,
+/// against an authority bound of
+/// [`MAX_ASSET_H2_STREAMS_PER_AUTHORITY`] asset or
+/// [`MAX_H2_STREAMS_PER_AUTHORITY`] range streams — so taking it first means a
+/// waiter never holds a slot in the looser budget while it waits on the tighter
+/// one. The authority semaphore then only narrows what the host already
+/// admitted, which is exactly the "outer bound" relationship the two are meant
+/// to have.
 pub(crate) async fn acquire_for(
     route: &DownloadRoute,
     asset: bool,

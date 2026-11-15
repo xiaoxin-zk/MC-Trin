@@ -181,6 +181,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 &connection,
                 &self.uri,
                 headers,
+                self.route.proxy,
             )
             .await;
             let (response, body) = match opened {

@@ -51,12 +51,24 @@ use std::time::{Duration, Instant};
 const REDIRECTOR_HOSTS: &[&str] =
     &["bmclapi2.bangbang93.com", "bmclapi.bangbang93.com"];
 
-/// How long a bulk-install plan stays in force after it is announced.
+/// How long a bulk-install plan stays in force without any sign of progress.
 ///
 /// Route planning happens per file, long after the shape of the install is
-/// known, so the announcement has to outlive the plan call that made it. A
-/// short lease is enough: it is refreshed by every file the install starts.
-const BULK_PLAN_LEASE: Duration = Duration::from_secs(120);
+/// known, so the announcement has to outlive the plan call that made it. The
+/// lease is refreshed by [`note_plan_progress`] from every started file and
+/// progress tick; this constant is only the idle timeout that ends the plan
+/// once the install has genuinely stopped. It is deliberately much longer than
+/// the gap between two files: a 4154-request install runs for far more than two
+/// minutes, and a fixed lease that lapsed mid-install silently put BMCLAPI back
+/// on the file routes — the exact path to the measured twenty-minute IP ban.
+const BULK_PLAN_LEASE: Duration = Duration::from_secs(600);
+
+/// A plan the long bucket cannot cover is refused for the rest of the session.
+///
+/// Refreshing would be wrong here: no amount of pacing makes 4154 requests fit
+/// a bucket of 1000, so the only safe answer is to keep the redirector out of
+/// the plan until the process restarts.
+const BULK_PLAN_UNCOVERABLE_LEASE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// A bulk install below this many files still fits the long bucket.
 const BULK_PLAN_MIN_FILES: usize = 64;
@@ -100,10 +112,14 @@ impl Bucket {
         }
         let elapsed = now.duration_since(self.last_refill);
         let window = REDIRECTOR_REFILL_WINDOW.as_secs_f64().max(1.0);
-        self.tokens = (self.tokens
-            + elapsed.as_secs_f64() * REDIRECTOR_TOKEN_CAPACITY as f64
-                / window)
-            .min(REDIRECTOR_TOKEN_CAPACITY as f64);
+        // The allowance is `byte_limit`, not the fixed ten: a `429` halves it
+        // and the halved value is what bounds both the burst this bucket can
+        // hold and the rate it earns tokens at. Without this the halving was
+        // bookkeeping that nothing consulted, so a throttled redirector kept
+        // taking ten requests a minute.
+        let capacity = self.byte_limit.max(1) as f64;
+        self.tokens = (self.tokens + elapsed.as_secs_f64() * capacity / window)
+            .min(capacity);
         self.last_refill = now;
 
         let long_elapsed = now.duration_since(self.long_started);
@@ -254,9 +270,12 @@ fn try_acquire_at(
             if bucket.long_tokens < 1.0 {
                 return Err(RedirectorDenied::LongBucketExhausted);
             }
+            // Time to the next token at the bucket's *current* capacity, which
+            // a `429` may have halved; quoting the un-halved rate would report
+            // a wait that is twice as long as the one that actually applies.
             let window = REDIRECTOR_REFILL_WINDOW.as_secs_f64().max(1.0);
-            let needed = (1.0 - bucket.tokens) * window
-                / REDIRECTOR_TOKEN_CAPACITY.max(1) as f64;
+            let capacity = bucket.byte_limit.max(1) as f64;
+            let needed = (1.0 - bucket.tokens) * window / capacity;
             return Err(RedirectorDenied::Exhausted(Duration::from_secs_f64(
                 needed.max(0.001),
             )));
@@ -438,11 +457,12 @@ fn note_response_at(
 
 /// Current byte-transfer allowance through a redirector.
 ///
-/// Starts at the ten-per-minute window and halves on every `429`, so a
-/// throttled redirector admits fewer parallel file GETs rather than the same
-/// number at a slower pace. It is reported here rather than enforced in
-/// [`acquire`] because a single file GET is one token either way: the halving
-/// exists to stop a wide batch from re-filling the window it just overran.
+/// Starts at the ten-per-minute window and halves on every `429`. It is the
+/// bucket's real capacity: [`Bucket::refill`] earns tokens at this rate and
+/// caps the burst at this value, so a throttled redirector admits fewer
+/// parallel file GETs rather than the same number at a slower pace. Without
+/// that wiring the halving was a number nothing read, and a `429` left the
+/// next window as wide as the one that caused it.
 pub(crate) fn byte_limit(host: &str, proxy: ProxyPolicy) -> usize {
     byte_limit_at(host, proxy, Instant::now())
 }
@@ -472,17 +492,45 @@ pub(crate) fn long_bucket_can_plan(
 /// Announces a bulk install: `files` metadata requests would be needed if the
 /// batch went through the redirector.
 ///
-/// Planning is refused outright rather than degraded, because the long bucket
-/// cannot cover it and the failure mode of discovering that halfway through is
-/// the measured IP ban. The lease is refreshed by every started file, so it
-/// expires on its own after the install stops.
+/// The long bucket cannot cover such a plan, and the failure mode of
+/// discovering that halfway through is the measured twenty-minute IP blackhole.
+/// So the announcement is *unconditional* — the redirector is dropped from the
+/// file routes whether or not the remaining long-bucket tokens happen to cover
+/// this particular count. That is the whole point: an install only reaches here
+/// because it is bigger than the window it would spend, and a plan that refills
+/// the window is exactly what got the IP banned.
+///
+/// The lease is renewed by [`note_plan_progress`] for as long as the install
+/// keeps starting files, and only lapses when the install has been silent for
+/// [`BULK_PLAN_LEASE`]; an uncoverable plan latches for the session because
+/// there is no later point at which the same request count could fit.
 pub(crate) fn note_plan(files: usize) {
     if files < BULK_PLAN_MIN_FILES {
         return;
     }
     let covers =
         long_bucket_can_plan(REDIRECTOR_HOSTS[0], ProxyPolicy::System, files);
-    *BULK_PLAN_UNTIL.lock() = Some(Instant::now() + BULK_PLAN_LEASE);
+    let lease = if covers {
+        BULK_PLAN_LEASE
+    } else {
+        BULK_PLAN_UNCOVERABLE_LEASE
+    };
+    let now = Instant::now();
+    let mut current = BULK_PLAN_UNTIL.lock();
+    // Never downgrade a latched uncoverable plan. One install announces itself
+    // phase by phase (assets, then libraries), and a later, smaller phase whose
+    // count happens to fit the bucket must not shorten the lease that the
+    // larger phase established — the assets and the libraries spend the same
+    // IP's budget.
+    let keep_latched = current
+        .as_ref()
+        .is_some_and(|plan| plan.lease > lease && plan.until > now);
+    if !keep_latched {
+        *current = Some(BulkPlan {
+            until: now + lease,
+            lease,
+        });
+    }
     tracing::debug!(
         files,
         long_bucket_covers_plan = covers,
@@ -491,20 +539,48 @@ pub(crate) fn note_plan(files: usize) {
     );
 }
 
-static BULK_PLAN_UNTIL: LazyLock<Mutex<Option<Instant>>> =
+/// Renews an active bulk plan from install progress.
+///
+/// Called from every file start (and any coarser progress tick) so the lease
+/// measures *silence*, not elapsed time. A 4154-request install easily outlives
+/// any fixed lease; without this the plan lapsed mid-install and BMCLAPI came
+/// back as a file route, spending the ten-per-minute window and re-arming the
+/// ban. A no-op when no plan is active, so ordinary downloads never acquire one.
+pub(crate) fn note_plan_progress() {
+    let mut slot = BULK_PLAN_UNTIL.lock();
+    let now = Instant::now();
+    let Some(mut plan) = slot.take() else {
+        return;
+    };
+    // The install already went quiet past the lease; do not resurrect it from
+    // a straggler completion.
+    if plan.until > now {
+        plan.until = now + plan.lease;
+        *slot = Some(plan);
+    }
+}
+
+/// An active bulk-install plan.
+struct BulkPlan {
+    /// When the plan lapses without further progress.
+    until: Instant,
+    /// How far each progress report pushes `until` forward.
+    lease: Duration,
+}
+
+static BULK_PLAN_UNTIL: LazyLock<Mutex<Option<BulkPlan>>> =
     LazyLock::new(|| Mutex::new(None));
 
 /// Whether a bulk install is currently the plan being built.
 pub(crate) fn bulk_plan_active() -> bool {
     let mut lease = BULK_PLAN_UNTIL.lock();
-    match *lease {
-        Some(until) if until > Instant::now() => true,
-        Some(_) => {
-            *lease = None;
-            false
-        }
-        None => false,
+    let active = lease
+        .as_ref()
+        .is_some_and(|plan| plan.until > Instant::now());
+    if !active {
+        *lease = None;
     }
+    active
 }
 
 #[cfg(test)]

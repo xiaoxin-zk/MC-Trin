@@ -172,7 +172,9 @@ pub(crate) async fn try_download_via_h2(
         );
 
         let (response, mut probe_body) =
-            match open_stream(&connection, &uri, probe_headers).await {
+            match open_stream(&connection, &uri, probe_headers, route.proxy)
+                .await
+            {
                 Ok(pair) => pair,
                 Err(error) => {
                     tracing::debug!(
@@ -527,11 +529,38 @@ fn parse_content_range_total(headers: &HeaderMap) -> Option<u64> {
 
 type StreamPair = (http::Response<()>, h2::RecvStream);
 
+/// The redirector host this hop must pay a metadata token to, if it is one.
+fn redirector_hop(uri: &Uri) -> Option<String> {
+    let host = uri.host()?.trim_end_matches('.').to_ascii_lowercase();
+    super::redirector_budget::is_redirector(&host).then_some(host)
+}
+
+/// Opens one multiplexed `GET`, charging the redirector budget when the hop is
+/// a redirector and reporting its answer back to that budget.
+///
+/// Every HTTP/2 `GET` in this module goes through here on purpose. A redirector
+/// charges one metadata token per request regardless of transport, so a path
+/// that opened streams directly would send an unpaced burst: a sub-64-file asset
+/// batch never announces a bulk plan — it *fits* the long bucket — so BMCLAPI
+/// could legitimately be its route and receive hundreds of unpaced GETs. That
+/// is the exact burst the budget exists to prevent, and the measured penalty is
+/// a twenty-minute TCP blackhole.
 pub(crate) async fn open_stream(
     connection: &SharedH2Connection,
     uri: &Uri,
     headers: HeaderMap,
+    proxy: fetch::ProxyPolicy,
 ) -> crate::Result<StreamPair> {
+    let redirector = redirector_hop(uri);
+    if let Some(host) = redirector.as_deref() {
+        super::redirector_budget::acquire(host, proxy)
+            .await
+            .map_err(|denied| {
+                crate::ErrorKind::NetworkError(format!(
+                    "Redirector {host} cannot take another metadata request: {denied}"
+                ))
+            })?;
+    }
     let mut request = http::Request::builder()
         .method(Method::GET)
         .uri(uri.clone())
@@ -541,6 +570,14 @@ pub(crate) async fn open_stream(
     *request.headers_mut() = headers;
     let response = connection.open(request).await?;
     let (parts, body) = response.into_parts();
+    if let Some(host) = redirector {
+        super::redirector_budget::note_response(
+            &host,
+            proxy,
+            parts.status,
+            &parts.headers,
+        );
+    }
     let response = http::Response::from_parts(parts, ());
     Ok((response, body))
 }
@@ -578,7 +615,13 @@ async fn single_stream(
     headers
         .insert(ACCEPT_ENCODING, HeaderValue::from_static(IDENTITY_ENCODING));
 
-    let (response, mut stream) = open_stream(connection, uri, headers).await?;
+    let request_started = Instant::now();
+    let (response, mut stream) =
+        open_stream(connection, uri, headers, route.proxy).await?;
+    // Response headers are the stream's time-to-first-byte, which is the signal
+    // the small-object knee is defined on. The whole-transfer duration is a
+    // throughput number and would look like congestion on every asset.
+    let ttfb = request_started.elapsed();
     super::native_breaker::record_response_status_failure(
         route,
         response.status().as_u16(),
@@ -763,12 +806,11 @@ async fn single_stream(
     // the caller before the legacy path's completion is ever reached, so
     // without it a warm H2 pool — the ordinary case — never fed the controller
     // and every host stayed pinned at its cold-start limit.
-    super::host_admission::record_completion(
+    super::host_admission::record_stream_completion(
         uri_text.as_str(),
         route.proxy,
         Some(downloaded),
-        transfer_started.elapsed(),
-        downloaded,
+        ttfb,
     );
 
     Ok(DownloadResult {
@@ -1404,6 +1446,11 @@ async fn download_asset_item(
     apply_native_policy: bool,
     rescue: bool,
 ) -> crate::Result<AssetBatchItemOutcome> {
+    // The bulk-plan heartbeat. This batch is the phase that actually outlives
+    // the lease — a 1.21.4 install is 4154 objects — and the redirector being
+    // dropped from the file routes is what keeps it off BMCLAPI's window at
+    // all. Renewing per object is a single uncontended mutex lock.
+    super::redirector_budget::note_plan_progress();
     let integrity = Integrity {
         size: Some(item.size),
         sha1: Some(item.sha1.clone()),
@@ -1462,6 +1509,7 @@ async fn download_asset_item(
     let mut current_uri = uri.clone();
     let mut current_route = route.clone();
     let mut redirect_count = 0;
+    let mut ttfb = std::time::Duration::ZERO;
     let (connection, _stream_permit, _connection_stream, response, mut stream) = loop {
         let _stream_permit = if apply_native_policy {
             Some(
@@ -1504,14 +1552,25 @@ async fn download_asset_item(
             HeaderValue::from_static(IDENTITY_ENCODING),
         );
 
-        let (response, mut stream) =
-            open_stream(&connection, &current_uri, headers).await?;
+        let hop_started = Instant::now();
+        let (response, mut stream) = open_stream(
+            &connection,
+            &current_uri,
+            headers,
+            current_route.proxy,
+        )
+        .await?;
+        let hop_ttfb = hop_started.elapsed();
         super::native_breaker::record_response_status_failure(
             &current_route,
             response.status().as_u16(),
             fetch::retry_after_headers(response.headers()),
         );
         if !response.status().is_redirection() {
+            // The latency sample belongs to the hop that answered for the
+            // object. A redirect hop's TTFB is the redirector's, and recording
+            // it would teach the serving node a knee it never showed.
+            ttfb = hop_ttfb;
             break (
                 connection,
                 _stream_permit,
@@ -1566,6 +1625,13 @@ async fn download_asset_item(
                 "Invalid redirect target {next_url}: {error}"
             ))
         })?;
+        // Admission keys on the authority that serves the bytes, and the memo
+        // is how the rest of the crate learns which one that is. Only the
+        // reqwest redirect path used to write it, so on a BMCLAPI batch every
+        // asset was admitted against the redirector while an OpenBMCLAPI node
+        // actually served it — the node's learned limit was never applied and
+        // the redirector's was charged for traffic it does not carry.
+        fetch::remember_effective_route_authority(route, next_url.as_str());
         current_route.url = next_url.into();
         redirect_count += 1;
     };
@@ -1607,7 +1673,6 @@ async fn download_asset_item(
             }
         };
         let mut downloaded = 0_u64;
-        let transfer_started = Instant::now();
         let current_uri_text = current_uri.to_string();
         let activity = super::h2_receive::H2TransferActivity::for_transfer(
             Some(current_uri_text.as_str()),
@@ -1669,12 +1734,15 @@ async fn download_asset_item(
         // TTFB is what inflates from 120 ms to 722 ms between 32 and 64
         // streams, and its completion is one of the eight that may earn the
         // host another connection.
-        super::host_admission::record_completion(
+        //
+        // This is a *stream* completion, not a whole transfer: the asset batch
+        // only ever increments `stream_in_flight`, so the transfer guard read
+        // an idle host here and never grew the limit at all.
+        super::host_admission::record_stream_completion(
             current_uri_text.as_str(),
             current_route.proxy,
             Some(downloaded),
-            transfer_started.elapsed(),
-            downloaded,
+            ttfb,
         );
 
         Ok(match copy_asset_legacy_destinations(item).await {

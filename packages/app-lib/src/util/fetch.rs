@@ -72,10 +72,11 @@ use crate::util::download::constants::{
     INITIAL_SEGMENT_CONCURRENCY, JOB_PROBE_WINDOW, MAX_FAILURE_COOLDOWN,
     MAX_GLOBAL_TAIL_HEDGES, MAX_SEGMENT_CONCURRENCY, MAX_TAIL_HEDGES_PER_FILE,
     MAX_TASK_PROBE_STATES, METADATA_ATTEMPT_BUDGET, METADATA_HEDGE_DELAY,
-    METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MODRINTH_API_HOST,
-    MODRINTH_DATA_PREFIX, NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED,
-    PARTIAL_FILE_SUFFIX, RANGE_IDLE_RECONNECT_TIMEOUT, RESOURCE_WAIT_TIMEOUT,
-    RETRY_AFTER_CAP, ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
+    METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MIN_SPLIT_BYTES,
+    MODRINTH_API_HOST, MODRINTH_DATA_PREFIX,
+    NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED, PARTIAL_FILE_SUFFIX,
+    RANGE_IDLE_RECONNECT_TIMEOUT, RESOURCE_WAIT_TIMEOUT, RETRY_AFTER_CAP,
+    ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
     ROUTE_PROBE_TIMEOUT, SEGMENT_EXPANSION_INTERVAL,
     SEGMENT_EXPANSION_SAMPLE_COUNT, SEGMENT_RETRY_ATTEMPTS,
     SEGMENTED_DOWNLOAD_THRESHOLD, TAIL_HEDGE_IDLE_TIMEOUT,
@@ -2391,19 +2392,55 @@ async fn fetch_advanced_inner(
             // A metadata request to a redirector is one token from a fixed
             // ten-per-minute window; pacing it here is what keeps a wide batch
             // from spending the whole window in its first second.
+            //
+            // A denial is a *route* failure, not a request failure: the
+            // redirector is simply not available for this object right now and
+            // the official host is. Propagating it with `?` aborted the whole
+            // metadata fetch — partly masked by hedging, but every non-hedged
+            // call hard-failed instead of trying the next route, which is how
+            // the file path already behaves. Recording it here keeps the route
+            // health honest for the next attempt and lets the loop move on.
             if let Some(host) = route_host(route)
                 && super::download::redirector_budget::is_redirector(&host)
+                && let Err(denied) =
+                    super::download::redirector_budget::acquire(
+                        &host,
+                        route.proxy,
+                    )
+                    .await
             {
-                super::download::redirector_budget::acquire(
-                    &host,
-                    route.proxy,
-                )
-                .await
-                .map_err(|denied| {
-                    ErrorKind::NetworkError(format!(
-                        "Redirector {host} cannot take another metadata request: {denied}"
-                    ))
-                })?;
+                let error: crate::Error = ErrorKind::NetworkError(format!(
+                    "Redirector {host} cannot take another metadata request: {denied}"
+                ))
+                .into();
+                // A parked or exhausted metadata window is not a statement
+                // about the host's sockets, so no connection cooldown is
+                // charged; the route is only skipped for this object.
+                record_route_failure(route, resource, None);
+                record_download_attempt_failure(
+                    &mut attempt_history,
+                    route,
+                    total_attempts,
+                    &error,
+                    if has_next_route {
+                        FETCH_SWITCH_ROUTE
+                    } else {
+                        FETCH_STOP
+                    },
+                    None,
+                    None,
+                    None,
+                );
+                tracing::warn!(
+                    url = %log_request_url,
+                    source = route_source.as_str(),
+                    attempt,
+                    max_attempts,
+                    error = %error,
+                    "Redirector metadata budget denied the request; trying the next route"
+                );
+                last_error = Some(error);
+                break;
             }
             let request_started = Instant::now();
             let result = if let Some(native_budget) = native_budget {
@@ -5775,12 +5812,22 @@ async fn try_segmented_download(
     .await
 }
 
+/// Announces that one file of an install is starting.
+///
+/// This is also the bulk-plan heartbeat. A 4154-request install runs for far
+/// longer than any fixed lease, and the lease is what keeps BMCLAPI out of the
+/// file routes; a fixed `BULK_PLAN_LEASE` therefore lapsed mid-install and put
+/// the redirector back on the route list, which spends the ten-per-minute
+/// window and is the exact path to the measured twenty-minute IP ban. The
+/// heartbeat is taken before the early return so a download without install
+/// tracking still renews a plan another part of the same install announced.
 pub(crate) async fn record_install_download_started(
     request: &DownloadRequest,
     route: &DownloadRoute,
     attempt: usize,
     max_attempts: usize,
 ) {
+    super::download::redirector_budget::note_plan_progress();
     let Some(tracking) = &request.install_tracking else {
         return;
     };
@@ -6026,12 +6073,15 @@ async fn select_h2_download_route(
     let h2_route = first_h2_route(routes)?;
     // A warm H2 socket must not bypass the large-file connection scheduler.
     // More streams on that socket cannot escape a per-connection speed limit.
+    // The H2-bypass gate mirrors the segmented gate below: an explicit
+    // connection floor never lowers the `MIN_SPLIT_BYTES` floor, so a small
+    // modpack jar is not handed to the range scheduler at all.
     if request.allow_http1_segmented_download
         && request.integrity.supports_resume()
         && request.integrity.size.is_some_and(|size| {
             size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD
                 || (request.range_connection_floor.is_some()
-                    && size >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64)
+                    && size >= MIN_SPLIT_BYTES)
         })
         && h2_route.supports_range
         && range_splitting_allowed(&h2_route)
@@ -6474,11 +6524,17 @@ async fn try_segmented_native_attempt(
         }
         _ => 0,
     };
+    // An explicit connection floor is a caller promise that this file *can*
+    // benefit from ranges, not permission to split below the floor. The gate
+    // used to be the segment minimum times two (512 KiB), so a 600 KB modpack
+    // jar carrying `range_connection_floor = 32` was split into two ranges and
+    // paid the measured ~30 MB / 1.1 s cold-start ramp on each. `MIN_SPLIT_BYTES`
+    // is the documented "never split below this" floor; the caller's floor can
+    // only add ranges above it, never lower it.
     let explicitly_parallel = request.range_connection_floor.is_some()
         && request.integrity.supports_resume()
         && request.integrity.size.is_some_and(|size| {
-            size.saturating_sub(resumable_part_bytes)
-                >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64
+            size.saturating_sub(resumable_part_bytes) >= MIN_SPLIT_BYTES
         });
     let tail_recovery = request.prefer_http1
         && request.integrity.size.is_some_and(|size| {

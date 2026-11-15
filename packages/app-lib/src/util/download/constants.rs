@@ -313,8 +313,15 @@ pub(crate) const REDIRECTOR_REFILL_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const REDIRECTOR_DEFAULT_PARK: Duration = Duration::from_secs(60);
 pub(crate) const REDIRECTOR_MAX_PARK: Duration = Duration::from_secs(600);
 pub(crate) const REDIRECTOR_LONG_BUCKET_CAPACITY: usize = 1000;
+/// The long window the service advertises (`Reset-long: 3600`).
+///
+/// The original 46 minutes came from a measurement session that ended early;
+/// the authority itself says one hour. A shorter window refills faster than the
+/// service does, which over-issues long-bucket tokens by about 30 % and is the
+/// one direction the budget must never err in: overrunning it is what produced
+/// the measured twenty-minute IP blackhole.
 pub(crate) const REDIRECTOR_LONG_BUCKET_WINDOW: Duration =
-    Duration::from_secs(46 * 60);
+    Duration::from_secs(60 * 60);
 /// How long a transfer waits for a redirector token before it gives up and
 /// reports the route as unavailable. Waiting a whole window would stall an
 /// install for a metadata request that has an official alternative.

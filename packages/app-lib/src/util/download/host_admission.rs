@@ -24,7 +24,7 @@
 //! congestion.
 
 use crate::util::download::constants::{
-    GLOBAL_IN_FLIGHT_CAP, H2_STREAMS_PER_CONNECTION_CAP,
+    GLOBAL_IN_FLIGHT_CAP, H2_STREAMS_PER_HOST_CAP,
     H2_STREAMS_PER_LEARNED_SOCKET, HOST_CONCURRENCY_CAP_MEASURED_MIN,
     HOST_CONCURRENCY_CAP_UNMEASURED, HOST_CONCURRENCY_COOLDOWN_LADDER,
     HOST_CONCURRENCY_FAST_ATTACK_PERCENT, HOST_CONCURRENCY_FAST_GROWTH_CEILING,
@@ -107,6 +107,22 @@ impl SizeClass {
             Self::Bulk => host_cap,
         }
     }
+}
+
+/// Which counter a completion's app-limited guard must read.
+///
+/// The two paths keep separate in-flight counters because a stream is not a
+/// socket. A guard that always read `in_flight` therefore found zero on a pure
+/// asset batch — the batch only ever increments `stream_in_flight` — concluded
+/// "the limit is not the bottleneck" on every completion, and never grew. The
+/// host stayed at [`HOST_CONCURRENCY_INITIAL`] for the whole session, which
+/// pinned the stream allowance at eight against a measured knee of 64 or more.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CompletionPath {
+    /// A whole transfer, admitted through [`HostPermit`].
+    Transfer,
+    /// One multiplexed stream, admitted through [`HostStreamPermit`].
+    Stream,
 }
 
 struct HostState {
@@ -464,7 +480,13 @@ impl HostPolicy {
         state.window_bytes = state.window_bytes.saturating_add(bytes);
     }
 
-    /// Records one finished request and applies the growth rules for its size.
+    /// Records one finished transfer and applies the growth rules for its size.
+    ///
+    /// This is the whole-transfer entry point: its app-limited guard reads
+    /// `in_flight`, the counter [`HostPermit`] maintains. The multiplexed path
+    /// must use [`Self::record_stream_completion`] instead, because a stream
+    /// never increments `in_flight` and a guard that read it would see an idle
+    /// host on every stream completion.
     ///
     /// `_bytes` is the transfer's delivered total, kept for call-site symmetry
     /// and diagnostics only; it is deliberately *not* added to `window_bytes`.
@@ -474,6 +496,43 @@ impl HostPolicy {
     /// twice the real throughput.
     pub(crate) fn record_completion(
         &self,
+        size: SizeClass,
+        host_cap: usize,
+        latency_ms: f64,
+        bytes: u64,
+    ) {
+        self.record_completion_on(
+            CompletionPath::Transfer,
+            size,
+            host_cap,
+            latency_ms,
+            bytes,
+        );
+    }
+
+    /// Records one finished multiplexed stream.
+    ///
+    /// Same controller, different in-flight counter: the guard compares
+    /// `stream_in_flight` against this host's stream allowance, which is what
+    /// actually bounds the multiplexed path.
+    pub(crate) fn record_stream_completion(
+        &self,
+        size: SizeClass,
+        host_cap: usize,
+        latency_ms: f64,
+    ) {
+        self.record_completion_on(
+            CompletionPath::Stream,
+            size,
+            host_cap,
+            latency_ms,
+            0,
+        );
+    }
+
+    fn record_completion_on(
+        &self,
+        path: CompletionPath,
         size: SizeClass,
         host_cap: usize,
         latency_ms: f64,
@@ -510,10 +569,20 @@ impl HostPolicy {
             };
             state.last_rate = Some(rate);
         }
-        // App-limited guard: with fewer than half the allowed transfers in
-        // flight the limit is not what bounds throughput, so a latency change
-        // is self-inflicted queueing rather than congestion.
-        if state.in_flight * 2 < state.effective_limit(size, host_cap) {
+        // App-limited guard: with fewer than half the allowed units in flight
+        // the limit is not what bounds throughput, so a latency change is
+        // self-inflicted queueing rather than congestion. The unit and its
+        // allowance both follow the path that is completing.
+        let (in_flight, allowed) = match path {
+            CompletionPath::Transfer => {
+                (state.in_flight, state.effective_limit(size, host_cap))
+            }
+            CompletionPath::Stream => (
+                state.stream_in_flight,
+                Self::stream_allowance_locked(&state),
+            ),
+        };
+        if in_flight * 2 < allowed {
             return;
         }
         if !state.latency_within_baseline() {
@@ -882,10 +951,11 @@ pub(crate) fn try_acquire(
 /// thirty-two streams while its learned limit keeps reporting four.
 ///
 /// The allowance is the learned limit scaled by the measured multiplexing ratio
-/// (`H2_STREAMS_PER_LEARNED_SOCKET`) and capped at one connection's saturation
-/// point (`H2_STREAMS_PER_CONNECTION_CAP`). Charging a stream as a whole socket
-/// would give a fresh host four streams where four plain sockets already
-/// deliver eight, so multiplexing could never pay for itself.
+/// (`H2_STREAMS_PER_LEARNED_SOCKET`) and capped at the measured per-host batch
+/// knee (`H2_STREAMS_PER_HOST_CAP`), not at one connection's saturation point.
+/// Charging a stream as a whole socket would give a fresh host four streams
+/// where four plain sockets already deliver eight, so multiplexing could never
+/// pay for itself.
 ///
 /// It deliberately does *not* take a [`GLOBAL_IN_FLIGHT_CAP`] permit. That
 /// ceiling exists to bound large byte transfers; charging every asset stream
@@ -926,7 +996,7 @@ pub(crate) fn stream_headroom(route: &DownloadRoute) -> usize {
     let url = admission_url(route);
     policy_for_url(&url, route.proxy)
         .map(|policy| policy.stream_headroom())
-        .unwrap_or(H2_STREAMS_PER_CONNECTION_CAP)
+        .unwrap_or(H2_STREAMS_PER_HOST_CAP)
 }
 
 /// Free slots on the host a route would land on.
@@ -976,6 +1046,32 @@ pub(crate) fn record_completion(
         cap_for_url(final_url),
         latency.as_secs_f64() * 1000.0,
         bytes,
+    );
+}
+
+/// Records a finished multiplexed stream against the host that served it.
+///
+/// The multiplexed paths must use this rather than [`record_completion`]: a
+/// stream increments `stream_in_flight`, so the whole-transfer guard read zero
+/// on every asset completion and refused to grow the host. `latency` is the
+/// stream's TTFB — the signal that actually inflates from 120 ms to 722 ms
+/// between 32 and 64 streams on 121 KB objects.
+pub(crate) fn record_stream_completion(
+    final_url: &str,
+    proxy: ProxyPolicy,
+    size: Option<u64>,
+    latency: Duration,
+) {
+    let Some(identity) = hop_identity(final_url) else {
+        return;
+    };
+    let policy = policy_for_scope(&super::proxy_context::authority_key(
+        &identity, proxy,
+    ));
+    policy.record_stream_completion(
+        SizeClass::of(size),
+        cap_for_url(final_url),
+        latency.as_secs_f64() * 1000.0,
     );
 }
 
