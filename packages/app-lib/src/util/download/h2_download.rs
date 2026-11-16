@@ -317,6 +317,20 @@ pub(crate) async fn try_download_via_h2(
             ) {
                 connection.record_stream_failure();
             }
+            // A node that accepts the HTTP/2 connection and then resets or
+            // refuses the stream is telling admission the same thing a reset
+            // HTTP/1 socket does, and only the plain path ever said so: a node
+            // that reset every stream kept its learned concurrency for the
+            // whole session. Only the two failures specific to a live h2 stream
+            // are charged here — a connect or TLS failure is charged by the
+            // HTTP/1 fallback this function is about to enter, and charging it
+            // twice would halve a host for one broken exchange.
+            if matches!(
+                failure,
+                H2DownloadFailure::Protocol | H2DownloadFailure::StreamReset
+            ) {
+                super::host_admission::record_fast_failure_for_route(route);
+            }
             if failure == H2DownloadFailure::Protocol {
                 connection.retire();
             }
@@ -984,6 +998,50 @@ impl AssetBatchConnectionGroup {
 mod tests {
     use super::*;
 
+    fn asset_route(host: &str) -> DownloadRoute {
+        DownloadRoute {
+            url: format!("https://{host}/file"),
+            source: DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: fetch::ProxyPolicy::Direct,
+        }
+    }
+
+    fn parked(route: &DownloadRoute) -> bool {
+        crate::util::download::host_admission::snapshot_for_route(route)
+            .expect("test route resolves to a host policy")
+            .parked
+    }
+
+    #[test]
+    fn only_a_zero_byte_all_failed_batch_parks_the_host() {
+        // Applies the production function the batch calls once its counters are
+        // known. A zero-byte all-failed batch is the documented suspected-ban
+        // trigger and must park the serving host; a batch that committed an
+        // object must leave a demonstrably serving host alone.
+        let failed = asset_route("zero-byte-batch.example");
+        assert!(!parked(&failed));
+        apply_asset_batch_outcome(&failed, 0, 4, Duration::from_millis(250));
+        assert!(
+            parked(&failed),
+            "a zero-byte all-failed batch must park the serving host"
+        );
+
+        let partial = asset_route("partially-successful-batch.example");
+        apply_asset_batch_outcome(
+            &partial,
+            4096,
+            1,
+            Duration::from_millis(250),
+        );
+        assert!(
+            !parked(&partial),
+            "a batch that delivered bytes must not park a working host"
+        );
+    }
+
     #[test]
     fn typed_transfer_recovery_is_not_a_protocol_failure() {
         for error in [
@@ -1366,6 +1424,23 @@ where
                 }
                 Err(error) => {
                     network_failures = network_failures.saturating_add(1);
+                    // The multiplexed batch never fed host admission either, so
+                    // a node that accepted the connection and reset every
+                    // stream kept its learned concurrency indefinitely. Charge
+                    // only the two failures specific to a live h2 stream: a
+                    // slow transfer, an HTTP status (a `429` is a metadata
+                    // budget instruction) or a local I/O error is a different
+                    // signal, and a connect or TLS failure is charged when the
+                    // per-file fallback retries the object over HTTP/1.
+                    if matches!(
+                        classify_download_error(&error),
+                        H2DownloadFailure::Protocol
+                            | H2DownloadFailure::StreamReset
+                    ) {
+                        super::host_admission::record_fast_failure_for_route(
+                            route,
+                        );
+                    }
                     tracing::debug!(
                         url = %fetch::sanitize_url_for_log(&item.url),
                         pass = pass + 1,
@@ -1382,21 +1457,15 @@ where
         }
     }
     if apply_native_policy {
-        if completed_bytes > 0 {
-            fetch::record_route_transfer_success(
-                route,
-                fetch::ResourceClass::MinecraftAsset,
-                completed_bytes,
-                batch_started.elapsed(),
-            );
-        } else if network_failures > 0 {
-            super::native_breaker::record_failure(route);
-            fetch::record_route_health_failure(
-                route,
-                fetch::ResourceClass::MinecraftAsset,
-                None,
-            );
-        }
+        // The counters that pick this branch exist only here, so the records it
+        // makes are applied in one place. The zero-byte branch is the documented
+        // suspected-ban trigger; a partially successful batch is not.
+        apply_asset_batch_outcome(
+            route,
+            completed_bytes,
+            network_failures,
+            batch_started.elapsed(),
+        );
     }
     let error = if let Some(error) = local_object_error {
         Some(error)
@@ -1425,6 +1494,41 @@ where
         committed_without_legacy,
         failed,
         error,
+    }
+}
+
+/// Applies a finished asset batch to route health, the breaker and admission.
+///
+/// The last branch is the documented suspected-ban trigger: a burst of network
+/// failures that delivered no bytes at all. Until this existed nothing in
+/// production ever called `record_suspected_ban`, so a node that refused every
+/// object of a batch was retried forever at its learned concurrency. A batch
+/// that committed any object is not evidence of a ban — that node is serving —
+/// and must not park a host.
+fn apply_asset_batch_outcome(
+    route: &DownloadRoute,
+    completed_bytes: u64,
+    network_failures: u32,
+    elapsed: std::time::Duration,
+) {
+    if completed_bytes > 0 {
+        fetch::record_route_transfer_success(
+            route,
+            fetch::ResourceClass::MinecraftAsset,
+            completed_bytes,
+            elapsed,
+        );
+    } else if network_failures > 0 {
+        super::native_breaker::record_failure(route);
+        fetch::record_route_health_failure(
+            route,
+            fetch::ResourceClass::MinecraftAsset,
+            None,
+        );
+        // Route-level, so the ban lands on the host the route actually reaches:
+        // a redirector hands out signed URLs and must never be charged for a
+        // serving node's refusal.
+        super::host_admission::record_suspected_ban_for_route(route);
     }
 }
 

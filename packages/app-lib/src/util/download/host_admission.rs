@@ -1074,13 +1074,42 @@ pub(crate) fn record_fast_failure(final_url: &str, proxy: ProxyPolicy) {
         .record_fast_failure();
 }
 
-/// Records a suspected ban (a burst of failures with no delivered bytes).
-pub(crate) fn record_suspected_ban(final_url: &str, proxy: ProxyPolicy) {
-    let Some(identity) = hop_identity(final_url) else {
-        return;
-    };
-    policy_for_scope(&super::proxy_context::authority_key(&identity, proxy))
-        .record_suspected_ban();
+/// Charges a suspected ban to the host a route actually reaches.
+///
+/// Resolution goes through [`admission_url`], which is the
+/// [`super::route_health::effective_route_authority`] once a redirect has been
+/// learned. A redirector only hands out signed URLs, so charging it with a
+/// serving node's zero-byte burst would park the metadata endpoint and leave
+/// the node that refused every stream at its learned concurrency.
+pub(crate) fn record_suspected_ban_for_route(route: &DownloadRoute) {
+    if let Some(policy) = policy_for_url(&admission_url(route), route.proxy) {
+        policy.record_suspected_ban();
+    }
+}
+
+/// Charges a reset/refusal/timeout to the host a route actually reaches.
+///
+/// Same effective-authority resolution as [`record_suspected_ban_for_route`]:
+/// the HTTP/2 paths know the route they started from, not necessarily the node
+/// a redirect landed on.
+pub(crate) fn record_fast_failure_for_route(route: &DownloadRoute) {
+    if let Some(policy) = policy_for_url(&admission_url(route), route.proxy) {
+        policy.record_fast_failure();
+    }
+}
+
+/// Admission state of the host a route reaches, for tests.
+///
+/// Production reaches the same policy through
+/// [`record_suspected_ban_for_route`] and [`record_fast_failure_for_route`]; a
+/// test needs the counters to prove those calls charge the host the route
+/// actually lands on.
+#[cfg(test)]
+pub(crate) fn snapshot_for_route(
+    route: &DownloadRoute,
+) -> Option<HostSnapshot> {
+    policy_for_url(&admission_url(route), route.proxy)
+        .map(|policy| policy.snapshot())
 }
 
 /// A precomputed attribution target for one in-flight transfer.
