@@ -4774,9 +4774,8 @@ async fn download_segment(
     // Ranged bytes belong to the node that serves them, so they are charged to
     // this hop's final URL. A redirector name here would credit a node's
     // throughput to a metadata endpoint and never grow the node's limit. The
-    // meter can only be built once the response names the serving hop: the
-    // pre-response value is overwritten below before any byte is read.
-    let mut authority_meter = None;
+    // meter is built where the response names the serving hop and lives for the
+    // rest of this function, so it needs no pre-response placeholder.
     let mut slow = super::download::native_slow::NativeSlowPolicy::new(0, None);
     let mut last_slow_speed = None;
     for attempt in 1..=SEGMENT_RETRY_ATTEMPTS {
@@ -4825,7 +4824,7 @@ async fn download_segment(
             Ok(Err(_)) | Err(_) => return Err(SegmentDownloadError::Transport),
         };
         final_url = response_url;
-        authority_meter =
+        let authority_meter =
             super::download::host_admission::TransferMeter::for_url(
                 &final_url,
                 route.proxy,
