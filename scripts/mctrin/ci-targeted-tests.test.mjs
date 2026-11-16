@@ -63,6 +63,12 @@ test('targets the changed workspace crate and its tests', () => {
         'api::mctier::protocol',
         '--',
         '--test-threads=1',
+        '--skip',
+        'synced_',
+        '--skip',
+        'util::download::endpoint_selection::benchmark::range_recovery',
+        '--skip',
+        'util::download::endpoint_selection::probe::tests::native_h2_single_stream',
     ])
     assert(commands.some((args) => args.includes('mctrin-gui')))
 })

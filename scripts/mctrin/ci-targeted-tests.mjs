@@ -17,6 +17,15 @@ const CRATES = [
 const WORKSPACE_FILES = /^(?:Cargo\.(?:toml|lock)|rust-toolchain\.toml|\.cargo\/.*)$/u
 const RUST_SOURCE_FILES = /(?:^|\/)(?:build\.rs|[^/]+\.rs|Cargo\.toml)$/u
 
+/// Cases the full suite runs with `--skip` because they need a real network or
+/// assert on timing-sensitive auto-concurrency steps. A module-level filter
+/// selects every test in the module, so the same exclusions must apply here.
+const MODULE_TEST_SKIPS = [
+    'synced_',
+    'util::download::endpoint_selection::benchmark::range_recovery',
+    'util::download::endpoint_selection::probe::tests::native_h2_single_stream',
+].flatMap((name) => ['--skip', name])
+
 export function moduleFilter(relativePath) {
     const match = /^packages\/app-lib\/src\/(.+)\.rs$/.exec(relativePath)
     if (!match) return null
@@ -163,10 +172,17 @@ export function targetedCargoArgs(plan) {
               ? ['test', '--package', crate.package, '--lib', '--no-fail-fast']
               : ['test', '--package', crate.package, '--all-targets', '--no-fail-fast']
         if (crate.features) base.push('--features', crate.features.join(','))
+        // These cases need a real network (they reach cdn.modrinth.com, or
+        // hosts that no longer answer) or assert on timing-sensitive
+        // auto-concurrency steps, so the full suite skips them by name. A
+        // per-module filter selects the whole module, which would otherwise
+        // re-introduce exactly those cases the suite deliberately excludes.
+        const skips = crate.moduleTests ? MODULE_TEST_SKIPS : []
+        const tail = ['--test-threads=1', ...skips]
         if (crate.filters.length > 0) {
-            return crate.filters.map((filter) => [...base, filter, '--', '--test-threads=1'])
+            return crate.filters.map((filter) => [...base, filter, '--', ...tail])
         }
-        return [[...base, '--', '--test-threads=1']]
+        return [[...base, '--', ...tail]]
     })
 }
 
