@@ -346,13 +346,16 @@ pub(crate) const HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS: u32 = 8;
 pub(crate) const HOST_CONCURRENCY_GROWTH_STEP: usize = 1;
 pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_STEP: usize = 2;
 pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_CEILING: usize = 16;
-pub(crate) const HOST_CONCURRENCY_CAP_BULK: usize = 128;
 /// Ceiling for a host with no measurement of its own.
 ///
-/// The spec's two caps are 64 for small files and 128 for bulk, but a *socket*
-/// plan still has to fit the per-authority socket budget, which is 64. A host
-/// that was never measured therefore keeps that measured-safe number rather
-/// than being handed a ceiling nothing in this build can fund.
+/// This is the true attainable maximum rather than a generic default: `host_cap`
+/// returns 64 here, 16 for `maven.aliyun.com` and 8 for
+/// `cmcc.mirrors.ustc.edu.cn`, and the small and medium size classes clamp
+/// whatever it returns to 32. The per-host maxima are therefore 64 bulk
+/// transfers, 32 small or medium transfers and 64 multiplexed streams, with at
+/// most 128 transfers process-wide ([`GLOBAL_IN_FLIGHT_CAP`]). A bulk ceiling of
+/// 128 could not be funded by [`MAX_CONNECTIONS_PER_AUTHORITY`], which is 64, so
+/// it would only hand a host a plan the per-authority socket budget refuses.
 pub(crate) const HOST_CONCURRENCY_CAP_UNMEASURED: usize = 64;
 /// The smallest per-host knee in the measured table.
 ///
@@ -383,7 +386,6 @@ pub(crate) const HOST_CONCURRENCY_COOLDOWN_LADDER: [Duration; 3] = [
 /// Files smaller than this are never split; the cold-start ramp of the first
 /// ~30 MB costs more than the extra connections gain.
 pub(crate) const MIN_SPLIT_BYTES: u64 = 8 * 1024 * 1024;
-pub(crate) const SPLIT_CHUNK_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const STALE_PARTIAL_DOWNLOAD_MAX_AGE: Duration =
     Duration::from_secs(7 * 24 * 60 * 60);
 pub(crate) const TASK_PROBE_MAX_ROUTES: usize = 3;

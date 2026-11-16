@@ -4597,6 +4597,16 @@ async fn download_tail_candidate(
     let remote_addr = response.remote_addr();
     let http_version = response.version();
     let expected = requested_end.saturating_sub(requested_start) + 1;
+    // A hedge's bytes are bytes the host serving it delivered, so they belong
+    // in that host's measurement window. Metering them at receive time covers
+    // the candidate whether it wins the race or loses: the loser still spent
+    // the host's bandwidth, and the winner's bytes are never re-metered when
+    // the file is copied into the segment writer.
+    let authority_meter =
+        super::download::host_admission::TransferMeter::for_url(
+            &final_url,
+            route.proxy,
+        );
     let mut received = 0_u64;
     let mut file = create_download_file(&path)
         .await
@@ -4637,6 +4647,9 @@ async fn download_tail_candidate(
             SegmentDownloadError::Fatal(IOError::with_path(error, &path).into())
         })?;
         received += accepted as u64;
+        if let Some(meter) = &authority_meter {
+            meter.record(accepted as u64);
+        }
         if let Some(state) = crate::State::get_if_initialized() {
             state.record_download_bytes(accepted as u64);
         }
@@ -4760,12 +4773,10 @@ async fn download_segment(
     let mut http_version = None;
     // Ranged bytes belong to the node that serves them, so they are charged to
     // this hop's final URL. A redirector name here would credit a node's
-    // throughput to a metadata endpoint and never grow the node's limit.
-    let mut authority_meter =
-        super::download::host_admission::TransferMeter::for_url(
-            &final_url,
-            route.proxy,
-        );
+    // throughput to a metadata endpoint and never grow the node's limit. The
+    // meter can only be built once the response names the serving hop: the
+    // pre-response value is overwritten below before any byte is read.
+    let mut authority_meter = None;
     let mut slow = super::download::native_slow::NativeSlowPolicy::new(0, None);
     let mut last_slow_speed = None;
     for attempt in 1..=SEGMENT_RETRY_ATTEMPTS {

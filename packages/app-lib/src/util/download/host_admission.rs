@@ -566,7 +566,10 @@ impl HostPolicy {
         {
             state.strikes = 0;
         }
-        if state.completions % HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS != 0 {
+        if !state
+            .completions
+            .is_multiple_of(HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS)
+        {
             return;
         }
         let rate = state.observe_rate(now);
@@ -1135,7 +1138,6 @@ pub(crate) fn observe_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::download::constants::HOST_CONCURRENCY_CAP_BULK;
     use crate::util::fetch::DownloadRouteSource;
 
     fn route(host: &str) -> DownloadRoute {
@@ -1181,10 +1183,19 @@ mod tests {
         assert_eq!(SizeClass::of(Some(121 * 1024)), SizeClass::Small);
         assert_eq!(SizeClass::of(Some(2 * 1024 * 1024)), SizeClass::Bulk);
         assert_eq!(
-            SizeClass::Small.ceiling(HOST_CONCURRENCY_CAP_BULK),
+            SizeClass::Small.ceiling(HOST_CONCURRENCY_CAP_UNMEASURED),
             SMALL_FILE_CONCURRENCY_CEILING
         );
-        assert_eq!(SizeClass::Bulk.ceiling(HOST_CONCURRENCY_CAP_BULK), 128);
+        // An unknown size has no throughput evidence, so it may not claim the
+        // bulk ceiling either.
+        assert_eq!(
+            SizeClass::Medium.ceiling(HOST_CONCURRENCY_CAP_UNMEASURED),
+            SMALL_FILE_CONCURRENCY_CEILING
+        );
+        assert_eq!(
+            SizeClass::Bulk.ceiling(HOST_CONCURRENCY_CAP_UNMEASURED),
+            HOST_CONCURRENCY_CAP_UNMEASURED
+        );
     }
 
     #[test]

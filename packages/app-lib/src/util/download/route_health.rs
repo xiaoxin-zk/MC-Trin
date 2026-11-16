@@ -485,7 +485,7 @@ async fn write_object_misses() -> std::io::Result<()> {
     };
     // Newest first, so the truncation below drops the oldest learnings rather
     // than the freshest ones.
-    entries.sort_unstable_by(|left, right| right.1.cmp(&left.1));
+    entries.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.1));
     entries.truncate(OBJECT_MISS_MEMORY_CAPACITY);
     let bytes = serde_json::to_vec(&PersistedObjectMisses {
         version: OBJECT_MISS_SCHEMA_VERSION,

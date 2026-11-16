@@ -225,7 +225,7 @@ fn with_bucket<R>(
             .filter(|(_, bucket)| {
                 // A parked bucket carries the authority's ban; dropping it
                 // would let the next request probe a blackholed origin again.
-                !bucket.parked_until.is_some_and(|until| until > now)
+                bucket.park_remaining(now).is_none()
             })
             .min_by_key(|(_, bucket)| bucket.last_refill)
             .map(|(key, _)| key.clone())
