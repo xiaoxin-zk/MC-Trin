@@ -655,6 +655,18 @@ impl HostPolicy {
     }
 
     /// Sustained overrun or a suspected ban: climb the cooldown ladder.
+    ///
+    /// Deliberately not wired into any production path yet. The trigger exists
+    /// (a zero-byte, all-failed HTTP/2 asset batch), but the response is unsafe
+    /// to enable as-is; the four prerequisites are listed on the free
+    /// `record_suspected_ban` in this module.
+    // `dead_code` is silenced only here and on the free function below: the
+    // audit that blocked wiring this detector found per-item charging,
+    // `ladder_step` that never decays, a park that fails the download instead
+    // of skipping the route, and evidence that counts a 429 or an admission
+    // timeout. Keeping the item visible is the honest alternative to deleting
+    // the design or pretending it is callable.
+    #[allow(dead_code)]
     pub(crate) fn record_suspected_ban(&self) {
         let now = Instant::now();
         let mut state = self.state.lock();
@@ -1074,42 +1086,37 @@ pub(crate) fn record_fast_failure(final_url: &str, proxy: ProxyPolicy) {
         .record_fast_failure();
 }
 
-/// Charges a suspected ban to the host a route actually reaches.
+/// Records a suspected ban (a burst of failures with no delivered bytes).
 ///
-/// Resolution goes through [`admission_url`], which is the
-/// [`super::route_health::effective_route_authority`] once a redirect has been
-/// learned. A redirector only hands out signed URLs, so charging it with a
-/// serving node's zero-byte burst would park the metadata endpoint and leave
-/// the node that refused every stream at its learned concurrency.
-pub(crate) fn record_suspected_ban_for_route(route: &DownloadRoute) {
-    if let Some(policy) = policy_for_url(&admission_url(route), route.proxy) {
-        policy.record_suspected_ban();
-    }
-}
-
-/// Charges a reset/refusal/timeout to the host a route actually reaches.
+/// **Deliberately not wired.** The trigger is real — an HTTP/2 asset batch that
+/// delivered no bytes and failed every item — but parking a host in response is
+/// not safe until all four of these hold:
 ///
-/// Same effective-authority resolution as [`record_suspected_ban_for_route`]:
-/// the HTTP/2 paths know the route they started from, not necessarily the node
-/// a redirect landed on.
-pub(crate) fn record_fast_failure_for_route(route: &DownloadRoute) {
-    if let Some(policy) = policy_for_url(&admission_url(route), route.proxy) {
-        policy.record_fast_failure();
-    }
-}
-
-/// Admission state of the host a route reaches, for tests.
+/// 1. One charge per batch, not per item. Charging every failed item through
+///    `record_fast_failure` and then the batch again advances the ladder once
+///    per three strikes, so three items × three retry passes reach `blocked`
+///    for the whole process.
+/// 2. `ladder_step` decays on the same schedule as `strikes`, and never
+///    advances while parked. Today it only ever increments and
+///    `record_completion_on` returns early while parked, so one park leaves a
+///    healthy host one step from the next, longer cooldown.
+/// 3. `AdmissionError::Cooling`/`Blocked` becomes a route-skip rather than a
+///    fatal file error, and route selection excludes parked hosts. A parked
+///    host currently fails the download instead of letting the next route run,
+///    is re-selected, re-fails and re-bans.
+/// 4. Banning requires strong evidence — `network_failures >= attempted`, or an
+///    explicit floor — and a `429` or an admission timeout can never count
+///    toward it.
 ///
-/// Production reaches the same policy through
-/// [`record_suspected_ban_for_route`] and [`record_fast_failure_for_route`]; a
-/// test needs the counters to prove those calls charge the host the route
-/// actually lands on.
-#[cfg(test)]
-pub(crate) fn snapshot_for_route(
-    route: &DownloadRoute,
-) -> Option<HostSnapshot> {
-    policy_for_url(&admission_url(route), route.proxy)
-        .map(|policy| policy.snapshot())
+// `dead_code` is silenced only here and on `HostPolicy::record_suspected_ban`:
+// the audit above is the reason the entry point has no caller.
+#[allow(dead_code)]
+pub(crate) fn record_suspected_ban(final_url: &str, proxy: ProxyPolicy) {
+    let Some(identity) = hop_identity(final_url) else {
+        return;
+    };
+    policy_for_scope(&super::proxy_context::authority_key(&identity, proxy))
+        .record_suspected_ban();
 }
 
 /// A precomputed attribution target for one in-flight transfer.
