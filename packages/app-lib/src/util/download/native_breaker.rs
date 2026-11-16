@@ -28,10 +28,26 @@ pub(crate) enum BreakerCause {
 }
 
 impl BreakerCause {
+    /// Maps a response status that describes the route, rather than the single
+    /// object the request named, onto the bucket that should cool down.
+    ///
+    /// The whole server-error family shares [`Self::ServiceUnavailable`]: a
+    /// `500`, `502`, `503` and `504` all say the host could not answer, and
+    /// they need the same remedy, so one shared counter keeps a host that
+    /// alternates between them able to reach the failure threshold. Only `503`
+    /// normally carries `Retry-After`; a bare `500` therefore falls back to the
+    /// exponential cooldown, and [`record_failure_for_cause`] never shortens a
+    /// cooldown that is already running, so mixing the two cannot cut a
+    /// server-requested pause.
+    ///
+    /// Every other `4xx` is deliberately absent. A `404` is an object miss and
+    /// a `401`/`403` is an authentication problem: neither may cool a host.
     fn from_status(status: u16) -> Option<Self> {
         match status {
             429 => Some(Self::RateLimited),
-            503 => Some(Self::ServiceUnavailable),
+            // Same family `fetch::route_status_is_health_failure` treats as
+            // route-health evidence through `is_server_error`.
+            500..=599 => Some(Self::ServiceUnavailable),
             _ => None,
         }
     }
@@ -102,10 +118,10 @@ pub(crate) fn should_skip(
     is_open(route)
 }
 
-/// Clears the cooldown for a route after a transfer succeeded. A server-provided
-/// cooldown stays in place: `429` and `503` ask the client to slow down for a
-/// specific period, and an unrelated success on the same route is not evidence
-/// that the pause has expired.
+/// Clears the cooldown for a route after a transfer succeeded. A
+/// status-driven cooldown stays in place: `429` and the `5xx` family ask the
+/// client to slow down for a specific period, and an unrelated success on the
+/// same route is not evidence that the pause has expired.
 pub(crate) fn record_success(route: &DownloadRoute) {
     let Some(key) = key(route) else {
         return;
@@ -130,8 +146,10 @@ pub(crate) fn record_failure_with_cooldown(
     record_failure_for_cause(route, retry_after, BreakerCause::Transfer);
 }
 
-/// Records a response status that asks the client to slow down. Returns
-/// whether the status opened a cause-specific cooldown.
+/// Records a response status that describes the route rather than one object,
+/// so it cools down its own cause bucket. `429` gets the rate-limit bucket and
+/// the `5xx` family the service-unavailable one; every other status records
+/// nothing. Returns whether the status named such a cause.
 pub(crate) fn record_response_status_failure(
     route: &DownloadRoute,
     status: u16,
@@ -165,7 +183,13 @@ fn record_failure_for_cause(
     }
     let requested = retry_after
         .unwrap_or_else(|| backoff_cooldown(state.consecutive_failures));
-    state.open_until = Some(Instant::now() + requested.min(MAX_COOLDOWN));
+    let until = Instant::now() + requested.min(MAX_COOLDOWN);
+    // A bare `500` shares a bucket with a `503` that carried `Retry-After`, so
+    // a later shorter request must not cut a server-requested pause short.
+    state.open_until = Some(match state.open_until {
+        Some(existing) if existing > until => existing,
+        _ => until,
+    });
 }
 
 fn backoff_cooldown(consecutive_failures: u32) -> Duration {
@@ -338,7 +362,28 @@ mod tests {
             breakers_open_for(&route, BreakerCause::ServiceUnavailable)
                 < Duration::from_secs(10)
         );
-        assert!(!record_response_status_failure(&route, 500, None));
+        // The whole server-error family shares the service-unavailable bucket,
+        // so a host that alternates between them still reaches the threshold
+        // instead of spreading its failures across causes that never open.
+        for status in [500, 502, 504] {
+            assert!(
+                record_response_status_failure(&route, status, None),
+                "{status} names the route, not one object"
+            );
+        }
+        assert!(
+            breakers_open_for(&route, BreakerCause::ServiceUnavailable)
+                > Duration::ZERO,
+            "server errors across the family open the shared cooldown"
+        );
+        // An object-level client error and an auth problem name the object or
+        // the credentials, never the host, so they must record nothing.
+        for status in [400, 401, 403, 404, 410, 416, 418] {
+            assert!(
+                !record_response_status_failure(&route, status, None),
+                "{status} must not cool a host"
+            );
+        }
         record_success(&route);
     }
 

@@ -1063,6 +1063,78 @@ mod tests {
         );
     }
 
+    #[test]
+    fn server_errors_charge_h2_route_health_without_reclassifying_statuses() {
+        use crate::util::download::native_breaker;
+
+        // `single_stream` and `download_asset_item` both charge the response
+        // status through `record_response_status_failure` as soon as the
+        // headers arrive, then report a non-success status as an `HttpError`.
+        // The charge must be real for a `5xx` and the report must stay `Http`,
+        // because `Http` is what keeps a `429` out of the `Protocol` bucket.
+        let route = DownloadRoute {
+            url: "https://h2-server-error-breaker.example/aa/object"
+                .to_string(),
+            source: DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: fetch::ProxyPolicy::Direct,
+        };
+        let status_error = |status: u16| -> crate::Error {
+            crate::ErrorKind::HttpError {
+                status,
+                method: H2_DOWNLOAD_GET.to_string(),
+                url: route.url.clone(),
+            }
+            .into()
+        };
+
+        // An object miss names one object: no breaker cause, and still an HTTP
+        // answer rather than a protocol fault.
+        assert!(!native_breaker::record_response_status_failure(
+            &route, 404, None
+        ));
+        assert!(!native_breaker::is_open(&route));
+        assert_eq!(
+            classify_download_error(&status_error(404)),
+            H2DownloadFailure::Http
+        );
+
+        // A `429` charges its own rate-limit bucket, stays below the threshold
+        // on its own, and must never be read as a protocol failure.
+        assert!(native_breaker::record_response_status_failure(
+            &route, 429, None
+        ));
+        assert!(!native_breaker::is_open(&route));
+        let throttled = classify_download_error(&status_error(429));
+        assert_eq!(throttled, H2DownloadFailure::Http);
+        assert_ne!(throttled, H2DownloadFailure::Protocol);
+        assert!(!throttled.should_cooldown_authority());
+
+        // A server error is route health: enough of them open the breaker.
+        // Before `BreakerCause::from_status` covered the server-error family
+        // this recorded nothing at all and the assertion below failed.
+        let threshold =
+            crate::util::download::constants::NATIVE_BREAKER_FAILURE_THRESHOLD;
+        for _ in 0..threshold {
+            assert!(native_breaker::record_response_status_failure(
+                &route, 500, None
+            ));
+        }
+        assert!(
+            native_breaker::is_open(&route),
+            "a 500 burst must open a route-health cooldown"
+        );
+        // The status is still reported as an HTTP answer, so the h2 caller
+        // neither retires the connection nor charges the `Protocol` bucket for
+        // the server's own failure.
+        let server_error = classify_download_error(&status_error(500));
+        assert_eq!(server_error, H2DownloadFailure::Http);
+        assert_ne!(server_error, H2DownloadFailure::Protocol);
+        assert!(!server_error.should_cooldown_authority());
+    }
+
     #[tokio::test]
     async fn reqwest_range_body_timeout_does_not_become_an_h2_protocol_failure()
     {
@@ -1685,11 +1757,6 @@ async fn download_asset_item(
         current_route.url = next_url.into();
         redirect_count += 1;
     };
-    super::native_breaker::record_response_status_failure(
-        &current_route,
-        response.status().as_u16(),
-        fetch::retry_after_headers(response.headers()),
-    );
     if !response.status().is_success() {
         let status = response.status();
         // A 404 on one object is the mirror not storing that object, not the
@@ -1704,8 +1771,16 @@ async fn download_asset_item(
             });
         }
         // A status is the server's answer, not an HTTP/2 framing fault, so it
-        // must not be bucketed as `Protocol`: a `429` is a metadata-budget
-        // instruction and a `5xx` is route health, both already recorded above.
+        // must not be bucketed as `Protocol`. Per-status route health is
+        // decided where the response headers arrive, by
+        // `record_response_status_failure` + `BreakerCause::from_status`: a
+        // `429` cools the rate-limit bucket and a `5xx` (`500`/`502`/`504`
+        // included) cools the service-unavailable one, so a server-error burst
+        // still opens the breaker and the persisted route health. That gate
+        // accepts nothing else on purpose: the `4xx` other than `429` are
+        // object or credential problems — `404`/`410` an object miss,
+        // `401`/`403` auth — and deliberately do no route-health accounting at
+        // all. This error only classifies the status as `Http`.
         return Err(crate::ErrorKind::HttpError {
             status: status.as_u16(),
             method: H2_DOWNLOAD_GET.to_string(),
