@@ -2236,6 +2236,15 @@ pub struct DownloadItemSnapshot {
     pub manual_url: Option<String>,
     pub request_url: Option<String>,
     pub source: Option<String>,
+    /// Bytes per second observed for this item.
+    ///
+    /// The job summary carries one aggregate across every concurrent file,
+    /// which cannot answer "which file is slow, and on which source?". The
+    /// per-item rate is already sampled for the live download state, so
+    /// exposing it costs nothing and lets the UI show the active source and the
+    /// rate that source actually delivered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_bytes_per_second: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -3047,6 +3056,7 @@ impl InstallJobState {
                             manual_url: None,
                             request_url: None,
                             source: None,
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3127,6 +3137,7 @@ impl InstallJobState {
                             manual_url: None,
                             request_url: None,
                             source: None,
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3167,6 +3178,7 @@ impl InstallJobState {
                             manual_url: None,
                             request_url: Some(url.clone()),
                             source: Some(source.clone()),
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3220,6 +3232,7 @@ impl InstallJobState {
                             manual_url: None,
                             request_url: None,
                             source: None,
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3257,6 +3270,7 @@ impl InstallJobState {
                             manual_url: manual_url.clone(),
                             request_url: None,
                             source: None,
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3292,6 +3306,7 @@ impl InstallJobState {
                             manual_url: None,
                             request_url: None,
                             source: None,
+                            speed_bytes_per_second: None,
                         });
                         indices.insert(path.clone(), index);
                     }
@@ -3352,6 +3367,7 @@ impl InstallJobState {
                     item.error = None;
                     item.request_url = Some(active.url.clone());
                     item.source = Some(active.source.clone());
+                    item.speed_bytes_per_second = active.speed_bytes_per_second;
                 } else {
                     items.push(DownloadItemSnapshot {
                         id: id.clone(),
@@ -3367,6 +3383,7 @@ impl InstallJobState {
                         manual_url: None,
                         request_url: Some(active.url.clone()),
                         source: Some(active.source.clone()),
+                        speed_bytes_per_second: active.speed_bytes_per_second,
                     });
                 }
             }

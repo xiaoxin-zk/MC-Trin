@@ -1,5 +1,7 @@
 use super::*;
-use crate::util::download::constants::ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD;
+use crate::util::download::constants::{
+    ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD, ROUTE_THROUGHPUT_TRUST_WINDOW,
+};
 
 #[test]
 fn custom_modrinth_sources_follow_priority_and_keep_official_fallback() {
@@ -1460,6 +1462,8 @@ fn mcim_stays_last_even_when_it_is_the_healthiest_route() {
         RouteHealth {
             success_samples: 8,
             throughput_bps: Some(900_000_000.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
             ttfb_ms: Some(1.0),
             ..RouteHealth::default()
         },
@@ -1585,6 +1589,232 @@ fn auto_without_a_mirror_preference_keeps_the_official_route_first() {
     *ROUTE_HEALTH.lock() = previous_health;
 }
 
+/// Records a trustworthy throughput measurement for one route.
+fn record_measured_throughput(
+    route: &DownloadRoute,
+    resource: ResourceClass,
+    bytes_per_second: f64,
+) {
+    let key = route_health_key(route, resource).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(bytes_per_second),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
+            ttfb_ms: Some(1.0),
+            ..RouteHealth::default()
+        },
+    );
+}
+
+#[test]
+fn a_measured_faster_mirror_leads_even_without_the_locale_preference() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The mirror is the measured-faster origin on this network, so it must lead
+    // whatever the locale says. Nothing in the ordering names a host: this is
+    // the "prefer the measured-faster route" rule, not "official first".
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        14.0 * 1024.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, false);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "the measured-faster route must lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes.last().unwrap().source, DownloadRouteSource::Mcim);
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_measured_faster_official_host_overtakes_a_locale_preferred_mirror() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The measured production case: official hosts at 12–15 MB/s against
+    // OpenBMCLAPI nodes at 88–302 KB/s. The locale preference is real and the
+    // mirror is healthy — only the measurement outranks it.
+    let mut routes = auto_order_test_routes();
+    let official = routes
+        .iter()
+        .find(|route| is_official_route(route))
+        .unwrap()
+        .clone();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &official,
+        ResourceClass::MinecraftAsset,
+        13.6 * 1024.0 * 1024.0,
+    );
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        180.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a measured 75x faster official host must lead, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(routes[1].source, DownloadRouteSource::Bmclapi);
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn an_unmeasured_route_is_never_sorted_below_a_slow_or_stale_measurement() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    // Very slow, and stale: outside the trust window.
+    let key = route_health_key(&mirror, ResourceClass::MinecraftAsset).unwrap();
+    ROUTE_HEALTH.lock().insert(
+        key,
+        RouteHealth {
+            success_samples: 8,
+            throughput_bps: Some(64.0 * 1024.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(
+                Instant::now()
+                    - ROUTE_THROUGHPUT_TRUST_WINDOW
+                    - Duration::from_secs(60),
+            ),
+            ..RouteHealth::default()
+        },
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "a stale measurement must not displace the locale preference: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_freshly_measured_slow_mirror_yields_to_the_unmeasured_official_host() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    // The production case this rule exists for. With a Chinese locale the
+    // mirror leads at cold start; it then measures 88–302 KB/s on OpenBMCLAPI
+    // nodes while the official hosts measure 12–15 MB/s. Once the mirror has a
+    // *fresh* slow measurement it must stop leading — otherwise every install
+    // keeps paying two orders of magnitude for the user's locale preference.
+    // The official host has not transferred anything yet, so this is also the
+    // "measured beats unmeasured" direction of the rule.
+    let mut routes = auto_order_test_routes();
+    let mirror = routes
+        .iter()
+        .find(|route| route.source == DownloadRouteSource::Bmclapi)
+        .unwrap()
+        .clone();
+    record_measured_throughput(
+        &mirror,
+        ResourceClass::MinecraftAsset,
+        180.0 * 1024.0,
+    );
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Official,
+        "a measured-slow mirror must not keep leading, routes: {:?}",
+        routes
+            .iter()
+            .map(|route| route.url.as_str())
+            .collect::<Vec<_>>()
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
+#[test]
+fn a_single_throughput_sample_is_not_a_measurement() {
+    let _guard = AUTO_SOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_health = std::mem::take(&mut *ROUTE_HEALTH.lock());
+
+    let mut routes = auto_order_test_routes();
+    let official = routes
+        .iter()
+        .find(|route| is_official_route(route))
+        .unwrap()
+        .clone();
+    let key =
+        route_health_key(&official, ResourceClass::MinecraftAsset).unwrap();
+    let single_sample = RouteHealth {
+        success_samples: 1,
+        throughput_bps: Some(13.6 * 1024.0 * 1024.0),
+        throughput_samples: 1,
+        throughput_measured_at: Some(Instant::now()),
+        ..RouteHealth::default()
+    };
+    assert!(
+        crate::util::download::route_health::trusted_throughput(&single_sample)
+            .is_none(),
+        "one object is one sample, not a route measurement"
+    );
+    ROUTE_HEALTH.lock().insert(key, single_sample);
+
+    order_auto_routes(&mut routes, ResourceClass::MinecraftAsset, true);
+    assert_eq!(
+        routes[0].source,
+        DownloadRouteSource::Bmclapi,
+        "an unproven sample must not displace the locale preference"
+    );
+    *ROUTE_HEALTH.lock() = previous_health;
+}
+
 #[test]
 fn official_only_drops_mirrors_even_when_the_locale_prefers_them() {
     let mut routes = auto_order_test_routes();
@@ -1645,6 +1875,8 @@ fn a_mirror_preference_never_promotes_mcim_above_other_routes() {
         RouteHealth {
             success_samples: 8,
             throughput_bps: Some(900_000_000.0),
+            throughput_samples: 8,
+            throughput_measured_at: Some(Instant::now()),
             ttfb_ms: Some(1.0),
             ..RouteHealth::default()
         },
@@ -2843,14 +3075,14 @@ async fn segmented_permits_wait_for_one_slot_instead_of_falling_back() {
         DownloadRouteSource::Official,
     );
     let started = Instant::now();
-    let (_, permits) = tokio::join!(
+    let (_, admitted) = tokio::join!(
         async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
             drop(held);
         },
-        acquire_initial_segment_permits(&route, &semaphore, 4,),
+        acquire_initial_segment_permits(&route, &semaphore, 4, None),
     );
-    let permits = permits.unwrap();
+    let (_host, permits) = admitted.unwrap();
     assert_eq!(permits.len(), 1);
     assert!(started.elapsed() >= Duration::from_millis(40));
 }
@@ -3104,7 +3336,10 @@ fn official_fallback_excludes_alternate_sources() {
 }
 
 #[test]
-fn segmented_download_starts_at_four_mebibytes() {
+fn segmented_download_starts_at_eight_mebibytes() {
+    // The measured cold-start ramp needs ~30 MB / 1.1 s to reach full speed, so
+    // splitting below 8 MB spends the whole file in the ramp.
+    assert_eq!(SEGMENTED_DOWNLOAD_THRESHOLD, 8 * 1024 * 1024);
     assert!(!should_use_segmented_download(
         SEGMENTED_DOWNLOAD_THRESHOLD - 1,
         0,
@@ -3933,6 +4168,7 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
+    let permit_count = 8;
     let outcome = try_segmented_download(
         SegmentedDownloadContext::new(
             &request,
@@ -3940,7 +4176,7 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
             &[],
             size as u64,
             &part_path,
-            &FetchSemaphore(Semaphore::new(8)),
+            &FetchSemaphore(Semaphore::new(permit_count)),
             None,
             &client,
             &client,
@@ -3953,8 +4189,31 @@ async fn mirror_ranges_start_concurrently_and_retries_reuse_redirect() {
     .await;
 
     assert!(matches!(outcome, SegmentedDownloadOutcome::Success(_)));
-    assert_eq!(redirect_requests.load(Ordering::Relaxed), 2);
-    assert!(range_requests.load(Ordering::Relaxed) > 2);
+    // Ranges start concurrently, and the redirect target is only learnt from the
+    // first *successful* response, so every range of the cold-start plan pays a
+    // redirect of its own before any of them can cache the target. The count is
+    // therefore the plan size, not the fixed two the old split threshold produced;
+    // one extra is allowed for a retry that had already started down the
+    // redirecting URL before the target was cached. What must not regress is
+    // reuse: the deliberate mid-body failure and every later growth step must find
+    // the target already cached, so the count stays well below the range count.
+    let redirects = redirect_requests.load(Ordering::Relaxed);
+    let ranges_served = range_requests.load(Ordering::Relaxed);
+    let cold_start_plan =
+        route_segmented_concurrency_cap(&route, permit_count, size as u64);
+    assert!(
+        redirects >= 2,
+        "the initial ranges must start concurrently, before any of them has learnt the target: got {redirects} redirects"
+    );
+    assert!(
+        redirects <= cold_start_plan + 1,
+        "only the cold-start plan may pay a redirect: {redirects} redirects for a plan of {cold_start_plan}"
+    );
+    assert!(
+        redirects < ranges_served,
+        "retries must reuse the learnt redirect, got {redirects} redirects for {ranges_served} range requests"
+    );
+    assert!(ranges_served > 2);
     assert_eq!(normal_requests.load(Ordering::Relaxed), 0);
     redirect_server.abort();
     range_server.abort();
@@ -4054,7 +4313,9 @@ async fn invalid_content_range_disables_range_splitting_after_repeats() {
         .unwrap();
     let semaphore = FetchSemaphore(Semaphore::new(FILE_VALIDATION_CONCURRENCY));
     let (progress, _receiver) = tokio::sync::mpsc::unbounded_channel();
-    let permit = acquire_native_connection(&route, &semaphore).await.unwrap();
+    let permit = acquire_native_connection(&route, &semaphore, None)
+        .await
+        .unwrap();
     let speed = DownloadSpeedTracker::default();
     let validator = Mutex::new(None);
     let output = crate::util::download::range_output::RangeOutput::create(

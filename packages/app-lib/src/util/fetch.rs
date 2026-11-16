@@ -72,10 +72,11 @@ use crate::util::download::constants::{
     INITIAL_SEGMENT_CONCURRENCY, JOB_PROBE_WINDOW, MAX_FAILURE_COOLDOWN,
     MAX_GLOBAL_TAIL_HEDGES, MAX_SEGMENT_CONCURRENCY, MAX_TAIL_HEDGES_PER_FILE,
     MAX_TASK_PROBE_STATES, METADATA_ATTEMPT_BUDGET, METADATA_HEDGE_DELAY,
-    METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MODRINTH_API_HOST,
-    MODRINTH_DATA_PREFIX, NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED,
-    PARTIAL_FILE_SUFFIX, RANGE_IDLE_RECONNECT_TIMEOUT, RESOURCE_WAIT_TIMEOUT,
-    RETRY_AFTER_CAP, ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
+    METADATA_REQUEST_TIMEOUT, MIN_SEGMENT_SIZE, MIN_SPLIT_BYTES,
+    MODRINTH_API_HOST, MODRINTH_DATA_PREFIX,
+    NATIVE_DOWNLOAD_SOURCE_HAS_BEEN_RETIRED, PARTIAL_FILE_SUFFIX,
+    RANGE_IDLE_RECONNECT_TIMEOUT, RESOURCE_WAIT_TIMEOUT, RETRY_AFTER_CAP,
+    ROUTE_PROBE_BYTES, ROUTE_PROBE_MIN_IMPROVEMENT_PERCENT,
     ROUTE_PROBE_TIMEOUT, SEGMENT_EXPANSION_INTERVAL,
     SEGMENT_EXPANSION_SAMPLE_COUNT, SEGMENT_RETRY_ATTEMPTS,
     SEGMENTED_DOWNLOAD_THRESHOLD, TAIL_HEDGE_IDLE_TIMEOUT,
@@ -91,7 +92,7 @@ use crate::util::download::constants::{
 };
 use crate::util::download::constants::{
     DOWNLOAD_DNS_PREWARM_CONCURRENCY, DOWNLOAD_FAILURE_DIAGNOSTIC_ATTEMPTS,
-    DOWNLOAD_PERCENT_BASE, FILE_POOL_MAX_IDLE_PER_HOST,
+    DOWNLOAD_PERCENT_BASE, FILE_POOL_IDLE_TIMEOUT, FILE_POOL_MAX_IDLE_PER_HOST,
     FILE_RETRY_SINGLE_STREAM_ROUNDS, FILE_VALIDATION_CONCURRENCY,
     MIN_PARALLEL_RANGES, RANGE_FULL_FAILURE_LIMIT, RANGE_REDUCED_CONCURRENCY,
     RANGE_REDUCED_FAILURE_LIMIT, ROUTE_PROBE_CONCURRENCY,
@@ -132,7 +133,7 @@ use url::Url;
 
 mod connection_budget;
 pub(crate) use connection_budget::{
-    NativeConnectionPermit, acquire_native_connection,
+    NativeConnectionPermit, acquire_native_connection, acquire_socket,
     configured_semaphore_limit,
 };
 use connection_budget::{
@@ -804,17 +805,23 @@ impl DownloadClients {
             let builder = file_reqwest_client_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .danger_accept_invalid_certs(ignore_ssl_errors);
-            // Reqwest does not expose a socket-lifetime admission hook. In
-            // automatic mode its idle sockets would outlive request permits
-            // and accumulate alongside probes and new endpoint generations.
-            // Native H2 retains its separately budgeted multiplexed pool.
-            let builder = if super::download::endpoint_selection::SelectionMode::configured()
-                == super::download::endpoint_selection::SelectionMode::Auto
-            {
-                builder.pool_max_idle_per_host(0)
-            } else {
-                builder
-            };
+            // Keep-alive is the single highest-value setting in this client.
+            //
+            // Measured on the 168-asset workload: fresh connection per file
+            // delivered 1.73 files/s, keep-alive 8.85 files/s — a 4.8× win that
+            // beats every concurrency tweak. `pool_max_idle_per_host(0)` used
+            // to be applied in automatic mode to keep reqwest's idle sockets
+            // from outliving request permits; that traded the whole measured
+            // gain away. The pool is now bounded instead of disabled, and the
+            // bound is clamped to the smallest measured per-host knee rather
+            // than to the many-small-files concurrency knee: idle sockets are
+            // charged to neither socket budget, so they can outlive the install
+            // that opened them, and only the smallest knee is safe for every
+            // authority. Idle connections still expire after 30 s so a stale
+            // socket cannot outlive a network change.
+            let builder = builder
+                .pool_max_idle_per_host(FILE_POOL_MAX_IDLE_PER_HOST)
+                .pool_idle_timeout(Some(FILE_POOL_IDLE_TIMEOUT));
             let builder = builder.dns_resolver(if direct {
                 Arc::clone(&direct_dns)
             } else {
@@ -1072,6 +1079,9 @@ fn record_route_success(
                 &mut entry.throughput_bps,
                 bytes as f64 / transfer_elapsed.as_secs_f64(),
             );
+            entry.throughput_samples =
+                entry.throughput_samples.saturating_add(1);
+            entry.throughput_measured_at = Some(Instant::now());
         }
     }
 }
@@ -1103,6 +1113,8 @@ pub(crate) fn record_route_transfer_success(
     entry.consecutive_failures = 0;
     entry.cooldown_until = None;
     update_ewma(&mut entry.throughput_bps, throughput_bps);
+    entry.throughput_samples = entry.throughput_samples.saturating_add(1);
+    entry.throughput_measured_at = Some(Instant::now());
 }
 
 fn record_route_failure(
@@ -1175,6 +1187,13 @@ fn record_route_status_failure(
 /// answered `404`/`410` into `session.terminal_routes`, so the same route is not
 /// retried for the same object, while other objects keep using it.
 fn record_route_object_miss(route: &DownloadRoute, status: StatusCode) {
+    // `404` and `410` are permanent for this object on this route: the mirror
+    // does not hold it. Remembering that stops the next attempt (and the next
+    // file with the same path) from paying the same miss again, while leaving
+    // the authority's health untouched for the objects it does serve.
+    if matches!(status, StatusCode::NOT_FOUND | StatusCode::GONE) {
+        super::download::route_health::remember_object_miss(&route.url);
+    }
     tracing::debug!(
         url = %sanitize_url_for_log(&route.url),
         source = route.source.as_str(),
@@ -1286,6 +1305,15 @@ fn range_splitting_allowed(route: &DownloadRoute) -> bool {
         return false;
     }
 
+    // A measured host that answers `Range` with `200` and the whole body would
+    // multiply one file's bytes by the number of range workers, so it is never
+    // split no matter what the caller asked for.
+    if let Some(host) = route_host(route)
+        && !super::download::host_admission::honours_range_requests(&host)
+    {
+        return false;
+    }
+
     range_splitting_authority(route).is_none_or(|authority| {
         let authority = super::download::proxy_context::authority_key(
             &authority,
@@ -1365,6 +1393,20 @@ async fn fetch_validated_metadata_route(
         request = request.header(name, value);
     }
     let _permit = semaphore.0.acquire().await?;
+    // A metadata document fetched from a redirector costs one token from its
+    // fixed window just like a file GET does, and a `429` here must park it for
+    // exactly the announced period.
+    if let Some(host) = route_host(route)
+        && super::download::redirector_budget::is_redirector(&host)
+    {
+        super::download::redirector_budget::acquire(&host, route.proxy)
+            .await
+            .map_err(|denied| {
+                ErrorKind::NetworkError(format!(
+                    "Redirector {host} cannot take another metadata request: {denied}"
+                ))
+            })?;
+    }
     let request_started = Instant::now();
     let response = match request.send().await {
         Ok(response) => response,
@@ -1375,6 +1417,16 @@ async fn fetch_validated_metadata_route(
             return Err(error.into());
         }
     };
+    if let Some(host) = route_host(route)
+        && super::download::redirector_budget::is_redirector(&host)
+    {
+        super::download::redirector_budget::note_response(
+            &host,
+            route.proxy,
+            response.status(),
+            response.headers(),
+        );
+    }
     let ttfb = request_started.elapsed();
     let status = response.status();
     let remote_addr = response.remote_addr();
@@ -2337,6 +2389,59 @@ async fn fetch_advanced_inner(
                 None
             };
             let permit = semaphore.0.acquire().await?;
+            // A metadata request to a redirector is one token from a fixed
+            // ten-per-minute window; pacing it here is what keeps a wide batch
+            // from spending the whole window in its first second.
+            //
+            // A denial is a *route* failure, not a request failure: the
+            // redirector is simply not available for this object right now and
+            // the official host is. Propagating it with `?` aborted the whole
+            // metadata fetch — partly masked by hedging, but every non-hedged
+            // call hard-failed instead of trying the next route, which is how
+            // the file path already behaves. Recording it here keeps the route
+            // health honest for the next attempt and lets the loop move on.
+            if let Some(host) = route_host(route)
+                && super::download::redirector_budget::is_redirector(&host)
+                && let Err(denied) =
+                    super::download::redirector_budget::acquire(
+                        &host,
+                        route.proxy,
+                    )
+                    .await
+            {
+                let error: crate::Error = ErrorKind::NetworkError(format!(
+                    "Redirector {host} cannot take another metadata request: {denied}"
+                ))
+                .into();
+                // A parked or exhausted metadata window is not a statement
+                // about the host's sockets, so no connection cooldown is
+                // charged; the route is only skipped for this object.
+                record_route_failure(route, resource, None);
+                record_download_attempt_failure(
+                    &mut attempt_history,
+                    route,
+                    total_attempts,
+                    &error,
+                    if has_next_route {
+                        FETCH_SWITCH_ROUTE
+                    } else {
+                        FETCH_STOP
+                    },
+                    None,
+                    None,
+                    None,
+                );
+                tracing::warn!(
+                    url = %log_request_url,
+                    source = route_source.as_str(),
+                    attempt,
+                    max_attempts,
+                    error = %error,
+                    "Redirector metadata budget denied the request; trying the next route"
+                );
+                last_error = Some(error);
+                break;
+            }
             let request_started = Instant::now();
             let result = if let Some(native_budget) = native_budget {
                 super::download::native_request::send_cdn_request_with_budget(
@@ -2364,6 +2469,22 @@ async fn fetch_advanced_inner(
                     let remote_addr = resp.remote_addr();
                     let http_version = resp.version();
                     let retry_after = retry_after(&resp);
+                    // A metadata document from a redirector spends the same
+                    // fixed window as a file GET, and its `429` carries
+                    // `retry-after-short`. Record the announcement before the
+                    // status is classified so the bucket learns it exactly once.
+                    if let Some(host) = route_host(route)
+                        && super::download::redirector_budget::is_redirector(
+                            &host,
+                        )
+                    {
+                        super::download::redirector_budget::note_response(
+                            &host,
+                            route.proxy,
+                            status,
+                            resp.headers(),
+                        );
+                    }
                     if status.is_redirection() {
                         if is_mirror
                             && has_next_route
@@ -4329,6 +4450,12 @@ pub(crate) async fn prepare_native_download_routes(
     semaphore: &FetchSemaphore,
 ) {
     crate::util::download::native_reputation::load_if_needed().await;
+    // The object-miss memo is what keeps a fresh install from paying the same
+    // guaranteed `404` on `maven.aliyun.com/repository/public` again: 13 % of
+    // small Maven paths (natives and classifiers) have no artifact there. It is
+    // loaded here, before ordering, so a memoised miss is skipped before it is
+    // attempted rather than discovered again.
+    crate::util::download::route_health::ensure_object_misses_loaded().await;
     ensure_task_routes_probed(
         request,
         routes,
@@ -4631,6 +4758,14 @@ async fn download_segment(
     let mut final_url = route.url.clone();
     let mut remote_addr = None;
     let mut http_version = None;
+    // Ranged bytes belong to the node that serves them, so they are charged to
+    // this hop's final URL. A redirector name here would credit a node's
+    // throughput to a metadata endpoint and never grow the node's limit.
+    let mut authority_meter =
+        super::download::host_admission::TransferMeter::for_url(
+            &final_url,
+            route.proxy,
+        );
     let mut slow = super::download::native_slow::NativeSlowPolicy::new(0, None);
     let mut last_slow_speed = None;
     for attempt in 1..=SEGMENT_RETRY_ATTEMPTS {
@@ -4679,6 +4814,11 @@ async fn download_segment(
             Ok(Err(_)) | Err(_) => return Err(SegmentDownloadError::Transport),
         };
         final_url = response_url;
+        authority_meter =
+            super::download::host_admission::TransferMeter::for_url(
+                &final_url,
+                route.proxy,
+            );
         let parsed_content_range = parse_content_range(&response);
         tracing::debug!(
             path = %part_path.display(),
@@ -4934,6 +5074,9 @@ async fn download_segment(
                 .map_err(|error| SegmentDownloadError::Fatal(error.into()))?;
             pending_progress += accepted as u64;
             speed.record_bytes(accepted as u64);
+            if let Some(meter) = &authority_meter {
+                meter.record(accepted as u64);
+            }
             if pending_progress >= DOWNLOAD_PROGRESS_MIN_BYTES
                 || last_progress_at.elapsed() >= DOWNLOAD_PROGRESS_INTERVAL
             {
@@ -5241,14 +5384,15 @@ async fn try_segmented_download(
             reason: FETCH_CONFIGURED_CONNECTION_LIMIT_IS_ONE,
         };
     }
-    let permits = match acquire_initial_segment_permits(
+    let (_host_permit, permits) = match acquire_initial_segment_permits(
         route,
         semaphore,
         requested_initial_count,
+        Some(size),
     )
     .await
     {
-        Ok(permits) => permits,
+        Ok(admitted) => admitted,
         Err(error) => return SegmentedDownloadOutcome::Fatal(error),
     };
     let mut cleanup_guard =
@@ -5668,12 +5812,22 @@ async fn try_segmented_download(
     .await
 }
 
+/// Announces that one file of an install is starting.
+///
+/// This is also the bulk-plan heartbeat. A 4154-request install runs for far
+/// longer than any fixed lease, and the lease is what keeps BMCLAPI out of the
+/// file routes; a fixed `BULK_PLAN_LEASE` therefore lapsed mid-install and put
+/// the redirector back on the route list, which spends the ten-per-minute
+/// window and is the exact path to the measured twenty-minute IP ban. The
+/// heartbeat is taken before the early return so a download without install
+/// tracking still renews a plan another part of the same install announced.
 pub(crate) async fn record_install_download_started(
     request: &DownloadRequest,
     route: &DownloadRoute,
     attempt: usize,
     max_attempts: usize,
 ) {
+    super::download::redirector_budget::note_plan_progress();
     let Some(tracking) = &request.install_tracking else {
         return;
     };
@@ -5919,12 +6073,15 @@ async fn select_h2_download_route(
     let h2_route = first_h2_route(routes)?;
     // A warm H2 socket must not bypass the large-file connection scheduler.
     // More streams on that socket cannot escape a per-connection speed limit.
+    // The H2-bypass gate mirrors the segmented gate below: an explicit
+    // connection floor never lowers the `MIN_SPLIT_BYTES` floor, so a small
+    // modpack jar is not handed to the range scheduler at all.
     if request.allow_http1_segmented_download
         && request.integrity.supports_resume()
         && request.integrity.size.is_some_and(|size| {
             size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD
                 || (request.range_connection_floor.is_some()
-                    && size >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64)
+                    && size >= MIN_SPLIT_BYTES)
         })
         && h2_route.supports_range
         && range_splitting_allowed(&h2_route)
@@ -6223,6 +6380,10 @@ async fn download_to_path_inner(
         "Acquired destination download lock"
     );
     let mode = source_mode_for_resource(request.resource);
+    // Load the object-miss memo before resolving routes: the resolver drops
+    // paths a route has already 404'd, and doing that after the plan is built
+    // would make the first download of every launch pay the miss again.
+    crate::util::download::route_health::ensure_object_misses_loaded().await;
     let mut routes = build_download_routes(&request, mode);
     let part_path = suffixed_path(destination, PARTIAL_FILE_SUFFIX);
 
@@ -6363,11 +6524,17 @@ async fn try_segmented_native_attempt(
         }
         _ => 0,
     };
+    // An explicit connection floor is a caller promise that this file *can*
+    // benefit from ranges, not permission to split below the floor. The gate
+    // used to be the segment minimum times two (512 KiB), so a 600 KB modpack
+    // jar carrying `range_connection_floor = 32` was split into two ranges and
+    // paid the measured ~30 MB / 1.1 s cold-start ramp on each. `MIN_SPLIT_BYTES`
+    // is the documented "never split below this" floor; the caller's floor can
+    // only add ranges above it, never lower it.
     let explicitly_parallel = request.range_connection_floor.is_some()
         && request.integrity.supports_resume()
         && request.integrity.size.is_some_and(|size| {
-            size.saturating_sub(resumable_part_bytes)
-                >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64
+            size.saturating_sub(resumable_part_bytes) >= MIN_SPLIT_BYTES
         });
     let tail_recovery = request.prefer_http1
         && request.integrity.size.is_some_and(|size| {
@@ -6411,6 +6578,16 @@ async fn try_segmented_native_attempt(
                 finalize_download(part_path, destination).await?;
                 let transferred_bytes =
                     result.size.saturating_sub(resumable_part_bytes);
+                // A completed multi-range transfer is the bulk signal: the host
+                // delivered this many bytes at this latency, so it earns
+                // connections from its own measurement.
+                super::download::host_admission::record_completion(
+                    &result.final_url,
+                    route.proxy,
+                    request.integrity.size,
+                    result.ttfb.max(result.transfer_elapsed),
+                    transferred_bytes,
+                );
                 if let Some(authority) = original_route_authority(route) {
                     crate::util::download::native_reputation::record_transport_success(
                         &authority,
@@ -7048,7 +7225,7 @@ async fn run_native_route_attempts(
         .await;
         let permit_wait = tokio::time::timeout(
             RESOURCE_WAIT_TIMEOUT,
-            acquire_native_connection(route, semaphore),
+            acquire_native_connection(route, semaphore, request.integrity.size),
         );
         let resource_wait_started = Instant::now();
         let permit = if let Some(cancellation) = request.cancellation.as_ref() {
@@ -7412,6 +7589,14 @@ async fn run_native_route_attempts(
             .size
             .unwrap_or(starting_size.saturating_add(response_length));
         let transfer_started = Instant::now();
+        // Bytes belong to the host that *served* them, so the meter is built
+        // from the final hop, never the requested URL: a redirector name here
+        // would credit a node's throughput to a metadata endpoint.
+        let authority_meter =
+            super::download::host_admission::TransferMeter::for_url(
+                &final_url,
+                route.proxy,
+            );
         let mut downloaded = starting_size;
         let mut batch_tail =
             super::download::h2_receive::BatchTailWindow::new(transfer_started);
@@ -7484,6 +7669,14 @@ async fn run_native_route_attempts(
                     request.transfer_counters.commit(starting_size, downloaded.saturating_sub(file.pending_bytes()));
                     if let Some(state) = crate::State::get_if_initialized() {
                         state.record_download_bytes(chunk.len() as u64);
+                    }
+                    // The host's observed rate is measured from the bytes it
+                    // actually delivered. This per-chunk meter is the only place
+                    // that happens on the plain path; `record_completion` does
+                    // not add the total again, precisely so the two do not
+                    // double-count.
+                    if let Some(meter) = &authority_meter {
+                        meter.record(chunk.len() as u64);
                     }
                     let persisted = downloaded.saturating_sub(file.pending_bytes());
                     if progress_gate.should_report(persisted, total_size) {
@@ -7713,6 +7906,13 @@ async fn run_native_route_attempts(
         if let Some(error) = transfer_error {
             record_route_failure(route, request.resource, None);
             record_native_transfer_failure(route, None);
+            // A body that stopped mid-transfer because the node reset or timed
+            // out is a capacity signal for that node, not for the redirector
+            // that handed out the signed URL.
+            super::download::host_admission::record_fast_failure(
+                &final_url,
+                route.proxy,
+            );
             preserve_or_remove_partial(
                 part_path,
                 &request.integrity,
@@ -7899,6 +8099,29 @@ async fn run_native_route_attempts(
         }
 
         finalize_download(part_path, destination).await?;
+        // The serving host earns connections from this transfer: its own bytes,
+        // its own TTFB. The *final* URL is what is charged, never the
+        // redirector that handed it out.
+        super::download::host_admission::record_completion(
+            &final_url,
+            route.proxy,
+            request.integrity.size,
+            ttfb,
+            downloaded.saturating_sub(starting_size),
+        );
+        // Publish the rate this source actually delivered, so the UI can show
+        // why a download is slow instead of guessing from the job aggregate.
+        if let Some(tracking) = &request.install_tracking
+            && let Some(rate) = super::download::host_admission::observed_rate(
+                &final_url,
+                route.proxy,
+            )
+        {
+            let _ = tracking
+                .reporter
+                .record_download_source_rate(&tracking.item_id, rate)
+                .await;
+        }
         record_route_success(
             route,
             request.resource,

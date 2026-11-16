@@ -666,6 +666,26 @@ impl InstallProgressReporter {
         .await
     }
 
+    /// Publishes the rate the item's own source delivered.
+    ///
+    /// The job summary aggregates every concurrent file, so it cannot answer
+    /// "which file is slow, and on which source?". This is the per-item answer:
+    /// the bytes per second the host that served this item measured for itself.
+    pub async fn record_download_source_rate(
+        &self,
+        path: &str,
+        bytes_per_second: u64,
+    ) -> crate::Result<()> {
+        let Ok(mut state) = self.state.try_lock() else {
+            return Ok(());
+        };
+        let Some(active) = state.job.active_downloads.get_mut(path) else {
+            return Ok(());
+        };
+        active.speed_bytes_per_second = Some(bytes_per_second);
+        Ok(())
+    }
+
     pub async fn record_download_progress(
         &self,
         path: impl Into<String>,

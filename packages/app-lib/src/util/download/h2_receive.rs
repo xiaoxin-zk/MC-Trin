@@ -103,22 +103,57 @@ impl BatchTailWindow {
     }
 }
 
-/// Tracks one active H2 stream in the native automatic-concurrency metrics.
+/// Tracks one active H2 stream in the native automatic-concurrency metrics and
+/// in its serving host's learned admission window.
 pub(crate) struct H2TransferActivity {
     _activity: Option<crate::state::DownloadConnectionActivity>,
+    /// `None` when the transfer's final host is unknown, in which case no
+    /// admission policy can be charged for it.
+    authority: Option<super::host_admission::TransferMeter>,
 }
 
 impl H2TransferActivity {
-    pub(crate) fn begin() -> Self {
+    /// Attributes bytes to the host that delivers them.
+    ///
+    /// `url` must be the *final* URL: a redirector's name here would charge a
+    /// node's throughput to a metadata endpoint.
+    pub(crate) fn for_transfer(
+        url: Option<&str>,
+        proxy: crate::util::fetch::ProxyPolicy,
+    ) -> Self {
+        let authority = url.and_then(|url| {
+            super::host_admission::TransferMeter::for_url(url, proxy)
+        });
+        Self::with_meter(authority)
+    }
+
+    /// Attributes bytes through an already-resolved meter.
+    ///
+    /// Used where the serving identity is known before the transfer starts — the
+    /// multi-range plan resolves it once from the connection it will use, so
+    /// every worker charges the same host window instead of recomputing it.
+    pub(crate) fn for_meter(
+        meter: Option<&super::host_admission::TransferMeter>,
+    ) -> Self {
+        Self::with_meter(meter.cloned())
+    }
+
+    fn with_meter(
+        authority: Option<super::host_admission::TransferMeter>,
+    ) -> Self {
         Self {
             _activity: crate::State::get_if_initialized()
                 .map(|state| state.begin_download_connection()),
+            authority,
         }
     }
 
     pub(crate) fn record_bytes(&self, bytes: usize) {
         if let Some(state) = crate::State::get_if_initialized() {
             state.record_download_bytes(bytes as u64);
+        }
+        if let Some(authority) = &self.authority {
+            authority.record(bytes as u64);
         }
     }
 }

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::util::download::constants::{
     NATIVE_REPUTATION_FILE_NAME as FILE_NAME,
@@ -43,6 +43,14 @@ pub(crate) struct NativeRouteReputation {
     pub(crate) consecutive_failures: u32,
     pub(crate) ttfb_ms: Option<f64>,
     pub(crate) throughput_bps: Option<f64>,
+    /// When `throughput_bps` was last written, so route ordering can refuse a
+    /// measurement older than its trust window.
+    ///
+    /// Defaulted rather than version-bumped: a store written by an older build
+    /// reads back as "throughput of unknown age", which route ordering treats
+    /// as untrusted until the route is measured again.
+    #[serde(default)]
+    pub(crate) throughput_updated_at: Option<u64>,
     updated_at: u64,
 }
 
@@ -264,6 +272,7 @@ pub(crate) fn record_success(
     if let Some(throughput_bps) = throughput_bps {
         entry.throughput_bps =
             Some(update_ewma(entry.throughput_bps, throughput_bps));
+        entry.throughput_updated_at = Some(now_secs());
     }
     entry.updated_at = now_secs();
     drop(reputation);
@@ -291,6 +300,7 @@ pub(crate) fn record_transfer_success(
     entry.consecutive_failures = 0;
     entry.throughput_bps =
         Some(update_ewma(entry.throughput_bps, throughput_bps));
+    entry.throughput_updated_at = Some(now_secs());
     entry.updated_at = now_secs();
     drop(reputation);
     schedule_write();
@@ -420,6 +430,22 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+impl NativeRouteReputation {
+    /// Monotonic instant at which this throughput was measured, if known.
+    ///
+    /// The store keeps wall-clock seconds because it survives restarts; route
+    /// ordering compares `Instant`s. Converting at read time keeps the clock
+    /// inside the trust window: a sample older than the monotonic clock's own
+    /// epoch, or one whose stored timestamp is in the future (a clock change),
+    /// yields `None`, which callers treat as "not measured" rather than
+    /// trusting a number whose age cannot be bounded.
+    pub(crate) fn throughput_measured_at(&self) -> Option<Instant> {
+        let updated_at = self.throughput_updated_at?;
+        let age = now_secs().checked_sub(updated_at)?;
+        Instant::now().checked_sub(std::time::Duration::from_secs(age))
+    }
 }
 
 #[cfg(test)]

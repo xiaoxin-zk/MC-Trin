@@ -22,6 +22,45 @@ use crate::util::fetch::{
 use reqwest::{Url, header};
 use tokio::sync::Mutex as AsyncMutex;
 
+/// Whether a transport error describes the serving host's capacity.
+///
+/// A refused socket, a reset and a timeout are the host saying it cannot take
+/// another connection. A `429` is deliberately absent: on BMCLAPI it describes
+/// the redirector's *metadata* budget, not byte-serving capacity, so treating
+/// it as a socket signal would halve a node that is serving bytes perfectly.
+pub(crate) fn is_connection_capacity_failure(error: &reqwest::Error) -> bool {
+    error.is_connect() || error.is_timeout()
+}
+
+/// The single post-redirect host that must be paced as a metadata redirector.
+///
+/// Returns the host when this hop is a redirector, so the caller can reserve a
+/// metadata token before sending and learn the announced budget afterwards.
+fn redirector_host(url: &Url) -> Option<String> {
+    let host = url.host_str()?.to_ascii_lowercase();
+    super::redirector_budget::is_redirector(&host).then_some(host)
+}
+
+/// Charges a redirector `429` to the metadata budget.
+///
+/// This runs before the hop is followed or returned, so one throttled request
+/// teaches the bucket the announced `retry-after-short` instead of letting
+/// dozens of already-queued transfers discover it independently.
+fn note_redirector_response(
+    host: Option<&str>,
+    proxy: ProxyPolicy,
+    response: &reqwest::Response,
+) {
+    if let Some(host) = host {
+        super::redirector_budget::note_response(
+            host,
+            proxy,
+            response.status(),
+            response.headers(),
+        );
+    }
+}
+
 pub(crate) fn byte_range_header_value(
     range_start: Option<u64>,
     range_end: Option<u64>,
@@ -75,6 +114,23 @@ async fn send_cdn_request_inner(
         retired_sources::normalize_parsed(request.url().clone())?;
     let original = request.url().clone();
     for hop in 0..=MAX_DOWNLOAD_REDIRECTS {
+        let hop_proxy =
+            selection.map_or(ProxyPolicy::System, |(_, proxy)| proxy);
+        let hop_redirector = redirector_host(request.url());
+        if let Some(host) = hop_redirector.as_deref() {
+            // A redirector `GET` is a metadata request even when it is a file
+            // download: it answers `302` and costs one token from a window of
+            // ten per minute. Pacing it here keeps a wide batch from spending
+            // the whole window in its first second, which is what produced the
+            // measured ban.
+            super::redirector_budget::acquire(host, hop_proxy)
+                .await
+                .map_err(|denied| {
+                    ErrorKind::NetworkError(format!(
+                        "Redirector {host} cannot take another metadata request: {denied}"
+                    ))
+                })?;
+        }
         let physical_budget = if let Some(permit) = admitted.take() {
             Some(std::sync::Arc::new(permit))
         } else if let Some((_, proxy)) = selection {
@@ -138,6 +194,15 @@ async fn send_cdn_request_inner(
                 .extensions_mut()
                 .insert(ResponseBudget { _permit: permit });
         }
+        // The redirector publishes its own budget. Observe it here, before the
+        // hop is followed or returned, so a `429` teaches the bucket the
+        // announced `retry-after-short` instead of letting every queued
+        // transfer discover it independently.
+        note_redirector_response(
+            hop_redirector.as_deref(),
+            hop_proxy,
+            &response,
+        );
         if let Some((_, lease)) = pinned
             && let Some((clients, _)) = selection
         {
@@ -222,6 +287,19 @@ pub(crate) async fn send_path_request_with_clients(
     current = retired_sources::normalize_parsed(current)?;
     let mut reused_redirect_target = current != original;
     for redirect_count in 0..=MAX_DOWNLOAD_REDIRECTS {
+        let hop_redirector = redirector_host(&current);
+        if let Some(host) = hop_redirector.as_deref() {
+            // A redirector GET is a metadata request even when it is a file
+            // download: it returns `302` and costs one token from a window of
+            // ten per minute.
+            super::redirector_budget::acquire(host, route.proxy)
+                .await
+                .map_err(|denied| {
+                    ErrorKind::NetworkError(format!(
+                        "Redirector {host} cannot take another metadata request: {denied}"
+                    ))
+                })?;
+        }
         let fallback_to_http1 = clients.force_http1
             || url_authority(current.as_str()).is_some_and(|authority| {
                 authority_uses_http1_fallback_for(&authority, route.proxy)
@@ -300,6 +378,16 @@ pub(crate) async fn send_path_request_with_clients(
                     )
                     .await;
                 }
+                if is_connection_capacity_failure(&error) {
+                    // A refused or reset socket is this host saying it cannot
+                    // take another connection, which is exactly the signal the
+                    // measured fast-attack reacts to. A `429` never reaches
+                    // here: it is a metadata budget instruction, not capacity.
+                    super::host_admission::record_fast_failure(
+                        current.as_str(),
+                        route.proxy,
+                    );
+                }
                 if !fallback_to_http1
                     && redirect_count < MAX_DOWNLOAD_REDIRECTS
                     && is_h2_protocol_failure(&error)
@@ -335,6 +423,13 @@ pub(crate) async fn send_path_request_with_clients(
             );
             response = redirect;
         }
+        // The redirector announces its own budget; record it before deciding
+        // whether this hop is a redirect or a final answer.
+        note_redirector_response(
+            hop_redirector.as_deref(),
+            route.proxy,
+            &response,
+        );
         if !response.status().is_redirection() {
             if reused_redirect_target
                 && (response.status().is_client_error()

@@ -118,10 +118,32 @@ impl AuthorityScheduler {
             .filter(|connection| {
                 !connection.is_dead() && !connection.is_retiring()
             })
+            // A connection carrying sixteen or more streams is at the measured
+            // saturation point of one multiplexed socket, so it is used only
+            // when every live connection is in the same state. Both pools
+            // then fall back to the least-loaded one instead of stalling the
+            // batch on a handshake that may not complete.
             .min_by_key(|connection| {
-                connection.assigned_streams_for_scheduler()
+                (
+                    !connection.has_stream_capacity(),
+                    connection.assigned_streams_for_scheduler(),
+                )
             })
             .cloned()
+    }
+
+    /// Whether a live connection has queued at the peer's stream limit.
+    ///
+    /// This is the equivalent signal the pool already measures: the stream
+    /// admission wait in `SharedH2Connection::open`. Two consecutive stalls are
+    /// the measured point at which a sibling socket beats more multiplexing, so
+    /// it is treated as the same evidence as a full sixteen-stream allocation.
+    pub(crate) fn head_of_line_saturated(&self) -> bool {
+        self.connections.iter().any(|connection| {
+            !connection.is_dead()
+                && !connection.is_retiring()
+                && connection.head_of_line_saturated()
+        })
     }
 
     pub(crate) fn select_connection(
@@ -214,12 +236,18 @@ impl AuthorityScheduler {
             if !owns_trial && TRIALS.snapshot(now).1.is_some() {
                 return false;
             }
+            // Either the existing connections are already sharing more streams
+            // than they have sockets, or one of them queued at the peer's
+            // stream limit. The second condition matters because a single
+            // connection can only show that queueing in its admission wait,
+            // never in the stream count the first test reads.
             if self
                 .connections
                 .iter()
                 .map(|c| c.assigned_streams_for_scheduler())
                 .sum::<usize>()
                 <= self.connections.len()
+                && !self.head_of_line_saturated()
             {
                 return false;
             }

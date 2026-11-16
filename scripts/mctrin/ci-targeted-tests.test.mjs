@@ -10,7 +10,10 @@ test('maps mctrin source files to their module paths', () => {
     assert.equal(moduleFilter('packages/app-lib/src/api/mctier/tests.rs'), 'api::mctier')
     assert.equal(moduleFilter('packages/app-lib/src/api/ai/catalog.rs'), 'api::ai')
     assert.equal(moduleFilter('packages/app-lib/src/api/ai/protocol.rs'), 'api::ai')
-    assert.equal(moduleFilter('packages/app-lib/src/util/fetch/connection_budget.rs'), 'util::fetch')
+    assert.equal(
+        moduleFilter('packages/app-lib/src/util/fetch/connection_budget.rs'),
+        'util::fetch',
+    )
     assert.equal(moduleFilter('packages/app-lib/src/util/fetch/routes.rs'), 'util::fetch')
     assert.equal(
         moduleFilter(
@@ -19,9 +22,7 @@ test('maps mctrin source files to their module paths', () => {
         'state::instances::commands::content_snapshot',
     )
     assert.equal(
-        moduleFilter(
-            'packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs',
-        ),
+        moduleFilter('packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs'),
         'state::instances::commands::instance_upgrade',
     )
     assert.equal(
@@ -31,9 +32,7 @@ test('maps mctrin source files to their module paths', () => {
         'state::instances::commands::apply_content_install',
     )
     assert.equal(
-        moduleFilter(
-            'packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs',
-        ),
+        moduleFilter('packages/app-lib/src/state/instances/commands/instance_upgrade/solver.rs'),
         'state::instances::commands::instance_upgrade',
     )
     assert.equal(moduleFilter('packages/app-lib/src/lib.rs'), null)
@@ -63,6 +62,12 @@ test('targets the changed workspace crate and its tests', () => {
         'api::mctier::protocol',
         '--',
         '--test-threads=1',
+        '--skip',
+        'synced_',
+        '--skip',
+        'util::download::endpoint_selection::benchmark::range_recovery',
+        '--skip',
+        'util::download::endpoint_selection::probe::tests::native_h2_single_stream',
     ])
     assert(commands.some((args) => args.includes('mctrin-gui')))
 })

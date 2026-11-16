@@ -251,6 +251,8 @@ export interface InstallJobSnapshot {
         manual_url?: string | null
         request_url?: string | null
         source?: string | null
+        /** Observed per-item rate, so the UI can say why a download is slow. */
+        speed_bytes_per_second?: number | null
     }>
 }
 

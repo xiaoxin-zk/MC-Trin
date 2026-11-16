@@ -42,6 +42,14 @@ pub(crate) const MAX_SEGMENT_CONCURRENCY: usize = 64;
 pub(crate) const MAX_TAIL_HEDGES_PER_FILE: usize = 2;
 pub(crate) const MIN_PARALLEL_RANGES: usize = 2;
 pub(crate) const MIN_SEGMENT_SIZE: u64 = 256 * 1024;
+/// Range splitting starts here, not at 4 MB.
+///
+/// The measured cold-start ramp needs about 30 MB / 1.1 s to reach full speed,
+/// which makes splitting a small object a net loss: the extra connections spend
+/// the whole file in the ramp. Files below [`MIN_SPLIT_BYTES`] are therefore
+/// never split, and nothing is split on a host that has not proven it honours
+/// `Range` (USTC answers `200` with the full body).
+pub(crate) const SEGMENTED_DOWNLOAD_THRESHOLD: u64 = MIN_SPLIT_BYTES;
 pub(crate) const RANGE_CHECKPOINT_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const RANGE_FULL_FAILURE_LIMIT: u32 = 1;
 pub(crate) const RANGE_IDLE_RECONNECT_TIMEOUT: Duration = if cfg!(test) {
@@ -53,7 +61,6 @@ pub(crate) const RANGE_JOURNAL_MAX_BYTES: u64 = 16 * 1024;
 pub(crate) const RANGE_REDUCED_CONCURRENCY: usize = 2;
 pub(crate) const RANGE_REDUCED_FAILURE_LIMIT: u32 = 3;
 pub(crate) const RANGE_SPLITTING_DISABLE_THRESHOLD: u32 = 2;
-pub(crate) const SEGMENTED_DOWNLOAD_THRESHOLD: u64 = 4 * 1024 * 1024;
 pub(crate) const SEGMENT_EXPANSION_INTERVAL: Duration =
     Duration::from_millis(1500);
 pub(crate) const SEGMENT_EXPANSION_SAMPLE_COUNT: usize = 3;
@@ -85,7 +92,14 @@ pub(crate) const CONNECTION_GROWTH_FACTOR: usize = 2;
 pub(crate) const CONNECTION_STABILITY_WINDOW: Duration =
     Duration::from_millis(500);
 pub(crate) const INITIAL_CONNECTION_TARGET: usize = 4;
-pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 32;
+/// Fixed outer bound on asset streams per URL authority.
+///
+/// It must not be tighter than [`H2_STREAMS_PER_HOST_CAP`], or it silently
+/// becomes the real ceiling: the learned host allowance can reach 64 streams,
+/// and an authority semaphore of 32 would hold the batch at half of what the
+/// measurement supports (57.41 files/s at N=8 rising to 138.54 at N=64). It is
+/// kept as a backstop for the case where no host policy can be resolved.
+pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 64;
 pub(crate) const MAX_CONNECTIONS_PER_AUTHORITY: usize = 64;
 pub(crate) const MAX_CONNECTION_TARGET: usize = 64;
 pub(crate) const MAX_H2_STREAMS_PER_AUTHORITY: usize = 256;
@@ -99,6 +113,49 @@ pub(crate) const ASSET_RESOURCE_WAIT_TIMEOUT: Duration =
 pub(crate) const H2_ADDITIONAL_CONNECTIONS_ENABLED: bool = true;
 pub(crate) const H2_ADMISSION_LOG_THRESHOLD: Duration =
     Duration::from_millis(25);
+/// Streams one shared HTTP/2 connection is planned to carry.
+///
+/// Measured saturation: a single connection stopped improving at about sixteen
+/// concurrent streams, and a second connection then raised the aggregate. The
+/// HTTP/2 pool therefore allocates new streams to the least-loaded connection
+/// below this number and treats a full connection as the signal to open a
+/// sibling. This is an allocation target, not a hard block: while a sibling
+/// handshake is in flight the only available connection may briefly carry one
+/// stream more rather than stalling the batch.
+///
+/// This is a *per socket* number and must not also be used as the per-host
+/// stream allowance: the measured knee is at or above 64 file-equivalents, and
+/// capping the whole host at one connection's saturation point threw away
+/// every connection the measured batch had already been shown to need.
+pub(crate) const H2_STREAMS_PER_CONNECTION_CAP: usize = 16;
+/// Streams one learned host may multiplex at once, across all its sockets.
+///
+/// The measured keep-alive curve is still rising at 64 (9.89 files/s at N=1,
+/// 57.41 at N=8, 95.57 at N=16, 118.81 at N=32, 138.54 at N=64), so 64 is the
+/// highest measured floor of the knee, not an optimum: it is the smallest cap
+/// that does not cut the host off below the last point the rate was still
+/// improving. Eight streams behave like eight parallel HTTP/1.1 connections on
+/// this workload, so the socket ceiling (32, the small-file batch peak) scaled
+/// by [`H2_STREAMS_PER_LEARNED_SOCKET`] lands exactly here; anything lower
+/// makes the multiplexed path slower than the plain path it replaced.
+pub(crate) const H2_STREAMS_PER_HOST_CAP: usize = 64;
+/// Streams one learned socket slot may carry on the multiplexed path.
+///
+/// Measured: sixteen streams on one connection tie eight parallel TCP
+/// connections, so one socket is worth about two streams. Expressing the stream
+/// allowance as `learned_limit × this` is what keeps the learned limit in
+/// charge — a host that learnt two gets four streams rather than sixteen, and a
+/// parked host gets none — without handing a fresh host (limit four) only four
+/// streams, which is half of what four plain sockets already deliver.
+pub(crate) const H2_STREAMS_PER_LEARNED_SOCKET: usize = 2;
+/// Head-of-line stalls before a sibling connection earns its handshake.
+///
+/// A stall is a stream that waited at the peer's stream limit (the `ready()`
+/// gate in `SharedH2Connection::open`) for longer than
+/// [`H2_ADMISSION_LOG_THRESHOLD`]. Two stalls on one connection are what the
+/// measurement showed to be the point at which a second TCP connection wins
+/// over more multiplexing.
+pub(crate) const H2_HEAD_OF_LINE_STALLS_BEFORE_SIBLING: usize = 2;
 pub(crate) const H2_CONNECTION_ATTEMPTS: usize = 2;
 pub(crate) const H2_CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const H2_CONNECTION_WINDOW: u32 = 64 * 1024 * 1024;
@@ -173,7 +230,30 @@ pub(crate) const FETCH_RETRY_DELAYS: [Duration; 3] = [
 pub(crate) const FETCH_RETRY_JITTER_MAX: f64 = 1.15;
 pub(crate) const FETCH_RETRY_JITTER_MIN: f64 = 0.85;
 pub(crate) const FILE_H2_KEEPALIVE: Duration = Duration::from_secs(15);
-pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 64;
+/// Idle sockets kept per host in the shared download client.
+///
+/// The many-small-files workload measured 1.73 files/s with a fresh connection
+/// per file and 8.85 files/s on keep-alive, so the pool must not be disabled.
+///
+/// The value is clamped to [`HOST_CONCURRENCY_CAP_MEASURED_MIN`], not to the
+/// many-small-files knee of 32. Idle sockets are charged against neither socket
+/// budget — [`super::native_budget`] and [`super::host_admission`] only count
+/// sockets that carry a transfer — so whatever this allows can remain open on a
+/// host after the install that opened them has finished. Eight is the smallest
+/// measured knee in the table (`cmcc.mirrors.ustc.edu.cn` answers
+/// `ConnectionRefused` from sixteen up, 731 RSTs at N=96), which makes it the
+/// only value that is safe for every authority the launcher talks to. The
+/// keep-alive win that motivated the pool survives at eight; the difference
+/// between eight and thirty-two idle sockets is the number of sockets a burst
+/// has to re-open, not the number it may run at once.
+pub(crate) const FILE_POOL_MAX_IDLE_PER_HOST: usize = 8;
+const _: () = assert!(
+    FILE_POOL_MAX_IDLE_PER_HOST <= HOST_CONCURRENCY_CAP_MEASURED_MIN,
+    "idle sockets must not exceed the smallest measured per-host knee"
+);
+/// Idle sockets expire after this long so a network change (or a proxy
+/// switch) cannot strand a connection that will only fail on next use.
+pub(crate) const FILE_POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const FILE_RETRY_SINGLE_STREAM_ROUNDS: [bool; 3] =
     [false, true, true];
 pub(crate) const FILE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
@@ -217,6 +297,93 @@ pub(crate) const MODRINTH_CDN_ATTEMPT_TIMEOUT: Duration =
     Duration::from_secs(120);
 pub(crate) const RESOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
 pub(crate) const RETRY_AFTER_CAP: Duration = Duration::from_secs(60);
+
+/// Redirector metadata budget.
+///
+/// `bmclapi2.bangbang93.com` never serves bytes: every file `GET` costs one
+/// metadata request and answers `302` to a signed URL on a rotating
+/// OpenBMCLAPI node. Its own headers advertise the budget
+/// (`x-ratelimit-limit-short: 10`, `x-ratelimit-reset-short: 60`,
+/// `x-ratelimit-remaining-short`, and `Retry-After-short: 60` on a `429`).
+/// The measured penalty for overrunning it was not only a `429`: a 46 s
+/// overrun (200 requests at N=8) got the client's IP TCP-blackholed for about
+/// twenty minutes. The window is therefore a hard budget, never a hint.
+pub(crate) const REDIRECTOR_TOKEN_CAPACITY: usize = 10;
+pub(crate) const REDIRECTOR_REFILL_WINDOW: Duration = Duration::from_secs(60);
+pub(crate) const REDIRECTOR_DEFAULT_PARK: Duration = Duration::from_secs(60);
+pub(crate) const REDIRECTOR_MAX_PARK: Duration = Duration::from_secs(600);
+pub(crate) const REDIRECTOR_LONG_BUCKET_CAPACITY: usize = 1000;
+/// The long window the service advertises (`Reset-long: 3600`).
+///
+/// The original 46 minutes came from a measurement session that ended early;
+/// the authority itself says one hour. A shorter window refills faster than the
+/// service does, which over-issues long-bucket tokens by about 30 % and is the
+/// one direction the budget must never err in: overrunning it is what produced
+/// the measured twenty-minute IP blackhole.
+pub(crate) const REDIRECTOR_LONG_BUCKET_WINDOW: Duration =
+    Duration::from_secs(60 * 60);
+/// How long a transfer waits for a redirector token before it gives up and
+/// reports the route as unavailable. Waiting a whole window would stall an
+/// install for a metadata request that has an official alternative.
+pub(crate) const REDIRECTOR_WAIT: Duration = Duration::from_millis(750);
+pub(crate) const REDIRECTOR_RATELIMIT_LIMIT_SHORT: &str =
+    "x-ratelimit-limit-short";
+pub(crate) const REDIRECTOR_RATELIMIT_REMAINING_SHORT: &str =
+    "x-ratelimit-remaining-short";
+pub(crate) const REDIRECTOR_RATELIMIT_RESET_SHORT: &str =
+    "x-ratelimit-reset-short";
+pub(crate) const RETRY_AFTER_SHORT_HEADER: &str = "retry-after-short";
+
+/// Adaptive data-plane concurrency, measured per post-redirect host.
+///
+/// A single global number is wrong in both directions: `piston-data` was clean
+/// at 96 connections while `maven.aliyun.com` kneed at 8–16 and
+/// `cmcc.mirrors.ustc.edu.cn` refused connections from 16 up. Every host
+/// therefore starts at four (safe on the worst measured host and already worth
+/// 70–80 % of its eventual peak) and earns more only from its own signals.
+pub(crate) const HOST_CONCURRENCY_INITIAL: usize = 4;
+pub(crate) const HOST_CONCURRENCY_GROWTH_PER_COMPLETIONS: u32 = 8;
+pub(crate) const HOST_CONCURRENCY_GROWTH_STEP: usize = 1;
+pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_STEP: usize = 2;
+pub(crate) const HOST_CONCURRENCY_FAST_GROWTH_CEILING: usize = 16;
+pub(crate) const HOST_CONCURRENCY_CAP_BULK: usize = 128;
+/// Ceiling for a host with no measurement of its own.
+///
+/// The spec's two caps are 64 for small files and 128 for bulk, but a *socket*
+/// plan still has to fit the per-authority socket budget, which is 64. A host
+/// that was never measured therefore keeps that measured-safe number rather
+/// than being handed a ceiling nothing in this build can fund.
+pub(crate) const HOST_CONCURRENCY_CAP_UNMEASURED: usize = 64;
+/// The smallest per-host knee in the measured table.
+///
+/// `cmcc.mirrors.ustc.edu.cn` answers `ConnectionRefused` from sixteen up and
+/// produced 731 RSTs at N=96; `host_cap` therefore returns 8 for it. Anything
+/// that must be safe for *every* authority without knowing which host it is —
+/// the shared keep-alive pool is the one such setting — has to fit inside this.
+pub(crate) const HOST_CONCURRENCY_CAP_MEASURED_MIN: usize = 8;
+/// p90 TTFB may grow to this percentage of the host's own baseline before the
+/// small-object knee is considered reached.
+pub(crate) const HOST_CONCURRENCY_LATENCY_RATIO_PERCENT: u128 = 125;
+pub(crate) const HOST_CONCURRENCY_FAST_ATTACK_PERCENT: usize = 70;
+pub(crate) const HOST_CONCURRENCY_PERCENT_BASE: usize = 100;
+pub(crate) const HOST_CONCURRENCY_FLOOR: usize = 2;
+pub(crate) const GLOBAL_IN_FLIGHT_CAP: usize = 128;
+/// Files below this size use p90 TTFB inflation as the knee signal instead of
+/// a throughput plateau: measured TTFB went 120 ms → 722 ms between 32 and 64
+/// streams on 121 KB objects.
+pub(crate) const SMALL_FILE_SIGNAL_BYTES: u64 = 500 * 1024;
+/// Objects at or above this size use the throughput-plateau controller.
+pub(crate) const BULK_SIGNAL_BYTES: u64 = 1024 * 1024;
+pub(crate) const SMALL_FILE_CONCURRENCY_CEILING: usize = 32;
+pub(crate) const HOST_CONCURRENCY_COOLDOWN_LADDER: [Duration; 3] = [
+    Duration::from_secs(60),
+    Duration::from_secs(300),
+    Duration::from_secs(1200),
+];
+/// Files smaller than this are never split; the cold-start ramp of the first
+/// ~30 MB costs more than the extra connections gain.
+pub(crate) const MIN_SPLIT_BYTES: u64 = 8 * 1024 * 1024;
+pub(crate) const SPLIT_CHUNK_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const STALE_PARTIAL_DOWNLOAD_MAX_AGE: Duration =
     Duration::from_secs(7 * 24 * 60 * 60);
 pub(crate) const TASK_PROBE_MAX_ROUTES: usize = 3;
@@ -268,6 +435,52 @@ pub(crate) const NATIVE_SWITCH_SPEED_PERCENT: u64 = 125;
 pub(crate) const RECONNECT_OVERHEAD_MAX: Duration = Duration::from_secs(5);
 pub(crate) const RECONNECT_OVERHEAD_MIN: Duration = Duration::from_millis(100);
 pub(crate) const ROUTE_HEALTH_EWMA_ALPHA: f64 = 0.25;
+/// How long a measured route throughput stays trustworthy for ordering.
+///
+/// A throughput sample describes a network path, not a server's identity: the
+/// same mirror that was fast this morning can be congested this afternoon, and
+/// the ISP route to it can change between launches. Thirty minutes is long
+/// enough for a session's own probes and first transfers to reorder the plan,
+/// and short enough that a stale number cannot pin the wrong source for a whole
+/// install or a whole day.
+pub(crate) const ROUTE_THROUGHPUT_TRUST_WINDOW: Duration =
+    Duration::from_secs(30 * 60);
+/// Successful transfers needed before a measured throughput may reorder routes.
+///
+/// One sample is one object on one connection, which is not yet evidence that
+/// the rate describes the route; two consecutive samples are. The threshold is
+/// deliberately the same confidence the cold-start probe uses
+/// ([`COLD_START_ROUTE_HEALTH_SAMPLE_THRESHOLD`]): a route the planner already
+/// treats as measured is a route it may reorder by.
+pub(crate) const ROUTE_THROUGHPUT_TRUST_SAMPLES: u32 = 2;
+/// How much faster a measured route must be before it outranks the configured
+/// source.
+///
+/// The measured gap this exists for is two orders of magnitude (13.6 MB/s
+/// official against 88–302 KB/s OpenBMCLAPI nodes), so a 25 % margin still
+/// captures it while leaving the user's preference in charge of routes whose
+/// measured difference is within run-to-run noise.
+pub(crate) const ROUTE_THROUGHPUT_PREFERENCE_PERCENT: f64 = 1.25;
+/// The rate a route is ordered by when it has no trustworthy measurement.
+///
+/// This is a prior, not a claim about any host: it is the rate at which an
+/// unmeasured route is considered "not obviously slower". It sits between the
+/// two measured populations on this network — OpenBMCLAPI nodes at 88–302 KB/s
+/// and the official hosts at 12–15 MB/s. A route measuring below it therefore
+/// loses its lead to an unmeasured one (the Chinese-locale mirror case), and a
+/// route measuring above it takes the lead; with nothing measured at all, every
+/// route uses the prior and the configured source preference decides, which is
+/// what keeps cold start unchanged.
+pub(crate) const ROUTE_THROUGHPUT_UNMEASURED_PRIOR_BPS: f64 =
+    4.0 * 1024.0 * 1024.0;
+/// How long a path known to be missing on one route stays skipped.
+///
+/// The memo is evidence about a mirror's index, not about the network: 13 % of
+/// small Maven paths have no artifact under `repository/public` because the
+/// repository does not mirror classifiers. It can still be synchronised later,
+/// so the memory expires rather than lasting forever.
+pub(crate) const ROUTE_OBJECT_MISS_TTL: Duration =
+    Duration::from_secs(24 * 60 * 60);
 /// Consecutive failures a mirror may accumulate before automatic mode stops
 /// leading with it.
 ///

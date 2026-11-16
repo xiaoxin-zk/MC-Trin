@@ -13,7 +13,7 @@ use crate::util::download::constants::{
     ROUTE_MIRROR_FAILURE_DEMOTION_THRESHOLD,
     ROUTE_POLICY_LAUNCHERMETA_MOJANG_COM, ROUTE_POLICY_MAVEN_FABRICMC_NET,
     ROUTE_POLICY_MAVEN_MINECRAFTFORGE_NET, ROUTE_POLICY_MAVEN_NEOFORGED_NET,
-    ROUTE_POLICY_PISTON_META_MOJANG_COM,
+    ROUTE_POLICY_PISTON_META_MOJANG_COM, ROUTE_THROUGHPUT_UNMEASURED_PRIOR_BPS,
 };
 use crate::util::download::route_policy;
 
@@ -522,19 +522,64 @@ pub(super) fn order_auto_routes(
         };
         let left_failures = failure_rank(&left_health);
         let right_failures = failure_rank(&right_health);
+        // Measured-throughput ordering, applied before the source preference.
+        //
+        // A route's key is the rate it is ordered by: its own trusted
+        // measurement when it has one, otherwise
+        // `ROUTE_THROUGHPUT_UNMEASURED_PRIOR_BPS`. Higher ranks first, so the
+        // measured-faster route leads. Nothing here names a host; on the
+        // measured network this is the official hosts at 12–15 MB/s against
+        // OpenBMCLAPI nodes at 88–302 KB/s, but a mirror that measures faster
+        // wins on a network where it genuinely is faster, which is the point.
+        //
+        // The prior is what makes the source preference still work:
+        //
+        // * Cold start — nothing measured — gives every route the same key, so
+        //   the locale/mirror preference below decides exactly as before. That
+        //   is requirement (a).
+        // * A trusted measurement replaces the prior outright. A route that
+        //   measures above it moves up and leads whatever the locale says
+        //   (requirement b); one that measures *below* it — the 88–302 KB/s
+        //   OpenBMCLAPI nodes with a Chinese locale — moves down and stops
+        //   leading, which is the largest single win in the spec. Clamping a
+        //   slow measurement up to the prior would instead leave the mirror
+        //   leading forever, so there is deliberately no `max` here.
+        // * A measurement that is too old (`ROUTE_THROUGHPUT_TRUST_WINDOW`) or
+        //   backed by too few samples is not a measurement at all:
+        //   `trusted_throughput` returns `None`, the prior applies, and the
+        //   route falls back into the tie the preference already decides. An
+        //   unmeasured route therefore cannot be sorted below a route whose
+        //   only claim is a stale number (requirement c).
+        //
+        // The key is a 25 %-wide geometric bucket (`throughput_rank`), not the
+        // raw rate: two routes within a quarter of each other are not
+        // measurably different on this network and the user's choice should
+        // decide there. A per-route key is also what keeps the comparator
+        // transitive — a pairwise margin is not (A may clear B's margin, B
+        // clear C's and C still clear A's), and a non-transitive comparator
+        // makes a sort's result depend on the input order.
+        let throughput_key = |health: &RouteHealth| {
+            crate::util::download::route_health::throughput_rank(
+                crate::util::download::route_health::trusted_throughput(health)
+                    .unwrap_or(ROUTE_THROUGHPUT_UNMEASURED_PRIOR_BPS),
+            )
+        };
+        let left_rank = throughput_key(&left_health);
+        let right_rank = throughput_key(&right_health);
         (left.source == DownloadRouteSource::Mcim)
             .cmp(&(right.source == DownloadRouteSource::Mcim))
             .then_with(|| left_cooling.cmp(&right_cooling))
             .then_with(|| left_failures.cmp(&right_failures))
+            .then_with(|| right_rank.cmp(&left_rank))
             .then_with(|| {
                 // Healthy routes are already resolved by the keys above: the
-                // MCIM pin, cooldown, mirror demotion and consecutive-failure
-                // comparisons run first, so this tie-break only orders routes
-                // that are equally reachable. A Chinese-locale preference leads
-                // with the mirror and keeps the official route as the next
-                // fallback; every other locale starts from the supplied
-                // official URL. MCIM is pinned by the first key, so `is_mirror`
-                // cannot promote it.
+                // MCIM pin, cooldown, mirror demotion, consecutive-failure and
+                // measured-throughput comparisons run first, so this tie-break
+                // only orders routes that are equally reachable and equally
+                // fast. A Chinese-locale preference leads with the mirror and
+                // keeps the official route as the next fallback; every other
+                // locale starts from the supplied official URL. MCIM is pinned
+                // by the first key, so `is_mirror` cannot promote it.
                 if prefer_mirrors {
                     right.is_mirror.cmp(&left.is_mirror)
                 } else {
@@ -658,7 +703,47 @@ pub fn resolve_download_routes_for_with_sources(
         mode
     };
     order_routes_for_mode(&mut routes, resource, mode, &url, prefer_mirrors);
+    drop_redirectors_for_bulk_plan(&mut routes, resource);
+    // Then drop only routes that already said they have no artifact for this
+    // exact path. A miss is per object, not per authority: 13 % of small Maven
+    // paths are absent from Aliyun's `repository/public`, and USTC answers 404
+    // for BMCLAPI's version API. Neither is a health failure, and skipping them
+    // before the attempt is what saves the round trip; the memo never removes
+    // the last route.
+    super::super::download::route_health::drop_known_object_misses(&mut routes);
     routes
+}
+
+/// Drops redirector routes when the plan is too large for their budget.
+///
+/// `bmclapi2.bangbang93.com` serves no bytes: each file costs one of ten
+/// metadata requests per minute, so a 400-file library set is 6.7 minutes of
+/// pure waiting at best and a `429` (or, measured, an IP blackhole) at worst.
+/// A bulk install is therefore planned against the official hosts from the
+/// start instead of discovering the budget wall halfway through.
+///
+/// Only *redirectors* are dropped. OpenBMCLAPI node URLs are byte sources and
+/// stay subject to their own measured per-host admission.
+fn drop_redirectors_for_bulk_plan(
+    routes: &mut Vec<DownloadRoute>,
+    resource: ResourceClass,
+) {
+    // A metadata document has no alternative path on the official host that
+    // the mirror also carries, and its single request never threatens the
+    // window on its own.
+    if matches!(resource, ResourceClass::Metadata) {
+        return;
+    }
+    if !super::super::download::redirector_budget::bulk_plan_active() {
+        return;
+    }
+    routes.retain(|route| {
+        !Url::parse(&route.url).is_ok_and(|url| {
+            url.host_str().is_some_and(
+                super::super::download::redirector_budget::is_redirector,
+            )
+        })
+    });
 }
 
 pub(super) fn source_mode_for_resource(

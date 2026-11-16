@@ -1008,6 +1008,10 @@ impl State {
             crate::util::download::local_resources::sample_cpu().await;
             crate::util::download::h2_pool::observe_adaptive_connections()
                 .await;
+            // Expire elapsed per-host cooldowns on the same tick, so a host
+            // parked by the failure ladder recovers without waiting for another
+            // transfer to notice it.
+            crate::util::download::host_admission::observe_all();
             if !self.auto_concurrent_downloads.load(Ordering::Acquire) {
                 controller = AutoConcurrencyController::default();
                 trial_lease = None;
